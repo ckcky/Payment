@@ -1,6 +1,7 @@
 package com.payment.reconciliation.integration;
 
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.reconciliation.api.ReconciliationSettlementFact;
 import com.payment.reconciliation.api.ReconciliationSettlementSummaryResponse;
 import com.payment.reconciliation.application.ChannelStatementLoader;
@@ -127,6 +128,7 @@ class ReconciliationSettlementRpcScenarioTest {
         PaymentFactsClient paymentClient = () -> payments;
         RefundFactsClient refundClient = () -> refunds;
         ChannelStatementLoader loader = period -> statements;
-        return new ReconciliationApplicationService(repository, paymentClient, refundClient, registry, loader);
+        return new ReconciliationApplicationService(repository, paymentClient, refundClient, registry, loader,
+                new NoopBusinessMetrics());
     }
 }

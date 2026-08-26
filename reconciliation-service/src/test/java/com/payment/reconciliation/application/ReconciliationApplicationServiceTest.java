@@ -1,6 +1,7 @@
 package com.payment.reconciliation.application;
 
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.reconciliation.domain.ChannelStatement;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
@@ -35,7 +36,8 @@ class ReconciliationApplicationServiceTest {
             new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"));
 
     private ReconciliationApplicationService service() {
-        return new ReconciliationApplicationService(repository, payments, refunds, registry, loader);
+        return new ReconciliationApplicationService(repository, payments, refunds, registry, loader,
+                new NoopBusinessMetrics());
     }
 
     @Test
@@ -65,7 +67,8 @@ class ReconciliationApplicationServiceTest {
                 () -> List.of(new PlatformFact("ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
                 () -> List.of(),
                 registry,
-                period -> List.of(new ChannelStatement("ref-1", 1000L, "CNY", "SUCCEEDED")));
+                period -> List.of(new ChannelStatement("ref-1", 1000L, "CNY", "SUCCEEDED")),
+                new NoopBusinessMetrics());
 
         ReconciliationBatch batch = service.runReconciliation("2026-09");
 

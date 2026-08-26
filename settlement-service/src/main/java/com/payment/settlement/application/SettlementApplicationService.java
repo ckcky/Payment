@@ -4,11 +4,14 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.idempotency.IdempotencyKey;
 import com.payment.common.core.idempotency.IdempotencyRegistry;
+import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.settlement.domain.EligibilityDecision;
 import com.payment.settlement.domain.SettlementBatch;
 import com.payment.settlement.domain.SettlementEligibility;
 import com.payment.settlement.domain.SettlementItem;
 import com.payment.settlement.domain.SettlementRepository;
+import com.payment.settlement.domain.SettlementStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -29,15 +32,21 @@ public class SettlementApplicationService {
     private final MerchantClient merchantClient;
     private final ReconciliationClient reconciliationClient;
     private final IdempotencyRegistry idempotencyRegistry;
+    private final BusinessMetrics metrics;
+    private final StructuredAuditLogger auditLogger;
 
     public SettlementApplicationService(SettlementRepository settlementRepository,
                                         MerchantClient merchantClient,
                                         ReconciliationClient reconciliationClient,
-                                        IdempotencyRegistry idempotencyRegistry) {
+                                        IdempotencyRegistry idempotencyRegistry,
+                                        BusinessMetrics metrics,
+                                        StructuredAuditLogger auditLogger) {
         this.settlementRepository = settlementRepository;
         this.merchantClient = merchantClient;
         this.reconciliationClient = reconciliationClient;
         this.idempotencyRegistry = idempotencyRegistry;
+        this.metrics = metrics;
+        this.auditLogger = auditLogger;
     }
 
     public SettlementBatch createBatch(String merchantId, String period, String idempotencyKey) {
@@ -86,10 +95,20 @@ public class SettlementApplicationService {
             return requireBatch(Long.valueOf(winnerId));
         }
 
+        metrics.counter("settlement.created", 1, "module", "settlement");
+        auditLogger.audit("settlement.created", batch.getIdempotencyKey(), batch.getNetMinor(),
+                batch.getCurrencyCode(), null, SettlementStatus.READY.name(), "settlement",
+                String.valueOf(batch.getId()));
+
         // 模拟执行：无真实打款，执行结果直接置 UNKNOWN（未知执行结果不等于成功）。
         batch.execute();
         batch.markUnknown("mock settlement payout unknown");
         settlementRepository.save(batch);
+
+        metrics.counter("settlement.unknown", 1, "module", "settlement");
+        auditLogger.audit("settlement.unknown", batch.getIdempotencyKey(), batch.getNetMinor(),
+                batch.getCurrencyCode(), SettlementStatus.EXECUTING.name(), SettlementStatus.UNKNOWN.name(),
+                "settlement", String.valueOf(batch.getId()));
 
         return batch;
     }
@@ -102,7 +121,14 @@ public class SettlementApplicationService {
         SettlementBatch batch = requireBatch(id);
         switch (authoritativeStatus) {
             case "SUCCEEDED" -> batch.succeed();
-            case "FAILED" -> batch.fail("resolved failed");
+            case "FAILED" -> {
+                String fromStatus = batch.getStatus().name();
+                batch.fail("resolved failed");
+                metrics.counter("settlement.failed", 1, "module", "settlement");
+                auditLogger.audit("settlement.failed", batch.getIdempotencyKey(), batch.getNetMinor(),
+                        batch.getCurrencyCode(), fromStatus, SettlementStatus.FAILED.name(),
+                        "settlement", String.valueOf(batch.getId()));
+            }
             default -> batch.markUnknown("still unknown");
         }
         settlementRepository.save(batch);

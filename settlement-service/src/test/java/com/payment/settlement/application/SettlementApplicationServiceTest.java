@@ -3,6 +3,8 @@ package com.payment.settlement.application;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
+import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.settlement.domain.SettlementBatch;
 import com.payment.settlement.domain.SettlementStatus;
 import com.payment.settlement.infra.InMemorySettlementRepository;
@@ -24,7 +26,8 @@ class SettlementApplicationServiceTest {
     private final FakeReconciliationClient reconciliationClient = new FakeReconciliationClient();
 
     private SettlementApplicationService service() {
-        return new SettlementApplicationService(repository, merchantClient, reconciliationClient, registry);
+        return new SettlementApplicationService(repository, merchantClient, reconciliationClient, registry,
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     @Test

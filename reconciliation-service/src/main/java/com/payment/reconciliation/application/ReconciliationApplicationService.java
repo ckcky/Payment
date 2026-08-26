@@ -4,6 +4,7 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.idempotency.IdempotencyKey;
 import com.payment.common.core.idempotency.IdempotencyRegistry;
+import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.reconciliation.api.ReconciliationSettlementFact;
 import com.payment.reconciliation.api.ReconciliationSettlementSummaryResponse;
 import com.payment.reconciliation.domain.ChannelStatement;
@@ -37,17 +38,20 @@ public class ReconciliationApplicationService {
     private final RefundFactsClient refundFactsClient;
     private final IdempotencyRegistry idempotencyRegistry;
     private final ChannelStatementLoader channelStatementLoader;
+    private final BusinessMetrics metrics;
 
     public ReconciliationApplicationService(ReconciliationRepository repository,
                                             PaymentFactsClient paymentFactsClient,
                                             RefundFactsClient refundFactsClient,
                                             IdempotencyRegistry idempotencyRegistry,
-                                            ChannelStatementLoader channelStatementLoader) {
+                                            ChannelStatementLoader channelStatementLoader,
+                                            BusinessMetrics metrics) {
         this.repository = repository;
         this.paymentFactsClient = paymentFactsClient;
         this.refundFactsClient = refundFactsClient;
         this.idempotencyRegistry = idempotencyRegistry;
         this.channelStatementLoader = channelStatementLoader;
+        this.metrics = metrics;
     }
 
     public ReconciliationBatch runReconciliation(String period) {
@@ -72,6 +76,12 @@ public class ReconciliationApplicationService {
             String winnerId = idempotencyRegistry.find(key)
                     .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR, "idempotency race"));
             return requireBatch(Long.valueOf(winnerId));
+        }
+
+        metrics.counter("reconciliation.run", 1, "module", "reconciliation");
+        for (Difference difference : batch.getDifferences()) {
+            metrics.counter("reconciliation.difference", 1, "module", "reconciliation",
+                    "type", difference.getType().name());
         }
         return batch;
     }
