@@ -17,5 +17,8 @@ public interface RefundRepository {
 
     List<Refund> findByOrderId(String orderId);
 
+    /** 按退款状态查询（对账事实抽取用）。 */
+    List<Refund> findByStatus(RefundStatus status);
+
     Refund save(Refund refund);
 }

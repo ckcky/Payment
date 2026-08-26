@@ -2,6 +2,7 @@ package com.payment.refund.infra;
 
 import com.payment.refund.domain.Refund;
 import com.payment.refund.domain.RefundRepository;
+import com.payment.refund.domain.RefundStatus;
 
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,13 @@ public class InMemoryRefundRepository implements RefundRepository {
     public List<Refund> findByOrderId(String orderId) {
         return byId.values().stream()
                 .filter(r -> orderId.equals(r.getOrderId()))
+                .toList();
+    }
+
+    @Override
+    public List<Refund> findByStatus(RefundStatus status) {
+        return byId.values().stream()
+                .filter(r -> status == r.getStatus())
                 .toList();
     }
 

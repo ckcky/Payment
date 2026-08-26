@@ -61,6 +61,15 @@ public class MybatisRefundRepository implements RefundRepository {
     }
 
     @Override
+    public List<Refund> findByStatus(RefundStatus status) {
+        return refundMapper.selectList(
+                        Wrappers.<RefundEntity>lambdaQuery().eq(RefundEntity::getStatus, status.name()))
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public Refund save(Refund refund) {
         if (refund.getId() == null) {
             RefundEntity entity = toEntity(refund);

@@ -6,6 +6,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
@@ -35,6 +36,15 @@ public class MybatisPaymentRepository implements PaymentRepository {
         PaymentEntity entity = paymentMapper.selectOne(
                 Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getTransactionId, transactionId));
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public List<Payment> findByStatus(PaymentStatus status) {
+        return paymentMapper.selectList(
+                        Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getStatus, status.name()))
+                .stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

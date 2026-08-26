@@ -1,5 +1,6 @@
 package com.payment.payment.domain;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -10,6 +11,9 @@ public interface PaymentRepository {
     Optional<Payment> findById(Long id);
 
     Optional<Payment> findByTransactionId(String transactionId);
+
+    /** 按平台状态查询支付（对账事实抽取用）。 */
+    List<Payment> findByStatus(PaymentStatus status);
 
     Payment save(Payment payment);
 }

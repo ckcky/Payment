@@ -2,6 +2,8 @@ package com.payment.payment.infra;
 
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
+import com.payment.payment.domain.PaymentStatus;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +27,13 @@ public class InMemoryPaymentRepository implements PaymentRepository {
         return byId.values().stream()
                 .filter(p -> transactionId.equals(p.getTransactionId()))
                 .findFirst();
+    }
+
+    @Override
+    public List<Payment> findByStatus(PaymentStatus status) {
+        return byId.values().stream()
+                .filter(p -> status == p.getStatus())
+                .toList();
     }
 
     @Override
