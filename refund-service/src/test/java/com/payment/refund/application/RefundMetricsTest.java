@@ -1,6 +1,5 @@
 package com.payment.refund.application;
 
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
@@ -21,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RefundMetricsTest {
 
     private final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
-    private final InMemoryIdempotencyRegistry idempotency = new InMemoryIdempotencyRegistry();
     private final RefundTestStack.RecordingPaymentRefundGateway payment =
             new RefundTestStack.RecordingPaymentRefundGateway();
     private final RefundTestStack.RecordingEntitlementGateway entitlement =
@@ -31,7 +29,7 @@ class RefundMetricsTest {
     private final StructuredAuditLogger audit = new StructuredAuditLogger();
 
     private RefundApplicationService appService() {
-        return new RefundApplicationService(refunds, payment, entitlement, idempotency, metrics, audit);
+        return new RefundApplicationService(refunds, payment, entitlement, metrics, audit);
     }
 
     private CreateRefundCommand cmd() {

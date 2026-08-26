@@ -1,6 +1,5 @@
 package com.payment.reconciliation.application;
 
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.reconciliation.domain.ChannelStatement;
 import com.payment.reconciliation.domain.DifferenceType;
@@ -26,7 +25,6 @@ class ReconciliationMetricsTest {
         MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
 
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
-        InMemoryIdempotencyRegistry idempotencyRegistry = new InMemoryIdempotencyRegistry();
 
         PaymentFactsClient payments = () -> List.of(
                 new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
@@ -37,7 +35,7 @@ class ReconciliationMetricsTest {
                 new ChannelStatement("channel-extra-2", 998L, "CNY", "SUCCEEDED"));
 
         ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository, payments, refunds, idempotencyRegistry, loader, metrics);
+                repository, payments, refunds, loader, metrics);
 
         ReconciliationBatch batch = service.runReconciliation("2026-08");
 

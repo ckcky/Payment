@@ -29,6 +29,13 @@ public class InMemorySettlementRepository implements SettlementRepository {
     }
 
     @Override
+    public Optional<SettlementBatch> findByIdempotencyKey(String idempotencyKey) {
+        return byId.values().stream()
+                .filter(b -> idempotencyKey.equals(b.getIdempotencyKey()))
+                .findFirst();
+    }
+
+    @Override
     public SettlementBatch save(SettlementBatch batch) {
         if (batch.getId() == null) {
             batch.setId(idGen.incrementAndGet());

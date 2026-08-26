@@ -30,6 +30,13 @@ public class InMemoryPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public Optional<Payment> findByIdempotencyKey(String idempotencyKey) {
+        return byId.values().stream()
+                .filter(p -> idempotencyKey.equals(p.getIdempotencyKey()))
+                .findFirst();
+    }
+
+    @Override
     public List<Payment> findByStatus(PaymentStatus status) {
         return byId.values().stream()
                 .filter(p -> status == p.getStatus())

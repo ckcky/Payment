@@ -1,6 +1,5 @@
 package com.payment.payment.application;
 
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
@@ -23,7 +22,6 @@ class PaymentMetricsTest {
 
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-    private final InMemoryIdempotencyRegistry idempotency = new InMemoryIdempotencyRegistry();
     private final PaymentTestStack.RecordingFulfillmentGateway fulfillment =
             new PaymentTestStack.RecordingFulfillmentGateway();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -31,7 +29,7 @@ class PaymentMetricsTest {
     private final StructuredAuditLogger audit = new StructuredAuditLogger();
 
     private PaymentApplicationService appService(MockChannelAdapter channel) {
-        return new PaymentApplicationService(payments, attempts, channel, idempotency, fulfillment,
+        return new PaymentApplicationService(payments, attempts, channel, fulfillment,
                 metrics, audit);
     }
 

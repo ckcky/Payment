@@ -2,8 +2,6 @@ package com.payment.refund.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.common.core.idempotency.IdempotencyKey;
-import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
@@ -16,51 +14,54 @@ import com.payment.refund.domain.RefundDecision;
 import com.payment.refund.domain.RefundPolicy;
 import com.payment.refund.domain.RefundRepository;
 import com.payment.refund.domain.RefundStatus;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
 /**
  * 退款申请编排（US2）：幂等受理、资格校验、渠道退款尝试、结果收敛与成功后处理。
  *
- * <p>幂等键以 {@code refund:create} 作用域登记：重复请求返回首次结果，不重复发起渠道退款；
- * 资格不通过与超退款在本地落为 REJECTED 且同样登记幂等。UNKNOWN 结果仅登记事实，
- * 交由 {@link RefundRpcCallbackService} 依据权威结果收敛，绝不臆断成败。</p>
+ * <p>幂等键由数据库唯一约束兜底（{@link #insertNew} 捕获重复键回放），重复请求返回首次结果，
+ * 不重复发起渠道退款。同一支付下的受理以悲观锁 {@code refund_intake_locks} 串行化，
+ * 防止并发读累计退款金额 + 写入之间竞态导致超退款（H1）。资格不通过与超退款在本地落为
+ * REJECTED 且同样登记幂等。UNKNOWN 结果仅登记事实，交由 {@link RefundRpcCallbackService}
+ * 依据权威结果收敛，绝不臆断成败。</p>
  */
 @Service
 public class RefundApplicationService {
 
-    private static final String IDEMPOTENCY_SCOPE = "refund:create";
     private static final String MODULE = "refund";
 
     private final RefundRepository refundRepository;
     private final PaymentRefundGateway paymentRefundGateway;
     private final EntitlementGateway entitlementGateway;
-    private final IdempotencyRegistry idempotencyRegistry;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
     public RefundApplicationService(RefundRepository refundRepository,
                                     PaymentRefundGateway paymentRefundGateway,
                                     EntitlementGateway entitlementGateway,
-                                    IdempotencyRegistry idempotencyRegistry,
                                     BusinessMetrics metrics,
                                     StructuredAuditLogger auditLogger) {
         this.refundRepository = refundRepository;
         this.paymentRefundGateway = paymentRefundGateway;
         this.entitlementGateway = entitlementGateway;
-        this.idempotencyRegistry = idempotencyRegistry;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
 
+    @Transactional
     public Refund createRefund(CreateRefundCommand cmd) {
-        IdempotencyKey key = IdempotencyKey.of(IDEMPOTENCY_SCOPE, cmd.idempotencyKey());
-        Optional<String> existing = idempotencyRegistry.find(key);
+        Optional<Refund> existing = refundRepository.findByIdempotencyKey(cmd.idempotencyKey());
         if (existing.isPresent()) {
             metrics.counter("refund.duplicate", 1.0, "module", MODULE);
-            return requireRefund(Long.valueOf(existing.get()));
+            return existing.get();
         }
+
+        // H1：先串行化同一支付的退款受理，再读累计退款金额，杜绝并发超退款。
+        refundRepository.lockForIntake(cmd.paymentId());
 
         PaymentAmountQueryResponse paid = paymentRefundGateway.queryAmount(
                 new PaymentAmountQueryRequest(cmd.paymentId()));
@@ -68,10 +69,8 @@ public class RefundApplicationService {
         if (!paid.status().equals("SUCCEEDED")) {
             Refund refund = newRefund(cmd);
             refund.reject("payment not in refundable state: " + paid.status());
-            refundRepository.save(refund);
-            idempotencyRegistry.recordIfAbsent(key, String.valueOf(refund.getId()));
             metrics.counter("refund.rejected", 1.0, "module", MODULE);
-            return refund;
+            return insertNew(refund);
         }
 
         long cumul = refundRepository.findByPaymentId(cmd.paymentId()).stream()
@@ -86,19 +85,11 @@ public class RefundApplicationService {
 
         if (!decision.isApproved()) {
             refund.reject(decision.reason());
-            refundRepository.save(refund);
-            idempotencyRegistry.recordIfAbsent(key, String.valueOf(refund.getId()));
             metrics.counter("refund.rejected", 1.0, "module", MODULE);
-            return refund;
+            return insertNew(refund);
         }
 
-        refundRepository.save(refund);
-        if (!idempotencyRegistry.recordIfAbsent(key, String.valueOf(refund.getId()))) {
-            String winnerId = idempotencyRegistry.find(key)
-                    .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR, "idempotency race"));
-            return requireRefund(Long.valueOf(winnerId));
-        }
-
+        refund = insertNew(refund);
         refund.process();
 
         RefundAttemptResponse attempt = paymentRefundGateway.attemptRefund(
@@ -168,5 +159,15 @@ public class RefundApplicationService {
     private Refund requireRefund(Long id) {
         return refundRepository.findById(id)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "refund not found: " + id));
+    }
+
+    private Refund insertNew(Refund refund) {
+        try {
+            return refundRepository.save(refund);
+        } catch (DuplicateKeyException e) {
+            return refundRepository.findByIdempotencyKey(refund.getIdempotencyKey())
+                    .orElseThrow(() -> BizException.of(ErrorCodes.DUPLICATE,
+                            "refund duplicate: " + refund.getIdempotencyKey()));
+        }
     }
 }

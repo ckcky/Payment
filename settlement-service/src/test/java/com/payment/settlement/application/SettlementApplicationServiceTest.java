@@ -2,7 +2,6 @@ package com.payment.settlement.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.settlement.domain.SettlementBatch;
@@ -21,12 +20,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SettlementApplicationServiceTest {
 
     private final InMemorySettlementRepository repository = new InMemorySettlementRepository();
-    private final InMemoryIdempotencyRegistry registry = new InMemoryIdempotencyRegistry();
     private final FakeMerchantClient merchantClient = new FakeMerchantClient();
     private final FakeReconciliationClient reconciliationClient = new FakeReconciliationClient();
 
     private SettlementApplicationService service() {
-        return new SettlementApplicationService(repository, merchantClient, reconciliationClient, registry,
+        return new SettlementApplicationService(repository, merchantClient, reconciliationClient,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 

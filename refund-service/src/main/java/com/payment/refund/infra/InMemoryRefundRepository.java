@@ -52,6 +52,11 @@ public class InMemoryRefundRepository implements RefundRepository {
     }
 
     @Override
+    public void lockForIntake(Long paymentId) {
+        // 内存实现无并发串行化需求（单测为单线程），生产由 MyBatis 排他锁承接。
+    }
+
+    @Override
     public Refund save(Refund refund) {
         if (refund.getId() == null) {
             refund.setId(idGen.incrementAndGet());

@@ -1,6 +1,5 @@
 package com.payment.refund.support;
 
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
@@ -23,12 +22,11 @@ import java.util.List;
 public final class RefundTestStack {
 
     public final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
-    public final InMemoryIdempotencyRegistry registry = new InMemoryIdempotencyRegistry();
     public final RecordingPaymentRefundGateway payment = new RecordingPaymentRefundGateway();
     public final RecordingEntitlementGateway entitlement = new RecordingEntitlementGateway();
 
     public RefundApplicationService appService() {
-        return new RefundApplicationService(refunds, payment, entitlement, registry,
+        return new RefundApplicationService(refunds, payment, entitlement,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 

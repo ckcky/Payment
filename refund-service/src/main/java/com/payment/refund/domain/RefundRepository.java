@@ -20,5 +20,8 @@ public interface RefundRepository {
     /** 按退款状态查询（对账事实抽取用）。 */
     List<Refund> findByStatus(RefundStatus status);
 
+    /** 持有 {@code paymentId} 的退款受理排他锁（H1：串行化累计退款金额读改写）。 */
+    void lockForIntake(Long paymentId);
+
     Refund save(Refund refund);
 }

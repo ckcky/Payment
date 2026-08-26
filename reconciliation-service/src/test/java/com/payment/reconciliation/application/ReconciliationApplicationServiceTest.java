@@ -1,6 +1,5 @@
 package com.payment.reconciliation.application;
 
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.reconciliation.domain.ChannelStatement;
 import com.payment.reconciliation.domain.DifferenceType;
@@ -20,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReconciliationApplicationServiceTest {
 
     private final InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
-    private final InMemoryIdempotencyRegistry registry = new InMemoryIdempotencyRegistry();
 
     private final PaymentFactsClient payments = () -> List.of(
             new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"),
@@ -36,7 +34,7 @@ class ReconciliationApplicationServiceTest {
             new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"));
 
     private ReconciliationApplicationService service() {
-        return new ReconciliationApplicationService(repository, payments, refunds, registry, loader,
+        return new ReconciliationApplicationService(repository, payments, refunds, loader,
                 new NoopBusinessMetrics());
     }
 
@@ -66,7 +64,6 @@ class ReconciliationApplicationServiceTest {
                 repository,
                 () -> List.of(new PlatformFact("ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
                 () -> List.of(),
-                registry,
                 period -> List.of(new ChannelStatement("ref-1", 1000L, "CNY", "SUCCEEDED")),
                 new NoopBusinessMetrics());
 

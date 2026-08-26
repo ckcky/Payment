@@ -1,6 +1,5 @@
 package com.payment.settlement.application;
 
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.settlement.domain.SettlementBatch;
@@ -25,7 +24,6 @@ class SettlementMetricsTest {
         MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
 
         InMemorySettlementRepository repository = new InMemorySettlementRepository();
-        InMemoryIdempotencyRegistry idempotencyRegistry = new InMemoryIdempotencyRegistry();
         MerchantClient merchantClient = id -> new MerchantView(id, "ACTIVE", true);
         ReconciliationClient reconciliationClient = period -> new ReconciliationSummary(period,
                 List.of(
@@ -34,7 +32,7 @@ class SettlementMetricsTest {
                 0);
 
         SettlementApplicationService service = new SettlementApplicationService(
-                repository, merchantClient, reconciliationClient, idempotencyRegistry, metrics,
+                repository, merchantClient, reconciliationClient, metrics,
                 new StructuredAuditLogger());
 
         SettlementBatch batch = service.createBatch("1", "2026-08", "idem-1");

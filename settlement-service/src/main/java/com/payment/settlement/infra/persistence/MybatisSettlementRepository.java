@@ -44,6 +44,13 @@ public class MybatisSettlementRepository implements SettlementRepository {
     }
 
     @Override
+    public Optional<SettlementBatch> findByIdempotencyKey(String idempotencyKey) {
+        SettlementBatchEntity entity = batchMapper.selectOne(Wrappers.<SettlementBatchEntity>lambdaQuery()
+                .eq(SettlementBatchEntity::getIdempotencyKey, idempotencyKey));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
     public SettlementBatch save(SettlementBatch batch) {
         if (batch.getId() == null) {
             SettlementBatchEntity entity = toEntity(batch);

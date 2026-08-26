@@ -39,6 +39,13 @@ public class MybatisPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public Optional<Payment> findByIdempotencyKey(String idempotencyKey) {
+        PaymentEntity entity = paymentMapper.selectOne(
+                Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getIdempotencyKey, idempotencyKey));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
     public List<Payment> findByStatus(PaymentStatus status) {
         return paymentMapper.selectList(
                         Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getStatus, status.name()))

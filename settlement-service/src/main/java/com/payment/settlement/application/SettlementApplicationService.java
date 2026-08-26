@@ -2,8 +2,6 @@ package com.payment.settlement.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.common.core.idempotency.IdempotencyKey;
-import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.settlement.domain.EligibilityDecision;
@@ -12,48 +10,45 @@ import com.payment.settlement.domain.SettlementEligibility;
 import com.payment.settlement.domain.SettlementItem;
 import com.payment.settlement.domain.SettlementRepository;
 import com.payment.settlement.domain.SettlementStatus;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
 /**
  * 结算批次编排（US3）：幂等受理、资格校验、净额计算、模拟执行与结果收敛。
  *
- * <p>幂等键以 {@code settlement:create} 作用域登记，且商户+周期构成业务幂等（数据库唯一约束兜底）。
+ * <p>幂等键与商户+周期均构成业务幂等，由数据库唯一约束兜底（{@link #insertNew} 捕获重复键回放）。
  * 净额 = 收入 − 退款 − 调整（MVP 调整额为 0）。执行仅模拟：批次直接进入 UNKNOWN，
  * 交由 {@link #resolveBatch} 依据权威结果收敛，绝不臆断成败。</p>
  */
 @Service
 public class SettlementApplicationService {
 
-    private static final String IDEMPOTENCY_SCOPE = "settlement:create";
-
     private final SettlementRepository settlementRepository;
     private final MerchantClient merchantClient;
     private final ReconciliationClient reconciliationClient;
-    private final IdempotencyRegistry idempotencyRegistry;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
     public SettlementApplicationService(SettlementRepository settlementRepository,
                                         MerchantClient merchantClient,
                                         ReconciliationClient reconciliationClient,
-                                        IdempotencyRegistry idempotencyRegistry,
                                         BusinessMetrics metrics,
                                         StructuredAuditLogger auditLogger) {
         this.settlementRepository = settlementRepository;
         this.merchantClient = merchantClient;
         this.reconciliationClient = reconciliationClient;
-        this.idempotencyRegistry = idempotencyRegistry;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
 
+    @Transactional
     public SettlementBatch createBatch(String merchantId, String period, String idempotencyKey) {
-        IdempotencyKey key = IdempotencyKey.of(IDEMPOTENCY_SCOPE, idempotencyKey);
-        Optional<String> existing = idempotencyRegistry.find(key);
+        Optional<SettlementBatch> existing = settlementRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
-            return requireBatch(Long.valueOf(existing.get()));
+            return existing.get();
         }
 
         Optional<SettlementBatch> byMerchantPeriod = settlementRepository.findByMerchantAndPeriod(merchantId, period);
@@ -88,12 +83,7 @@ public class SettlementApplicationService {
             batch.addItem(new SettlementItem(fact.reference(), fact.type(), fact.amountMinor(), fact.currencyCode()));
         }
 
-        settlementRepository.save(batch);
-        if (!idempotencyRegistry.recordIfAbsent(key, String.valueOf(batch.getId()))) {
-            String winnerId = idempotencyRegistry.find(key)
-                    .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR, "idempotency race"));
-            return requireBatch(Long.valueOf(winnerId));
-        }
+        batch = insertNew(batch);
 
         metrics.counter("settlement.created", 1, "module", "settlement");
         auditLogger.audit("settlement.created", batch.getIdempotencyKey(), batch.getNetMinor(),
@@ -117,6 +107,7 @@ public class SettlementApplicationService {
         return requireBatch(id);
     }
 
+    @Transactional
     public SettlementBatch resolveBatch(Long id, String authoritativeStatus) {
         SettlementBatch batch = requireBatch(id);
         switch (authoritativeStatus) {
@@ -138,5 +129,16 @@ public class SettlementApplicationService {
     private SettlementBatch requireBatch(Long id) {
         return settlementRepository.findById(id)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "settlement batch not found: " + id));
+    }
+
+    private SettlementBatch insertNew(SettlementBatch batch) {
+        try {
+            return settlementRepository.save(batch);
+        } catch (DuplicateKeyException e) {
+            return settlementRepository.findByIdempotencyKey(batch.getIdempotencyKey())
+                    .or(() -> settlementRepository.findByMerchantAndPeriod(batch.getMerchantId(), batch.getPeriod()))
+                    .orElseThrow(() -> BizException.of(ErrorCodes.DUPLICATE,
+                            "settlement batch duplicate: " + batch.getIdempotencyKey()));
+        }
     }
 }

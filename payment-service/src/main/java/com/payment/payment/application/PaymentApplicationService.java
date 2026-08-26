@@ -2,8 +2,6 @@ package com.payment.payment.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.common.core.idempotency.IdempotencyKey;
-import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.channel.ChannelResult;
@@ -15,7 +13,9 @@ import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 支付意图创建（T037）：幂等受理、创建支付与尝试、调用渠道并应用结果。
@@ -26,13 +26,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class PaymentApplicationService {
 
-    private static final String IDEMPOTENCY_SCOPE = "payment:create";
     private static final String MODULE = "payment";
 
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository attemptRepository;
     private final PaymentChannel channel;
-    private final IdempotencyRegistry idempotencyRegistry;
     private final FulfillmentGateway fulfillmentGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
@@ -40,37 +38,36 @@ public class PaymentApplicationService {
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentAttemptRepository attemptRepository,
                                      PaymentChannel channel,
-                                     IdempotencyRegistry idempotencyRegistry,
                                      FulfillmentGateway fulfillmentGateway,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.channel = channel;
-        this.idempotencyRegistry = idempotencyRegistry;
         this.fulfillmentGateway = fulfillmentGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
 
+    /**
+     * 支付意图创建：幂等受理、创建支付与尝试、调用渠道并应用结果。
+     *
+     * <p>幂等以数据库唯一约束 {@code uk_payments_idempotency_key} 兜底（非进程内内存登记）：
+     * 先按幂等键回查，未命中则插入；并发/重启后的重复插入撞唯一约束，捕获后回查返回首次结果。
+     * 本地多步写（支付 + 尝试）在同一本地事务内原子提交；履约 RPC 失败不回滚支付成功事实。</p>
+     */
+    @Transactional
     public Payment createPaymentIntent(CreatePaymentCommand cmd) {
-        IdempotencyKey key = IdempotencyKey.of(IDEMPOTENCY_SCOPE, cmd.idempotencyKey());
-        Optional<String> existing = idempotencyRegistry.find(key);
+        Optional<Payment> existing = paymentRepository.findByIdempotencyKey(cmd.idempotencyKey());
         if (existing.isPresent()) {
-            return requirePayment(Long.valueOf(existing.get()));
+            metrics.counter("payment.duplicate", 1.0, "module", MODULE);
+            return existing.get();
         }
 
         Payment payment = new Payment(cmd.transactionId(), cmd.orderId(), cmd.userId(),
                 cmd.amountMinor(), cmd.currencyCode(), cmd.idempotencyKey());
-        payment = paymentRepository.save(payment);
+        payment = insertNew(payment);
         metrics.counter("payment.created", 1.0, "module", MODULE);
-
-        // 先登记幂等键再扣款，避免并发重复扣款；登记失败则丢弃本地未扣款支付，返回胜者。
-        if (!idempotencyRegistry.recordIfAbsent(key, String.valueOf(payment.getId()))) {
-            String winnerId = idempotencyRegistry.find(key)
-                    .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR, "idempotency race"));
-            return requirePayment(Long.valueOf(winnerId));
-        }
 
         PaymentAttempt attempt = new PaymentAttempt(payment.getId(), cmd.channelCode(), 0);
         attempt = attemptRepository.save(attempt);
@@ -86,9 +83,24 @@ public class PaymentApplicationService {
             recordTransition(payment, fromStatus, result);
         }
         if (changed && result.status() == ChannelResult.Status.SUCCESS) {
-            fulfillmentGateway.notifyPaymentSucceeded(PaymentResultApplier.toSucceededRequest(payment));
+            try {
+                fulfillmentGateway.notifyPaymentSucceeded(PaymentResultApplier.toSucceededRequest(payment));
+            } catch (RuntimeException ignored) {
+                // 履约 RPC 失败不得回滚支付成功事实（跨服务一致性由幂等 + 后续对账收敛）。
+            }
         }
         return payment;
+    }
+
+    /** 插入新支付；并发/重启后撞幂等键唯一约束时，回查并返回首次结果（不重复入账）。 */
+    private Payment insertNew(Payment payment) {
+        try {
+            return paymentRepository.save(payment);
+        } catch (DuplicateKeyException e) {
+            return paymentRepository.findByIdempotencyKey(payment.getIdempotencyKey())
+                    .orElseThrow(() -> BizException.of(ErrorCodes.DUPLICATE,
+                            "payment duplicate: " + payment.getIdempotencyKey()));
+        }
     }
 
     public Payment getPayment(Long id) {

@@ -39,3 +39,11 @@ CREATE TABLE IF NOT EXISTS refund_items (
     PRIMARY KEY (id),
     KEY idx_refund_items_refund_id (refund_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 退款受理悲观锁：以 payment_id 为行锁，串行化同一支付的退款受理，
+-- 防止并发读累计退款金额 + 写入之间的竞态导致超退款（H1 资金正确性）。
+-- 行在事务内由 INSERT ... ON DUPLICATE KEY UPDATE 持有直至提交/回滚。
+CREATE TABLE IF NOT EXISTS refund_intake_locks (
+    payment_id BIGINT NOT NULL,
+    PRIMARY KEY (payment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

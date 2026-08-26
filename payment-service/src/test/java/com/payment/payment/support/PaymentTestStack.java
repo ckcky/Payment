@@ -2,7 +2,6 @@ package com.payment.payment.support;
 
 import com.payment.common.dto.rpc.FulfillmentAcceptedResponse;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
-import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.CreatePaymentCommand;
@@ -24,7 +23,6 @@ public final class PaymentTestStack {
 
     public final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     public final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-    public final InMemoryIdempotencyRegistry registry = new InMemoryIdempotencyRegistry();
     public final RecordingFulfillmentGateway fulfillment = new RecordingFulfillmentGateway();
 
     public final PaymentResultProcessor processor =
@@ -37,7 +35,7 @@ public final class PaymentTestStack {
                     new StructuredAuditLogger());
 
     public PaymentApplicationService appService(PaymentChannel channel) {
-        return new PaymentApplicationService(payments, attempts, channel, registry, fulfillment,
+        return new PaymentApplicationService(payments, attempts, channel, fulfillment,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 

@@ -23,10 +23,13 @@ public class MybatisRefundRepository implements RefundRepository {
 
     private final RefundMapper refundMapper;
     private final RefundItemMapper refundItemMapper;
+    private final RefundIntakeLockMapper intakeLockMapper;
 
-    public MybatisRefundRepository(RefundMapper refundMapper, RefundItemMapper refundItemMapper) {
+    public MybatisRefundRepository(RefundMapper refundMapper, RefundItemMapper refundItemMapper,
+                                   RefundIntakeLockMapper intakeLockMapper) {
         this.refundMapper = refundMapper;
         this.refundItemMapper = refundItemMapper;
+        this.intakeLockMapper = intakeLockMapper;
     }
 
     @Override
@@ -67,6 +70,11 @@ public class MybatisRefundRepository implements RefundRepository {
                 .stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public void lockForIntake(Long paymentId) {
+        intakeLockMapper.lockForIntake(paymentId);
     }
 
     @Override

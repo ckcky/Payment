@@ -2,8 +2,6 @@ package com.payment.reconciliation.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.common.core.idempotency.IdempotencyKey;
-import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.reconciliation.api.ReconciliationSettlementFact;
 import com.payment.reconciliation.api.ReconciliationSettlementSummaryResponse;
@@ -14,7 +12,9 @@ import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.domain.ReconciliationMatching;
 import com.payment.reconciliation.domain.ReconciliationMatchingResult;
 import com.payment.reconciliation.domain.ReconciliationRepository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,35 +30,37 @@ import java.util.Optional;
 @Service
 public class ReconciliationApplicationService {
 
-    private static final String IDEMPOTENCY_SCOPE = "reconciliation:run";
     private static final String MOCK_CHANNEL_SOURCE = "mock-channel";
 
     private final ReconciliationRepository repository;
     private final PaymentFactsClient paymentFactsClient;
     private final RefundFactsClient refundFactsClient;
-    private final IdempotencyRegistry idempotencyRegistry;
     private final ChannelStatementLoader channelStatementLoader;
     private final BusinessMetrics metrics;
 
     public ReconciliationApplicationService(ReconciliationRepository repository,
                                             PaymentFactsClient paymentFactsClient,
                                             RefundFactsClient refundFactsClient,
-                                            IdempotencyRegistry idempotencyRegistry,
                                             ChannelStatementLoader channelStatementLoader,
                                             BusinessMetrics metrics) {
         this.repository = repository;
         this.paymentFactsClient = paymentFactsClient;
         this.refundFactsClient = refundFactsClient;
-        this.idempotencyRegistry = idempotencyRegistry;
         this.channelStatementLoader = channelStatementLoader;
         this.metrics = metrics;
     }
 
+    /**
+     * 对账执行：拉取平台事实与渠道账单逐笔比对，产出对账批次。
+     *
+     * <p>幂等以周期唯一约束 {@code uk_reconciliation_batches_period} 兜底（非进程内内存登记）：
+     * 先按周期回查，未命中则比对并插入；并发/重启后的重复插入撞唯一约束，捕获后回查返回首次批次。</p>
+     */
+    @Transactional
     public ReconciliationBatch runReconciliation(String period) {
-        IdempotencyKey key = IdempotencyKey.of(IDEMPOTENCY_SCOPE, period);
-        Optional<String> existing = idempotencyRegistry.find(key);
+        Optional<ReconciliationBatch> existing = repository.findByPeriod(period);
         if (existing.isPresent()) {
-            return requireBatch(Long.valueOf(existing.get()));
+            return existing.get();
         }
 
         List<PlatformFact> platform = new ArrayList<>(paymentFactsClient.fetchConfirmedFacts());
@@ -70,13 +72,7 @@ public class ReconciliationApplicationService {
         ReconciliationBatch batch = new ReconciliationBatch(period, MOCK_CHANNEL_SOURCE);
         batch.start();
         batch.finish(result.matches(), result.differences());
-        repository.save(batch);
-
-        if (!idempotencyRegistry.recordIfAbsent(key, String.valueOf(batch.getId()))) {
-            String winnerId = idempotencyRegistry.find(key)
-                    .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR, "idempotency race"));
-            return requireBatch(Long.valueOf(winnerId));
-        }
+        batch = insertNew(batch);
 
         metrics.counter("reconciliation.run", 1, "module", "reconciliation");
         for (Difference difference : batch.getDifferences()) {
@@ -84,6 +80,17 @@ public class ReconciliationApplicationService {
                     "type", difference.getType().name());
         }
         return batch;
+    }
+
+    /** 插入新批次；并发/重启后撞周期唯一约束时，回查并返回首次批次（不重复比对）。 */
+    private ReconciliationBatch insertNew(ReconciliationBatch batch) {
+        try {
+            return repository.save(batch);
+        } catch (DuplicateKeyException e) {
+            return repository.findByPeriod(batch.getPeriod())
+                    .orElseThrow(() -> BizException.of(ErrorCodes.DUPLICATE,
+                            "reconciliation batch duplicate: " + batch.getPeriod()));
+        }
     }
 
     public ReconciliationBatch getBatch(Long id) {
@@ -94,6 +101,7 @@ public class ReconciliationApplicationService {
         return requireBatch(batchId).getDifferences();
     }
 
+    @Transactional
     public Difference resolveDifference(Long batchId, String reference, String resolutionNote) {
         ReconciliationBatch batch = requireBatch(batchId);
         Difference difference = batch.getDifferences().stream()
