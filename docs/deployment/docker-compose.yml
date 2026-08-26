@@ -1,11 +1,16 @@
 # Commerce & Payment Platform MVP — 单机启动入口
 #
 # 本阶段只提供「最小运行依赖」：MySQL 8。
-# 各微服务镜像与编排在 Dockerfile 就绪后（Polish 阶段 T074）补齐；
-# 当前本地运行以 `./mvnw` 直接启动各服务（端口见各服务 application.yml）。
+# 各微服务镜像与编排在 Dockerfile 就绪后补齐；
+# 当前本地运行以 `./mvnw` 直接启动各服务，服务端口（8081–8089）：
+#   merchant 8081 / catalog 8082 / order 8083 / payment 8084 / refund 8085
+#   fulfillment 8086 / entitlement 8087 / reconciliation 8088 / settlement 8089
 #
 # Database-per-Service：生产/集成测试每个服务独立数据库；本地单机开发为降低门槛，
 # 用同一个 MySQL 实例承载多个逻辑库（每个服务一个 schema），仍保持服务间不共享表。
+#
+# initdb 目录含 01–08 共 8 个建库脚本（对应 9 个服务，其中 merchant 无独立业务表），
+# 首次 `up -d` 时按序自动执行，为每个服务创建独立数据库。
 
 services:
   mysql:
