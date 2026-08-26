@@ -106,11 +106,11 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 - [X] T042 [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/api/PaymentSuccessRpcController.java` 接收 payment-service 的成功支付 RPC 并创建幂等履约任务；依赖 T033、T040。
 - [X] T043 [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/api/FulfillmentCompletedRpcController.java` 接收履约完成 RPC 并授予权益；依赖 T040、T041、T042。
 - [X] T044 [US1] 在 `order-service/src/main/java/com/payment/order/api/`、`payment-service/src/main/java/com/payment/payment/api/` 实现订单创建、支付意图、渠道回调、支付查询和 UNKNOWN 收敛接口；依赖 T036-T039。
-- [ ] T045a [US1] 在 `catalog-service/src/main/java/com/payment/catalog/infra/persistence/` 为 Catalog 接入模块自有持久化实现和历史追踪；依赖 T029。
-- [ ] T045b [US1] 在 `order-service/src/main/java/com/payment/order/infra/persistence/` 为 Order 和 Transaction 接入模块自有持久化实现和历史追踪；依赖 T030-T032。
-- [ ] T045c [US1] 在 `payment-service/src/main/java/com/payment/payment/infra/persistence/` 为 Payment 和 PaymentAttempt 接入模块自有持久化实现、渠道引用和回调历史追踪；依赖 T033-T039。
-- [ ] T045d [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/infra/persistence/` 为 Fulfillment 接入模块自有持久化实现和履约历史追踪；依赖 T040、T042。
-- [ ] T045e [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/` 为 Entitlement 接入模块自有持久化实现和授予历史追踪；依赖 T041、T043。
+- [X] T045a [US1] 在 `catalog-service/src/main/java/com/payment/catalog/infra/persistence/` 为 Catalog 接入模块自有持久化实现和历史追踪；依赖 T029。
+- [X] T045b [US1] 在 `order-service/src/main/java/com/payment/order/infra/persistence/` 为 Order 和 Transaction 接入模块自有持久化实现和历史追踪；依赖 T030-T032。
+- [X] T045c [US1] 在 `payment-service/src/main/java/com/payment/payment/infra/persistence/` 为 Payment 和 PaymentAttempt 接入模块自有持久化实现、渠道引用和回调历史追踪；依赖 T033-T039。
+- [X] T045d [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/infra/persistence/` 为 Fulfillment 接入模块自有持久化实现和履约历史追踪；依赖 T040、T042。
+- [X] T045e [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/` 为 Entitlement 接入模块自有持久化实现和授予历史追踪；依赖 T041、T043。
 - [X] T046 [US1] 在 `payment-service/src/main/java/com/payment/payment/infra/channel/` 实现 Mock Channel 的成功、失败、超时和不完整响应场景；依赖 T035。
 - [X] T047 [US1] 在 `order-service/src/test/java/com/payment/order/scenario/SuccessfulPurchaseScenarioTest.java` 完成 T020 的实现验证，并运行 `mvnw test` 验证 US1 独立 RPC 闭环；依赖 T044-T046。
 
