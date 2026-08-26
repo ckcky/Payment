@@ -64,7 +64,7 @@ class CatalogPersistenceTest {
 
     @Test
     void optimisticLockRejectsStaleUpdate() {
-        Product product = new Product("P-1001", "Annual Membership", "MEMBERSHIP");
+        Product product = new Product("P-1002", "Annual Membership", "MEMBERSHIP");
         product.list();
         productRepository.save(product);
 

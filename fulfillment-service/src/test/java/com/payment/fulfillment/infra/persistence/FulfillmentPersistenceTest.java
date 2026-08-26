@@ -41,7 +41,7 @@ class FulfillmentPersistenceTest {
 
     @Test
     void optimisticLockRejectsStaleUpdate() {
-        Fulfillment fulfillment = new Fulfillment("order_1", "item_1", "mock delivery", "pay_1");
+        Fulfillment fulfillment = new Fulfillment("order_1", "item_1", "mock delivery", "pay_2");
         fulfillmentRepository.save(fulfillment);
 
         Fulfillment first = fulfillmentRepository.findById(fulfillment.getId()).orElseThrow();

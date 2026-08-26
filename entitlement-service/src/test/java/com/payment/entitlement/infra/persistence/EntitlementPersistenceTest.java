@@ -41,7 +41,7 @@ class EntitlementPersistenceTest {
 
     @Test
     void optimisticLockRejectsStaleUpdate() {
-        Entitlement e = new Entitlement("user_1", "order_1", "ful_1", 3, "default", null);
+        Entitlement e = new Entitlement("user_1", "order_1", "ful_2", 3, "default", null);
         e.grant();
         entitlementRepository.save(e);
 
