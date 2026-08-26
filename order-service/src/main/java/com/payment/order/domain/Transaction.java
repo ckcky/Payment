@@ -13,6 +13,8 @@ import java.util.Objects;
 public class Transaction {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final String orderId;
     private final long amountMinor;
     private final String currencyCode;
@@ -27,6 +29,16 @@ public class Transaction {
         this.amountMinor = amountMinor;
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.purpose = purpose == null ? "PURCHASE" : purpose;
+    }
+
+    /** 持久化重建：还原交易聚合及其历史状态，绕过创建期状态机（不改变业务规则）。 */
+    public static Transaction rehydrate(Long id, String orderId, long amountMinor, String currencyCode,
+                                        String purpose, TransactionStatus status, Integer version) {
+        Transaction t = new Transaction(orderId, amountMinor, currencyCode, purpose);
+        t.id = id;
+        t.status = status;
+        t.version = version;
+        return t;
     }
 
     public void start() {
@@ -96,6 +108,14 @@ public class Transaction {
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getOrderId() {

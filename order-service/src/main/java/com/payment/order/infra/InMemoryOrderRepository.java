@@ -6,12 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.springframework.stereotype.Repository;
 
 /**
- * 内存订单仓储（MVP）。
+ * 内存订单仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisOrderRepository} 承接。
  */
-@Repository
 public class InMemoryOrderRepository implements OrderRepository {
 
     private final Map<Long, Order> byId = new ConcurrentHashMap<>();

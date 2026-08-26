@@ -17,6 +17,8 @@ import java.util.Objects;
 public class Order {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final String userId;
     private final String merchantId;
     private OrderStatus status = OrderStatus.PENDING_CONFIRMATION;
@@ -42,6 +44,21 @@ public class Order {
         }
         this.totalMinor = total;
         this.items = Collections.unmodifiableList(new ArrayList<>(items));
+    }
+
+    /**
+     * 持久化重建：用既有快照明细与历史状态/金额还原聚合，绕过创建期状态机（不改变业务规则）。
+     */
+    public static Order rehydrate(Long id, String userId, String merchantId, OrderStatus status,
+                                  String currencyCode, List<OrderItem> items,
+                                  long paidMinor, long refundedMinor, Integer version) {
+        Order order = new Order(userId, merchantId, currencyCode, items);
+        order.id = id;
+        order.status = status;
+        order.paidMinor = paidMinor;
+        order.refundedMinor = refundedMinor;
+        order.version = version;
+        return order;
     }
 
     // ---- 状态机（唯一的状态变更入口）----
@@ -127,6 +144,14 @@ public class Order {
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getUserId() {

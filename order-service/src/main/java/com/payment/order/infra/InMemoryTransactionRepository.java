@@ -6,12 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.springframework.stereotype.Repository;
 
 /**
- * 内存交易仓储（MVP）。
+ * 内存交易仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisTransactionRepository} 承接。
  */
-@Repository
 public class InMemoryTransactionRepository implements TransactionRepository {
 
     private final Map<Long, Transaction> byId = new ConcurrentHashMap<>();
