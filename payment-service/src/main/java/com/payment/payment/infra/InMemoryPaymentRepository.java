@@ -6,12 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.springframework.stereotype.Repository;
 
 /**
- * 内存支付仓储（MVP）。生产实现替换为 MyBatis-Plus 实体 + 数据库唯一约束兜底幂等。
+ * 内存支付仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisPaymentRepository} 承接。
  */
-@Repository
 public class InMemoryPaymentRepository implements PaymentRepository {
 
     private final Map<Long, Payment> byId = new ConcurrentHashMap<>();

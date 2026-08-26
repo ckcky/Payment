@@ -7,12 +7,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.springframework.stereotype.Repository;
 
 /**
- * 内存支付尝试仓储（MVP）。
+ * 内存支付尝试仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisPaymentAttemptRepository} 承接。
  */
-@Repository
 public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepository {
 
     private final Map<Long, PaymentAttempt> byId = new ConcurrentHashMap<>();

@@ -18,6 +18,8 @@ import java.util.Objects;
 public class Payment {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final String transactionId;
     private final String orderId;
     private final String userId;
@@ -39,6 +41,22 @@ public class Payment {
         this.amountMinor = amountMinor;
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+    }
+
+    /**
+     * 持久化重建：用历史状态/渠道尝试信息还原聚合，绕过创建期状态机（不改变业务规则）。
+     */
+    public static Payment rehydrate(Long id, String transactionId, String orderId, String userId,
+                                    long amountMinor, String currencyCode, String idempotencyKey,
+                                    PaymentStatus status, Long currentAttemptId, String failureReason,
+                                    Integer version) {
+        Payment payment = new Payment(transactionId, orderId, userId, amountMinor, currencyCode, idempotencyKey);
+        payment.id = id;
+        payment.status = status;
+        payment.currentAttemptId = currentAttemptId;
+        payment.failureReason = failureReason;
+        payment.version = version;
+        return payment;
     }
 
     // ---- 状态机（唯一状态变更入口）----
@@ -120,6 +138,14 @@ public class Payment {
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getTransactionId() {

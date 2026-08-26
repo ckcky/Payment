@@ -16,9 +16,11 @@ import java.util.Objects;
 public class PaymentAttempt {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final Long paymentId;
     private final String channelCode;
-    private final Instant requestedAt;
+    private Instant requestedAt;
     private Instant respondedAt;
     private String channelReference;
     private PaymentAttemptStatus status = PaymentAttemptStatus.PENDING;
@@ -30,6 +32,24 @@ public class PaymentAttempt {
         this.channelCode = Objects.requireNonNull(channelCode, "channelCode");
         this.requestedAt = Instant.now();
         this.retryCount = retryCount;
+    }
+
+    /**
+     * 持久化重建：还原一次渠道交互的完整历史（引用/时间/状态/未知信息），绕过创建期状态机
+     * （不改变业务规则）。
+     */
+    public static PaymentAttempt rehydrate(Long id, Long paymentId, String channelCode, int retryCount,
+                                           Instant requestedAt, Instant respondedAt, String channelReference,
+                                           PaymentAttemptStatus status, String failureReason, Integer version) {
+        PaymentAttempt attempt = new PaymentAttempt(paymentId, channelCode, retryCount);
+        attempt.id = id;
+        attempt.requestedAt = requestedAt;
+        attempt.respondedAt = respondedAt;
+        attempt.channelReference = channelReference;
+        attempt.status = status;
+        attempt.failureReason = failureReason;
+        attempt.version = version;
+        return attempt;
     }
 
     // ---- 状态机 ----
@@ -102,6 +122,14 @@ public class PaymentAttempt {
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public Long getPaymentId() {

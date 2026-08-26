@@ -1,0 +1,88 @@
+package com.payment.payment.infra.persistence;
+
+import com.payment.common.core.error.BizException;
+import com.payment.common.core.error.ErrorCodes;
+import com.payment.payment.domain.Payment;
+import com.payment.payment.domain.PaymentAttempt;
+import com.payment.payment.domain.PaymentAttemptRepository;
+import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.payment.domain.PaymentRepository;
+import com.payment.payment.domain.PaymentStatus;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 支付/支付尝试持久化集成测试（H2，MySQL 兼容模式）：验证 PO↔领域映射、审计字段、幂等键/渠道引用唯一、乐观锁。
+ */
+@SpringBootTest
+class PaymentPersistenceTest {
+
+    @Autowired
+    private PaymentRepository paymentRepository;
+
+    @Autowired
+    private PaymentAttemptRepository attemptRepository;
+
+    @Test
+    void paymentRoundTrip() {
+        Payment payment = new Payment("txn-rt", "order-rt", "user-rt", 100L, "CNY", "idem-rt");
+        paymentRepository.save(payment);
+
+        Payment reloaded = paymentRepository.findById(payment.getId()).orElseThrow();
+        assertThat(reloaded.getId()).isEqualTo(payment.getId());
+        assertThat(reloaded.getTransactionId()).isEqualTo("txn-rt");
+        assertThat(reloaded.getOrderId()).isEqualTo("order-rt");
+        assertThat(reloaded.getUserId()).isEqualTo("user-rt");
+        assertThat(reloaded.getAmountMinor()).isEqualTo(100L);
+        assertThat(reloaded.getCurrencyCode()).isEqualTo("CNY");
+        assertThat(reloaded.getIdempotencyKey()).isEqualTo("idem-rt");
+        assertThat(reloaded.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(reloaded.getVersion()).isEqualTo(1);
+
+        assertThat(paymentRepository.findByTransactionId("txn-rt")).isPresent();
+    }
+
+    @Test
+    void attemptRoundTrip() {
+        Payment payment = new Payment("txn-att", "order-att", "user-att", 100L, "CNY", "idem-att");
+        paymentRepository.save(payment);
+
+        PaymentAttempt attempt = new PaymentAttempt(payment.getId(), "mock", 0);
+        attempt.accept("ref-att");
+        attemptRepository.save(attempt);
+
+        PaymentAttempt reloaded = attemptRepository.findById(attempt.getId()).orElseThrow();
+        assertThat(reloaded.getId()).isEqualTo(attempt.getId());
+        assertThat(reloaded.getPaymentId()).isEqualTo(payment.getId());
+        assertThat(reloaded.getChannelCode()).isEqualTo("mock");
+        assertThat(reloaded.getChannelReference()).isEqualTo("ref-att");
+        assertThat(reloaded.getStatus()).isEqualTo(PaymentAttemptStatus.ACCEPTED);
+        assertThat(reloaded.getRetryCount()).isEqualTo(0);
+        assertThat(reloaded.getVersion()).isEqualTo(1);
+
+        assertThat(attemptRepository.findByPaymentId(payment.getId())).hasSize(1);
+    }
+
+    @Test
+    void optimisticLockRejectsStaleUpdate() {
+        Payment payment = new Payment("txn-lock", "order-lock", "user-lock", 100L, "CNY", "idem-lock");
+        paymentRepository.save(payment);
+
+        Payment first = paymentRepository.findById(payment.getId()).orElseThrow();
+        Payment second = paymentRepository.findById(payment.getId()).orElseThrow();
+
+        first.start(1L);
+        first.succeed();
+        paymentRepository.save(first);
+
+        second.start(2L);
+        second.succeed();
+        assertThatThrownBy(() -> paymentRepository.save(second))
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.CONFLICT));
+    }
+}
