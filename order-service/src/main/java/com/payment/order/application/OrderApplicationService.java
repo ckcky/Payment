@@ -2,6 +2,8 @@ package com.payment.order.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.dto.rpc.CreatePaymentRequest;
+import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.order.domain.Order;
 import com.payment.order.domain.OrderItem;
 import com.payment.order.domain.OrderRepository;
@@ -12,7 +14,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * 订单应用服务（T036）：订单创建、SKU RPC 校验、价格快照，以及 Order 1:1 Transaction。
+ * 订单应用服务（T036）：订单创建、SKU RPC 校验、价格快照，Order 1:1 Transaction，
+ * 以及创建支付意图的同步 RPC（order → payment）。
  *
  * <p>只有可售 SKU 才能下单；价格在创建时冻结为快照；订单总额由明细小计累加（防溢出）。</p>
  */
@@ -22,13 +25,16 @@ public class OrderApplicationService {
     private final OrderRepository orderRepository;
     private final TransactionRepository transactionRepository;
     private final CatalogClient catalogClient;
+    private final PaymentGateway paymentGateway;
 
     public OrderApplicationService(OrderRepository orderRepository,
                                    TransactionRepository transactionRepository,
-                                   CatalogClient catalogClient) {
+                                   CatalogClient catalogClient,
+                                   PaymentGateway paymentGateway) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.catalogClient = catalogClient;
+        this.paymentGateway = paymentGateway;
     }
 
     public CreateOrderResult createOrder(String userId, String merchantId, List<OrderLine> lines) {
@@ -62,8 +68,18 @@ public class OrderApplicationService {
         order.confirm();
         orderRepository.save(order);
 
+        CreatePaymentResponse payment = paymentGateway.createPayment(new CreatePaymentRequest(
+                String.valueOf(order.getId()),
+                String.valueOf(transaction.getId()),
+                order.getUserId(),
+                order.getTotalMinor(),
+                order.getCurrencyCode(),
+                "payment:" + order.getId(),
+                "mock"));
+
         return new CreateOrderResult(order.getId(), transaction.getId(), order.getStatus(),
-                order.getTotalMinor(), order.getCurrencyCode());
+                order.getTotalMinor(), order.getCurrencyCode(), payment.paymentId(),
+                payment.status());
     }
 
     public Order getOrder(Long id) {
