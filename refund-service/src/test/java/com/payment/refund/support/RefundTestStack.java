@@ -53,10 +53,15 @@ public final class RefundTestStack {
     public static final class RecordingEntitlementGateway implements EntitlementGateway {
 
         public final List<RefundPostProcessRequest> postProcessRequests = new ArrayList<>();
+        /** 置为 true 模拟后处理 RPC 抛错（验证不因后处理失败回滚退款成功）。 */
+        public boolean failPostProcess = false;
 
         @Override
         public RefundPostProcessResponse notifyRefundPostProcess(RefundPostProcessRequest request) {
             postProcessRequests.add(request);
+            if (failPostProcess) {
+                throw new IllegalStateException("post-process RPC failed");
+            }
             return new RefundPostProcessResponse(request.refundId(), "REVOKED");
         }
     }
