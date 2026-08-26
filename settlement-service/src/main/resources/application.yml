@@ -1,6 +1,21 @@
 spring:
   application:
     name: settlement-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/settlement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
 server:
   port: 8089
+
+services:
+  merchant:
+    url: http://localhost:8081
+  reconciliation:
+    url: http://localhost:8088
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
