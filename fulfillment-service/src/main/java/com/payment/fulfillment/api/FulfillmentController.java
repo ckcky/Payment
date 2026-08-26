@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 履约查询接口（只读，无命令入口——履约由 PaymentSucceeded 事件触发）。
+ * 履约查询接口（只读，无命令入口——履约由 payment-service 的同步 RPC 触发）。
  */
 @RestController
 @RequestMapping("/fulfillments")
