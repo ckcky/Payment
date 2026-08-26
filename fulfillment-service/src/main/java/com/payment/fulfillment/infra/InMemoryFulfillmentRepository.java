@@ -2,16 +2,15 @@ package com.payment.fulfillment.infra;
 
 import com.payment.fulfillment.domain.Fulfillment;
 import com.payment.fulfillment.domain.FulfillmentRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 内存版履约仓储（MVP：无持久化）。线程安全，用 {@code sourcePaymentId} 维护幂等索引。
+ * 内存版履约仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisFulfillmentRepository} 承接。
+ * 线程安全，用 {@code sourcePaymentId} 维护幂等索引。
  */
-@Repository
 public class InMemoryFulfillmentRepository implements FulfillmentRepository {
 
     private final ConcurrentHashMap<Long, Fulfillment> byId = new ConcurrentHashMap<>();

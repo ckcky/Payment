@@ -14,6 +14,8 @@ import com.payment.common.core.error.ErrorCodes;
 public class Fulfillment {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final String orderId;
     private final String orderItemId;
     private final String deliveryContent;
@@ -27,6 +29,20 @@ public class Fulfillment {
         this.deliveryContent = deliveryContent;
         this.sourcePaymentId = sourcePaymentId;
         this.status = FulfillmentStatus.PENDING;
+    }
+
+    /**
+     * 持久化重建：还原履约聚合及其历史状态，绕过创建期状态机（不改变业务规则）。
+     */
+    public static Fulfillment rehydrate(Long id, String orderId, String orderItemId, String deliveryContent,
+                                        String sourcePaymentId, FulfillmentStatus status, String failureReason,
+                                        Integer version) {
+        Fulfillment fulfillment = new Fulfillment(orderId, orderItemId, deliveryContent, sourcePaymentId);
+        fulfillment.id = id;
+        fulfillment.status = status;
+        fulfillment.failureReason = failureReason;
+        fulfillment.version = version;
+        return fulfillment;
     }
 
     /** PENDING → PROCESSING。 */
@@ -68,6 +84,14 @@ public class Fulfillment {
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getOrderId() {
