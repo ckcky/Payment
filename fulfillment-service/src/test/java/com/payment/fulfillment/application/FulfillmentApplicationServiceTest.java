@@ -1,5 +1,6 @@
 package com.payment.fulfillment.application;
 
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.rpc.EntitlementGrantedResponse;
 import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
@@ -29,7 +30,7 @@ class FulfillmentApplicationServiceTest {
     void setUp() {
         repository = new InMemoryFulfillmentRepository();
         gateway = new RecordingEntitlementGateway(new ArrayList<>());
-        service = new FulfillmentApplicationService(repository, gateway);
+        service = new FulfillmentApplicationService(repository, gateway, new NoopBusinessMetrics());
     }
 
     private static PaymentSucceededRequest paymentSucceededRequest() {

@@ -1,5 +1,6 @@
 package com.payment.entitlement.application;
 
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.entitlement.domain.Entitlement;
 import com.payment.entitlement.domain.EntitlementStatus;
@@ -20,7 +21,8 @@ class EntitlementApplicationServiceTest {
     @Test
     void firstCompletionGrantsAvailableEntitlement() {
         InMemoryEntitlementRepository repository = new InMemoryEntitlementRepository();
-        EntitlementApplicationService service = new EntitlementApplicationService(repository);
+        EntitlementApplicationService service =
+                new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         Entitlement e = service.grantOnFulfillmentCompleted(REQUEST);
 
@@ -35,7 +37,8 @@ class EntitlementApplicationServiceTest {
     @Test
     void repeatedFulfillmentReturnsSameEntitlement() {
         InMemoryEntitlementRepository repository = new InMemoryEntitlementRepository();
-        EntitlementApplicationService service = new EntitlementApplicationService(repository);
+        EntitlementApplicationService service =
+                new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         Entitlement first = service.grantOnFulfillmentCompleted(REQUEST);
         Entitlement second = service.grantOnFulfillmentCompleted(REQUEST);

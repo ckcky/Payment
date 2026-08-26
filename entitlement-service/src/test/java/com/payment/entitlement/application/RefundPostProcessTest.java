@@ -1,5 +1,6 @@
 package com.payment.entitlement.application;
 
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.rpc.RefundPostProcessRequest;
 import com.payment.common.dto.rpc.RefundPostProcessResponse;
 import com.payment.entitlement.domain.Entitlement;
@@ -23,7 +24,8 @@ class RefundPostProcessTest {
     @Test
     void noEntitlementsForOrderReturnsNoop() {
         InMemoryEntitlementRepository repository = new InMemoryEntitlementRepository();
-        EntitlementApplicationService service = new EntitlementApplicationService(repository);
+        EntitlementApplicationService service =
+                new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         RefundPostProcessResponse response =
                 service.revokeOnRefund(new RefundPostProcessRequest(1L, 2L, "order-1", "user_1", "refund"));
@@ -35,7 +37,8 @@ class RefundPostProcessTest {
     @Test
     void revokesAvailableEntitlementForOrder() {
         InMemoryEntitlementRepository repository = new InMemoryEntitlementRepository();
-        EntitlementApplicationService service = new EntitlementApplicationService(repository);
+        EntitlementApplicationService service =
+                new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         Entitlement e = repository.save(granted("order-1"));
 
@@ -51,7 +54,8 @@ class RefundPostProcessTest {
     @Test
     void secondRefundIsIdempotentNoop() {
         InMemoryEntitlementRepository repository = new InMemoryEntitlementRepository();
-        EntitlementApplicationService service = new EntitlementApplicationService(repository);
+        EntitlementApplicationService service =
+                new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         repository.save(granted("order-1"));
         RefundPostProcessRequest request = new RefundPostProcessRequest(1L, 2L, "order-1", "user_1", "refund");

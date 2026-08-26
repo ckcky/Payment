@@ -1,5 +1,6 @@
 package com.payment.entitlement.application;
 
+import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.RefundPostProcessRequest;
 import com.payment.common.dto.rpc.RefundPostProcessResponse;
@@ -19,10 +20,14 @@ import java.util.Optional;
 @Service
 public class EntitlementApplicationService {
 
-    private final EntitlementRepository repository;
+    private static final String MODULE = "entitlement";
 
-    public EntitlementApplicationService(EntitlementRepository repository) {
+    private final EntitlementRepository repository;
+    private final BusinessMetrics metrics;
+
+    public EntitlementApplicationService(EntitlementRepository repository, BusinessMetrics metrics) {
         this.repository = repository;
+        this.metrics = metrics;
     }
 
     public Entitlement grantOnFulfillmentCompleted(FulfillmentCompletedRequest request) {
@@ -32,10 +37,22 @@ public class EntitlementApplicationService {
         if (existing.isPresent()) {
             return existing.get();
         }
-        Entitlement e = new Entitlement(request.userId(), request.orderId(),
-                String.valueOf(request.fulfillmentId()), 1, "default", null);
-        e.grant();
+        Entitlement e = newEntitlement(request.userId(), request.orderId(),
+                String.valueOf(request.fulfillmentId()));
+        try {
+            e.grant();
+        } catch (RuntimeException ex) {
+            e.fail(ex.getMessage());
+            metrics.counter("entitlement.grant.failed", 1.0, "module", MODULE);
+            return repository.save(e);
+        }
+        metrics.counter("entitlement.granted", 1.0, "module", MODULE);
         return repository.save(e);
+    }
+
+    /** 测试缝隙：供单测注入可被拒绝的 mock 授予（不改动状态机）。 */
+    Entitlement newEntitlement(String userId, String orderId, String sourceFulfillmentId) {
+        return new Entitlement(userId, orderId, sourceFulfillmentId, 1, "default", null);
     }
 
     /**

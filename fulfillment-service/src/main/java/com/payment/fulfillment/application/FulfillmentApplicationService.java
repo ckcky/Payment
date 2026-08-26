@@ -1,5 +1,6 @@
 package com.payment.fulfillment.application;
 
+import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.fulfillment.domain.Fulfillment;
@@ -17,12 +18,18 @@ import java.util.Optional;
 @Service
 public class FulfillmentApplicationService {
 
+    private static final String MODULE = "fulfillment";
+
     private final FulfillmentRepository repository;
     private final EntitlementGateway entitlementGateway;
+    private final BusinessMetrics metrics;
 
-    public FulfillmentApplicationService(FulfillmentRepository repository, EntitlementGateway entitlementGateway) {
+    public FulfillmentApplicationService(FulfillmentRepository repository,
+                                         EntitlementGateway entitlementGateway,
+                                         BusinessMetrics metrics) {
         this.repository = repository;
         this.entitlementGateway = entitlementGateway;
+        this.metrics = metrics;
     }
 
     public Fulfillment acceptPaymentSucceeded(PaymentSucceededRequest request) {
@@ -34,8 +41,7 @@ public class FulfillmentApplicationService {
             return existing.get();
         }
 
-        Fulfillment fulfillment = new Fulfillment(
-                request.orderId(), null, "mock delivery", sourcePaymentId);
+        Fulfillment fulfillment = newFulfillment(request.orderId(), sourcePaymentId);
         fulfillment.start();
 
         // 同步 mock 处理（PROCESSING → DELIVERED）。真实实现会在此处调用交付渠道；
@@ -44,8 +50,11 @@ public class FulfillmentApplicationService {
             fulfillment.deliver();
         } catch (RuntimeException ex) {
             fulfillment.fail(ex.getMessage());
+            metrics.counter("fulfillment.failed", 1.0, "module", MODULE);
             return repository.save(fulfillment);
         }
+
+        metrics.counter("fulfillment.completed", 1.0, "module", MODULE);
 
         Fulfillment saved = repository.save(fulfillment);
 
@@ -53,5 +62,10 @@ public class FulfillmentApplicationService {
         entitlementGateway.notifyFulfillmentCompleted(
                 new FulfillmentCompletedRequest(saved.getId(), saved.getOrderId(), request.userId()));
         return saved;
+    }
+
+    /** 测试缝隙：供单测注入可失败的 mock 交付（不改动状态机）。 */
+    Fulfillment newFulfillment(String orderId, String sourcePaymentId) {
+        return new Fulfillment(orderId, null, "mock delivery", sourcePaymentId);
     }
 }
