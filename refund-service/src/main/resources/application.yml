@@ -1,6 +1,21 @@
 spring:
   application:
     name: refund-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/refund?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
 server:
   port: 8085
+
+services:
+  payment:
+    url: http://localhost:8084
+  entitlement:
+    url: http://localhost:8087
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
