@@ -148,20 +148,20 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 
 ### US3 测试任务（先写测试）
 
-- [ ] T059 [P] [US3] 在 `reconciliation-service/src/test/java/com/payment/reconciliation/domain/ReconciliationMatchingTest.java` 编写基于 Mock/预置渠道账单的一致、金额差异、状态差异、平台独有和渠道独有记录测试。
-- [ ] T060 [P] [US3] 在 `settlement-service/src/test/java/com/payment/settlement/domain/SettlementEligibilityTest.java` 编写未确认事实、重大差异和重复商户周期批次约束测试。
-- [ ] T061 [P] [US3] 在 `reconciliation-service/src/test/java/com/payment/reconciliation/integration/ReconciliationSettlementRpcScenarioTest.java` 编写基础对账、差异处理、结算批次和结算 UNKNOWN RPC 集成测试。
+- [X] T059 [P] [US3] 在 `reconciliation-service/src/test/java/com/payment/reconciliation/domain/ReconciliationMatchingTest.java` 编写基于 Mock/预置渠道账单的一致、金额差异、状态差异、平台独有和渠道独有记录测试。
+- [X] T060 [P] [US3] 在 `settlement-service/src/test/java/com/payment/settlement/domain/SettlementEligibilityTest.java` 编写未确认事实、重大差异和重复商户周期批次约束测试。
+- [X] T061 [P] [US3] 在 `reconciliation-service/src/test/java/com/payment/reconciliation/integration/ReconciliationSettlementRpcScenarioTest.java` 编写基础对账、差异处理、结算批次和结算 UNKNOWN RPC 集成测试。
 
 ### US3 实现任务
 
-- [ ] T062 [P] [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/domain/` 实现 ReconciliationBatch、Match、Difference 和对账状态机。
-- [ ] T063 [P] [US3] 在 `settlement-service/src/main/java/com/payment/settlement/domain/` 实现 SettlementBatch、SettlementItem、Adjustment 和最小结算状态机。
-- [ ] T064 [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/application/ReconciliationApplicationService.java` 使用 Mock/预置渠道账单和 Payment/Refund 查询 RPC 实现事实比对，禁止修改原始 Payment/Refund；依赖 T062。
-- [ ] T065 [US3] 在 `settlement-service/src/main/java/com/payment/settlement/application/SettlementApplicationService.java` 实现商户周期结算资格、净额计算、批次幂等和 UNKNOWN；仅生成结算批次和模拟结果，不执行真实出款；依赖 T063、T064。
-- [ ] T066 [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/api/` 实现基础对账执行、差异查询和差异处理 RPC；依赖 T064。
-- [ ] T067 [US3] 在 `settlement-service/src/main/java/com/payment/settlement/api/` 实现结算批次创建、查询和模拟结果收敛 RPC；明确不提供真实出款接口；依赖 T065。
-- [ ] T068 [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/infra/persistence/` 和 `settlement-service/src/main/java/com/payment/settlement/infra/persistence/` 实现服务自有持久化，并在 `reconciliation-service/src/main/resources/fixtures/channel-statements/` 提供 Mock/预置渠道账单；依赖 T062-T067。
-- [ ] T069 [US3] 在 `reconciliation-service/src/test/java/com/payment/reconciliation/integration/ReconciliationSettlementRpcScenarioTest.java` 完成 T061 的实现验证，并运行 `mvnw test` 验证 US3 不破坏 US1/US2；依赖 T066-T068。
+- [X] T062 [P] [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/domain/` 实现 ReconciliationBatch、Match、Difference 和对账状态机。
+- [X] T063 [P] [US3] 在 `settlement-service/src/main/java/com/payment/settlement/domain/` 实现 SettlementBatch、SettlementItem、Adjustment 和最小结算状态机。
+- [X] T064 [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/application/ReconciliationApplicationService.java` 使用 Mock/预置渠道账单和 Payment/Refund 查询 RPC 实现事实比对，禁止修改原始 Payment/Refund；依赖 T062。
+- [X] T065 [US3] 在 `settlement-service/src/main/java/com/payment/settlement/application/SettlementApplicationService.java` 实现商户周期结算资格、净额计算、批次幂等和 UNKNOWN；仅生成结算批次和模拟结果，不执行真实出款；依赖 T063、T064。
+- [X] T066 [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/api/` 实现基础对账执行、差异查询和差异处理 RPC；依赖 T064。
+- [X] T067 [US3] 在 `settlement-service/src/main/java/com/payment/settlement/api/` 实现结算批次创建、查询和模拟结果收敛 RPC；明确不提供真实出款接口；依赖 T065。
+- [X] T068 [US3] 在 `reconciliation-service/src/main/java/com/payment/reconciliation/infra/persistence/` 和 `settlement-service/src/main/java/com/payment/settlement/infra/persistence/` 实现服务自有持久化，并在 `reconciliation-service/src/main/resources/fixtures/channel-statements/` 提供 Mock/预置渠道账单；依赖 T062-T067。
+- [X] T069 [US3] 在 `reconciliation-service/src/test/java/com/payment/reconciliation/integration/ReconciliationSettlementRpcScenarioTest.java` 完成 T061 的实现验证，并运行 `mvnw test` 验证 US3 不破坏 US1/US2；依赖 T066-T068。
 
 **检查点**: 对账与结算独立；差异可追踪；结算只使用已确认事实；重复批次和 UNKNOWN 结果不会重复结算。
 
