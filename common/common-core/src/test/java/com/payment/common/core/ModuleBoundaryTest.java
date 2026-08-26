@@ -15,7 +15,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * 内验证两条共享层不变量：</p>
  * <ol>
  *   <li>共享模块不得反向依赖任何业务服务包（common ≠ 业务，杜绝共享代码里写服务逻辑）。</li>
- *   <li>核心值对象（money/idempotency/event/result）保持框架无关，不得依赖 Spring。</li>
+ *   <li>核心值对象（money/idempotency/result）保持框架无关，不得依赖 Spring。</li>
  * </ol>
  */
 class ModuleBoundaryTest {
@@ -40,7 +40,6 @@ class ModuleBoundaryTest {
                 .that().resideInAnyPackage(
                         "com.payment.common.core.money..",
                         "com.payment.common.core.idempotency..",
-                        "com.payment.common.core.event..",
                         "com.payment.common.core.result..")
                 .should().dependOnClassesThat().resideInAPackage("org.springframework..");
         rule.check(commonCore);

@@ -11,7 +11,7 @@
     </parent>
     <artifactId>common-dto</artifactId>
     <name>common-dto</name>
-    <description>Cross-service DTOs and public domain-event contracts</description>
+    <description>Cross-service synchronous RPC DTOs (no cross-service events)</description>
 
     <dependencies>
         <dependency>
