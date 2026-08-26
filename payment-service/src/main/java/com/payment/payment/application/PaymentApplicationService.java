@@ -2,7 +2,6 @@ package com.payment.payment.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.common.core.event.DomainEventPublisher;
 import com.payment.common.core.idempotency.IdempotencyKey;
 import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.payment.application.channel.ChannelResult;
@@ -30,18 +29,18 @@ public class PaymentApplicationService {
     private final PaymentAttemptRepository attemptRepository;
     private final PaymentChannel channel;
     private final IdempotencyRegistry idempotencyRegistry;
-    private final DomainEventPublisher publisher;
+    private final FulfillmentGateway fulfillmentGateway;
 
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentAttemptRepository attemptRepository,
                                      PaymentChannel channel,
                                      IdempotencyRegistry idempotencyRegistry,
-                                     DomainEventPublisher publisher) {
+                                     FulfillmentGateway fulfillmentGateway) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.channel = channel;
         this.idempotencyRegistry = idempotencyRegistry;
-        this.publisher = publisher;
+        this.fulfillmentGateway = fulfillmentGateway;
     }
 
     public Payment createPaymentIntent(CreatePaymentCommand cmd) {
@@ -71,8 +70,8 @@ public class PaymentApplicationService {
         boolean changed = PaymentResultApplier.apply(payment, attempt, result);
         paymentRepository.save(payment);
         attemptRepository.save(attempt);
-        if (changed) {
-            publisher.publish(PaymentResultApplier.toEvent(payment, result));
+        if (changed && result.status() == ChannelResult.Status.SUCCESS) {
+            fulfillmentGateway.notifyPaymentSucceeded(PaymentResultApplier.toSucceededRequest(payment));
         }
         return payment;
     }

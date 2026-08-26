@@ -23,16 +23,16 @@ class PaymentUnknownResolutionTest {
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
-        assertThat(stack.events).hasSize(1); // PaymentUnknown
+        assertThat(stack.fulfillment.succeededRequests).isEmpty(); // UNKNOWN 不触发履约
 
         boolean resolved = stack.resolution.resolve(payment.getId(), ChannelResult.success("authoritative"));
         assertThat(resolved).isTrue();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
-        assertThat(stack.events).hasSize(2); // + PaymentSucceeded（只触发一次履约）
+        assertThat(stack.fulfillment.succeededRequests).hasSize(1); // 收敛为成功，触发一次履约
 
         boolean again = stack.resolution.resolve(payment.getId(), ChannelResult.success("authoritative"));
         assertThat(again).isFalse();
-        assertThat(stack.events).hasSize(2); // 不再发布第二个 PaymentSucceeded
+        assertThat(stack.fulfillment.succeededRequests).hasSize(1); // 不再触发第二次履约
     }
 
     @Test

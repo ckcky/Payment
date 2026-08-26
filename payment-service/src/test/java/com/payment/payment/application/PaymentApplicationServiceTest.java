@@ -1,8 +1,5 @@
 package com.payment.payment.application;
 
-import com.payment.common.dto.event.PaymentFailed;
-import com.payment.common.dto.event.PaymentSucceeded;
-import com.payment.common.dto.event.PaymentUnknown;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.channel.MockChannelAdapter;
@@ -19,42 +16,42 @@ class PaymentApplicationServiceTest {
     private final PaymentTestStack stack = new PaymentTestStack();
 
     @Test
-    void successPublishesPaymentSucceeded() {
+    void successTriggersFulfillmentOnce() {
         PaymentApplicationService service = stack.appService(new MockChannelAdapter());
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
-        assertThat(stack.events).hasSize(1);
-        assertThat(stack.events.get(0)).isInstanceOf(PaymentSucceeded.class);
+        assertThat(stack.fulfillment.succeededRequests).hasSize(1);
+        assertThat(stack.fulfillment.succeededRequests.get(0).orderId()).isEqualTo("order-1");
+        assertThat(stack.fulfillment.succeededRequests.get(0).transactionId()).isEqualTo("txn-1");
+        assertThat(stack.fulfillment.succeededRequests.get(0).amountMinor()).isEqualTo(100);
     }
 
     @Test
-    void failurePublishesPaymentFailed() {
+    void failureDoesNotTriggerFulfillment() {
         PaymentApplicationService service =
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.FAILURE));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
-        assertThat(stack.events).hasSize(1);
-        assertThat(stack.events.get(0)).isInstanceOf(PaymentFailed.class);
+        assertThat(stack.fulfillment.succeededRequests).isEmpty();
     }
 
     @Test
-    void timeoutPublishesPaymentUnknown() {
+    void timeoutDoesNotTriggerFulfillment() {
         PaymentApplicationService service =
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
-        assertThat(stack.events).hasSize(1);
-        assertThat(stack.events.get(0)).isInstanceOf(PaymentUnknown.class);
+        assertThat(stack.fulfillment.succeededRequests).isEmpty();
     }
 
     @Test
-    void duplicateIdempotencyKeyReturnsSamePaymentWithoutNewAttemptOrEvent() {
+    void duplicateIdempotencyKeyReturnsSamePaymentWithoutNewAttemptOrFulfillment() {
         PaymentApplicationService service = stack.appService(new MockChannelAdapter());
         Payment first = service.createPaymentIntent(stack.command("dup"));
         Payment second = service.createPaymentIntent(stack.command("dup"));
 
         assertThat(second.getId()).isEqualTo(first.getId());
         assertThat(stack.attempts.findByPaymentId(first.getId())).hasSize(1);
-        assertThat(stack.events).hasSize(1);
+        assertThat(stack.fulfillment.succeededRequests).hasSize(1);
     }
 }

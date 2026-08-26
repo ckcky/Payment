@@ -1,10 +1,13 @@
 package com.payment.payment.api;
 
-import com.payment.payment.api.dto.CreatePaymentRequest;
+import com.payment.common.dto.rpc.CreatePaymentRequest;
+import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.payment.api.dto.PaymentResponse;
 import com.payment.payment.api.dto.ResolveRequest;
+import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentUnknownResolutionService;
+import com.payment.payment.domain.Payment;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,8 +35,12 @@ public class PaymentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PaymentResponse createPayment(@RequestBody CreatePaymentRequest request) {
-        return PaymentResponse.from(applicationService.createPaymentIntent(request.toCommand()));
+    public CreatePaymentResponse createPayment(@RequestBody CreatePaymentRequest request) {
+        CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderId(),
+                request.userId(), request.amountMinor(), request.currencyCode(),
+                request.idempotencyKey(), request.channelCode());
+        Payment payment = applicationService.createPaymentIntent(command);
+        return new CreatePaymentResponse(payment.getId(), payment.getStatus().name());
     }
 
     @GetMapping("/{id}")

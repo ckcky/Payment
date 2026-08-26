@@ -1,8 +1,10 @@
 package com.payment.payment.support;
 
-import com.payment.common.core.event.DomainEvent;
+import com.payment.common.dto.rpc.FulfillmentAcceptedResponse;
+import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
 import com.payment.payment.application.CreatePaymentCommand;
+import com.payment.payment.application.FulfillmentGateway;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentCallbackService;
 import com.payment.payment.application.PaymentResultProcessor;
@@ -14,27 +16,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 支付服务测试栈：内存仓储 + 捕获事件的发布器 + 真实应用服务编排。
+ * 支付服务测试栈：内存仓储 + 记录式履约 RPC fake + 真实应用服务编排。
  */
 public final class PaymentTestStack {
 
     public final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     public final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
     public final InMemoryIdempotencyRegistry registry = new InMemoryIdempotencyRegistry();
-    public final List<DomainEvent> events = new ArrayList<>();
+    public final RecordingFulfillmentGateway fulfillment = new RecordingFulfillmentGateway();
 
     public final PaymentResultProcessor processor =
-            new PaymentResultProcessor(payments, attempts, events::add);
+            new PaymentResultProcessor(payments, attempts, fulfillment);
     public final PaymentUnknownResolutionService resolution =
             new PaymentUnknownResolutionService(payments, processor);
     public final PaymentCallbackService callback =
             new PaymentCallbackService(processor);
 
     public PaymentApplicationService appService(PaymentChannel channel) {
-        return new PaymentApplicationService(payments, attempts, channel, registry, events::add);
+        return new PaymentApplicationService(payments, attempts, channel, registry, fulfillment);
     }
 
     public CreatePaymentCommand command(String idempotencyKey) {
         return new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", idempotencyKey, "mock");
+    }
+
+    /** 记录 notifyPaymentSucceeded 调用并返回固定受理响应，供测试断言。 */
+    public static final class RecordingFulfillmentGateway implements FulfillmentGateway {
+
+        public final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();
+
+        @Override
+        public FulfillmentAcceptedResponse notifyPaymentSucceeded(PaymentSucceededRequest request) {
+            succeededRequests.add(request);
+            return new FulfillmentAcceptedResponse(1L, "PROCESSING");
+        }
     }
 }

@@ -36,11 +36,11 @@ class PaymentCallbackContractTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
 
         stack.callback.handleCallback(payment.getId(), ChannelResult.success("ref-cb"));
-        int eventsAfterFirst = stack.events.size();
+        int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
 
         boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.success("ref-cb"));
         assertThat(changed).isFalse();
-        assertThat(stack.events).hasSize(eventsAfterFirst);
+        assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
     }
 
     @Test
@@ -60,11 +60,11 @@ class PaymentCallbackContractTest {
         PaymentApplicationService service =
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
-        int eventsAfterFirst = stack.events.size();
+        int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
 
         boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.unknown("still unknown"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
-        assertThat(stack.events).hasSize(eventsAfterFirst);
+        assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
     }
 }

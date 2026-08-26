@@ -20,6 +20,6 @@ public class PaymentCallbackService {
 
     /** 处理一次渠道回调；返回支付是否因此发生状态迁移。 */
     public boolean handleCallback(Long paymentId, ChannelResult result) {
-        return processor.applyAndPublish(paymentId, result);
+        return processor.applyAndNotify(paymentId, result);
     }
 }

@@ -32,6 +32,6 @@ public class PaymentUnknownResolutionService {
         if (payment.getStatus() != PaymentStatus.UNKNOWN) {
             return false;
         }
-        return processor.applyAndPublish(paymentId, authoritativeResult);
+        return processor.applyAndNotify(paymentId, authoritativeResult);
     }
 }
