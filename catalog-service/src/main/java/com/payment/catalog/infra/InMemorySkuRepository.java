@@ -2,7 +2,6 @@ package com.payment.catalog.infra;
 
 import com.payment.catalog.domain.Sku;
 import com.payment.catalog.domain.SkuRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,9 +9,8 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 内存版 Sku 仓储（MVP，无持久化）。ConcurrentHashMap + AtomicLong 保证并发安全。
+ * 内存 SKU 仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisSkuRepository} 承接。
  */
-@Repository
 public class InMemorySkuRepository implements SkuRepository {
 
     private final ConcurrentMap<Long, Sku> store = new ConcurrentHashMap<>();

@@ -2,7 +2,6 @@ package com.payment.catalog.infra;
 
 import com.payment.catalog.domain.Product;
 import com.payment.catalog.domain.ProductRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,9 +9,8 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 内存版 Product 仓储（MVP，无持久化）。ConcurrentHashMap + AtomicLong 保证并发安全。
+ * 内存商品仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisProductRepository} 承接。
  */
-@Repository
 public class InMemoryProductRepository implements ProductRepository {
 
     private final ConcurrentMap<Long, Product> store = new ConcurrentHashMap<>();

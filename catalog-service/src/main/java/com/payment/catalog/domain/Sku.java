@@ -10,6 +10,8 @@ import com.payment.common.core.error.ErrorCodes;
 public class Sku {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final String skuCode;
     private final Long productId;
     private final String name;
@@ -29,12 +31,33 @@ public class Sku {
         this.status = SkuStatus.DRAFT;
     }
 
+    /**
+     * 持久化重建：用既有快照与历史状态还原 SKU 聚合，绕过创建期状态机（不改变业务规则）。
+     */
+    public static Sku rehydrate(Long id, String skuCode, Long productId, String name, long priceMinor,
+                                String currencyCode, String deliveryDefinition, SkuStatus status,
+                                Integer version) {
+        Sku sku = new Sku(skuCode, productId, name, priceMinor, currencyCode, deliveryDefinition);
+        sku.id = id;
+        sku.status = status;
+        sku.version = version;
+        return sku;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getSkuCode() {
