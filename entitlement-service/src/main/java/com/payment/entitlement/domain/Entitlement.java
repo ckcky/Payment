@@ -89,6 +89,25 @@ public class Entitlement {
         this.status = EntitlementStatus.REVOKED;
     }
 
+    /**
+     * 退款驱动的权益撤销：幂等、不抛异常（区别于 {@link #revoke()}）。
+     *
+     * <p>仅撤销 {@code AVAILABLE} 权益；已消费/耗尽/过期/失败等非 AVAILABLE 状态
+     * 不在此自动撤销，留待人工处理（退款成功但权益无法撤销时，保留退款事实，不伪造撤销成功）。</p>
+     *
+     * @return {@code true} 本次实际从 AVAILABLE 迁至 REVOKED；{@code false} 表示无需处理（已撤销或非 AVAILABLE）。
+     */
+    public boolean revokeForRefund() {
+        if (this.status == EntitlementStatus.REVOKED) {
+            return false;
+        }
+        if (this.status != EntitlementStatus.AVAILABLE) {
+            return false;
+        }
+        this.status = EntitlementStatus.REVOKED;
+        return true;
+    }
+
     /** PENDING_GRANT → FAILED；{@code reason} 供失败事实与告警使用。 */
     public void fail(String reason) {
         requireState(EntitlementStatus.PENDING_GRANT, "fail");

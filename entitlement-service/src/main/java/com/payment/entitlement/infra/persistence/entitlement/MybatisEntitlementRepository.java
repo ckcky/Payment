@@ -8,6 +8,7 @@ import com.payment.entitlement.domain.EntitlementRepository;
 import com.payment.entitlement.domain.EntitlementStatus;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -37,6 +38,16 @@ public class MybatisEntitlementRepository implements EntitlementRepository {
                 Wrappers.<EntitlementEntity>lambdaQuery()
                         .eq(EntitlementEntity::getSourceFulfillmentId, sourceFulfillmentId));
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public List<Entitlement> findByOrderId(String orderId) {
+        return entitlementMapper.selectList(
+                        Wrappers.<EntitlementEntity>lambdaQuery()
+                                .eq(EntitlementEntity::getOrderId, orderId))
+                .stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.payment.entitlement.infra;
 import com.payment.entitlement.domain.Entitlement;
 import com.payment.entitlement.domain.EntitlementRepository;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +26,13 @@ public class InMemoryEntitlementRepository implements EntitlementRepository {
     @Override
     public Optional<Entitlement> findBySourceFulfillmentId(String sourceFulfillmentId) {
         return Optional.ofNullable(bySourceFulfillmentId.get(sourceFulfillmentId));
+    }
+
+    @Override
+    public List<Entitlement> findByOrderId(String orderId) {
+        return byId.values().stream()
+                .filter(e -> orderId.equals(e.getOrderId()))
+                .toList();
     }
 
     @Override
