@@ -2,7 +2,6 @@ package com.payment.entitlement.infra;
 
 import com.payment.entitlement.domain.Entitlement;
 import com.payment.entitlement.domain.EntitlementRepository;
-import org.springframework.stereotype.Repository;
 
 import java.util.Map;
 import java.util.Optional;
@@ -10,9 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 进程内仓储实现，用于 MVP 与基础测试；生产需替换为持久化实现（见各服务 infra 层约定）。
+ * 内存权益仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisEntitlementRepository} 承接。
  */
-@Repository
 public class InMemoryEntitlementRepository implements EntitlementRepository {
 
     private final Map<Long, Entitlement> byId = new ConcurrentHashMap<>();

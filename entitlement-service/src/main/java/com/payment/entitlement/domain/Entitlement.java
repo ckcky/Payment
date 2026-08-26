@@ -14,6 +14,8 @@ import java.time.LocalDateTime;
 public class Entitlement {
 
     private Long id;
+    /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
+    private Integer version;
     private final String userId;
     private final String orderId;
     private final String sourceFulfillmentId;
@@ -32,6 +34,21 @@ public class Entitlement {
         this.scope = scope;
         this.expiryAt = expiryAt;
         this.status = EntitlementStatus.PENDING_GRANT;
+    }
+
+    /**
+     * 持久化重建：还原权益聚合及其历史状态/剩余量，绕过创建期状态机（不改变业务规则）。
+     * {@code grantRef} 为构造器之外的非派生字段，需显式回填。
+     */
+    public static Entitlement rehydrate(Long id, String userId, String orderId, String sourceFulfillmentId,
+                                        int availableQuantity, String scope, LocalDateTime expiryAt,
+                                        EntitlementStatus status, Integer version, String grantRef) {
+        Entitlement e = new Entitlement(userId, orderId, sourceFulfillmentId, availableQuantity, scope, expiryAt);
+        e.id = id;
+        e.status = status;
+        e.version = version;
+        e.grantRef = grantRef;
+        return e;
     }
 
     /** PENDING_GRANT → AVAILABLE。 */
@@ -102,6 +119,14 @@ public class Entitlement {
 
     public Long getId() {
         return id;
+    }
+
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public String getUserId() {
