@@ -169,13 +169,13 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 
 **目标**: 完成可观测性、部署验证、文档回归和完整 MVP 验收。
 
-- [ ] T070 [P] 在各服务 `src/main/java/com/payment/<service>/infra/observability/BusinessMetrics.java` 实现支付成功/失败/UNKNOWN、UNKNOWN 持续时间、重复回调、退款成功/失败、履约失败、权益发放失败、对账差异和结算失败指标。
-- [ ] T071 [P] 在各服务 `src/main/java/com/payment/<service>/infra/observability/StructuredAuditLogger.java` 实现结构化业务日志和模拟资金动作审计字段，确保敏感信息脱敏。
-- [ ] T072 [P] 在各资金服务 `src/test/java/` 验证所有必需业务指标在对应状态变化时递增或记录持续时间。
-- [ ] T073 [P] 在各服务 `src/test/java/` 验证关联 ID 能贯穿订单、支付、回调、履约、权益、退款、对账和结算 RPC 流程。
-- [ ] T074 在 `docs/deployment/docker-compose.yml` 和 `docs/deployment/README.md` 完成本地、Compose、单机启动、健康检查和基本回滚验证说明。
-- [ ] T075 [P] 在 `.github/workflows/verify.yml` 配置 `mvnw verify`、测试、格式检查和构建产物验证；不引入微服务部署流水线。
-- [ ] T076 [P] 更新 `docs/specs/001-core-business-model/quickstart.md`，补充实际启动命令、验证命令和预期结果。
+- [X] T070 [P] 在各服务 `src/main/java/com/payment/<service>/infra/observability/BusinessMetrics.java` 实现支付成功/失败/UNKNOWN、UNKNOWN 持续时间、重复回调、退款成功/失败、履约失败、权益发放失败、对账差异和结算失败指标。
+- [X] T071 [P] 在各服务 `src/main/java/com/payment/<service>/infra/observability/StructuredAuditLogger.java` 实现结构化业务日志和模拟资金动作审计字段，确保敏感信息脱敏。
+- [X] T072 [P] 在各资金服务 `src/test/java/` 验证所有必需业务指标在对应状态变化时递增或记录持续时间。
+- [X] T073 [P] 在各服务 `src/test/java/` 验证关联 ID 能贯穿订单、支付、回调、履约、权益、退款、对账和结算 RPC 流程。
+- [X] T074 在 `docs/deployment/docker-compose.yml` 和 `docs/deployment/README.md` 完成本地、Compose、单机启动、健康检查和基本回滚验证说明。
+- [X] T075 [P] 在 `.github/workflows/verify.yml` 配置 `mvnw verify`、测试、格式检查和构建产物验证；不引入微服务部署流水线。
+- [X] T076 [P] 更新 `docs/specs/001-core-business-model/quickstart.md`，补充实际启动命令、验证命令和预期结果。
 - [ ] T077 运行 `mvnw verify`、Compose 验证和 quickstart 全链路 RPC 回归，记录 `docs/specs/001-core-business-model/` 下的 MVP 验收结果；确认 Settlement 只生成模拟结算结果，不执行真实出款。
 - [ ] T078 运行 `/review` 和支付相关 `/payment-review`，检查 `docs/specs/001-core-business-model/plan.md` 与实现结果，确认没有绕过模块边界、状态机、幂等或 Ledger 约束。
 
