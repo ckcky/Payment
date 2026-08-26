@@ -1,7 +1,7 @@
 # 持久化约定（common-mybatis / 各服务 infra/persistence）
 
 > 对应 tasks.md **T014**。本工程采用 **Database-per-Service**（ADR-0001）：每个服务自有数据库
-> 与自有表，服务之间通过 **API（Feign，同步）** 和 **事件契约（Outbox，异步，无 MQ）** 通信。
+> 与自有表，服务之间通过 **API（Feign，同步 RPC）** 通信，不使用跨服务异步事件或 MQ。
 
 ## 铁律（MUST）
 

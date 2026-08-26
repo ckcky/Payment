@@ -75,44 +75,44 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 
 ### US1 测试任务（先写测试）
 
-- [ ] T020 [P] [US1] 在 `order-service/src/test/java/com/payment/order/scenario/SuccessfulPurchaseScenarioTest.java` 编写成功购买端到端 RPC 场景，先验证失败，再实现业务。
-- [ ] T021 [P] [US1] 在 `catalog-service/src/test/java/com/payment/catalog/domain/CatalogInvariantTest.java` 编写 Product/SKU 可售性和价格快照约束测试。
-- [ ] T022 [P] [US1] 在 `order-service/src/test/java/com/payment/order/domain/OrderStateMachineTest.java` 编写订单状态转换、取消和订单金额约束测试。
-- [ ] T023 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/domain/PaymentStateMachineTest.java` 编写 Payment、PaymentAttempt 状态转换和终态保护测试。
-- [ ] T024 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/contract/PaymentChannelContractTest.java` 编写 Channel Adapter 与 Mock Channel 契约测试。
-- [ ] T025 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/contract/PaymentCallbackContractTest.java` 编写成功、失败、重复、延迟和不完整回调契约测试。
-- [ ] T026 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/integration/PaymentUnknownResolutionTest.java` 编写超时进入 UNKNOWN、查询/回调收敛和只触发一次履约 RPC 的集成测试。
-- [ ] T027 [P] [US1] 在 `fulfillment-service/src/test/java/com/payment/fulfillment/integration/FulfillmentEntitlementRpcFlowTest.java` 编写 Payment 成功后 RPC 履约、权益授予和失败恢复测试。
+- [X] T020 [P] [US1] 在 `order-service/src/test/java/com/payment/order/scenario/SuccessfulPurchaseScenarioTest.java` 编写成功购买端到端 RPC 场景，先验证失败，再实现业务。
+- [X] T021 [P] [US1] 在 `catalog-service/src/test/java/com/payment/catalog/domain/CatalogInvariantTest.java` 编写 Product/SKU 可售性和价格快照约束测试。
+- [X] T022 [P] [US1] 在 `order-service/src/test/java/com/payment/order/domain/OrderStateMachineTest.java` 编写订单状态转换、取消和订单金额约束测试。
+- [X] T023 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/domain/PaymentStateMachineTest.java` 编写 Payment、PaymentAttempt 状态转换和终态保护测试。
+- [X] T024 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/contract/PaymentChannelContractTest.java` 编写 Channel Adapter 与 Mock Channel 契约测试。
+- [X] T025 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/contract/PaymentCallbackContractTest.java` 编写成功、失败、重复、延迟和不完整回调契约测试。
+- [X] T026 [P] [US1] 在 `payment-service/src/test/java/com/payment/payment/integration/PaymentUnknownResolutionTest.java` 编写超时进入 UNKNOWN、查询/回调收敛和只触发一次履约 RPC 的集成测试。
+- [X] T027 [P] [US1] 在 `fulfillment-service/src/test/java/com/payment/fulfillment/integration/FulfillmentEntitlementRpcFlowTest.java` 编写 Payment 成功后 RPC 履约、权益授予和失败恢复测试。
 
 ### US1 领域与应用实现
 
-- [ ] T028 [P] [US1] 在 `merchant-service/src/main/java/com/payment/merchant/domain/` 实现 Merchant 最小实体、有效状态和结算资格规则。
-- [ ] T029 [P] [US1] 在 `catalog-service/src/main/java/com/payment/catalog/domain/` 实现 Product、SKU、价格引用和交付定义，限制只有可售 SKU 才能下单。
-- [ ] T030 [P] [US1] 在 `order-service/src/main/java/com/payment/order/domain/` 实现 Order、OrderItem、PriceSnapshot 和订单状态机，固定 Order 1:1 Transaction。
-- [ ] T031 [P] [US1] 在 `order-service/src/main/java/com/payment/order/domain/` 实现订单金额、已支付金额、已退款金额和订单快照不变量。
-- [ ] T032 [US1] 在 `order-service/src/main/java/com/payment/order/domain/transaction/` 实现 Transaction 领域模型和状态机，固定 Transaction 1:1 Payment；依赖 T030。
-- [ ] T033 [P] [US1] 在 `payment-service/src/main/java/com/payment/payment/domain/` 实现 Payment、PaymentResult 和支付状态机；Payment 只保存平台支付意图与平台状态。
-- [ ] T034 [P] [US1] 在 `payment-service/src/main/java/com/payment/payment/domain/` 实现 PaymentAttempt，记录每次渠道交互、渠道引用和 UNKNOWN 信息。
-- [ ] T035 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/channel/PaymentChannel.java` 定义渠道抽象，在 `payment-service/src/main/java/com/payment/payment/infra/channel/MockChannelAdapter.java` 实现 Mock Channel；依赖 T033、T034。
-- [ ] T036 [US1] 在 `order-service/src/main/java/com/payment/order/application/OrderApplicationService.java` 实现订单创建、SKU RPC 校验和价格快照；依赖 T029-T031。
-- [ ] T037 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java` 实现支付意图创建、PaymentAttempt 创建和幂等受理；依赖 T032-T035。
-- [ ] T038 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentCallbackService.java` 实现回调去重、延迟保护、成功/失败更新和 UNKNOWN 处理；依赖 T034、T035、T037。
-- [ ] T039 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentUnknownResolutionService.java` 实现查询/权威回调收敛 UNKNOWN，并保证只触发一次履约 RPC；依赖 T038。
+- [X] T028 [P] [US1] 在 `merchant-service/src/main/java/com/payment/merchant/domain/` 实现 Merchant 最小实体、有效状态和结算资格规则。
+- [X] T029 [P] [US1] 在 `catalog-service/src/main/java/com/payment/catalog/domain/` 实现 Product、SKU、价格引用和交付定义，限制只有可售 SKU 才能下单。
+- [X] T030 [P] [US1] 在 `order-service/src/main/java/com/payment/order/domain/` 实现 Order、OrderItem、PriceSnapshot 和订单状态机，固定 Order 1:1 Transaction。
+- [X] T031 [P] [US1] 在 `order-service/src/main/java/com/payment/order/domain/` 实现订单金额、已支付金额、已退款金额和订单快照不变量。
+- [X] T032 [US1] 在 `order-service/src/main/java/com/payment/order/domain/transaction/` 实现 Transaction 领域模型和状态机，固定 Transaction 1:1 Payment；依赖 T030。
+- [X] T033 [P] [US1] 在 `payment-service/src/main/java/com/payment/payment/domain/` 实现 Payment、PaymentResult 和支付状态机；Payment 只保存平台支付意图与平台状态。
+- [X] T034 [P] [US1] 在 `payment-service/src/main/java/com/payment/payment/domain/` 实现 PaymentAttempt，记录每次渠道交互、渠道引用和 UNKNOWN 信息。
+- [X] T035 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/channel/PaymentChannel.java` 定义渠道抽象，在 `payment-service/src/main/java/com/payment/payment/infra/channel/MockChannelAdapter.java` 实现 Mock Channel；依赖 T033、T034。
+- [X] T036 [US1] 在 `order-service/src/main/java/com/payment/order/application/OrderApplicationService.java` 实现订单创建、SKU RPC 校验和价格快照；依赖 T029-T031。
+- [X] T037 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java` 实现支付意图创建、PaymentAttempt 创建和幂等受理；依赖 T032-T035。
+- [X] T038 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentCallbackService.java` 实现回调去重、延迟保护、成功/失败更新和 UNKNOWN 处理；依赖 T034、T035、T037。
+- [X] T039 [US1] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentUnknownResolutionService.java` 实现查询/权威回调收敛 UNKNOWN，并保证只触发一次履约 RPC；依赖 T038。
 
 ### US1 履约、权益和接口
 
-- [ ] T040 [P] [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/domain/` 实现 Fulfillment、FulfillmentItem 和履约状态机。
-- [ ] T041 [P] [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/domain/` 实现 Entitlement、Grant、Consumption 和权益状态机。
-- [ ] T042 [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/api/PaymentSuccessRpcController.java` 接收 payment-service 的成功支付 RPC 并创建幂等履约任务；依赖 T033、T040。
-- [ ] T043 [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/api/FulfillmentCompletedRpcController.java` 接收履约完成 RPC 并授予权益；依赖 T040、T041、T042。
-- [ ] T044 [US1] 在 `order-service/src/main/java/com/payment/order/api/`、`payment-service/src/main/java/com/payment/payment/api/` 实现订单创建、支付意图、渠道回调、支付查询和 UNKNOWN 收敛接口；依赖 T036-T039。
+- [X] T040 [P] [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/domain/` 实现 Fulfillment、FulfillmentItem 和履约状态机。
+- [X] T041 [P] [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/domain/` 实现 Entitlement、Grant、Consumption 和权益状态机。
+- [X] T042 [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/api/PaymentSuccessRpcController.java` 接收 payment-service 的成功支付 RPC 并创建幂等履约任务；依赖 T033、T040。
+- [X] T043 [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/api/FulfillmentCompletedRpcController.java` 接收履约完成 RPC 并授予权益；依赖 T040、T041、T042。
+- [X] T044 [US1] 在 `order-service/src/main/java/com/payment/order/api/`、`payment-service/src/main/java/com/payment/payment/api/` 实现订单创建、支付意图、渠道回调、支付查询和 UNKNOWN 收敛接口；依赖 T036-T039。
 - [ ] T045a [US1] 在 `catalog-service/src/main/java/com/payment/catalog/infra/persistence/` 为 Catalog 接入模块自有持久化实现和历史追踪；依赖 T029。
 - [ ] T045b [US1] 在 `order-service/src/main/java/com/payment/order/infra/persistence/` 为 Order 和 Transaction 接入模块自有持久化实现和历史追踪；依赖 T030-T032。
 - [ ] T045c [US1] 在 `payment-service/src/main/java/com/payment/payment/infra/persistence/` 为 Payment 和 PaymentAttempt 接入模块自有持久化实现、渠道引用和回调历史追踪；依赖 T033-T039。
 - [ ] T045d [US1] 在 `fulfillment-service/src/main/java/com/payment/fulfillment/infra/persistence/` 为 Fulfillment 接入模块自有持久化实现和履约历史追踪；依赖 T040、T042。
 - [ ] T045e [US1] 在 `entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/` 为 Entitlement 接入模块自有持久化实现和授予历史追踪；依赖 T041、T043。
-- [ ] T046 [US1] 在 `payment-service/src/main/java/com/payment/payment/infra/channel/` 实现 Mock Channel 的成功、失败、超时和不完整响应场景；依赖 T035。
-- [ ] T047 [US1] 在 `order-service/src/test/java/com/payment/order/scenario/SuccessfulPurchaseScenarioTest.java` 完成 T020 的实现验证，并运行 `mvnw test` 验证 US1 独立 RPC 闭环；依赖 T044-T046。
+- [X] T046 [US1] 在 `payment-service/src/main/java/com/payment/payment/infra/channel/` 实现 Mock Channel 的成功、失败、超时和不完整响应场景；依赖 T035。
+- [X] T047 [US1] 在 `order-service/src/test/java/com/payment/order/scenario/SuccessfulPurchaseScenarioTest.java` 完成 T020 的实现验证，并运行 `mvnw test` 验证 US1 独立 RPC 闭环；依赖 T044-T046。
 
 **检查点**: US1 可独立演示；支付成功只发布一次；UNKNOWN 在权威查询/回调后收敛；履约和权益失败不回写 Payment 成功事实。
 
