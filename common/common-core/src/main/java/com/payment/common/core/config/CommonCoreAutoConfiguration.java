@@ -1,6 +1,5 @@
 package com.payment.common.core.config;
 
-import com.payment.common.core.client.TraceIdRequestInterceptor;
 import com.payment.common.core.error.GlobalExceptionHandler;
 import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
@@ -12,7 +11,6 @@ import com.payment.common.core.trace.TraceIdFilter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 
@@ -56,12 +54,5 @@ public class CommonCoreAutoConfiguration {
     @ConditionalOnMissingBean
     public StructuredAuditLogger structuredAuditLogger() {
         return new StructuredAuditLogger();
-    }
-
-    @Bean
-    @ConditionalOnClass(feign.RequestInterceptor.class)
-    @ConditionalOnMissingBean
-    public TraceIdRequestInterceptor traceIdRequestInterceptor() {
-        return new TraceIdRequestInterceptor();
     }
 }
