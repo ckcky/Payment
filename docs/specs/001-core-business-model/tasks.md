@@ -123,20 +123,20 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 
 ### US2 测试任务（先写测试）
 
-- [ ] T048 [P] [US2] 在 `refund-service/src/test/java/com/payment/refund/domain/RefundStateMachineTest.java` 编写退款状态转换、部分退款和关闭规则测试。
-- [ ] T049 [P] [US2] 在 `refund-service/src/test/java/com/payment/refund/domain/RefundAmountInvariantTest.java` 编写可退款金额、累计退款和币种一致性测试。
-- [ ] T050 [P] [US2] 在 `refund-service/src/test/java/com/payment/refund/integration/RefundScenarioTest.java` 编写成功退款、重复退款、退款 UNKNOWN 和退款后处理 RPC 集成测试。
+- [X] T048 [P] [US2] 在 `refund-service/src/test/java/com/payment/refund/domain/RefundStateMachineTest.java` 编写退款状态转换、部分退款和关闭规则测试。
+- [X] T049 [P] [US2] 在 `refund-service/src/test/java/com/payment/refund/domain/RefundAmountInvariantTest.java` 编写可退款金额、累计退款和币种一致性测试。
+- [X] T050 [P] [US2] 在 `refund-service/src/test/java/com/payment/refund/integration/RefundScenarioTest.java` 编写成功退款、重复退款、退款 UNKNOWN 和退款后处理 RPC 集成测试。
 
 ### US2 实现任务
 
-- [ ] T051 [P] [US2] 在 `refund-service/src/main/java/com/payment/refund/domain/` 实现 Refund、RefundItem、RefundDecision 和退款状态机。
-- [ ] T052 [US2] 在 `refund-service/src/main/java/com/payment/refund/application/RefundApplicationService.java` 实现退款资格判断、部分/全部退款和退款幂等；依赖 T051。
-- [ ] T053 [US2] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentRefundService.java` 实现 Payment 内部退款尝试和 Mock Channel 退款结果；依赖 T035、T052。
-- [ ] T054 [US2] 在 `refund-service/src/main/java/com/payment/refund/application/RefundRpcCallbackService.java` 实现退款回调 RPC 去重、UNKNOWN 收敛和只确认一次退款成功；依赖 T053。
-- [ ] T055 [US2] 在 `refund-service/src/main/java/com/payment/refund/application/RefundPostProcessingRpcClient.java` 通过 RPC 请求退款成功后的履约/权益后处理，禁止直接修改其他服务内部状态；依赖 T054。
-- [ ] T056 [US2] 在 `refund-service/src/main/java/com/payment/refund/api/` 实现退款申请、退款查询和退款回调接口；依赖 T052-T054。
-- [ ] T057 [US2] 在 `refund-service/src/main/java/com/payment/refund/infra/persistence/` 实现 Refund 服务自有持久化和幂等追踪；依赖 T051-T055。
-- [ ] T058 [US2] 在 `refund-service/src/test/java/com/payment/refund/integration/RefundScenarioTest.java` 完成 T050 的实现验证，并运行 `mvnw test` 验证 US2 不破坏 US1；依赖 T056、T057。
+- [X] T051 [P] [US2] 在 `refund-service/src/main/java/com/payment/refund/domain/` 实现 Refund、RefundItem、RefundDecision 和退款状态机。
+- [X] T052 [US2] 在 `refund-service/src/main/java/com/payment/refund/application/RefundApplicationService.java` 实现退款资格判断、部分/全部退款和退款幂等；依赖 T051。
+- [X] T053 [US2] 在 `payment-service/src/main/java/com/payment/payment/application/PaymentRefundService.java` 实现 Payment 内部退款尝试和 Mock Channel 退款结果；依赖 T035、T052。
+- [X] T054 [US2] 在 `refund-service/src/main/java/com/payment/refund/application/RefundRpcCallbackService.java` 实现退款回调 RPC 去重、UNKNOWN 收敛和只确认一次退款成功；依赖 T053。
+- [X] T055 [US2] 在 `refund-service/src/main/java/com/payment/refund/application/RefundPostProcessingRpcClient.java` 通过 RPC 请求退款成功后的履约/权益后处理，禁止直接修改其他服务内部状态；依赖 T054。
+- [X] T056 [US2] 在 `refund-service/src/main/java/com/payment/refund/api/` 实现退款申请、退款查询和退款回调接口；依赖 T052-T054。
+- [X] T057 [US2] 在 `refund-service/src/main/java/com/payment/refund/infra/persistence/` 实现 Refund 服务自有持久化和幂等追踪；依赖 T051-T055。
+- [X] T058 [US2] 在 `refund-service/src/test/java/com/payment/refund/integration/RefundScenarioTest.java` 完成 T050 的实现验证，并运行 `mvnw test` 验证 US2 不破坏 US1；依赖 T056、T057。
 
 **检查点**: 部分/全部退款可追踪；重复退款不产生第二次资金动作；未知退款不被当作失败或成功；退款成功后的权益处理保持独立。
 
