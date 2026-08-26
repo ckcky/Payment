@@ -3,6 +3,8 @@ package com.payment.payment.support;
 import com.payment.common.dto.rpc.FulfillmentAcceptedResponse;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
+import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.FulfillmentGateway;
 import com.payment.payment.application.PaymentApplicationService;
@@ -28,12 +30,15 @@ public final class PaymentTestStack {
     public final PaymentResultProcessor processor =
             new PaymentResultProcessor(payments, attempts, fulfillment);
     public final PaymentUnknownResolutionService resolution =
-            new PaymentUnknownResolutionService(payments, processor);
+            new PaymentUnknownResolutionService(payments, processor, new NoopBusinessMetrics(),
+                    new StructuredAuditLogger());
     public final PaymentCallbackService callback =
-            new PaymentCallbackService(processor);
+            new PaymentCallbackService(processor, payments, new NoopBusinessMetrics(),
+                    new StructuredAuditLogger());
 
     public PaymentApplicationService appService(PaymentChannel channel) {
-        return new PaymentApplicationService(payments, attempts, channel, registry, fulfillment);
+        return new PaymentApplicationService(payments, attempts, channel, registry, fulfillment,
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     public CreatePaymentCommand command(String idempotencyKey) {

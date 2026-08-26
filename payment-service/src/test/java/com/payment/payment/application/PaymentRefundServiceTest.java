@@ -2,6 +2,8 @@ package com.payment.payment.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
@@ -22,7 +24,8 @@ class PaymentRefundServiceTest {
     private final InMemoryPaymentRepository repository = new InMemoryPaymentRepository();
 
     private PaymentRefundService service(MockChannelAdapter channel) {
-        return new PaymentRefundService(repository, channel);
+        return new PaymentRefundService(repository, channel, new NoopBusinessMetrics(),
+                new StructuredAuditLogger());
     }
 
     private Payment succeededPayment() {

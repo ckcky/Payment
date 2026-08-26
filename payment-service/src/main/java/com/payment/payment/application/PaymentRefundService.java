@@ -2,6 +2,8 @@ package com.payment.payment.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
@@ -25,10 +27,19 @@ public class PaymentRefundService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentChannel channel;
+    private final BusinessMetrics metrics;
+    private final StructuredAuditLogger auditLogger;
 
-    public PaymentRefundService(PaymentRepository paymentRepository, PaymentChannel channel) {
+    public PaymentRefundService(PaymentRepository paymentRepository,
+                                PaymentChannel channel,
+                                BusinessMetrics metrics,
+                                StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
         this.channel = channel;
+        // 退款业务指标（refund.*）由拥有退款生命周期的 refund-service 记录；支付侧退款尝试
+        // 仅是渠道透传（不迁移支付领域状态），故此处只注入、不记录。
+        this.metrics = metrics;
+        this.auditLogger = auditLogger;
     }
 
     public PaymentAmountQueryResponse queryAmount(PaymentAmountQueryRequest request) {

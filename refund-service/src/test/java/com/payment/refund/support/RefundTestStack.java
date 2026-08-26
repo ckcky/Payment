@@ -1,6 +1,8 @@
 package com.payment.refund.support;
 
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
+import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
@@ -26,7 +28,8 @@ public final class RefundTestStack {
     public final RecordingEntitlementGateway entitlement = new RecordingEntitlementGateway();
 
     public RefundApplicationService appService() {
-        return new RefundApplicationService(refunds, payment, entitlement, registry);
+        return new RefundApplicationService(refunds, payment, entitlement, registry,
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     /** 记录 attemptRefund 调用，返回可配置的退款尝试结果。 */
