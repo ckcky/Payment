@@ -1,6 +1,21 @@
 spring:
   application:
     name: reconciliation-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/reconciliation?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
 server:
   port: 8088
+
+services:
+  payment:
+    url: http://localhost:8084
+  refund:
+    url: http://localhost:8085
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

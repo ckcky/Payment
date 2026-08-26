@@ -1,0 +1,5 @@
+reference,amountMinor,currencyCode,status
+mock-ref-1,1000,CNY,SUCCEEDED
+mock-ref-2,2000,CNY,SUCCEEDED
+refund-1,500,CNY,SUCCEEDED
+channel-extra-1,999,CNY,SUCCEEDED
