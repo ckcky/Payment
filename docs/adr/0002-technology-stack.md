@@ -41,4 +41,4 @@
 ## 关联
 
 - ADR-0001：微服务架构。
-- `docs/engineering-standards.md`：工程规范（落地的具体约束）。
+- `docs/guides/engineering-standards.md`：工程规范（落地的具体约束）。

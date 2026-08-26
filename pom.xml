@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        PaymentArch 父工程（Constitution v2.0.0 + ADR-0001：Spring Cloud 微服务）。
+
+        职责（仅此而已，不承载业务代码）：
+          1. 统一 Java / Spring Boot / Spring Cloud / MyBatis-Plus 版本（Engineering Standards §9）。
+          2. 通过 Spring Boot BOM（继承自 spring-boot-starter-parent）+ Spring Cloud BOM 对齐版本。
+          3. 为各服务与 common-* 模块提供统一的 dependencyManagement，版本冲突以本父 POM 的 BOM 为准。
+
+        服务清单见 docs/adr/0001（gateway 与 ledger-service 本 MVP 延后，故不在 modules 中）。
+    -->
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.15</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>com.payment</groupId>
+    <artifactId>payment-arch</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>PaymentArch</name>
+    <description>Commerce &amp; Payment Platform — Spring Cloud microservices monorepo parent</description>
+
+    <modules>
+        <module>common/common-core</module>
+        <module>common/common-dto</module>
+        <module>common/common-mybatis</module>
+        <module>merchant-service</module>
+        <module>catalog-service</module>
+        <module>order-service</module>
+        <module>payment-service</module>
+        <module>refund-service</module>
+        <module>fulfillment-service</module>
+        <module>entitlement-service</module>
+        <module>reconciliation-service</module>
+        <module>settlement-service</module>
+    </modules>
+
+    <properties>
+        <!-- ADR-0002：Java 21 LTS -->
+        <java.version>21</java.version>
+
+        <!--
+            Spring Boot 3.5 是 3.x 最终主线；Spring Cloud 2025.0.x (Northfields) 与之对齐。
+            Constitution / ADR-0002 明确选择 "Spring Boot 3.x + Spring Cloud"，故不升级到 Boot 4.x。
+        -->
+        <spring-cloud.version>2025.0.3</spring-cloud.version>
+
+        <!-- ADR-0002：MyBatis-Plus（Spring Boot 3 用 spring-boot3 starter） -->
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
+
+        <!-- Testcontainers 集成测试（MySQL） -->
+        <testcontainers.version>1.20.6</testcontainers.version>
+
+        <!-- ArchUnit：模块/依赖方向边界测试（T016） -->
+        <archunit.version>1.2.1</archunit.version>
+
+        <!-- Micrometer / JUnit 5 / Mockito / AssertJ 版本由 spring-boot-starter-parent 的 BOM 统一管理 -->
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Cloud BOM（含 OpenFeign、LoadBalancer），与 Spring Boot BOM 对齐 -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- MyBatis-Plus：统一 starter 版本，子服务声明依赖时无需写版本号 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+
+            <!-- 分页插件依赖 JSQLParser（MyBatis-Plus 3.5.9+ 从 extension 拆出，需显式引入） -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+
+            <!-- Testcontainers BOM：统一各容器依赖版本 -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- ArchUnit：统一边界测试依赖版本（test scope） -->
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- 本工程内部共享模块（版本随父 POM 0.1.0-SNAPSHOT） -->
+            <dependency>
+                <groupId>com.payment</groupId>
+                <artifactId>common-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.payment</groupId>
+                <artifactId>common-dto</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.payment</groupId>
+                <artifactId>common-mybatis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- spring-boot-maven-plugin 与 maven-compiler-plugin（release=java.version）已由父 POM 管理 -->
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

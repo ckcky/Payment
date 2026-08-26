@@ -1,0 +1,60 @@
+package com.payment.order.domain;
+
+import com.payment.common.core.error.BizException;
+import com.payment.common.core.error.ErrorCodes;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 订单金额与快照不变量测试（T031）：总额=明细小计之和；已支付≤总额；已退款≤已支付；快照冻结。
+ */
+class OrderInvariantTest {
+
+    @Test
+    void totalEqualsSumOfSubtotals() {
+        Order order = new Order("u1", "m1", "CNY", List.of(
+                new OrderItem("1", "A", "item a", 2, 100, "CNY"),
+                new OrderItem("2", "B", "item b", 3, 50, "CNY")));
+        assertThat(order.getTotalMinor()).isEqualTo(350L); // 200 + 150
+    }
+
+    @Test
+    void itemCurrencyMismatchRejected() {
+        assertThatThrownBy(() -> new Order("u1", "m1", "CNY", List.of(
+                new OrderItem("1", "A", "item a", 1, 100, "USD"))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void emptyItemsRejected() {
+        assertThatThrownBy(() -> new Order("u1", "m1", "CNY", List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void refundCannotExceedPaid() {
+        Order order = new Order("u1", "m1", "CNY",
+                List.of(new OrderItem("1", "A", "item a", 2, 100, "CNY")));
+        order.confirm();
+        order.markPaid(100);
+        order.recordRefund(50);
+        assertThat(order.getRefundedMinor()).isEqualTo(50L);
+        assertThat(order.getRefundableMinor()).isEqualTo(50L);
+        assertThatThrownBy(() -> order.recordRefund(51))
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.AMOUNT_INVARIANT_VIOLATION));
+    }
+
+    @Test
+    void snapshotIsImmutableAfterCreation() {
+        Order order = new Order("u1", "m1", "CNY",
+                List.of(new OrderItem("1", "A", "item a", 2, 100, "CNY")));
+        assertThat(order.getTotalMinor()).isEqualTo(200L);
+        assertThatThrownBy(() -> order.getItems().add(
+                new OrderItem("2", "B", "item b", 1, 1, "CNY")))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+}

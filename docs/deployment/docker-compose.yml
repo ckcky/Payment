@@ -1,0 +1,28 @@
+# Commerce & Payment Platform MVP — 单机启动入口
+#
+# 本阶段只提供「最小运行依赖」：MySQL 8。
+# 各微服务镜像与编排在 Dockerfile 就绪后（Polish 阶段 T074）补齐；
+# 当前本地运行以 `./mvnw` 直接启动各服务（端口见各服务 application.yml）。
+#
+# Database-per-Service：生产/集成测试每个服务独立数据库；本地单机开发为降低门槛，
+# 用同一个 MySQL 实例承载多个逻辑库（每个服务一个 schema），仍保持服务间不共享表。
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: payment-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysql-data:

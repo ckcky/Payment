@@ -5,7 +5,7 @@ argument-hint: [模块 | 服务 | 改动范围]
 
 # 测试
 
-为改动补齐测试并运行验证，遵守 `docs/engineering-standards.md` §4。
+为改动补齐测试并运行验证，遵守 `docs/guides/engineering-standards.md` §4。
 
 ## 至少考虑：
 

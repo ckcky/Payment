@@ -78,7 +78,7 @@ Sync Impact Report:
 
 ### IV. 架构边界（Architecture：Spring Cloud 微服务）
 
-**总体架构**：Spring Cloud 微服务（见 ADR-0001）。按 **Bounded Context** 划分服务（一个领域上下文一个服务），每个服务**独立数据库**（Database-per-Service），跨服务通过 API / 事件交互，**不共享表**。分布式一致性用 **Saga + Outbox + 幂等**，**禁止** 2PC/XA 分布式事务（见 Core Principle V）。
+**总体架构**：Spring Cloud 微服务（见 ADR-0001）。按 **Bounded Context** 划分服务（一个领域上下文一个服务），每个服务拥有独立的数据逻辑边界；在单机部署阶段允许多个服务使用同一物理数据库，但必须使用独立 Schema，禁止跨服务访问或修改他服务的数据。跨服务默认通过同步 API/RPC 交互，后置流程也通过明确的 HTTP/RPC 用例触发；不以 MQ 或跨服务异步事件作为当前默认方案。分布式一致性用 Saga + RPC + 幂等，**禁止** 2PC/XA 分布式事务（见 Core Principle V）。
 
 服务清单（详见 ADR-0001）：`gateway`、`merchant-service`、`catalog-service`、`order-service`、`payment-service`（含 Channel 适配）、`refund-service`、`fulfillment-service`、`entitlement-service`、`ledger-service`、`reconciliation-service`、`settlement-service`。
 
@@ -89,7 +89,7 @@ Sync Impact Report:
 3. **Dependency Direction**：依赖指向内层/稳定层，禁止循环依赖（Maven 多模块 + lint 强制）。
 4. **Data Ownership**：每个服务**独占**自己的表；其他服务读写该数据 MUST 通过该服务的 API，**MUST NOT** 直接 SQL 其他服务的表。
 5. **API Boundary**：对外 HTTP API 与领域模型分离（`api → application → domain ← infra` 分层），API 不直接暴露数据库实体。
-6. **Event Boundary**：跨服务副作用通过**领域事件**触发（Outbox + 消息），不通过共享状态。
+6. **RPC Boundary**：跨服务通过对方公开的 API/RPC 用例交互，不通过共享状态或直接调用内部实现。领域事件可以在服务内部使用，但当前不作为跨服务通信机制。
 
 **禁止清单（MUST NOT）**：
 
@@ -97,7 +97,7 @@ Sync Impact Report:
 - ❌ 核心领域（Payment/Order/Ledger）依赖具体渠道实现。
 - ❌ 为技术炫技过度拆分（CQRS、Event Sourcing、DDD 全套仪式，除非业务真实需要）。
 - ❌ 无理由新增微服务或中间件（服务边界已由 ADR-0001 固定，新增须立 ADR）。
-- ❌ 引入 2PC/XA 分布式事务（用 Saga + Outbox + 幂等替代）。
+- ❌ 引入 2PC/XA 分布式事务（用 Saga + RPC + 幂等替代）。
 - ❌ 为体现复杂度引入中间件（Kafka/Redis/MQ/ES 等，除非对应阶段有真实需要且经 ADR 论证）。
 
 **引入基础设施的决策门槛**：不为了分布式而分布式。引入任何基础设施/中间件前 MUST 回答：①解决什么问题？②为什么当前方案解决不了？③引入后有什么收益？④引入后有什么成本？⑤是否值得长期维护？答不出或答不全，视为「为了炫技」，禁止引入。
@@ -108,7 +108,7 @@ Sync Impact Report:
 
 1. **Idempotency（幂等）**：支付、退款、结算等资金入口 MUST 有幂等键；相同幂等键的重复请求 MUST NOT 产生重复资金动作。幂等键由调用方提供，服务端持久化并唯一约束。
 2. **State Machine（状态机）**：Order / Payment / Refund / Fulfillment / Entitlement / Settlement 都 MUST 有**显式、单向**的状态机。禁止非法状态跳转；状态流转 MUST 通过集中状态转换函数，禁止散落直接 set 状态。
-3. **Eventual Consistency（最终一致）**：与外部系统（渠道、网关）的交互采用最终一致；单服务内部跨表状态变更用本地事务保证原子；跨服务用 **Saga + Outbox + 幂等消费**。三者分层，不可混淆。
+3. **Eventual Consistency（最终一致）**：与外部系统（渠道、网关）的交互采用最终一致；单服务内部状态变更用本地事务保证原子；跨服务通过同步 RPC 编排和幂等重试实现最终一致，暂不引入 MQ 或跨服务异步事件。三者分层，不可混淆。
 4. **Retry（重试）**：对幂等的外部调用才允许自动重试，重试 MUST 有退避与上限；非幂等调用禁止盲目重试。
 5. **Duplicate Message / Callback（重复消息/回调）**：消费/处理侧 MUST 假设消息与回调会重复到达，靠幂等键 + 状态机幂等吸收，不重复入账。
 6. **Timeout（超时）**：所有外部调用 MUST 有超时；超时**不等于失败或成功**，需进入「未知状态」处理（见下条）。
@@ -119,7 +119,7 @@ Sync Impact Report:
 1. **Code Quality**：Checkstyle + Spotless（CI 强制）；命名遵循 Java 惯例，包名 `com.payment.<service>.<layer>`；错误显式传递，业务错误（`BizException`）与系统错误（`SystemException`）分离；全局异常处理器兜底。
 2. **分层**：`api → application → domain ← infra`，依赖单向；`domain` 不依赖任何框架层；DTO / Entity 分离，跨服务只传 DTO / 事件。
 3. **Testing**：JUnit 5 + Mockito + AssertJ；集成测试用 Testcontainers。资金逻辑 MUST 有测试；表驱动测试优先；关键路径（支付成功/失败/超时/重复回调/渠道失败/服务重启/最终一致）有集成测试。**MUST NOT** 删测试或改测试迎合错误实现。
-4. **Documentation & ADR**：不可逆/重要决策 MUST 立 ADR（`docs/adr/NNNN-*.md`）；领域需求以 Spec（`specs/<feature>/spec.md`）为单一事实源。
+4. **Documentation & ADR**：不可逆/重要决策 MUST 立 ADR（`docs/adr/NNNN-*.md`）；领域需求以 Spec（`docs/specs/<feature>/spec.md`）为单一事实源。
 5. **CI/CD**：Maven Wrapper（mvnw）锁定版本；`mvnw verify`（compile+test）→ lint → 打包；配置与代码分离（Nacos / 环境变量）；Conventional Commits + 功能分支 + PR Review。
 6. **Dependency Management**：父 POM + `dependencyManagement` 统一版本（Spring Boot BOM + Spring Cloud BOM）；最小化依赖，每个新依赖 MUST 有理由（ADR 或 commit）。
 7. **Backward Compatibility**：已发布的 API / 跨服务接口 / 对外 schema 变更 MUST 向后兼容或提供迁移路径；破坏性变更 MUST 经人类确认（见 Governance）。

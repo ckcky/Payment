@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: reconciliation-service
+
+server:
+  port: 8088

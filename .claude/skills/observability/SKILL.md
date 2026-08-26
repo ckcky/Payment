@@ -5,7 +5,7 @@ description: 可观测性规范——Micrometer 指标、结构化日志（trace
 
 # 可观测性规范
 
-来源：`.specify/memory/constitution.md` Observability、`docs/engineering-standards.md` §7。
+来源：`.specify/memory/constitution.md` Observability、`docs/guides/engineering-standards.md` §7。
 
 核心业务流程（Product→Order→Payment→…→Settlement 主链，及 Refund 链）都 MUST 具备可观测性。
 

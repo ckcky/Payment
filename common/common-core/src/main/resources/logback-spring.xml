@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 结构化日志基座：key=value 风格，带关联 ID（MDC: traceId，由 TraceIdFilter 写入）。
+         各服务如需 JSON 日志可覆盖本文件。 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5level thread="%thread" traceId="%X{traceId:-N/A}" logger=%logger{36} msg="%msg"%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

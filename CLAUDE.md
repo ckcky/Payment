@@ -2,18 +2,19 @@
 
 面向生产环境的 Commerce & Payment Platform（Java / Spring Cloud 微服务），用于学习并实践支付、交易、履约、权益、对账、结算体系与高质量后端工程。不是 CRUD Demo。
 
-> 本文是给 Claude 的**操作总纲**，只保留必须始终在上下文里的硬规则；详细约束见 `docs/`。
+> 本文是给 Claude 的**项目导航和硬规则摘要**；Feature 开发唯一流程入口是 Spec Kit，详细约束见 `docs/` 和 `.specify/`。
 
 ## 必读文档（按需加载，不要凭假设动手）
 
 | 文档 | 内容 | 何时读 |
 |---|---|---|
 | [.specify/memory/constitution.md](.specify/memory/constitution.md) | 最高宪法（v2.0.0）：领域边界、架构、一致性、工程、可观测、AI 原则、人类决策边界 | 任何实现 / 设计前 |
-| [docs/adr/](docs/adr/) | 架构决策（0001 微服务、0002 技术栈） | 涉及架构 / 技术选型 |
-| [docs/ai-workflow.md](docs/ai-workflow.md) | SDD 流水线、实现前分析、Feature 完成标准 | 做任何 Feature 前 |
-| [docs/engineering-standards.md](docs/engineering-standards.md) | 编码 / 测试 / CI / 可观测具体规范 | 写代码 / 测试 / 配置前 |
-| [docs/project-structure.md](docs/project-structure.md) | 目录结构与分包约定 | 新建模块 / 文件前 |
-| [docs/documentation.md](docs/documentation.md) | 文档体系与层级 | 写 / 改文档前 |
+| [docs/README.md](docs/README.md) | 文档体系导航（分类目录、权威层级、路径收口） | 找文档时 |
+| [docs/adr/](docs/adr/) | 架构决策（索引见 [docs/adr/README.md](docs/adr/README.md)，0001 微服务、0002 技术栈） | 涉及架构 / 技术选型 |
+| [docs/architecture/overview.md](docs/architecture/overview.md) | 当前有效总体架构方案 | 涉及服务、端口、Schema、RPC 或部署 |
+| [docs/architecture/roadmap.md](docs/architecture/roadmap.md) | 项目阶段、当前状态和下一 Feature | 开始或完成一个 Feature 前 |
+| [docs/guides/engineering-standards.md](docs/guides/engineering-standards.md) | 编码 / 测试 / CI / 可观测具体规范 | 写代码 / 测试 / 配置前 |
+| [docs/guides/development-guide.md](docs/guides/development-guide.md) | 从需求到交付的日常开发入口 | 开始一个特性前 |
 
 ## 硬性红线（MUST NOT）
 
@@ -34,6 +35,7 @@
 
 ## 命令与技能
 
-- 命令：`/feature` `/review` `/payment-review` `/test`（见 `.claude/commands/`）
+- Feature 开发唯一入口：`/speckit-specify` `/speckit-clarify` `/speckit-plan` `/speckit-tasks` `/speckit-implement`。
+- 辅助检查：`/review` `/payment-review` `/test`（见 `.claude/commands/`）
 - 技能：`payment-domain` `architecture` `observability`（见 `.claude/skills/`）
-- Spec Kit（SDD）：`/speckit-specify` `/speckit-plan` `/speckit-tasks` `/speckit-implement` 等（见 `.claude/skills/speckit-*`）
+- Spec Kit（唯一 Feature 流程）：`/speckit-specify` `/speckit-clarify` `/speckit-plan` `/speckit-tasks` `/speckit-implement` 等（见 `.claude/skills/speckit-*`）

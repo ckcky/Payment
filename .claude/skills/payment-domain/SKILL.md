@@ -36,9 +36,9 @@ description: 支付领域知识——六条关键边界、资金正确性铁律�
 
 1. **幂等**：资金入口 MUST 有幂等键，服务端持久化 + 唯一约束，重复请求不产生重复资金动作。
 2. **状态机**：Order/Payment/Refund/Fulfillment/Entitlement/Settlement 都 MUST 有显式单向状态机；流转集中在 domain 状态转换函数。
-3. **最终一致**：与外部系统（渠道/网关）交互用最终一致；内部跨表用本地事务。二者分层。
+3. **最终一致**：与外部系统（渠道/网关）交互用最终一致；服务内部用本地事务；跨服务通过同步 RPC、幂等重试和状态查询收敛。三者分层。
 4. **重试**：仅对幂等外部调用允许自动重试，带 backoff 与上限。
-5. **重复消息/回调**：处理侧 MUST 假设重复，靠幂等键 + 状态机吸收。
+5. **重复 RPC/回调**：处理侧 MUST 假设重复，靠幂等键 + 状态机吸收。
 6. **超时**：外部调用 MUST 有 context 超时；超时 ≠ 失败或成功。
 7. **未知支付状态（最核心）**：结果不确定时 MUST NOT 猜成败直接落账，进 UNKNOWN/PENDING，靠查询接口/对账/人工收敛。
 
@@ -49,7 +49,7 @@ description: 支付领域知识——六条关键边界、资金正确性铁律�
 2. 阅读退款领域文档
 3. 查看状态机
 4. 搜索现有幂等实现
-5. 搜索现有 Event 模式
+5. 搜索现有 RPC 调用模式
 
 
 ## 必须考虑：
@@ -60,7 +60,7 @@ description: 支付领域知识——六条关键边界、资金正确性铁律�
 - Retry
 - Duplicate Callback
 - Unknown State
-- Eventual Consistency
+- RPC 超时和最终一致
 
 ## 禁止：
 
@@ -69,6 +69,5 @@ Payment 直接修改 Entitlement 内部状态。
 ## 优先使用：
 
 Payment Success
-→ Business Event
-→ Fulfillment
-→ Entitlement
+→ Fulfillment RPC
+→ Entitlement RPC

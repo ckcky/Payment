@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: refund-service
+
+server:
+  port: 8085

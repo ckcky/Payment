@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: entitlement-service
+
+server:
+  port: 8087

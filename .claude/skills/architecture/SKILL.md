@@ -5,7 +5,7 @@ description: 项目架构——Spring Cloud 微服务、服务边界、分层与
 
 # 项目架构
 
-来源：`docs/adr/0001-adopt-spring-cloud-microservices.md`、`docs/adr/0002-technology-stack.md`、`docs/project-structure.md`。
+来源：`docs/adr/0001-adopt-spring-cloud-microservices.md`、`docs/adr/0002-technology-stack.md`、`docs/architecture/overview.md`。
 
 
 ## 进行以下任务时使用：
@@ -34,8 +34,8 @@ description: 项目架构——Spring Cloud 微服务、服务边界、分层与
 
 ## 总体架构：Spring Cloud 微服务
 
-- 按 **Bounded Context** 划分服务（一个领域上下文一个服务），**Database-per-Service**，跨服务通过 API / 事件交互，**不共享表**。
-- 分布式一致性用 **Saga + Outbox + 幂等**，**禁止** 2PC/XA 分布式事务。
+- 按 **Bounded Context** 划分服务（一个领域上下文一个服务），**Database-per-Service**，跨服务通过公开 HTTP/RPC 交互，**不共享表**；单机阶段可共用物理数据库，但必须使用独立 Schema。
+- 分布式一致性用 **Saga + 同步 RPC + 幂等重试**，当前不引入 MQ 或跨服务异步事件，**禁止** 2PC/XA 分布式事务。
 
 ## 服务边界（ADR-0001）
 
@@ -55,7 +55,7 @@ description: 项目架构——Spring Cloud 微服务、服务边界、分层与
 
 > **Channel 不单独成服务**：渠道适配以「接口 + 模块」存在于 payment-service 内（Payment ≠ Channel 边界）。
 
-## 单服务分层（project-structure.md）
+## 单服务分层
 
 ```
 api → application → domain ← infra

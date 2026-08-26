@@ -14,8 +14,8 @@
 采用 **Spring Cloud 微服务架构**：
 
 1. 按 **Bounded Context（限界上下文）** 划分服务——一个领域上下文一个服务，而非按实体或函数拆分。
-2. 每个服务拥有**独立数据库**（Database-per-Service），跨服务通过 API / 事件交互，**不共享表**。
-3. 分布式一致性使用 **Saga + Outbox + 幂等**，**不采用**分布式事务（2PC / XA）。
+2. 每个服务拥有独立的数据逻辑边界（Database-per-Service 的业务目标）。单机部署阶段允许多个服务使用同一物理数据库，但每个服务使用独立 Schema，跨服务不共享表、不访问他服务 Schema。
+3. 跨服务默认使用同步 HTTP/RPC 通过公开用例交互；当前不使用 MQ 或跨服务异步事件。分布式一致性使用 Saga + RPC + 幂等，不采用分布式事务（2PC / XA）。
 
 ## 服务边界划分
 
@@ -31,7 +31,7 @@
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 |
 | ledger-service | Ledger | 复式记账（资金核心） |
 | reconciliation-service | Reconciliation | 异步对账 |
-| settlement-service | Settlement | 结算划转 |
+| settlement-service | Settlement | 结算批次与结算结果（当前不真实出款） |
 
 > **Channel 不单独成服务**：渠道适配以「接口 + 模块」形式存在于 payment-service 内，保持 Constitution §2.3 中 **Payment ≠ Channel** 的边界（靠接口抽象实现）。当渠道数量与隔离需求上升时，再抽取为独立 gateway 服务（届时另立 ADR）。
 
@@ -43,12 +43,12 @@
 - 技术栈可逐步替换（未来某服务可独立换语言/框架）。
 
 **代价（必须显式应对）**：
-- **分布式一致性成本**：跨服务资金流转需要 Saga / Outbox / 幂等，复杂度显著高于单体。
+- **分布式一致性成本**：跨服务资金流转需要 Saga / RPC / 幂等，复杂度显著高于单体。
 - **运维复杂度**：注册中心、配置中心、网关、多套部署。
-- **跨服务幂等与对账成为硬要求**（见 Constitution §4）。
+- **跨服务 RPC、幂等与对账成为硬要求**（见 Constitution §4）。
 
 ## 关联
 
 - 取代 Constitution §3.1（模块化单体）—— Constitution 需按 §10 修订。
 - ADR-0002：技术栈选型。
-- `docs/project-structure.md`：目录结构。
+- `docs/architecture/overview.md`：当前总体架构方案。
