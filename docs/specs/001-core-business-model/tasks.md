@@ -176,7 +176,7 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 - [X] T074 在 `docs/deployment/docker-compose.yml` 和 `docs/deployment/README.md` 完成本地、Compose、单机启动、健康检查和基本回滚验证说明。
 - [X] T075 [P] 在 `.github/workflows/verify.yml` 配置 `mvnw verify`、测试、格式检查和构建产物验证；不引入微服务部署流水线。
 - [X] T076 [P] 更新 `docs/specs/001-core-business-model/quickstart.md`，补充实际启动命令、验证命令和预期结果。
-- [ ] T077 运行 `mvnw verify`、Compose 验证和 quickstart 全链路 RPC 回归，记录 `docs/specs/001-core-business-model/` 下的 MVP 验收结果；确认 Settlement 只生成模拟结算结果，不执行真实出款。
+- [X] T077 运行 `mvnw verify`、Compose 验证和 quickstart 全链路 RPC 回归，记录 `docs/specs/001-core-business-model/` 下的 MVP 验收结果；确认 Settlement 只生成模拟结算结果，不执行真实出款。
 - [ ] T078 运行 `/review` 和支付相关 `/payment-review`，检查 `docs/specs/001-core-business-model/plan.md` 与实现结果，确认没有绕过模块边界、状态机、幂等或 Ledger 约束。
 
 **检查点**: MVP 通过完整购买、UNKNOWN、退款、对账、结算、指标、日志、Compose 和 CI 验证。
