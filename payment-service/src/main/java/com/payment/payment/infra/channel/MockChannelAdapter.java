@@ -3,6 +3,7 @@ package com.payment.payment.infra.channel;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.payment.application.channel.RefundRequest;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +39,15 @@ public class MockChannelAdapter implements PaymentChannel {
             case SUCCESS -> ChannelResult.success("mock-ref-" + refGen.incrementAndGet());
             case FAILURE -> ChannelResult.failure("mock-ref-" + refGen.incrementAndGet(), "mock declined");
             case TIMEOUT -> ChannelResult.unknown("mock timeout");
+        };
+    }
+
+    @Override
+    public ChannelResult refund(RefundRequest request) {
+        return switch (scenario) {
+            case SUCCESS -> ChannelResult.success("mock-refund-ref-" + refGen.incrementAndGet());
+            case FAILURE -> ChannelResult.failure("mock-refund-ref-" + refGen.incrementAndGet(), "mock refund declined");
+            case TIMEOUT -> ChannelResult.unknown("mock refund timeout");
         };
     }
 }
