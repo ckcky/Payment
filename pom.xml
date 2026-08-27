@@ -60,8 +60,8 @@
         <!-- Testcontainers 集成测试（MySQL） -->
         <testcontainers.version>1.20.6</testcontainers.version>
 
-        <!-- ArchUnit：模块/依赖方向边界测试（T016） -->
-        <archunit.version>1.2.1</archunit.version>
+        <!-- ArchUnit：模块/依赖方向边界测试（T016）。1.4.1 起支持 Java 25（class major 69） -->
+        <archunit.version>1.4.1</archunit.version>
 
         <!-- Micrometer / JUnit 5 / Mockito / AssertJ 版本由 spring-boot-starter-parent 的 BOM 统一管理 -->
     </properties>
