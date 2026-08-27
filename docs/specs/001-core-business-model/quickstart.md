@@ -14,10 +14,10 @@
    ./mvnw verify   # Windows: mvnw.cmd verify
    ```
 
-2. 启动最小运行依赖（MySQL 8，首启自动执行 `initdb` 01–08 建库脚本）：
+2. 启动最小运行依赖（MySQL 8，首启自动执行 `initdb` 脚本，只创建空数据库）：
 
    ```sh
-   docker compose -f docs/deployment/docker-compose.yml up -d
+   docker compose -f deployment/docker-compose.yml up -d
    ```
 
 3. 分别启动 9 个服务（各为独立进程）：
@@ -96,7 +96,7 @@
 
   ```sh
   curl http://localhost:8081/actuator/health   # Merchant
-  # ... 8082–8089 依次替换端口，见 docs/deployment/README.md 端口表
+  # ... 8082–8089 依次替换端口，见 deployment/README.md 端口表
   ```
 
 - 场景 1–4 的幂等与状态机断言全部通过；场景 2 有明确收敛结果。

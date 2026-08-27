@@ -9,8 +9,9 @@
 # Database-per-Service：生产/集成测试每个服务独立数据库；本地单机开发为降低门槛，
 # 用同一个 MySQL 实例承载多个逻辑库（每个服务一个 schema），仍保持服务间不共享表。
 #
-# initdb 目录含 01–08 共 8 个建库脚本（对应 9 个服务，其中 merchant 无独立业务表），
-# 首次 `up -d` 时按序自动执行，为每个服务创建独立数据库。
+# initdb 目录仅含 01-create-databases.sql：首次 `up -d` 时只创建 8 个空数据库
+# （对应 9 个服务，其中 merchant 无独立数据库），不创建任何业务表；表结构由后续
+# 各服务自己的 migration 负责。完整业务表 DDL 参考见 schema/（不挂载、不自动执行）。
 
 services:
   mysql:

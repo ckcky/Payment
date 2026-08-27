@@ -9,7 +9,7 @@
 | [architecture/](architecture/) | 总体技术方案、模块结构、Roadmap | Explanation（是什么/为什么） |
 | [adr/](adr/) | 架构决策记录（ADR）及索引 | Reference + 生命周期 |
 | [guides/](guides/) | 工程规范、开发指南、AI 工作流 | Reference + How-to（怎么做） |
-| [deployment/](deployment/) | 本地/Compose 运行说明 | How-to |
+| [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
 | [audits/](audits/) | 一次性审计报告（带日期，已归档） | 历史留档 |
 | [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录） | Feature 生命周期产物 |
 
@@ -26,7 +26,7 @@
 | **工程规范** | `docs/guides/engineering-standards.md` | 编码/测试/CI 的具体约束 | 规范调整时 |
 | **开发入口** | `docs/guides/development-guide.md` | 从需求到交付的日常开发入口 | 流程调整时 |
 | **AI 工作流** | `docs/guides/ai-workflow.md` | SDD 流程补充（配合 spec-kit 命令） | 流程调整时 |
-| **部署说明** | `docs/deployment/README.md` | 本地/Compose 启动最小 how-to | 运行方式变化时 |
+| **部署说明** | `deployment/README.md` | 本地/Compose 启动最小 how-to | 运行方式变化时 |
 | **Feature Spec** | `docs/specs/<feature>/spec.md` | 特性的需求、边界与验收（单一事实源） | 特性新增或变更时 |
 | **README** | 根目录 | 项目目标、架构总览、快速开始 | 保持最新 |
 

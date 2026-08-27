@@ -212,7 +212,7 @@ settlement-service → merchant/reconciliation 校验结算资格 + 生成结算
 
 ## 6. 数据架构
 
-- **数据库**：MySQL 8.0（本地通过 [docker-compose.yml](../deployment/docker-compose.yml) 启动）。
+- **数据库**：MySQL 8.0（本地通过 [docker-compose.yml](../../deployment/docker-compose.yml) 启动）。
 - **隔离策略**：Database-per-Service 的访问边界（ADR-0001）——每个服务独占自己的 Schema，命名如 `merchant_schema` / `catalog_schema` / `order_schema` / `payment_schema` / `refund_schema` / `fulfillment_schema` / `entitlement_schema` / `reconciliation_schema` / `settlement_schema`（具体 schema 命名待 Phase 0 落地收口，见 §15）。
 - **数据所有权**：每个领域只拥有自己核心实体的**唯一事实来源**（详见 Spec 001 §Data Ownership）；其他领域只能保存必要引用或不可变副本，不得把副本当作可修改事实来源。
 - **禁止**：任何服务直接 SQL 他服务 Schema 的表；跨服务读写一律经对方公开 API/RPC。
@@ -310,7 +310,7 @@ payment-service/
 
 - 服务是**独立进程、独立端口、独立部署单元**；单机只是多个进程跑在同一台服务器，不改变服务边界。
 - `gateway` 与 `ledger-service` 本 MVP **不创建、不部署**（延后）。
-- 本地启动：`./mvnw` 逐服务启动；`docker-compose up` 起 MySQL（见 [deployment/README.md](../deployment/README.md)）。
+- 本地启动：`./mvnw` 逐服务启动；`docker-compose up` 起 MySQL（见 [deployment/README.md](../../deployment/README.md)）。
 - 演进路径：本地多服务 → Docker Compose → 单机部署 → CI/CD → 可观测增强 → 有证据的部分服务独立数据库迁移（Roadmap Phase 10）。
 
 ## 13. 架构演进（Phase 0-3 详述）

@@ -37,7 +37,7 @@ mvnw.cmd verify
 
 **本地运行**：各服务用 `./mvnw -pl <service> spring-boot:run` 启动（端口见各服务 `application.yml`，8081–8089）。
 
-**Docker Compose**（最小依赖 MySQL）：`docker compose -f docs/deployment/docker-compose.yml up -d`
+**Docker Compose**（最小依赖 MySQL）：`docker compose -f deployment/docker-compose.yml up -d`
 
 ## 从哪里开始
 
