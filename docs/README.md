@@ -6,7 +6,7 @@
 
 | 目录 | 内容 | 类型 |
 |---|---|---|
-| [architecture/](architecture/) | 总体技术方案、模块结构、Roadmap | Explanation（是什么/为什么） |
+| [architecture/](architecture/) | 总体技术方案、每服务系统设计（[systems/](architecture/systems/)）、模块结构、Roadmap | Explanation（是什么/为什么） |
 | [adr/](adr/) | 架构决策记录（ADR）及索引 | Reference + 生命周期 |
 | [guides/](guides/) | 工程规范、开发指南、AI 工作流 | Reference + How-to（怎么做） |
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
@@ -20,7 +20,8 @@
 | **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.0.0） | 架构级变化时（走宪法修订流程） |
 | **CLAUDE.md** | 根目录 | Claude Code 自动加载的项目地图与指针 | 架构 / 文档路径变化时 |
 | **ADR** | `docs/adr/NNNN-*.md`（索引见 [docs/adr/README.md](adr/README.md)） | 记录不可逆/重要架构决策 | 每次重要决策时 |
-| **总体架构方案** | `docs/architecture/overview.md` | 当前有效运行形态、服务边界、Schema 和 RPC 规则 | 架构基线变化时 |
+| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（8 节）：总体架构、详细流程、非功能、部署、计划、风险 | 架构基线变化时 |
+| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（9 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
 | **Roadmap** | `docs/architecture/roadmap.md` | 项目阶段、当前状态、Feature 依赖和下一步 | 阶段或里程碑变化时 |
 | **目录结构** | `docs/architecture/project-structure.md` | 项目骨架约定 | 模块增删时 |
 | **工程规范** | `docs/guides/engineering-standards.md` | 编码/测试/CI 的具体约束 | 规范调整时 |
@@ -35,7 +36,8 @@
 ```
 Constitution（.specify/memory/constitution.md，最高宪法）
    ├── ADR（docs/adr/，记录重要决策，不自动取代宪法）
-   ├── 总体架构方案（docs/architecture/overview.md，当前有效基线）
+   ├── 总体技术方案（docs/architecture/technical-solution.md，当前有效基线）
+   │       └── 每服务系统设计（docs/architecture/systems/<service>-service.md）
    ├── Roadmap（docs/architecture/roadmap.md，阶段边界）
    └── Feature（docs/specs/<feature>/）
           ├── spec.md（要什么）

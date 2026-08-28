@@ -24,6 +24,8 @@ class PaymentMetricsTest {
     private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
     private final PaymentTestStack.RecordingFulfillmentGateway fulfillment =
             new PaymentTestStack.RecordingFulfillmentGateway();
+    private final PaymentTestStack.RecordingOrderGateway order =
+            new PaymentTestStack.RecordingOrderGateway();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final BusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
     private final StructuredAuditLogger audit = new StructuredAuditLogger();
@@ -68,7 +70,7 @@ class PaymentMetricsTest {
     void duplicateCallbackIncrementsDuplicateCounter() {
         Payment payment = appService(new MockChannelAdapter()).createPaymentIntent(command("k1"));
 
-        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment);
+        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment, order);
         PaymentCallbackService callback = new PaymentCallbackService(processor, payments, metrics, audit);
 
         boolean changed = callback.handleCallback(payment.getId(), ChannelResult.success("late-ref"));
@@ -83,7 +85,7 @@ class PaymentMetricsTest {
                 .createPaymentIntent(command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
 
-        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment);
+        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment, order);
         PaymentUnknownResolutionService resolution =
                 new PaymentUnknownResolutionService(payments, processor, metrics, audit);
 

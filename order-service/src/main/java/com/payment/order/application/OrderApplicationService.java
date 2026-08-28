@@ -2,16 +2,20 @@ package com.payment.order.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.common.dto.rpc.CreatePaymentResponse;
+import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.order.domain.Order;
 import com.payment.order.domain.OrderItem;
 import com.payment.order.domain.OrderRepository;
 import com.payment.order.domain.Transaction;
 import com.payment.order.domain.TransactionRepository;
+import com.payment.order.domain.TransactionStatus;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 订单应用服务（T036）：订单创建、SKU RPC 校验、价格快照，Order 1:1 Transaction，
@@ -22,22 +26,38 @@ import org.springframework.stereotype.Service;
 @Service
 public class OrderApplicationService {
 
+    private static final String MODULE = "order";
+
     private final OrderRepository orderRepository;
     private final TransactionRepository transactionRepository;
     private final CatalogClient catalogClient;
     private final PaymentGateway paymentGateway;
+    private final BusinessMetrics metrics;
 
     public OrderApplicationService(OrderRepository orderRepository,
                                    TransactionRepository transactionRepository,
                                    CatalogClient catalogClient,
-                                   PaymentGateway paymentGateway) {
+                                   PaymentGateway paymentGateway,
+                                   BusinessMetrics metrics) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.catalogClient = catalogClient;
         this.paymentGateway = paymentGateway;
+        this.metrics = metrics;
     }
 
     public CreateOrderResult createOrder(String userId, String merchantId, List<OrderLine> lines) {
+        try {
+            CreateOrderResult result = doCreateOrder(userId, merchantId, lines);
+            metrics.counter("order.created", 1.0, "module", MODULE);
+            return result;
+        } catch (RuntimeException e) {
+            metrics.counter("order.create_failed", 1.0, "module", MODULE);
+            throw e;
+        }
+    }
+
+    private CreateOrderResult doCreateOrder(String userId, String merchantId, List<OrderLine> lines) {
         if (lines == null || lines.isEmpty()) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "order must have at least one line");
         }
@@ -77,6 +97,13 @@ public class OrderApplicationService {
                 "payment:" + order.getId(),
                 "mock"));
 
+        // 支付意图已创建，交易进入处理中；订单记录下游支付单号（支付尚未成功，状态保持 PENDING_PAYMENT）。
+        transaction.start();
+        transactionRepository.save(transaction);
+
+        order.recordPayment(payment.paymentId());
+        orderRepository.save(order);
+
         return new CreateOrderResult(order.getId(), transaction.getId(), order.getStatus(),
                 order.getTotalMinor(), order.getCurrencyCode(), payment.paymentId(),
                 payment.status());
@@ -85,5 +112,30 @@ public class OrderApplicationService {
     public Order getOrder(Long id) {
         return orderRepository.findById(id)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + id));
+    }
+
+    /**
+     * 支付成功回调回写（T 新增）：payment-service 在支付真正成功时通过内部 RPC 通知，
+     * 驱动 Order PENDING_PAYMENT → PAID（记录 paymentId、整单支付），并收敛 Transaction 为 SUCCEEDED。
+     */
+    @Transactional
+    public void onPaymentSucceeded(PaymentSucceededRequest request) {
+        Long orderId = Long.valueOf(request.orderId());
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + orderId));
+        boolean changed = order.markPaid(request.paymentId());
+        if (!changed) {
+            return; // 幂等重复回调：订单已 PAID，吸收
+        }
+        orderRepository.save(order);
+
+        Transaction transaction = transactionRepository.findByOrderId(request.orderId())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                        "transaction not found for order: " + orderId));
+        if (transaction.getStatus() == TransactionStatus.PENDING) {
+            transaction.start();
+        }
+        transaction.succeed();
+        transactionRepository.save(transaction);
     }
 }

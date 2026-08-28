@@ -29,28 +29,20 @@ class OrderStateMachineTest {
     void fullPaymentMovesToPaid() {
         Order order = order(100, 2); // total 200
         order.confirm();
-        assertThat(order.markPaid(200)).isTrue();
+        assertThat(order.markPaid(1L)).isTrue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(order.getPaidMinor()).isEqualTo(200L);
+        assertThat(order.getPaymentId()).isEqualTo(1L);
     }
 
     @Test
-    void partialThenFullPayment() {
+    void repeatedPaidCallbackIsAbsorbed() {
         Order order = order(100, 2); // total 200
         order.confirm();
-        assertThat(order.markPaid(50)).isTrue();
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PARTIALLY_PAID);
-        assertThat(order.markPaid(150)).isTrue();
+        order.markPaid(1L);
+        assertThat(order.markPaid(2L)).isFalse(); // 幂等重复回调，吸收且不覆盖 paymentId
+        assertThat(order.getPaymentId()).isEqualTo(1L);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
-    }
-
-    @Test
-    void overPaymentRejected() {
-        Order order = order(100, 2); // total 200
-        order.confirm();
-        assertThatThrownBy(() -> order.markPaid(201))
-                .isInstanceOfSatisfying(BizException.class,
-                        e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.AMOUNT_INVARIANT_VIOLATION));
     }
 
     @Test
@@ -65,7 +57,7 @@ class OrderStateMachineTest {
     void cancelFromPaidThrows() {
         Order order = order(100, 1);
         order.confirm();
-        order.markPaid(100);
+        order.markPaid(1L);
         assertThatThrownBy(order::cancel)
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.STATE_TRANSITION_VIOLATION));
@@ -75,7 +67,7 @@ class OrderStateMachineTest {
     void fullLifecycleToClosed() {
         Order order = order(100, 1);
         order.confirm();
-        order.markPaid(100);
+        order.markPaid(1L);
         order.markFulfilling();
         order.complete();
         order.close();

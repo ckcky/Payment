@@ -82,7 +82,7 @@
 
 状态转换规则由 Feature Spec 定义，并且必须作为领域规则实现：
 
-- Order: pending confirmation → pending payment → partially paid/paid → fulfilling → completed; cancellation/closure only when allowed.
+- Order: pending confirmation → pending payment → paid → fulfilling → completed; cancellation/closure only when allowed.
 - Transaction：待处理 → 处理中 → 成功/失败/已取消/未知。
 - Payment：待支付 → 处理中 → 成功/失败/未知 → 已关闭。
 - PaymentAttempt：待处理 → 已受理 → 成功/失败/未知。

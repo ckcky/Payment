@@ -1,6 +1,6 @@
 # 部署与运行说明
 
-> 本地单机运行与 Docker Compose 的最小 how-to。完整架构见 [docs/architecture/overview.md](../docs/architecture/overview.md)。
+> 本地单机运行与 Docker Compose 的最小 how-to。完整架构见 [docs/architecture/technical-solution.md](../docs/architecture/technical-solution.md)。
 
 ## 服务与端口
 
@@ -26,9 +26,9 @@
 
 本地开发用同一个 MySQL 实例承载多个逻辑库（Database-per-Service），服务间不共享表。
 
-## Docker Compose（本地 MySQL）
+## Docker Compose（本地 MySQL + 可观测）
 
-当前 Compose 只提供 MySQL 8（各微服务镜像与编排在 Dockerfile 就绪后补齐）：
+Compose 提供 MySQL 8、Prometheus 与 Grafana（各微服务镜像与编排在 Dockerfile 就绪后补齐）：
 
 ```sh
 # 启动 MySQL（首次会执行 initdb/01-create-databases.sql，只建空库）
@@ -56,6 +56,31 @@ docker compose -f deployment/docker-compose.yml down -v
 - 首次 `up -d` 时，`./initdb/01-create-databases.sql` 只创建 8 个**空数据库**：`catalog / order / payment / refund / fulfillment / entitlement / reconciliation / settlement`（`merchant` 无库）。**不创建任何业务表**。
 - 完整业务表 DDL 参考见 [`schema/`](schema/)（不挂载、不自动执行）；表结构由后续各服务自己的 migration 负责。
 - MySQL 实例：`mysql:8.0`，容器名 `payment-mysql`，宿主机端口 `3306`，命名卷 `mysql-data` 持久化数据。
+
+## 一键启动 / 停止（推荐）
+
+项目提供两个脚本（Windows 在 **Git Bash** 里跑，macOS/Linux 直接跑）：
+
+```sh
+bash deployment/start-all.sh   # 起 MySQL/Prometheus/Grafana + 9 个微服务，日志落 deployment/logs/
+bash deployment/stop-all.sh    # 停全部微服务 + 容器（保留 MySQL 数据卷）
+```
+
+`start-all.sh` 依次做三件事：`docker compose up -d`（基础设施）→ `./mvnw -q install -DskipTests`（首次构建，后续可跳过）→ 后台启动 9 个服务，每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
+
+> 前提：已安装并**启动 Docker Desktop**（Windows/macOS）或 docker 引擎（Linux），且 `docker` 在 PATH 上。首次 `install` 较慢属正常。
+
+## 日志在哪看
+
+服务当前没有文件日志 appender，日志 = 每个服务的控制台输出：
+
+- **一键启动后**：`deployment/logs/<service>.log`，实时跟踪 `tail -f deployment/logs/payment-service.log`。
+- **手动 `spring-boot:run` 时**：日志直接打在启动该服务的终端窗口里。
+- **资金动作审计**：`StructuredAuditLogger` 输出 `FINANCIAL_AUDIT` 的 JSON 行，检索：
+  ```sh
+  grep FINANCIAL_AUDIT deployment/logs/payment-service.log
+  ```
+- **容器日志**（MySQL/Prometheus/Grafana）：`docker compose -f deployment/docker-compose.yml logs -f <service>`。
 
 ## 本地运行（Maven Wrapper）
 
@@ -102,6 +127,38 @@ curl http://localhost:8089/actuator/health   # Settlement
 ```
 
 预期返回 `{"status":"UP"}`。
+
+## 可观测（Swagger + Prometheus + Grafana）
+
+每个服务暴露（端口见上表）：
+
+- **Swagger UI**：`http://localhost:<port>/swagger-ui.html` —— 浏览并试调该服务的全部 HTTP 接口。
+- **Prometheus 指标**：`http://localhost:<port>/actuator/prometheus` —— Micrometer 业务指标以 Prometheus 格式导出。
+- **Actuator**：`/actuator/health`、`/actuator/metrics`、`/actuator/info`。
+
+服务以宿主进程运行；Prometheus/Grafana 以容器运行并抓取宿主（`host.docker.internal`）：
+
+```sh
+docker compose -f deployment/docker-compose.yml up -d prometheus grafana
+
+# Prometheus 目标/查询：http://localhost:9090
+# Grafana（admin/admin）：http://localhost:3000  → 内置「PaymentArch 业务指标」看板
+```
+
+**Windows 能看到 Grafana 吗？** 能。前提是装了 Docker Desktop 并处于 Running。Prometheus 抓取目标用 `host.docker.internal:8081~8089`（Docker Desktop 会把该主机名映射到宿主机），服务默认绑定 `0.0.0.0`，容器内可达。两点注意：
+
+- 若 `docker` 命令在 Git Bash 里 `command not found`，通常是 Docker Desktop 未启动或未装，先启动再跑脚本。
+- Windows Defender 防火墙首次可能拦截 `java`/端口入站，允许即可；若 Prometheus 里 target 状态为 DOWN 且日志是连接拒绝，多半就是防火墙。
+
+核心业务指标（Micrometer 计数器，点号→下划线、加 `_total` 后缀，维度 `module=<service>`）：
+
+- 支付：`payment_created_total` / `payment_succeeded_total` / `payment_failed_total` / `payment_unknown_total` / `payment_duplicate_total` / `payment_duplicate_callback_total`
+- 退款：`refund_created_total` / `refund_succeeded_total` / `refund_failed_total` / `refund_unknown_total` / `refund_rejected_total`
+- 履约/权益：`fulfillment_completed_total` / `fulfillment_failed_total` / `entitlement_granted_total` / `entitlement_grant_failed_total`
+- 对账/结算：`reconciliation_run_total` / `reconciliation_difference_total` / `settlement_created_total` / `settlement_failed_total` / `settlement_unknown_total`
+- 订单：`order_created_total` / `order_create_failed_total`
+
+业务告警规则见 `prometheus/rules/payment-alerts.yml`（支付 UNKNOWN 堆积 / 退款失败 / 对账差异）。
 
 ## 后续 schema / migration 位置
 

@@ -6,6 +6,7 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.FulfillmentGateway;
+import com.payment.payment.application.OrderGateway;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentCallbackService;
 import com.payment.payment.application.PaymentResultProcessor;
@@ -24,9 +25,10 @@ public final class PaymentTestStack {
     public final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     public final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
     public final RecordingFulfillmentGateway fulfillment = new RecordingFulfillmentGateway();
+    public final RecordingOrderGateway order = new RecordingOrderGateway();
 
     public final PaymentResultProcessor processor =
-            new PaymentResultProcessor(payments, attempts, fulfillment);
+            new PaymentResultProcessor(payments, attempts, fulfillment, order);
     public final PaymentUnknownResolutionService resolution =
             new PaymentUnknownResolutionService(payments, processor, new NoopBusinessMetrics(),
                     new StructuredAuditLogger());
@@ -52,6 +54,17 @@ public final class PaymentTestStack {
         public FulfillmentAcceptedResponse notifyPaymentSucceeded(PaymentSucceededRequest request) {
             succeededRequests.add(request);
             return new FulfillmentAcceptedResponse(1L, "PROCESSING");
+        }
+    }
+
+    /** 记录订单回写 RPC 调用，供测试断言。 */
+    public static final class RecordingOrderGateway implements OrderGateway {
+
+        public final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();
+
+        @Override
+        public void notifyPaymentSucceeded(PaymentSucceededRequest request) {
+            succeededRequests.add(request);
         }
     }
 }

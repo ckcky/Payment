@@ -39,11 +39,11 @@ class OrderInvariantTest {
         Order order = new Order("u1", "m1", "CNY",
                 List.of(new OrderItem("1", "A", "item a", 2, 100, "CNY")));
         order.confirm();
-        order.markPaid(100);
-        order.recordRefund(50);
-        assertThat(order.getRefundedMinor()).isEqualTo(50L);
-        assertThat(order.getRefundableMinor()).isEqualTo(50L);
-        assertThatThrownBy(() -> order.recordRefund(51))
+        order.markPaid(1L); // 整单支付，paidMinor = totalMinor = 200
+        order.recordRefund(199);
+        assertThat(order.getRefundedMinor()).isEqualTo(199L);
+        assertThat(order.getRefundableMinor()).isEqualTo(1L);
+        assertThatThrownBy(() -> order.recordRefund(2))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.AMOUNT_INVARIANT_VIOLATION));
     }

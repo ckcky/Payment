@@ -2,6 +2,7 @@ package com.payment.payment.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
@@ -20,13 +21,16 @@ public class PaymentResultProcessor {
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository attemptRepository;
     private final FulfillmentGateway fulfillmentGateway;
+    private final OrderGateway orderGateway;
 
     public PaymentResultProcessor(PaymentRepository paymentRepository,
                                   PaymentAttemptRepository attemptRepository,
-                                  FulfillmentGateway fulfillmentGateway) {
+                                  FulfillmentGateway fulfillmentGateway,
+                                  OrderGateway orderGateway) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.fulfillmentGateway = fulfillmentGateway;
+        this.orderGateway = orderGateway;
     }
 
     /** 返回支付是否真正发生了状态迁移（据此决定是否已触发履约 RPC）。 */
@@ -40,7 +44,17 @@ public class PaymentResultProcessor {
         paymentRepository.save(payment);
         attemptRepository.save(attempt);
         if (changed && result.status() == ChannelResult.Status.SUCCESS) {
-            fulfillmentGateway.notifyPaymentSucceeded(PaymentResultApplier.toSucceededRequest(payment));
+            PaymentSucceededRequest request = PaymentResultApplier.toSucceededRequest(payment);
+            try {
+                fulfillmentGateway.notifyPaymentSucceeded(request);
+            } catch (RuntimeException ignored) {
+                // 履约 RPC 失败不得回滚支付成功事实（跨服务一致性由幂等 + 后续对账收敛）。
+            }
+            try {
+                orderGateway.notifyPaymentSucceeded(request);
+            } catch (RuntimeException ignored) {
+                // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）。
+            }
         }
         return changed;
     }

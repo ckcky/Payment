@@ -54,10 +54,10 @@ class OrderPersistenceTest {
         Order first = orderRepository.findById(order.getId()).orElseThrow();
         Order second = orderRepository.findById(order.getId()).orElseThrow();
 
-        first.markPaid(200L);
+        first.markPaid(1L);
         orderRepository.save(first);
 
-        second.markPaid(200L);
+        second.markPaid(1L);
         assertThatThrownBy(() -> orderRepository.save(second))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.CONFLICT));

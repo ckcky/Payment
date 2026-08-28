@@ -8,17 +8,17 @@
 
 ## Current Status
 
-- **当前阶段**：Phase 0 — Foundation / 治理与服务骨架收口
-- **当前 Feature**：`001-core-business-model`
-- **Feature 状态**：Spec、Plan、Tasks 已有；源码是多服务启动骨架，业务能力尚未实现。
-- **当前能力**：根 Maven 工程 `validate` 已通过；已有服务启动类和上下文测试；没有完整业务闭环。
-- **当前阻塞**：总体架构基线、服务与数据库 Schema 约定、跨服务 RPC 边界、构建/部署入口需要先统一。
+- **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收（`docs/specs/001-core-business-model/acceptance.md`），端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；退款/对账/结算服务已骨架化并接入指标。
+- **当前 Feature**：`002-payment-order-callback`（支付成功回写订单/交易，spec 已写）＋ 并行推进 `009 Observability Baseline`（Swagger + Prometheus/Grafana 可视化）。
+- **Feature 状态**：001 有完整 Spec/Plan/Tasks/Acceptance/Review 产物；可观测埋点（metrics + 资金审计 + traceId 透传）已落地，可视化层进行中。
+- **当前能力**：`mvnw verify` 通过；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI。
+- **当前阻塞**：无。
 
 ## Next Feature
 
-- **下一个 Feature**：`001-core-business-model` 的实现阶段，不另造技术型 Feature。
-- **进入条件**：完成 Phase 0 的架构、目录、构建和服务运行基线，并确认 Feature 001 的 Plan/Tasks 使用实际 `*-service` 路径。
-- **为什么**：当前最有价值的下一步是实现第一条可运行业务能力，而不是继续扩展服务数量或提前实现 Ledger、MQ、复杂安全。
+- **下一个 Feature**：主链 `002 Payment Reliability`——强化支付超时、UNKNOWN 收敛、重复/乱序回调、有限重试与人工收敛。
+- **进入条件**：完成 `002-payment-order-callback`（支付成功回写闭环）与 `009 Observability Baseline`（可视化看板）。
+- **为什么**：主链 MVP 已闭环，下一步补强支付可靠性（真实异常与不确定结果处理），为后续退款/对账/结算建立可信前提。
 
 ## Feature Dependency Graph
 

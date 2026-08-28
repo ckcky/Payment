@@ -64,8 +64,8 @@ public class MybatisOrderRepository implements OrderRepository {
                 .map(this::toItem)
                 .toList();
         return Order.rehydrate(entity.getId(), entity.getUserId(), entity.getMerchantId(),
-                OrderStatus.valueOf(entity.getStatus()), entity.getCurrencyCode(), items,
-                entity.getPaidMinor(), entity.getRefundedMinor(), entity.getVersion());
+                entity.getPaymentId(), OrderStatus.valueOf(entity.getStatus()), entity.getCurrencyCode(),
+                items, entity.getPaidMinor(), entity.getRefundedMinor(), entity.getVersion());
     }
 
     private OrderItem toItem(OrderItemEntity entity) {
@@ -78,6 +78,7 @@ public class MybatisOrderRepository implements OrderRepository {
         entity.setId(order.getId());
         entity.setUserId(order.getUserId());
         entity.setMerchantId(order.getMerchantId());
+        entity.setPaymentId(order.getPaymentId());
         entity.setStatus(order.getStatus().name());
         entity.setCurrencyCode(order.getCurrencyCode());
         entity.setTotalMinor(order.getTotalMinor());

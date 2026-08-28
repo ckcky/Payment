@@ -63,6 +63,9 @@
         <!-- ArchUnit：模块/依赖方向边界测试（T016）。1.4.1 起支持 Java 25（class major 69） -->
         <archunit.version>1.4.1</archunit.version>
 
+        <!-- springdoc-openapi（Swagger UI）：2.8.x 兼容 Spring Boot 3.5，用于本地 API 可视化 -->
+        <springdoc.version>2.8.14</springdoc.version>
+
         <!-- Micrometer / JUnit 5 / Mockito / AssertJ 版本由 spring-boot-starter-parent 的 BOM 统一管理 -->
     </properties>
 
@@ -106,6 +109,13 @@
                 <artifactId>archunit-junit5</artifactId>
                 <version>${archunit.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!-- springdoc-openapi：统一 Swagger UI 版本（本地 API 可视化） -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
             </dependency>
 
             <!-- 本工程内部共享模块（版本随父 POM 0.1.0-SNAPSHOT） -->

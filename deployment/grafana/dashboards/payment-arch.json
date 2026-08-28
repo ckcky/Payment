@@ -1,0 +1,128 @@
+{
+  "uid": "payment-arch",
+  "title": "PaymentArch 业务指标",
+  "tags": ["payment", "observability"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "支付成功 (累计)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "green" } } },
+      "targets": [
+        { "expr": "sum(payment_succeeded_total{module=\"payment\"})", "legendFormat": "succeeded", "refId": "A" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "支付失败 (累计)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "red" } } },
+      "targets": [
+        { "expr": "sum(payment_failed_total{module=\"payment\"})", "legendFormat": "failed", "refId": "A" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "支付未知 (累计)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "orange" } } },
+      "targets": [
+        { "expr": "sum(payment_unknown_total{module=\"payment\"})", "legendFormat": "unknown", "refId": "A" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "支付创建 (累计)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "blue" } } },
+      "targets": [
+        { "expr": "sum(payment_created_total{module=\"payment\"})", "legendFormat": "created", "refId": "A" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "支付流转速率 (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(increase(payment_succeeded_total{module=\"payment\"}[5m]))", "legendFormat": "succeeded", "refId": "A" },
+        { "expr": "sum(increase(payment_failed_total{module=\"payment\"}[5m]))", "legendFormat": "failed", "refId": "B" },
+        { "expr": "sum(increase(payment_unknown_total{module=\"payment\"}[5m]))", "legendFormat": "unknown", "refId": "C" },
+        { "expr": "sum(increase(payment_created_total{module=\"payment\"}[5m]))", "legendFormat": "created", "refId": "D" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "退款流转 (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(increase(refund_succeeded_total{module=\"refund\"}[5m]))", "legendFormat": "succeeded", "refId": "A" },
+        { "expr": "sum(increase(refund_failed_total{module=\"refund\"}[5m]))", "legendFormat": "failed", "refId": "B" },
+        { "expr": "sum(increase(refund_unknown_total{module=\"refund\"}[5m]))", "legendFormat": "unknown", "refId": "C" },
+        { "expr": "sum(increase(refund_created_total{module=\"refund\"}[5m]))", "legendFormat": "created", "refId": "D" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "履约 / 权益 (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(increase(fulfillment_completed_total{module=\"fulfillment\"}[5m]))", "legendFormat": "fulfillment.completed", "refId": "A" },
+        { "expr": "sum(increase(fulfillment_failed_total{module=\"fulfillment\"}[5m]))", "legendFormat": "fulfillment.failed", "refId": "B" },
+        { "expr": "sum(increase(entitlement_granted_total{module=\"entitlement\"}[5m]))", "legendFormat": "entitlement.granted", "refId": "C" },
+        { "expr": "sum(increase(entitlement_grant_failed_total{module=\"entitlement\"}[5m]))", "legendFormat": "entitlement.grant_failed", "refId": "D" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "结算 / 对账 (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(increase(settlement_created_total{module=\"settlement\"}[5m]))", "legendFormat": "settlement.created", "refId": "A" },
+        { "expr": "sum(increase(settlement_failed_total{module=\"settlement\"}[5m]))", "legendFormat": "settlement.failed", "refId": "B" },
+        { "expr": "sum(increase(settlement_unknown_total{module=\"settlement\"}[5m]))", "legendFormat": "settlement.unknown", "refId": "C" },
+        { "expr": "sum(increase(reconciliation_difference_total{module=\"reconciliation\"}[5m]))", "legendFormat": "reconciliation.difference", "refId": "D" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "HTTP 请求量 (各服务, 1m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (instance) (rate(http_server_requests_seconds_count[1m]))", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "HTTP P99 延迟 (各服务)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, instance) (rate(http_server_requests_seconds_bucket[1m])))", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 }
+    }
+  ]
+}

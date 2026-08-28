@@ -21,6 +21,8 @@ public class Order {
     private Integer version;
     private final String userId;
     private final String merchantId;
+    /** 下游支付单号（payment-service 的 payment.id），下单时同步 RPC 返回、支付成功回调确认。 */
+    private Long paymentId;
     private OrderStatus status = OrderStatus.PENDING_CONFIRMATION;
     private final String currencyCode;
     private final long totalMinor;
@@ -49,11 +51,12 @@ public class Order {
     /**
      * 持久化重建：用既有快照明细与历史状态/金额还原聚合，绕过创建期状态机（不改变业务规则）。
      */
-    public static Order rehydrate(Long id, String userId, String merchantId, OrderStatus status,
-                                  String currencyCode, List<OrderItem> items,
+    public static Order rehydrate(Long id, String userId, String merchantId, Long paymentId,
+                                  OrderStatus status, String currencyCode, List<OrderItem> items,
                                   long paidMinor, long refundedMinor, Integer version) {
         Order order = new Order(userId, merchantId, currencyCode, items);
         order.id = id;
+        order.paymentId = paymentId;
         order.status = status;
         order.paidMinor = paidMinor;
         order.refundedMinor = refundedMinor;
@@ -68,21 +71,21 @@ public class Order {
         this.status = OrderStatus.PENDING_PAYMENT;
     }
 
-    /** 记录已支付金额；部分支付或全额支付。返回 true 表示本次发生了状态变化。 */
-    public boolean markPaid(long amountMinor) {
-        if (amountMinor <= 0) {
-            throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION, "paid amount must be > 0");
+    /** 关联下游支付意图（下单时同步 RPC 返回的 paymentId），不改变订单状态。 */
+    public void recordPayment(Long paymentId) {
+        this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
+    }
+
+    /** 支付成功：PENDING_PAYMENT → PAID，记录下游支付单号并把已支付金额置为订单总额（不支持部分支付）。 */
+    public boolean markPaid(Long paymentId) {
+        if (this.status == OrderStatus.PAID) {
+            return false; // 幂等重复回调，吸收
         }
-        requireAnyStatus("markPaid", OrderStatus.PENDING_PAYMENT, OrderStatus.PARTIALLY_PAID);
-        long newPaid = Math.addExact(this.paidMinor, amountMinor);
-        if (newPaid > totalMinor) {
-            throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION, "paid amount exceeds order total");
-        }
-        this.paidMinor = newPaid;
-        OrderStatus next = newPaid == totalMinor ? OrderStatus.PAID : OrderStatus.PARTIALLY_PAID;
-        boolean changed = this.status != next;
-        this.status = next;
-        return changed;
+        requireStatus(OrderStatus.PENDING_PAYMENT, "markPaid");
+        this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
+        this.paidMinor = this.totalMinor;
+        this.status = OrderStatus.PAID;
+        return true;
     }
 
     public void markFulfilling() {
@@ -160,6 +163,10 @@ public class Order {
 
     public String getMerchantId() {
         return merchantId;
+    }
+
+    public Long getPaymentId() {
+        return paymentId;
     }
 
     public OrderStatus getStatus() {

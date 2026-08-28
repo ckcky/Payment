@@ -137,7 +137,7 @@ docs/
 
 状态转换集中于各服务 domain 层，禁止 Controller 或 RPC 适配器直接写状态。Payment 至少支持待支付、处理中、成功、失败、UNKNOWN、已关闭；退款和履约/权益使用 Spec 中定义的独立状态。每个非法跳转、终态重复通知、超时 RPC 和 UNKNOWN 收敛路径都必须有测试。
 
-> **MVP 豁免（H4）**：Order/Transaction 状态机在本 MVP 的真实链路中不被驱动——支付/退款成功不回写 order/transaction 状态（不新增跨服务 RPC 回调）。Order 的状态仅由订单自身生命周期推进，Transaction 保留 `PENDING` 初始态与领域状态机测试。这是有记录的 MVP 范围豁免，非缺陷；恢复回写需单独 Feature（见「Deferred Decisions」）。
+> **状态回写（已实现，Feature 002）**：支付成功通过跨服务 RPC 回调 order-service（`PaymentResultProcessor` → `OrderFeignClient` → `OrderApplicationService.onPaymentSucceeded`），驱动 Order `PENDING_PAYMENT → PAID`（记录 paymentId、整单支付）、Transaction `PROCESSING → SUCCEEDED`；重复回调幂等吸收，支付失败/未知不回写。原「MVP 豁免 H4」已移除。
 
 ## 10. Error Handling
 
@@ -192,7 +192,6 @@ docs/
 - 结算费率、结算账户路由、批次调度和生产资金执行。
 - 服务进一步独立物理数据库、服务通信基础设施和消息基础设施。
 - 认证授权、密钥管理、生产安全策略和云部署策略的最终方案。
-- **Order/Transaction 状态机端到端回写（MVP 豁免 H4）**：MVP 不在支付/退款成功后通过跨服务 RPC 回写 order/transaction 状态；Order 状态仅由订单生命周期推进，Transaction 保留初始态。后续 Feature 需单独设计回写 RPC 契约、幂等与失败补偿后恢复。
 
 ## 复杂度记录
 

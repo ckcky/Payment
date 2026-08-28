@@ -5,7 +5,7 @@ description: 项目架构——Spring Cloud 微服务、服务边界、分层与
 
 # 项目架构
 
-来源：`docs/adr/0001-adopt-spring-cloud-microservices.md`、`docs/adr/0002-technology-stack.md`、`docs/architecture/overview.md`。
+来源：`docs/adr/0001-adopt-spring-cloud-microservices.md`、`docs/adr/0002-technology-stack.md`、`docs/architecture/technical-solution.md`。
 
 
 ## 进行以下任务时使用：

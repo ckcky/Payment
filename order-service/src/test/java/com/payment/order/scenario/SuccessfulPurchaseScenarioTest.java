@@ -2,6 +2,7 @@ package com.payment.order.scenario;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.order.application.CatalogClient;
@@ -12,6 +13,7 @@ import com.payment.order.application.PaymentGateway;
 import com.payment.order.application.SkuSnapshot;
 import com.payment.order.domain.OrderStatus;
 import com.payment.order.domain.Transaction;
+import com.payment.order.domain.TransactionStatus;
 import com.payment.order.infra.InMemoryOrderRepository;
 import com.payment.order.infra.InMemoryTransactionRepository;
 import java.util.ArrayList;
@@ -37,7 +39,8 @@ class SuccessfulPurchaseScenarioTest {
     private final FakePaymentGateway paymentGateway = new FakePaymentGateway();
 
     private OrderApplicationService service(CatalogClient client) {
-        return new OrderApplicationService(orderRepository, transactionRepository, client, paymentGateway);
+        return new OrderApplicationService(orderRepository, transactionRepository, client, paymentGateway,
+                new NoopBusinessMetrics());
     }
 
     /** 记录型 fake：捕获创建支付意图请求并返回固定响应。 */
@@ -84,6 +87,7 @@ class SuccessfulPurchaseScenarioTest {
                 .orElseThrow();
         assertThat(transaction.getAmountMinor()).isEqualTo(200L);
         assertThat(transaction.getCurrencyCode()).isEqualTo("CNY");
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.PROCESSING);
 
         assertThat(paymentGateway.requests).hasSize(1);
         CreatePaymentRequest request = paymentGateway.requests.get(0);

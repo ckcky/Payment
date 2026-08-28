@@ -51,4 +51,4 @@
 
 - 取代 Constitution §3.1（模块化单体）—— Constitution 需按 §10 修订。
 - ADR-0002：技术栈选型。
-- `docs/architecture/overview.md`：当前总体架构方案。
+- `docs/architecture/technical-solution.md`：当前总体技术方案。

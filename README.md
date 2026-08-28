@@ -44,7 +44,7 @@ mvnw.cmd verify
 - 文档导航：[docs/README.md](docs/README.md)
 - 开发流程：[docs/guides/development-guide.md](docs/guides/development-guide.md)
 - 项目宪法：[.specify/memory/constitution.md](.specify/memory/constitution.md)
-- 总体架构：[docs/architecture/overview.md](docs/architecture/overview.md)
+- 总体技术方案：[docs/architecture/technical-solution.md](docs/architecture/technical-solution.md)
 - Roadmap：[docs/architecture/roadmap.md](docs/architecture/roadmap.md)
 - 架构决策：[docs/adr/](docs/adr/)
 - 特性设计：`docs/specs/<feature>/`

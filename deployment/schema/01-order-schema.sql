@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS orders (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64) NOT NULL,
+    payment_id BIGINT NULL,
     status VARCHAR(32) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     total_minor BIGINT NOT NULL,

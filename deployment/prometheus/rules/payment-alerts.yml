@@ -1,0 +1,34 @@
+# 业务告警规则（Constitution Observability / engineering-standards §7）
+#
+# 只告业务异常，不告基础设施：支付 UNKNOWN 堆积、退款失败、对账差异。
+# 指标名对应 Micrometer 计数器（点号→下划线，计数器加 _total 后缀）。
+
+groups:
+  - name: payment-arch-business
+    rules:
+      - alert: PaymentUnknownBacklog
+        expr: increase(payment_unknown_total{module="payment"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "支付状态 UNKNOWN 堆积"
+          description: "过去 5 分钟新增 {{ $value }} 笔 UNKNOWN 支付，需查询/对账/人工收敛。"
+
+      - alert: RefundFailure
+        expr: increase(refund_failed_total{module="refund"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "退款失败"
+          description: "过去 5 分钟新增 {{ $value }} 笔退款失败，需追踪处理。"
+
+      - alert: ReconciliationDifference
+        expr: reconciliation_difference_total{module="reconciliation"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "对账发现差异"
+          description: "对账差异累计 {{ $value }} 条，需人工核对原始支付/退款事实。"

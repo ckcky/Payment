@@ -30,5 +30,34 @@ services:
       timeout: 5s
       retries: 20
 
+  # 可观测：Prometheus 抓取各服务 /actuator/prometheus；Grafana 呈现业务指标看板。
+  # 服务以宿主进程运行（非容器），抓取目标用 host.docker.internal 访问宿主。
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: payment-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: payment-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
 volumes:
   mysql-data:

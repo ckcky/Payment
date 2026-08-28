@@ -6,6 +6,7 @@ CREATE TABLE orders (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64) NOT NULL,
+    payment_id BIGINT NULL,
     status VARCHAR(32) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     total_minor BIGINT NOT NULL,
