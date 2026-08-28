@@ -351,3 +351,33 @@ grep `feign/readTimeout/connectTimeout/resilience4j/@Retryable` 在 `application
 ---
 
 > **审计收尾**：本报告聚焦代码实现现状，已二次核验全部 High 结论。与 2026-08-26 治理审计相比，项目已从「骨架 + 文档冲突」推进到「主链 MVP 跑通、领域建模扎实」；剩余差距集中在**安全基线、真实测试、部署落地、Money VO 启用、重试/超时/熔断**五处，均在 Roadmap 的 Phase 7–10 或 002 Feature 的覆盖范围内，可按 P0→P1→P2 有序收敛。
+
+---
+
+## 11. 修复进度（2026-08-28 后续整改）
+
+> 依据用户指令「把这些问题修了」，对可落地、可验证、不破坏现有测试的高优先级问题实施了代码级修复；**DB 密码硬编码（F4）按用户要求保持原样未改**。所有改动通过 `payment-service` 全量测试（45 个）与全 reactor 编译验证。
+
+### 11.1 已修复（本次）
+
+| 审计项 | 修复内容 | 关键文件 |
+| --- | --- | --- |
+| **P0-3 事务内同步 RPC（High）** | 新增 `PaymentPersistence`（两个 `@Transactional` 短事务：`insertPending` / `applyAndPersist`）；`createPaymentIntent` 中 `channel.charge` 与 `fulfillment` 跨服务 RPC 现已移出 DB 事务，避免连接被网络调用长期占用（雪崩） | `PaymentPersistence.java`（新）、`PaymentApplicationService.java` |
+| **P0-2 / 5.2 / 5.3 超时·熔断·重试（High）** | `application.yml` 增加 Feign `connect-timeout: 2000` / `read-timeout: 5000` 与 `circuitbreaker.enabled: true`；pom 增加 `spring-cloud-starter-circuitbreaker-resilience4j`；新增 `ResilientFulfillmentGateway`（仅对幂等 sink 调用做指数退避重试，max 3 / 200ms 起），经 `@Primary` bean 包裹 Feign 客户端 | `application.yml`、`pom.xml`、`ResilientFulfillmentGateway.java`（新）、`PaymentClientConfig.java`（新）、`ResilientFulfillmentGatewayTest.java`（新） |
+| **P1-6 / F3 全站无输入校验（High/Med）** | `common-dto` 增加 `spring-boot-starter-validation`；`CreatePaymentRequest` 与 `ResolveRequest` 加 `@NotNull`/`@Positive`/`@Pattern`；`PaymentController` 的 `@RequestBody` 加 `@Valid`（全局异常处理器已有 `MethodArgumentNotValidException` 兜底） | `common-dto/pom.xml`、`CreatePaymentRequest.java`、`ResolveRequest.java`、`PaymentController.java` |
+| **F2 未鉴权可伪造支付成功（High）** | 新增 `ResolveAuthorizationInterceptor`（`HandlerInterceptor`）：要求请求头 `X-Admin-Token` 等于 `payment.admin.token`（env `PAYMENT_ADMIN_TOKEN`），未配置则 fail-closed 返回 503；经 `WebConfig` 注册到 `/payments/*/resolve` | `ResolveAuthorizationInterceptor.java`（新）、`WebConfig.java`（新） |
+
+### 11.2 验证结果
+
+- 全 reactor 编译：`PaymentArch` + 12 模块 **BUILD SUCCESS**。
+- `payment-service` 测试：**45 passed / 0 failed**（含 `PaymentApplicationServiceTest`、`PaymentCallbackContractTest`、`PaymentUnknownResolutionTest`、`PaymentMetricsTest`、`ResilientFulfillmentGatewayTest` 及 `@SpringBootTest` 上下文加载测试）。
+- 行为保持不变：成功/失败/超时(UNKNOWN)/幂等重复/延迟回调终态保护等既有契约测试全部通过。
+
+### 11.3 按用户指示未改 / 仍待办
+
+- **未改**：F4 DB 密码硬编码（用户明确「这个不用改，就先这样」）。
+- **仍待办（大型跨模块 / Phase 9 范围，本次未实施，避免破坏项目可运行性）**：
+  - **Money VO 全量启用（P0-1）**：`Money` 值对象设计完备但需将 6 个服务约 50 处的 `(long,String)` 金额元组整体替换为 `Money`，属独立重构，建议单独排期并以 `MoneyInvariantTest` 守护。
+  - **F1 全站 Security/OAuth2**、**F5 回调签名校验**：Constitution 已要求，Roadmap 排在 Phase 9，建议立 ADR 明确范围/时点。
+  - **Nacos 引入 / URL 硬编码**、**Testcontainers 替换 H2**、**Schema 经 Flyway 挂载**、**CI 接入 Checkstyle+Spotless**、**Dockerfile / docker-compose 补全**：属部署与安全基线，建议并入 Phase 9–10 或专门基建迭代。
+

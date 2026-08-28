@@ -23,7 +23,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 ### 1.2 当前现状（Phase 0 — Foundation）
 
 - 架构基线已确认：**Spring Cloud 微服务**，按限界上下文划分（ADR-0001），技术栈 Java 21 + Spring Boot 3.x + MyBatis-Plus + Nacos + OpenFeign（ADR-0002）。
-- 已建 **9 个服务模块 + 3 个共享库**（见 §3），`gateway` 与 `ledger-service` 本 MVP 延后。
+- 已建 **9 个服务模块 + 3 个共享库**（见 §3），`gateway` 本 MVP 延后；`ledger-service` 已在 Feature 004 前置实现（文档先行，待 ADR-0008~0011 确认后编码）。
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
 - 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**部分已落地**，退款/对账/结算多数仍是骨架，未形成完整业务闭环。
 - **尚未引入**：真实支付渠道（当前 Mock Channel）、Ledger 复式记账、MQ / 跨服务异步事件、API 网关、熔断组件、K8s/服务网格。
@@ -231,6 +231,10 @@ sequenceDiagram
 渠道通知**可能重复、乱序、延迟**到达。payment-service 依据「渠道交易引用 + 支付尝试」幂等吸收重复通知，不回退已确认的合法状态；终态成功不被后到的失败回调覆盖。回调只更新 Payment/PaymentAttempt，并通过同步 RPC 触发 order-service 回写订单/交易状态（Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`）、fulfillment-service 履约，不直接改写其他领域内部数据。
 
 渠道超时/断连/响应不完整时，Payment/Refund **进入 UNKNOWN**（不是失败别名）。收敛路径：主动查询接口、后续回调、对账、人工处理；在未收敛前**不得重复执行不可确认的资金动作**。
+
+> **决策记录（Feature 003 / ADR 集合 `docs/adr/0003-payment-reliability-decisions.md`）**：
+> - 超时进 UNKNOWN、主动查询收敛、有限重试、终态冲突策略（迟到成功不覆盖已失败）已 **Accept**（ADR-0003/0004/0005/0007）。
+> - **人工收敛端点（原 ADR-0006 / spec US4）本阶段不做**：高危资金操作须配套完整权限/审计，该体系在路线图 Phase 9（Risk / Security）统一建设。本阶段的自动收敛（主动查询 + 超时 + 重试）已覆盖绝大多数 UNKNOWN；剩余无法自动收敛者保持 UNKNOWN，依赖既有对账流程兜底，不阻塞本 Feature 交付。误判修正统一走对账，不自动覆盖终态（ADR-0007）。
 
 #### 4.3.3 退款链路
 

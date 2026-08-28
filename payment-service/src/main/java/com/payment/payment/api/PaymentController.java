@@ -8,6 +8,7 @@ import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentUnknownResolutionService;
 import com.payment.payment.domain.Payment;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +36,7 @@ public class PaymentController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CreatePaymentResponse createPayment(@RequestBody CreatePaymentRequest request) {
+    public CreatePaymentResponse createPayment(@Valid @RequestBody CreatePaymentRequest request) {
         CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderId(),
                 request.userId(), request.amountMinor(), request.currencyCode(),
                 request.idempotencyKey(), request.channelCode());
@@ -49,7 +50,7 @@ public class PaymentController {
     }
 
     @PostMapping("/{id}/resolve")
-    public PaymentResponse resolveUnknown(@PathVariable Long id, @RequestBody ResolveRequest request) {
+    public PaymentResponse resolveUnknown(@PathVariable Long id, @Valid @RequestBody ResolveRequest request) {
         resolutionService.resolve(id, request.toResult());
         return PaymentResponse.from(applicationService.getPayment(id));
     }

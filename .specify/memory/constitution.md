@@ -8,6 +8,15 @@ Sync Impact Report:
 - TODO: 无
 -->
 
+<!--
+Sync Impact Report:
+- Version: 2.0.0 → 2.1.0（MINOR：解决 D1 自相矛盾，将 Ledger 从前置依赖「延后 Phase 8」改为「当前 Feature 004 实现」，并补充 MVP 过渡条款）
+- 修订：§II.3 增加过渡说明（MVP 阶段在 ledger-service 落地前以状态机事实模拟资金；Ledger 已前置到 Feature 004，落地后所有真实资金变动改走 ledger-service）
+- 关联：docs/adr/0004-ledger-design-decisions.md（ADR-0008~0011）；docs/specs/004-ledger/
+- 决策来源：2026-08-28 负责人确认（审计 D1：§II.3 与 Roadmap 延后 Ledger 的矛盾）
+- TODO: 无
+-->
+
 # PaymentArch Constitution
 
 > Commerce & Payment Platform — 长期有效的工程与架构约束（最高宪法）。
@@ -36,6 +45,7 @@ Sync Impact Report:
 1. 金额一律用**最小货币单位（整数 `long` 分）或 `BigDecimal`（明确 scale）**；全库 **MUST NOT** 用 `float`/`double` 表示或计算金额。
 2. 封装 `Money` 值对象（金额 + 币种），禁止裸 `long` 满天飞。
 3. 任何资金变动 **MUST** 经 `ledger-service` 复式记账，借贷必须平衡；**MUST NOT** 直接改余额字段。
+   - **过渡条款（v2.1.0）**：`ledger-service` 已前置到 Feature 004 实现（原 Roadmap 延后至 Phase 8，D1 矛盾已消解）。在 `ledger-service` 落地前的 MVP 阶段，允许以 Payment/Refund/Settlement 状态机事实**临时**模拟资金（不视为最终账务事实）；`ledger-service` 落地后，所有已确认资金变动 **MUST** 改走 `ledger-service`（见 ADR-0004 / `docs/specs/004-ledger/`）。
 4. 资金路径（支付、退款、结算）**MUST** 具备幂等性（见 Core Principle V）。
 
 ### III. 领域边界（Domain Boundaries）
@@ -189,4 +199,4 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
 3. 修订后按语义化版本递增版本号：MAJOR（原则删除/重定义）、MINOR（新增原则/扩展）、PATCH（措辞/澄清）。
 4. 更新版本行并记录修订历史。
 
-**Version**: 2.0.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-08-26
+**Version**: 2.1.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-08-28

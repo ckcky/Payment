@@ -18,6 +18,11 @@
             <groupId>com.payment</groupId>
             <artifactId>common-core</artifactId>
         </dependency>
+        <!-- Bean Validation 约束注解（JSR-380）随 DTO 提供，校验实现由使用方 starter 提供 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
         <!-- 事件契约基础测试（T019） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
