@@ -8,17 +8,19 @@
 
 ## Current Status
 
-- **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收（`docs/specs/001-core-business-model/acceptance.md`），端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；退款/对账/结算服务已骨架化并接入指标。
-- **当前 Feature**：`002-payment-order-callback`（支付成功回写订单/交易，spec 已写）＋ 并行推进 `009 Observability Baseline`（Swagger + Prometheus/Grafana 可视化）。
-- **Feature 状态**：001 有完整 Spec/Plan/Tasks/Acceptance/Review 产物；可观测埋点（metrics + 资金审计 + traceId 透传）已落地，可视化层进行中。
+- **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收（`docs/specs/001-core-business-model/acceptance.md`），端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；退款/对账/结算服务已落地并接入指标（详见 `docs/architecture/systems/`）。
+- **当前 Feature**：`003-payment-reliability` **已实现并通过验收**（`docs/specs/003-payment-reliability/acceptance.md`）：US1 超时→UNKNOWN、US2 主动查询收敛、US3 有限重试与耗尽、US5 可靠性指标与真实收敛时长均已落地，`mvn verify` 全量通过（payment-service 63 tests 全过）；US4 人工收敛按 ADR-0006 延后 Phase 9。实现期决策见 `docs/adr/0005-payment-reliability-impl-decisions.md`（ADR-0012~0015，Proposed 待确认）。+ 并行推进 `009 Observability Baseline`。
+- **下一 Feature（已前置）**：`004-ledger` —— 由审计 D1（Constitution §II.3 与 Roadmap 延后 Ledger 的矛盾）驱动，负责人决策**前置实现 Ledger**，按 Spec Kit「文档先行」已产出 spec/plan/tasks/data-model/contracts/checklists/acceptance/quickstart，设计决策见 `docs/adr/0004-ledger-design-decisions.md`（ADR-0008~0011，待确认）。Constitution 已升至 v2.1.0 消除该矛盾。
+- **Feature 状态**：001/**003** 有完整 Spec/Plan/Tasks/Acceptance 产物（003 已代码实现并验收）；004 有完整文档产物待实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地，可视化层进行中。
 - **当前能力**：`mvnw verify` 通过；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI。
-- **当前阻塞**：无。
+- **当前阻塞**：004-ledger 待 ADR-0008~0011 负责人确认后进入实现（按负责人指示，实现期未知决策按「最简方式」推进并补记 ADR 供决策）。
 
 ## Next Feature
 
-- **下一个 Feature**：主链 `002 Payment Reliability`——强化支付超时、UNKNOWN 收敛、重复/乱序回调、有限重试与人工收敛。
-- **进入条件**：完成 `002-payment-order-callback`（支付成功回写闭环）与 `009 Observability Baseline`（可视化看板）。
-- **为什么**：主链 MVP 已闭环，下一步补强支付可靠性（真实异常与不确定结果处理），为后续退款/对账/结算建立可信前提。
+- **下一个 Feature**：`004 Ledger`（**已前置**）——实现 `ledger-service` 复式记账，落地 Constitution §II.3「一切资金变动经 ledger-service」。
+- **进入条件**：ADR-0008~0011 经负责人确认（Constitution §8 人类决策边界）；复用既有 003 可靠性与同步 RPC 底座。
+- **为什么前置**：审计 D1 指出 Constitution §II.3（MUST 经 ledger-service）与 Roadmap（Ledger 延后 Phase 8）自相矛盾；负责人决策把 Ledger 前置，先「文档先行」消除矛盾，再实现资金账务底座，为退款/对账/结算提供更可信的事实来源。
+- **注意**：原 Roadmap 顺序（003 Refund → 004 Reconciliation → ... → 006 Ledger）因本前置决策调整；后续 Feature 编号与阶段标签解耦（遵循 `003-payment-reliability` 既定约定：spec 物理目录采用顺序编号 `004-ledger`）。
 
 ## Feature Dependency Graph
 

@@ -25,7 +25,11 @@ public class PaymentAttempt {
     private String channelReference;
     private PaymentAttemptStatus status = PaymentAttemptStatus.PENDING;
     private String failureReason;
-    private final int retryCount;
+    private int retryCount;
+    /** 失败的错误分类（决定可重试性，spec US3 / ADR-0012）。 */
+    private PaymentAttemptErrorType errorType;
+    /** 计划下次重试时刻（退避计算），为空表示不再重试（spec US3）。 */
+    private Instant nextRetryAt;
 
     public PaymentAttempt(Long paymentId, String channelCode, int retryCount) {
         this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
@@ -40,7 +44,9 @@ public class PaymentAttempt {
      */
     public static PaymentAttempt rehydrate(Long id, Long paymentId, String channelCode, int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason, Integer version) {
+                                           PaymentAttemptStatus status, String failureReason,
+                                           PaymentAttemptErrorType errorType, Instant nextRetryAt,
+                                           Integer version) {
         PaymentAttempt attempt = new PaymentAttempt(paymentId, channelCode, retryCount);
         attempt.id = id;
         attempt.requestedAt = requestedAt;
@@ -48,6 +54,8 @@ public class PaymentAttempt {
         attempt.channelReference = channelReference;
         attempt.status = status;
         attempt.failureReason = failureReason;
+        attempt.errorType = errorType;
+        attempt.nextRetryAt = nextRetryAt;
         attempt.version = version;
         return attempt;
     }
@@ -162,5 +170,26 @@ public class PaymentAttempt {
 
     public int getRetryCount() {
         return retryCount;
+    }
+
+    /** 记录一次重试（spec US3）：重试序号自增，用于与重试上限比较。 */
+    public void recordRetry() {
+        this.retryCount++;
+    }
+
+    public PaymentAttemptErrorType getErrorType() {
+        return errorType;
+    }
+
+    public void setErrorType(PaymentAttemptErrorType errorType) {
+        this.errorType = errorType;
+    }
+
+    public Instant getNextRetryAt() {
+        return nextRetryAt;
+    }
+
+    public void setNextRetryAt(Instant nextRetryAt) {
+        this.nextRetryAt = nextRetryAt;
     }
 }

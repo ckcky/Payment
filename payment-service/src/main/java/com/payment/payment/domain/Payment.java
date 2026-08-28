@@ -3,6 +3,7 @@ package com.payment.payment.domain;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -29,6 +30,10 @@ public class Payment {
     private PaymentStatus status = PaymentStatus.PENDING;
     private Long currentAttemptId;
     private String failureReason;
+    /** UNKNOWN 主动查询累计次数（spec US2 / ADR-0003），达上限停止自动查询转人工/对账。 */
+    private int queryAttempts;
+    /** 进入 UNKNOWN 的时刻，用于度量真实收敛时长（spec US5 / ADR-0015）。 */
+    private Instant enteredUnknownAt;
 
     public Payment(String transactionId, String orderId, String userId, long amountMinor,
                    String currencyCode, String idempotencyKey) {
@@ -49,12 +54,14 @@ public class Payment {
     public static Payment rehydrate(Long id, String transactionId, String orderId, String userId,
                                     long amountMinor, String currencyCode, String idempotencyKey,
                                     PaymentStatus status, Long currentAttemptId, String failureReason,
-                                    Integer version) {
+                                    int queryAttempts, Instant enteredUnknownAt, Integer version) {
         Payment payment = new Payment(transactionId, orderId, userId, amountMinor, currencyCode, idempotencyKey);
         payment.id = id;
         payment.status = status;
         payment.currentAttemptId = currentAttemptId;
         payment.failureReason = failureReason;
+        payment.queryAttempts = queryAttempts;
+        payment.enteredUnknownAt = enteredUnknownAt;
         payment.version = version;
         return payment;
     }
@@ -82,11 +89,12 @@ public class Payment {
         return changed;
     }
 
-    /** PROCESSING → UNKNOWN。终态冲突被吸收（返回 false）。 */
+    /** PROCESSING → UNKNOWN。终态冲突被吸收（返回 false）。进入未知的时刻用于度量收敛时长。 */
     public boolean markUnknown(String reason) {
         boolean changed = transitionTo(PaymentStatus.UNKNOWN, "markUnknown", PaymentStatus.PROCESSING);
         if (changed) {
             this.failureReason = reason;
+            this.enteredUnknownAt = Instant.now();
         }
         return changed;
     }
@@ -182,5 +190,18 @@ public class Payment {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    /** 记录一次主动查询尝试（spec US2 / ADR-0003）。 */
+    public void recordQueryAttempt() {
+        this.queryAttempts++;
+    }
+
+    public int getQueryAttempts() {
+        return queryAttempts;
+    }
+
+    public Instant getEnteredUnknownAt() {
+        return enteredUnknownAt;
     }
 }

@@ -9,6 +9,7 @@ import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.time.Duration;
+import java.time.Instant;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,9 +47,10 @@ public class PaymentUnknownResolutionService {
         boolean changed = processor.applyAndNotify(paymentId, authoritativeResult);
         if (changed) {
             recordTransition(payment, PaymentStatus.UNKNOWN, authoritativeResult);
-            // Payment 领域聚合未携带 updatedAt（审计时间戳只落在持久化实体 BaseEntity 上，
-            // 新增领域字段属 §8 边界），故 UNKNOWN 收敛耗时以零时长记录，仅保留维度事实。
-            metrics.timer("payment.unknown.duration", Duration.ZERO, "module", MODULE);
+            // UNKNOWN 真实收敛时长：进入 UNKNOWN 时由状态机记录 enteredUnknownAt（spec US5 / ADR-0015）。
+            Instant enteredAt = payment.getEnteredUnknownAt();
+            Duration duration = enteredAt == null ? Duration.ZERO : Duration.between(enteredAt, Instant.now());
+            metrics.timer("payment.unknown.duration", duration, "module", MODULE);
         }
         return changed;
     }

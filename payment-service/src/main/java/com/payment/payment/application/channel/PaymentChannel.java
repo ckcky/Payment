@@ -15,4 +15,12 @@ public interface PaymentChannel {
      * <p>与扣款一致，超时/断连/不完整响应必须映射为 {@link ChannelResult.Status#UNKNOWN}。</p>
      */
     ChannelResult refund(RefundRequest request);
+
+    /**
+     * 主动查询渠道侧支付状态，用于把 UNKNOWN 收敛为权威终态（spec US2 / ADR-0003）。
+     *
+     * <p>渠道在结果仍不明确时必须返回 {@link ChannelResult.Status#UNKNOWN}（从不臆断成败）；
+     * 返回 SUCCESS/FAILURE 视为权威结果，由收敛服务据此推进。</p>
+     */
+    ChannelResult queryStatus(QueryStatusRequest request);
 }

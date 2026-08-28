@@ -8,10 +8,13 @@ import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.FulfillmentGateway;
 import com.payment.payment.application.OrderGateway;
 import com.payment.payment.application.PaymentApplicationService;
+import com.payment.payment.application.PaymentPersistence;
 import com.payment.payment.application.PaymentCallbackService;
 import com.payment.payment.application.PaymentResultProcessor;
 import com.payment.payment.application.PaymentUnknownResolutionService;
 import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.payment.application.reliability.PaymentRetryService;
+import com.payment.payment.application.reliability.ReliabilityConfig;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import java.util.ArrayList;
@@ -37,7 +40,10 @@ public final class PaymentTestStack {
                     new StructuredAuditLogger());
 
     public PaymentApplicationService appService(PaymentChannel channel) {
-        return new PaymentApplicationService(payments, attempts, channel, fulfillment,
+        PaymentPersistence persistence = new PaymentPersistence(payments, attempts);
+        PaymentRetryService retryService = new PaymentRetryService(payments, attempts, channel, processor,
+                new ReliabilityConfig(), new NoopBusinessMetrics());
+        return new PaymentApplicationService(payments, persistence, channel, retryService, fulfillment,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 

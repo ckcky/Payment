@@ -75,7 +75,9 @@ public class MybatisPaymentRepository implements PaymentRepository {
         return Payment.rehydrate(entity.getId(), entity.getTransactionId(), entity.getOrderId(),
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
                 entity.getIdempotencyKey(), PaymentStatus.valueOf(entity.getStatus()),
-                entity.getCurrentAttemptId(), entity.getFailureReason(), entity.getVersion());
+                entity.getCurrentAttemptId(), entity.getFailureReason(),
+                entity.getQueryAttempts() != null ? entity.getQueryAttempts() : 0,
+                entity.getEnteredUnknownAt(), entity.getVersion());
     }
 
     private PaymentEntity toEntity(Payment payment) {
@@ -90,6 +92,8 @@ public class MybatisPaymentRepository implements PaymentRepository {
         entity.setStatus(payment.getStatus().name());
         entity.setCurrentAttemptId(payment.getCurrentAttemptId());
         entity.setFailureReason(payment.getFailureReason());
+        entity.setQueryAttempts(payment.getQueryAttempts());
+        entity.setEnteredUnknownAt(payment.getEnteredUnknownAt());
         entity.setVersion(payment.getVersion());
         return entity;
     }

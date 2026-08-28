@@ -2,6 +2,7 @@ package com.payment.payment.infra.persistence.payment;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.payment.common.mybatis.BaseEntity;
+import java.time.Instant;
 
 /**
  * 支付持久化实体（PO）：仅承载 payments 表列，领域规则在 {@code domain.Payment}，映射由仓储完成。
@@ -21,6 +22,10 @@ public class PaymentEntity extends BaseEntity {
     private String status;
     private Long currentAttemptId;
     private String failureReason;
+    /** UNKNOWN 主动查询累计次数（spec US2 / ADR-0003）。 */
+    private Integer queryAttempts;
+    /** 进入 UNKNOWN 的时刻（spec US5 / ADR-0015），用于计算真实收敛时长。 */
+    private Instant enteredUnknownAt;
 
     public String getTransactionId() {
         return transactionId;
@@ -92,5 +97,21 @@ public class PaymentEntity extends BaseEntity {
 
     public void setFailureReason(String failureReason) {
         this.failureReason = failureReason;
+    }
+
+    public Integer getQueryAttempts() {
+        return queryAttempts;
+    }
+
+    public void setQueryAttempts(Integer queryAttempts) {
+        this.queryAttempts = queryAttempts;
+    }
+
+    public Instant getEnteredUnknownAt() {
+        return enteredUnknownAt;
+    }
+
+    public void setEnteredUnknownAt(Instant enteredUnknownAt) {
+        this.enteredUnknownAt = enteredUnknownAt;
     }
 }

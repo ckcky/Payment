@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.payment.domain.PaymentAttempt;
+import com.payment.payment.domain.PaymentAttemptErrorType;
 import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentAttemptStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
@@ -56,11 +58,24 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
         return attempt;
     }
 
+    @Override
+    public List<PaymentAttempt> findRetryableDue(Instant now) {
+        return attemptMapper.selectList(
+                        Wrappers.<PaymentAttemptEntity>lambdaQuery()
+                                .isNotNull(PaymentAttemptEntity::getNextRetryAt)
+                                .le(PaymentAttemptEntity::getNextRetryAt, now))
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private PaymentAttempt toDomain(PaymentAttemptEntity entity) {
         return PaymentAttempt.rehydrate(entity.getId(), entity.getPaymentId(), entity.getChannelCode(),
                 entity.getRetryCount(), entity.getRequestedAt(), entity.getRespondedAt(),
                 entity.getChannelReference(), PaymentAttemptStatus.valueOf(entity.getStatus()),
-                entity.getFailureReason(), entity.getVersion());
+                entity.getFailureReason(),
+                entity.getErrorType() == null ? null : PaymentAttemptErrorType.valueOf(entity.getErrorType()),
+                entity.getNextRetryAt(), entity.getVersion());
     }
 
     private PaymentAttemptEntity toEntity(PaymentAttempt attempt) {
@@ -74,6 +89,8 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
         entity.setStatus(attempt.getStatus().name());
         entity.setFailureReason(attempt.getFailureReason());
         entity.setRetryCount(attempt.getRetryCount());
+        entity.setErrorType(attempt.getErrorType() == null ? null : attempt.getErrorType().name());
+        entity.setNextRetryAt(attempt.getNextRetryAt());
         entity.setVersion(attempt.getVersion());
         return entity;
     }

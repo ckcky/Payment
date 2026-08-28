@@ -2,6 +2,7 @@ package com.payment.payment.infra;
 
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +26,13 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
     public List<PaymentAttempt> findByPaymentId(Long paymentId) {
         return byId.values().stream()
                 .filter(a -> paymentId.equals(a.getPaymentId()))
+                .toList();
+    }
+
+    @Override
+    public List<PaymentAttempt> findRetryableDue(Instant now) {
+        return byId.values().stream()
+                .filter(a -> a.getNextRetryAt() != null && !a.getNextRetryAt().isAfter(now))
                 .toList();
     }
 
