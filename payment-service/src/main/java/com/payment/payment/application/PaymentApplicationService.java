@@ -3,10 +3,12 @@ package com.payment.payment.application;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.reliability.PaymentRetryService;
+import com.payment.payment.application.risk.RiskCheckService;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
@@ -29,6 +31,7 @@ public class PaymentApplicationService {
     private final PaymentRetryService retryService;
     private final LedgerPostingGateway ledgerGateway;
     private final FulfillmentGateway fulfillmentGateway;
+    private final RiskCheckService riskCheckService;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
@@ -39,6 +42,7 @@ public class PaymentApplicationService {
                                      PaymentRetryService retryService,
                                      LedgerPostingGateway ledgerGateway,
                                      FulfillmentGateway fulfillmentGateway,
+                                     RiskCheckService riskCheckService,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
@@ -46,6 +50,7 @@ public class PaymentApplicationService {
         this.retryService = retryService;
         this.ledgerGateway = ledgerGateway;
         this.fulfillmentGateway = fulfillmentGateway;
+        this.riskCheckService = riskCheckService;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
@@ -59,7 +64,12 @@ public class PaymentApplicationService {
                                      StructuredAuditLogger auditLogger) {
         this(paymentRepository, paymentPersistence, retryService,
                 (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
-                }, fulfillmentGateway, metrics, auditLogger);
+                }, fulfillmentGateway, noRiskCheck(), metrics, auditLogger);
+    }
+
+    /** 兼容构造用：风控关闭（ADR-0028 默认只观测），等价于不做任何检查。 */
+    private static RiskCheckService noRiskCheck() {
+        return new RiskCheckService(false, 0, 0, new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     /**
@@ -78,6 +88,8 @@ public class PaymentApplicationService {
             return pending.payment();
         }
         metrics.counter("payment.created", 1.0, "module", MODULE);
+        // 最小风控（ADR-0028）：仅观测，命中不阻断资金主流程。
+        riskCheckService.onPaymentCreated(pending.payment());
 
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
         // 重试期间不落库，最终结果与重试次数一次性写入。

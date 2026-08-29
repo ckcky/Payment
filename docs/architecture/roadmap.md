@@ -10,18 +10,17 @@
 
 - **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收；端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；`004-ledger` / `005-refund` / `006-reconciliation` / `007-settlement` 均已落地并接入指标与记账（详见 `docs/architecture/systems/`）。
 - **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016~0018）、`006-reconciliation`（ADR-0019~0021）、`007-settlement`（ADR-0022~0023，按最简单实现落地）。`mvn test` 全量通过。
-- **当前 Feature**：`007-settlement`（结算缺口补齐）——基于已确认事实生成商户周期结算批次；新增**调整项模型**（独立表 + 带符号净额）、**已确认事实本地闸门**（type/币种/金额/周期）、`resolveBatch` 收敛为 SUCCEEDED 且净额 > 0 时向 `ledger-service` 记账、新增调整项登记 / 批次列表 / 关闭端点与出站 Feign 弹性配置。结算侧记账承接 `004-ledger` 的 US3 结算部分（同 `006-refund` 退款记账先例）。代码已落地、测试通过。
-- **Feature 状态**：001/003/004/005/006/007 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地，可视化层进行中。
-- **当前能力**：`mvnw verify` / `mvn test` 通过；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
-- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
-- **当前阻塞**：`007-settlement` 的 ADR-0022~0023 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项。
+- **当前 Feature**：`009-risk-security`（Phase 9 风险 / 安全底座）——补齐渠道回调 HMAC-SHA256 验签与防重放（最高危外部面）、`/internal/**` 内部服务间 `X-Service-Token` 鉴权、密钥 env 注入与敏感数据脱敏、最小风控（只观测不拦截）。代码已落地、全量测试通过，ADR-0024~0028 待负责人确认。
+- **Feature 状态**：001/003/004/005/006/007/009 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+- **当前能力**：`mvn -o verify -fae` 全量 13 模块 BUILD SUCCESS；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
+- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）与 `0009-risk-security-decisions.md`（**ADR-0024~0028**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
+- **当前阻塞**：ADR-0022~0028 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项；ADR-0024 遗留「出站内部服务令牌拦截器」（见 tasks T013），`payment.security.internal-auth-enabled` 因此默认关闭。
 
 ## Next Feature
 
-- **下一个 Feature**：`004 Ledger`（**已前置**）——实现 `ledger-service` 复式记账，落地 Constitution §II.3「一切资金变动经 ledger-service」。
-- **进入条件**：ADR-0008~0011 经负责人确认（Constitution §8 人类决策边界）——**已于 2026-08-29 满足**；复用既有 003 可靠性与同步 RPC 底座。
-- **为什么前置**：审计 D1 指出 Constitution §II.3（MUST 经 ledger-service）与 Roadmap（Ledger 延后 Phase 8）自相矛盾；负责人决策把 Ledger 前置，先「文档先行」消除矛盾，再实现资金账务底座，为退款/对账/结算提供更可信的事实来源。
-- **注意**：原 Roadmap 顺序（003 Refund → 004 Reconciliation → ... → 006 Ledger）因本前置决策调整；后续 Feature 编号与阶段标签解耦（遵循 `003-payment-reliability` 既定约定：spec 物理目录采用顺序编号 `004-ledger`）。
+- **下一个 Feature**：`010 Distributed Evolution`（Roadmap Phase 10）——根据实际负载、故障隔离和团队 ownership，有证据地演进服务与数据库部署。
+- **进入条件**：Phase 9 安全与账务基线具备（代码已落地，ADR-0022~0028 待负责人确认后即可视为满足）。
+- **注意**：原 Roadmap 顺序与 Feature 编号已解耦（遵循 `003-payment-reliability` / `004-ledger` 既定约定：spec 物理目录采用顺序编号 `009-risk-security`）。Phase 9 四项范围（服务和操作权限、渠道回调签名和来源校验、敏感数据脱敏和密钥管理、最小风控规则）已在 `009-risk-security` 内一次性覆盖。
 
 ## Feature Dependency Graph
 
@@ -411,13 +410,24 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 - 敏感数据脱敏和密钥管理。
 - 与支付流程匹配的最小风控规则。
 
+**落地情况（2026-08-29）**：以上四项已由 `009-risk-security` 一次性实现并通过全量验证，产物见 `docs/specs/009-risk-security/`，决策见 `docs/adr/0009-risk-security-decisions.md`（ADR-0024~0028，Proposed 待确认）：
+
+| Phase 9 范围 | 落地 |
+| --- | --- |
+| 服务和操作权限 | `InternalServiceAuthInterceptor`（`X-Service-Token`，`/internal/**`）；复用既有 resolve 端点 `X-Admin-Token` |
+| 渠道回调签名和来源校验 | `ChannelCallbackSignatureFilter`（HMAC-SHA256 + 防重放）+ `SignatureVerifier`（common-core） |
+| 敏感数据脱敏和密钥管理 | `SensitiveDataMasker`（common-core）；三类密钥经 env 注入 |
+| 最小风控规则 | `RiskCheckService`（`SINGLE_MAX_AMOUNT` / `WINDOW_LIMIT_COUNT`，只观测不拦截，默认关闭） |
+
 ### 不包含
 
-不包含一开始就建设复杂风控平台或全量合规体系。
+不包含一开始就建设复杂风控平台或全量合规体系。**未做**：mTLS / OAuth2、密钥管理服务（Vault/KMS）、统一出站内网令牌拦截器、规则引擎。
 
 ### 验收标准
 
 未授权请求被拒绝；伪造回调无法改变支付；敏感信息不进入日志；安全策略可审计。
+
+**达成情况**：四项均已由自动化测试覆盖并通过（见 `docs/specs/009-risk-security/acceptance.md`）。
 
 ### 完成后获得的能力
 
