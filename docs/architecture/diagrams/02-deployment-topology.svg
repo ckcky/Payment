@@ -1,0 +1,99 @@
+<svg viewBox="0 0 680 444" width="680" height="444" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>PaymentArch 单机部署拓扑</title>
+<desc>十个 Spring Boot 服务以宿主进程运行，MySQL、Prometheus、Grafana 由 Docker Compose 承载，服务经 JDBC 与指标抓取与容器双向交互。</desc>
+<style>
+text { font-family: "Microsoft YaHei","PingFang SC","Helvetica Neue",Arial,sans-serif; }
+.t { font-size: 14px; font-weight: 500; fill: #2C2C2A; }
+.ts { font-size: 12px; fill: #5F5E5A; }
+.tl { font-size: 12px; fill: #888780; }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+
+<rect x="40" y="20" width="600" height="152" rx="20" fill="#F7F6F3" stroke="#D3D1C7" stroke-width="0.5"/>
+<text class="tl" x="60" y="40" dominant-baseline="central">宿主机 · 每个服务一个独立 JVM 进程（无 Dockerfile，未容器化）</text>
+<g>
+<rect x="60" y="56" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
+<text class="ts" x="112" y="72" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">merchant</text>
+<text class="ts" x="112" y="88" text-anchor="middle" dominant-baseline="central">8081</text>
+</g>
+<g>
+<rect x="174" y="56" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
+<text class="ts" x="226" y="72" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">catalog</text>
+<text class="ts" x="226" y="88" text-anchor="middle" dominant-baseline="central">8082</text>
+</g>
+<g>
+<rect x="288" y="56" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
+<text class="ts" x="340" y="72" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">order</text>
+<text class="ts" x="340" y="88" text-anchor="middle" dominant-baseline="central">8083</text>
+</g>
+<g>
+<rect x="402" y="56" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
+<text class="ts" x="454" y="72" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">payment</text>
+<text class="ts" x="454" y="88" text-anchor="middle" dominant-baseline="central">8084</text>
+</g>
+<g>
+<rect x="516" y="56" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
+<text class="ts" x="568" y="72" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">refund</text>
+<text class="ts" x="568" y="88" text-anchor="middle" dominant-baseline="central">8085</text>
+</g>
+<g>
+<rect x="60" y="110" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#0F6E56" stroke-width="1"/>
+<text class="ts" x="112" y="126" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">fulfillment</text>
+<text class="ts" x="112" y="142" text-anchor="middle" dominant-baseline="central">8086</text>
+</g>
+<g>
+<rect x="174" y="110" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#0F6E56" stroke-width="1"/>
+<text class="ts" x="226" y="126" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">entitlement</text>
+<text class="ts" x="226" y="142" text-anchor="middle" dominant-baseline="central">8087</text>
+</g>
+<g>
+<rect x="288" y="110" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#0F6E56" stroke-width="1"/>
+<text class="ts" x="340" y="126" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">reconciliation</text>
+<text class="ts" x="340" y="142" text-anchor="middle" dominant-baseline="central">8088</text>
+</g>
+<g>
+<rect x="402" y="110" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#0F6E56" stroke-width="1"/>
+<text class="ts" x="454" y="126" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">settlement</text>
+<text class="ts" x="454" y="142" text-anchor="middle" dominant-baseline="central">8089</text>
+</g>
+<g>
+<rect x="516" y="110" width="104" height="44" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="1"/>
+<text class="ts" x="568" y="126" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">ledger</text>
+<text class="ts" x="568" y="142" text-anchor="middle" dominant-baseline="central">8090</text>
+</g>
+
+<path d="M420 176 L420 204" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text class="ts" x="430" y="190" dominant-baseline="central">JDBC 3306</text>
+<path d="M240 204 L240 176" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text class="ts" x="250" y="196" dominant-baseline="central">指标抓取</text>
+
+<rect x="40" y="212" width="600" height="120" rx="20" fill="#F7F6F3" stroke="#D3D1C7" stroke-width="0.5"/>
+<text class="tl" x="60" y="232" dominant-baseline="central">Docker Compose · 基础设施容器</text>
+<g>
+<rect x="60" y="242" width="180" height="72" rx="8" fill="#FFFFFF" stroke="#5F5E5A" stroke-width="1"/>
+<text class="t" x="150" y="262" text-anchor="middle" dominant-baseline="central">MySQL 8.0</text>
+<text class="ts" x="150" y="280" text-anchor="middle" dominant-baseline="central">3306</text>
+<text class="ts" x="150" y="298" text-anchor="middle" dominant-baseline="central">9 个独立 Schema，卷持久化</text>
+</g>
+<g>
+<rect x="250" y="242" width="180" height="72" rx="8" fill="#FFFFFF" stroke="#5F5E5A" stroke-width="1"/>
+<text class="t" x="340" y="262" text-anchor="middle" dominant-baseline="central">Prometheus</text>
+<text class="ts" x="340" y="280" text-anchor="middle" dominant-baseline="central">9090</text>
+<text class="ts" x="340" y="298" text-anchor="middle" dominant-baseline="central">抓取宿主 8081–8090 指标</text>
+</g>
+<g>
+<rect x="440" y="242" width="180" height="72" rx="8" fill="#FFFFFF" stroke="#5F5E5A" stroke-width="1"/>
+<text class="t" x="530" y="262" text-anchor="middle" dominant-baseline="central">Grafana</text>
+<text class="ts" x="530" y="280" text-anchor="middle" dominant-baseline="central">3000</text>
+<text class="ts" x="530" y="298" text-anchor="middle" dominant-baseline="central">内置业务指标看板</text>
+</g>
+
+<rect x="40" y="356" width="600" height="68" rx="8" fill="#F7F6F3" stroke="#888780" stroke-width="1"/>
+<text class="t" x="60" y="378" dominant-baseline="central">一键运维</text>
+<text class="ts" x="60" y="398" dominant-baseline="central">start-all.sh / stop-all.sh 起停全部进程与容器，日志落 deployment/logs/</text>
+<text class="ts" x="60" y="414" dominant-baseline="central">每服务暴露 Swagger UI、/actuator/health、/actuator/prometheus</text>
+</svg>

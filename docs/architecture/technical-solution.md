@@ -55,39 +55,17 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 ### 3.1 分层架构
 
-```mermaid
-flowchart TB
-    subgraph L1["接入层（调用方）"]
-        U["用户 / 客户端 / 后台 / 商户"]
-    end
+![PaymentArch 系统架构分层](diagrams/01-system-architecture.svg)
 
-    subgraph L2["接入层（网关 · 本 MVP 延后）"]
-        GW["gateway<br/>路由 / 鉴权 / 限流"]
-    end
+> 该图的 PlantUML 源码：[diagrams/01-system-architecture.puml](diagrams/01-system-architecture.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
 
-    subgraph L3["应用层（业务服务 · 独立进程 · 独立端口）"]
-        M["merchant-service<br/>Merchant"]
-        Cat["catalog-service<br/>Product / SKU"]
-        O["order-service<br/>Order / Transaction"]
-        P["payment-service<br/>Payment + Channel Adapter"]
-        R["refund-service<br/>Refund"]
-        F["fulfillment-service<br/>Fulfillment"]
-        E["entitlement-service<br/>Entitlement"]
-        Recon["reconciliation-service<br/>Reconciliation"]
-        S["settlement-service<br/>Settlement"]
-    end
+- **接入层**：`gateway` 作为统一入口/鉴权/限流，本 MVP **延后**（虚线）；当前调用方直连各服务暴露的 REST。
+- **编排层**：order / payment / refund 承接业务意图并编排跨域流程（§3.2），可调用下游；独立进程、独立端口、独立部署单元。
+- **执行层**：catalog / fulfillment / entitlement 自持状态机，**不得反向依赖编排层**。
+- **资金层**：ledger / reconciliation / settlement / merchant 承载账务事实、核对与结算。其中 `ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），只被依赖、不调用任何业务服务。
+- **数据层**：MySQL 8.0，Database-per-Service 的**访问边界**（§3.4）；Nacos（注册 + 配置）为 `[目标]`，生产启用前本地直连。
 
-    subgraph L4["数据层"]
-        Nacos["Nacos<br/>注册 + 配置"]
-        DB[("MySQL 8.0<br/>每服务独立 Schema")]
-    end
-
-    L1 --> L2 --> L3 --> L4
-```
-
-- **接入层**：`gateway` 作为统一入口/鉴权/限流，本 MVP **延后**；当前各服务直接暴露 REST。
-- **应用层**：一个限界上下文一个服务（§3.2），独立进程、独立端口、独立部署单元。
-- **数据层**：Nacos（注册 + 配置）+ MySQL 8.0；Database-per-Service 的**访问边界**（§3.4）。
+> **注**：reconciliation / settlement 对 payment / refund 的依赖是**只读事实抽取**（读已确认业务事实，不回写、不修改），不构成对编排层的反向业务依赖，不违反 §3.4 的单向依赖原则。
 
 ### 3.2 核心模块职责
 
@@ -101,11 +79,13 @@ flowchart TB
 | refund-service | Refund | 退款编排（渠道退款 + 权益撤销 + 对账） | 骨架 |
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
-| ledger-service | Ledger | 复式记账（资金核心） | 延后 Phase 8 |
+| ledger-service | Ledger | 复式记账（资金核心） | 已实现（`004-ledger` 前置，8090） |
 | reconciliation-service | Reconciliation | 异步对账 | 骨架 |
 | settlement-service | Settlement | 结算批次与结果（不真实出款） | 骨架 |
 
 > Channel 不单独成服务：以「接口 + 模块」内聚在 payment-service（`application/channel` 接口 + `infra/channel` 实现），落实 Payment ≠ Channel。
+
+> **状态列口径**：上表基于本文 2026-08-26 基线。`ledger-service` 已按 `004-ledger` 前置实现并接入 payment 侧记账；refund / reconciliation / settlement 的进展以 [roadmap.md](roadmap.md) Current Status 与 `docs/specs/005~007` 为准，本文相关表述待下次基线刷新时统一修订。
 
 ### 3.3 系统间通讯协议
 
@@ -251,10 +231,28 @@ flowchart LR
 
 `PaymentSucceeded`（Payment 服务内部事实）→ 通过 RPC 请求 fulfillment-service 履约；履约完成后再请求 entitlement-service 授予权益。支付成功只**触发**履约，不决定履约最终状态；履约失败不回写支付为失败；权益授予失败保留履约事实、可重试/人工补发，不重复扣款。
 
-#### 4.3.5 对账与结算
+#### 4.3.5 资金闭环：记账、对账与结算
 
+资金链路只有一条准入门槛：**未确认的事实不得进入账务与结算**。
+
+![PaymentArch 资金闭环与复式记账映射](diagrams/03-funds-closed-loop.svg)
+
+> 该图的 PlantUML 源码：[diagrams/03-funds-closed-loop.puml](diagrams/03-funds-closed-loop.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
+
+**复式记账映射**（`ledger-service`，四个预置科目，MVP 仅 CNY）：
+
+| 场景 | 借方 DEBIT | 贷方 CREDIT | 平衡 |
+|---|---|---|---|
+| 支付成功（金额 A，手续费 F，净额 N = A − F） | `CUSTOMER_CASH` A | `MERCHANT_PAYABLE` N ＋ `PLATFORM_FEE_REVENUE` F | A = N + F |
+| 退款成功（实退金额 R） | `MERCHANT_PAYABLE` R | `CUSTOMER_CASH` R | 与支付方向相反 |
+| 结算批次（净额 S） | `MERCHANT_PAYABLE` S | `SETTLEMENT_PAYABLE` S | 借贷相等 |
+
+- **记账**：仅对**已确认**的支付/退款/结算事实记账，`UNKNOWN` / 处理中 / 失败 / 拒绝**一律不记账**（Constitution §V.7）。幂等键 `PAYMENT:<key>` / `REFUND:<key>` / `SETTLEMENT:<batchId>` 保证重复请求只产生一份分录；借贷不平衡由 Posting 聚合根强校验拒绝，不落任何分录。记账 RPC 失败**不回滚**业务事实，记 `ledger.posting_failed` 并进入「待记账」清单由对账补齐。
 - **对账**：reconciliation-service 读取已确认的 Payment/Refund 事实，与 Mock/预置渠道账单比对，产出一致/金额差异/状态差异/平台独有/渠道独有。**对账只产生匹配/差异事实，永不修改原始 Payment/Refund 事实。**
 - **结算**：settlement-service 只消费「已确认且差异可解释」的财务事实（校验商户结算资格 → 净额计算 → 生成结算批次）。同一商户周期不重复生成批次；未知执行结果不等于成功。
+- **分录不可变**：已提交分录禁止 UPDATE/DELETE，更正只能新增反向分录（冲正）。
+
+> **注**：`ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），设计决策见 [ADR-0004](../adr/0004-ledger-design-decisions.md)；§2.3 非目标中「不实现 Ledger 复式记账」的表述应以 Roadmap Current Status 为准。
 
 #### 4.3.6 典型跨服务调用
 
@@ -331,19 +329,14 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 
 **当前部署形态：单机多进程 + 单 MySQL 独立 Schema**（不是模块化单体）：
 
-```text
-一台服务器
-├── merchant-service / catalog-service / order-service / payment-service
-├── refund-service / fulfillment-service / entitlement-service
-└── reconciliation-service / settlement-service      （各自不同端口）
+![PaymentArch 单机部署拓扑](diagrams/02-deployment-topology.svg)
 
-一个物理数据库（MySQL 8.0）
-└── merchant_schema / catalog_schema / order_schema / ...   （各自独立 Schema）
-```
+> 该图的 PlantUML 源码：[diagrams/02-deployment-topology.puml](diagrams/02-deployment-topology.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
 
 - 服务是**独立进程、独立端口、独立部署单元**；单机只是多个进程跑在同一台服务器，不改变服务边界。
-- `gateway` 与 `ledger-service` 本 MVP **不创建、不部署**。
-- 本地启动：`./mvnw` 逐服务启动；`docker-compose up` 起 MySQL（见 [deployment/README.md](../../deployment/README.md)）。
+- `gateway` 本 MVP **不创建、不部署**；`ledger-service`（8090）已按 `004-ledger` 前置创建并纳入部署。
+- 服务当前**未容器化**（无 Dockerfile），以宿主进程运行；只有 MySQL / Prometheus / Grafana 由 `docker compose` 承载，Prometheus 经 `host.docker.internal` 回抓宿主端口的 `/actuator/prometheus`。
+- 每个服务暴露 Swagger UI、`/actuator/health`、`/actuator/prometheus`；`deployment/start-all.sh` / `stop-all.sh` 一键起停，日志落 `deployment/logs/<service>.log`（详见 [deployment/README.md](../../deployment/README.md)）。
 - **演进路径**：本地多服务 → Docker Compose → 单机部署 → CI/CD → 可观测增强 → 有证据的部分服务独立数据库迁移（Roadmap Phase 10）。
 
 > 各服务的**运行态配置**（环境变量、启动依赖顺序、端口）见 [systems/](systems/) 下对应文档（要素 6），与本节「物理机部署」区分。

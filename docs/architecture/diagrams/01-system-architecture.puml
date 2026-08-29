@@ -1,0 +1,75 @@
+@startuml
+' PaymentArch 系统架构分层图
+' 渲染：plantuml.jar -tsvg -o _render 01-system-architecture.puml
+' 警告：PlantUML 默认输出同名 .svg，会直接覆盖文档展示用的手绘图！务必用 -o 指定输出目录
+' 布局：无 Graphviz 时用 Smetana；已装 Graphviz 后可删掉下行 pragma，改用 dot 渲染（布局更规整）
+!pragma layout smetana
+
+title PaymentArch 系统架构分层
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #6B6B6B
+skinparam ArrowThickness 1
+skinparam ArrowFontSize 11
+skinparam Padding 4
+skinparam Linetype ortho
+
+skinparam package {
+  Style rectangle
+  BorderColor #B4B2A9
+  BackgroundColor #FAFAF8
+  FontSize 13
+  FontStyle bold
+  BorderThickness 1
+}
+
+skinparam rectangle {
+  BorderThickness 1
+  FontSize 12
+}
+
+rectangle "调用方：用户 / 商户 / 运营" as U #FFFFFF
+rectangle "gateway\n统一入口 · 路由 / 鉴权 / 限流\n（本 MVP 延后）" as GW #F1EFE8
+
+package "编排层 · 承接业务意图，编排跨域流程" as ORCH {
+  rectangle "order-service\n8083 · order" as O #EEEDFE
+  rectangle "payment-service\n8084 · payment" as P #EEEDFE
+  rectangle "refund-service\n8085 · refund" as R #EEEDFE
+  O -[hidden]right- P
+  P -[hidden]right- R
+}
+
+package "执行层 · 商品、交付与消费权利" as EXEC {
+  rectangle "catalog-service\n8082 · catalog" as Cat #E1F5EE
+  rectangle "fulfillment-service\n8086 · fulfillment" as F #E1F5EE
+  rectangle "entitlement-service\n8087 · entitlement" as E #E1F5EE
+  Cat -[hidden]right- F
+  F -[hidden]right- E
+}
+
+package "资金层 · 账务事实、核对与结算" as FUND {
+  rectangle "ledger-service\n8090 · ledger" as L #D7E9F5
+  rectangle "reconciliation-service\n8088 · reconciliation" as Recon #D7E9F5
+  rectangle "settlement-service\n8089 · settlement" as S #D7E9F5
+  rectangle "merchant-service\n8081 · 无独立库" as M #D7E9F5
+  L -[hidden]right- Recon
+  Recon -[hidden]right- S
+  S -[hidden]right- M
+}
+
+database "MySQL 8.0\n9 个独立 Schema，禁止跨库直查" as DB #F1EFE8
+
+U -down-> GW
+GW .down.> ORCH : 延后
+ORCH -down-> EXEC
+ORCH -down-> FUND
+Recon .up.> P : 只读事实
+FUND -down-> DB
+
+note bottom of DB
+  每服务独占 Schema，
+  跨 Schema 读写一律走对方公开 API
+end note
+
+@enduml

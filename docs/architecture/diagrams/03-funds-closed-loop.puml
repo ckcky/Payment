@@ -1,0 +1,47 @@
+@startuml
+' PaymentArch 资金闭环流程图
+' 渲染：plantuml.jar -tsvg -o _render 03-funds-closed-loop.puml
+' 警告：PlantUML 默认输出同名 .svg，会直接覆盖文档展示用的手绘图！务必用 -o 指定输出目录
+' 注意：活动图不依赖 Graphviz，可删掉下行 pragma
+!pragma layout smetana
+
+title PaymentArch 资金闭环
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #6B6B6B
+skinparam ArrowThickness 1.5
+skinparam Padding 4
+
+skinparam activity {
+  BackgroundColor #FAFAF8
+  BorderColor #B4B2A9
+  FontSize 12
+  BorderThickness 1
+}
+
+start
+:1 · 事实确认
+**支付或退款**到达 **SUCCEEDED** 终态
+UNKNOWN / 处理中 / 失败 / 拒绝 **一律不记账、不结算**;
+
+:2 · 复式记账
+按映射写 **借贷平衡** 分录
+幂等键隔离来源，重复请求返回首次 Posting;
+
+:3 · 对账比对
+与渠道账单比对产出 **差异记录**
+只记录差异，**永不修改**原始 Payment / Refund 事实;
+
+:4 · 结算批次
+只消费 **已确认且差异可解释** 的事实
+按商户周期幂等生成批次并记账;
+
+stop
+
+legend right
+  分录 append-only，
+  更正只能新增反向分录（冲正）
+endlegend
+
+@enduml
