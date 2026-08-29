@@ -4,6 +4,7 @@ import com.payment.refund.application.CreateRefundCommand;
 import com.payment.refund.application.RefundApplicationService;
 import com.payment.refund.application.RefundRpcCallbackService;
 import com.payment.refund.domain.Refund;
+import com.payment.refund.domain.RefundPostProcessAttempt;
 import com.payment.refund.domain.RefundStatus;
 import com.payment.refund.support.RefundTestStack;
 import org.junit.jupiter.api.Test;
@@ -88,6 +89,11 @@ class RefundScenarioTest {
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
         assertThat(stack.payment.attemptRequests).hasSize(1);
-        assertThat(stack.entitlement.postProcessRequests).hasSize(1); // 后处理已尝试，但失败不回滚退款
+        // 后处理虽失败但未回滚退款成功（ADR-0017 Saga）；ENTITLEMENT 尝试被记录为 FAILED 供重放。
+        // 编排器对失败目标同步重试 3 次（ADR-0017），故 RPC 调用计 3 次，逻辑尝试记录仅 1 条。
+        assertThat(stack.entitlement.postProcessRequests).hasSize(3);
+        assertThat(stack.attempts.findByRefundId(refund.getId()).stream()
+                .anyMatch(a -> "ENTITLEMENT".equals(a.getTarget()) && "FAILED".equals(a.getStatus())))
+                .isTrue();
     }
 }

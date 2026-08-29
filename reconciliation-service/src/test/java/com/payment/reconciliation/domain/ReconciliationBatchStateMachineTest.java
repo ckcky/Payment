@@ -46,6 +46,8 @@ class ReconciliationBatchStateMachineTest {
         batch.beginProcessing();
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.PROCESSING);
 
+        // 关闭门禁（ADR-0019）：须先处理未解决差异，方可收口。
+        batch.getDifferences().get(0).resolve("manual match confirmed", "ops", "2026-08-29T00:00:00Z");
         batch.close("ops", "2026-08-29T00:00:00Z");
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
     }

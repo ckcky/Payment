@@ -4,6 +4,7 @@ import com.payment.ledger.domain.Account;
 import com.payment.ledger.domain.LedgerEntry;
 import com.payment.ledger.domain.LedgerSourceType;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** 记账测试辅助：构造平衡的业务分录组合（见 data-model §5 关键业务映射）。 */
@@ -15,13 +16,17 @@ public final class LedgerTestSupport {
     /** 支付成功（金额 A，手续费 F，净额 N=A-F）：借客户资金 A / 贷应付商户 N + 贷手续费收入 F。 */
     public static List<LedgerEntry> paymentCapture(LedgerSourceType sourceType, String sourceId,
                                                    long amount, long fee) {
-        return List.of(
-                entry(sourceType, sourceId, Account.CUSTOMER_CASH, LedgerEntry.Direction.DEBIT,
-                        amount, LedgerEntry.Type.PAYMENT_CAPTURE),
-                entry(sourceType, sourceId, Account.MERCHANT_PAYABLE, LedgerEntry.Direction.CREDIT,
-                        amount - fee, LedgerEntry.Type.PAYMENT_CAPTURE),
-                entry(sourceType, sourceId, Account.PLATFORM_FEE_REVENUE, LedgerEntry.Direction.CREDIT,
-                        fee, LedgerEntry.Type.FEE));
+        List<LedgerEntry> entries = new ArrayList<>();
+        entries.add(entry(sourceType, sourceId, Account.CUSTOMER_CASH, LedgerEntry.Direction.DEBIT,
+                amount, LedgerEntry.Type.PAYMENT_CAPTURE));
+        entries.add(entry(sourceType, sourceId, Account.MERCHANT_PAYABLE, LedgerEntry.Direction.CREDIT,
+                amount - fee, LedgerEntry.Type.PAYMENT_CAPTURE));
+        // 与生产网关 FeignLedgerPostingGateway 对齐：手续费为 0 时不产生 0 金额分录。
+        if (fee > 0) {
+            entries.add(entry(sourceType, sourceId, Account.PLATFORM_FEE_REVENUE,
+                    LedgerEntry.Direction.CREDIT, fee, LedgerEntry.Type.FEE));
+        }
+        return entries;
     }
 
     /** 退款 R：借应付商户 R / 贷客户资金 R（与支付方向相反）。 */

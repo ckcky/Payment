@@ -98,16 +98,19 @@ class RefundApplicationServiceTest {
 
     @Test
     void cumulativeUsesConfirmedAmountForTerminalAndRequestedForInTransit() {
-        // 第一笔部分退款 300（终态，计已确认额 300）；第二笔在途 400（计申请额 400）。
-        // 已支付 1000，累计 = 300 + 400 = 700 <= 1000，可批准。
+        // 第一笔部分退款 300（终态，计已确认额 300）。
         stack.payment.refundedAmountMinor = 300L;
         stack.appService().createRefund(
                 new CreateRefundCommand("order-1", 1L, "user-1", 300L, "CNY", "customer",
                         "idem-1", List.of()));
 
+        // 第二笔在途（渠道回 UNKNOWN，待权威结果收敛）：申请 400 计申请额。
+        // 累计 = 300(已确认) + 400(在途申请额) = 700 <= 1000，应被批准（不落 REJECTED）。
+        stack.payment.attemptStatus = "UNKNOWN";
         Refund second = stack.appService().createRefund(
                 new CreateRefundCommand("order-1", 1L, "user-1", 400L, "CNY", "customer",
                         "idem-2", List.of()));
-        assertThat(second.getStatus()).isEqualTo(RefundStatus.PROCESSING);
+        assertThat(second.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
+        assertThat(second.getStatus()).isNotEqualTo(RefundStatus.REJECTED);
     }
 }
