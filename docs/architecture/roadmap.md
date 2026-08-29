@@ -10,17 +10,17 @@
 
 - **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收；端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；`004-ledger` / `005-refund` / `006-reconciliation` / `007-settlement` 均已落地并接入指标与记账（详见 `docs/architecture/systems/`）。
 - **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016~0018）、`006-reconciliation`（ADR-0019~0021）、`007-settlement`（ADR-0022~0023，按最简单实现落地）。`mvn test` 全量通过。
-- **当前 Feature**：`009-risk-security`（Phase 9 风险 / 安全底座）——补齐渠道回调 HMAC-SHA256 验签与防重放（最高危外部面）、`/internal/**` 内部服务间 `X-Service-Token` 鉴权、密钥 env 注入与敏感数据脱敏、最小风控（只观测不拦截）。代码已落地、全量测试通过，ADR-0024~0028 待负责人确认。
-- **Feature 状态**：001/003/004/005/006/007/009 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
-- **当前能力**：`mvn -o verify -fae` 全量 13 模块 BUILD SUCCESS；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
-- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）与 `0009-risk-security-decisions.md`（**ADR-0024~0028**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
-- **当前阻塞**：ADR-0022~0028 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项；ADR-0024 遗留「出站内部服务令牌拦截器」（见 tasks T013），`payment.security.internal-auth-enabled` 因此默认关闭。
+- **当前 Feature**：`010-distributed-evolution`（Roadmap Phase 10 分布式演进）——**刻意不拆服务**，改为把「按证据演进」落成门禁：新增 `architecture-tests` 模块用 ArchUnit 强制四条服务边界不变量（含防空转门禁）、提供运行手册与拆分提案模板。代码已落地、全量测试通过，ADR-0029~0033 待负责人确认。
+- **Feature 状态**：001/003/004/005/006/007/009/010 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+- **当前能力**：`mvn -o verify -fae` 全量 **14** 模块 BUILD SUCCESS（含新增 `architecture-tests`）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
+- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）、`0009-risk-security-decisions.md`（**ADR-0024~0028**）、`0010-distributed-evolution-decisions.md`（**ADR-0029~0033**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
+- **当前阻塞**：ADR-0022~0033 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项；ADR-0024 遗留「出站内部服务令牌拦截器」（见 `009-risk-security` tasks T013），`payment.security.internal-auth-enabled` 因此默认关闭。
 
 ## Next Feature
 
-- **下一个 Feature**：`010 Distributed Evolution`（Roadmap Phase 10）——根据实际负载、故障隔离和团队 ownership，有证据地演进服务与数据库部署。
-- **进入条件**：Phase 9 安全与账务基线具备（代码已落地，ADR-0022~0028 待负责人确认后即可视为满足）。
-- **注意**：原 Roadmap 顺序与 Feature 编号已解耦（遵循 `003-payment-reliability` / `004-ledger` 既定约定：spec 物理目录采用顺序编号 `009-risk-security`）。Phase 9 四项范围（服务和操作权限、渠道回调签名和来源校验、敏感数据脱敏和密钥管理、最小风控规则）已在 `009-risk-security` 内一次性覆盖。
+- **Roadmap 主链已走完 Phase 0~10**，无预设下一阶段（Phase 10 本身即为长期演进终点，后续按新的 Roadmap 版本调整）。
+- **后续立项必须走闸门**：任何服务拆分、数据库实例拆分或引入分布式基础设施（MQ / 容器编排 / Service Mesh），MUST 先填 `docs/operations/split-proposal-template.md`（问题-证据 / 收益 / 成本 / 回滚 四段必填）并通过评审；运行手册 `docs/operations/runbook.md` 同步更新。
+- **注意**：原 Roadmap 顺序与 Feature 编号已解耦（遵循 `003-payment-reliability` / `004-ledger` 既定约定：spec 物理目录采用顺序编号 `009-risk-security` / `010-distributed-evolution`）。Phase 9 四项范围（服务和操作权限、渠道回调签名和来源校验、敏感数据脱敏和密钥管理、最小风控规则）已在 `009-risk-security` 内一次性覆盖；Phase 10 四项范围在 `010-distributed-evolution` 内以「门禁 + 判据」形式覆盖。
 
 ## Feature Dependency Graph
 
@@ -458,13 +458,27 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 - 服务独立扩缩容、发布和故障隔离。
 - 云部署路径评估。
 
+**落地情况（2026-08-30）**：前置条件为「至少一个真实业务瓶颈或隔离需求 + 负责人确认」，当前两者皆无，因此 `010-distributed-evolution` 的**最简实现是「不拆服务，先立门禁」**——产物见 `docs/specs/010-distributed-evolution/`，决策见 `docs/adr/0010-distributed-evolution-decisions.md`（ADR-0029~0033，Proposed 待确认）：
+
+| Phase 10 范围 | 落地形态 |
+| --- | --- |
+| 部分服务独立数据库迁移 | **不迁**；只登记触发条件（容量 / 隔离 / 合规归属 / 可用性）与顺位建议（首推 `ledger`），见 ADR-0030 |
+| 必要时评估跨服务异步消息 | **不引入**；登记引入判据（性能 / 解耦 / 削峰证据）与不可越过的一致性约束，见 ADR-0031；构建期规则禁止 MQ/JTA-XA 出现 |
+| 服务独立扩缩容、发布和故障隔离 | 只立关键等级 T0~T3 分级表作为投入排序依据，不改任何部署形态，见 ADR-0032 |
+| 云部署路径评估 | 纳入拆分提案模板的「成本」段，按提案走，不预设路径 |
+| 服务边界测试 | 新增 `architecture-tests` 模块（ArchUnit）：服务零编译期耦合 / domain 框架无关 / 接入层不直达仓储 / 无 MQ-JTA，另含防空转门禁 |
+| 运行手册 | `docs/operations/runbook.md`（10 服务端口、依赖、启动顺序、指标、故障处置、回滚） |
+| 拆分提案模板 | `docs/operations/split-proposal-template.md`（问题-证据 / 收益 / 成本 / 回滚，四段必填） |
+
 ### 不包含
 
-不因“看起来像微服务”而默认引入 Service Mesh、Kubernetes、CQRS 或 Event Sourcing。
+不因“看起来像微服务”而默认引入 Service Mesh、Kubernetes、CQRS 或 Event Sourcing。**本期未做**：任何真实的服务拆分、数据库实例拆分、容器化、MQ、Service Mesh。
 
 ### 验收标准
 
 每次拆分都有问题、收益、成本和回滚方案；业务事实和契约向后兼容；服务边界测试和运行手册齐全。
+
+**达成情况**：后两项已由 `010-distributed-evolution` 交付并通过验证；第一项（每**次**拆分都有方案）是持续性门禁——由 `split-proposal-template.md` 保证，尚无真实拆分发生，故未产生实际提案。
 
 ### 完成后获得的能力
 

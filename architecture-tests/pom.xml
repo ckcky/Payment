@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.payment</groupId>
+        <artifactId>payment-arch</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>architecture-tests</artifactId>
+    <name>architecture-tests</name>
+    <description>
+        Phase 10 服务边界测试（ADR-0029）：以 ArchUnit 在构建期强制「服务可独立演进」的结构性前提。
+
+        本模块没有任何业务代码，也不被任何服务依赖；它只读取各服务的编译产物做结构校验。
+        因为各服务是 spring-boot-maven-plugin 重打包过的可执行 jar（类在 BOOT-INF/classes 下，
+        不能直接作为依赖被 import），这里不用 classpath 导入，而是按目录导入各服务的
+        target/classes。声明对各服务的 test 依赖仅用于固定 reactor 构建顺序。
+    </description>
+
+    <properties>
+        <!-- 本模块产出测试报告，不作为可部署构件安装到仓库 -->
+        <maven.install.skip>true</maven.install.skip>
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <spring-boot.repackage.skip>true</spring-boot.repackage.skip>
+    </properties>
+
+    <dependencies>
+        <!-- 仅用于保证本模块在所有服务之后构建；不做 classpath 导入 -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>common-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>common-dto</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>common-mybatis</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>merchant-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>catalog-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>order-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>payment-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>refund-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>fulfillment-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>entitlement-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>reconciliation-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>settlement-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>ledger-service</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

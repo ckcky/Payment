@@ -43,6 +43,8 @@
         <module>reconciliation-service</module>
         <module>settlement-service</module>
         <module>ledger-service</module>
+        <!-- Phase 10 服务边界测试：必须在所有服务之后构建（读取各服务 target/classes 做结构校验） -->
+        <module>architecture-tests</module>
     </modules>
 
     <properties>
