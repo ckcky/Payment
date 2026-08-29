@@ -100,6 +100,48 @@ class InternalServiceAuthTest {
         }
     }
 
+    /**
+     * 入站令牌回退到平台级配置（ADR-0034）。
+     *
+     * <p>本服务专属令牌未配置时，回退到 {@code platform.security.internal-token}——正是出站
+     * {@code InternalTokenRequestInterceptor} 携带的那一把。两端同源，
+     * {@code internal-auth-enabled=true} 才可能安全开启（否则调用方全线 403）。</p>
+     */
+    @Nested
+    @SpringBootTest
+    @AutoConfigureMockMvc
+    @TestPropertySource(properties = {
+            "payment.security.internal-auth-enabled=true",
+            "payment.security.service-token=",
+            "platform.security.internal-token=platform-shared-token"
+    })
+    class PlatformTokenFallback {
+
+        private static final String PLATFORM_TOKEN = "platform-shared-token";
+
+        @Autowired
+        private MockMvc mockMvc;
+
+        @Autowired
+        private PaymentApplicationService applicationService;
+
+        @Test
+        void acceptsPlatformSharedToken() throws Exception {
+            Payment payment = applicationService.createPaymentIntent(
+                    new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
+                            "idem-" + UUID.randomUUID(), "mock"));
+
+            mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", PLATFORM_TOKEN))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void stillRejectsOtherTokens() throws Exception {
+            mockMvc.perform(queryAmount(1L).header("X-Service-Token", "some-other-token"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
     /** 开关关闭（默认）：放行，兼容本地联调与既有集成测试。 */
     @Nested
     @SpringBootTest

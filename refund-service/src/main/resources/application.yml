@@ -18,6 +18,13 @@ spring:
 server:
   port: 8085
 
+# 平台级安全底座（Feature 009 / ADR-0034）：出站内部服务令牌
+# 开关打开且注入 PLATFORM_INTERNAL_TOKEN 后，出站 RPC 才会对 /internal/** 端点附加 X-Service-Token。
+platform:
+  security:
+    internal-token: ${PLATFORM_INTERNAL_TOKEN:}
+    outbound-token-enabled: false
+
 management:
   endpoints:
     web:

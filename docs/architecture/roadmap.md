@@ -12,9 +12,10 @@
 - **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016~0018）、`006-reconciliation`（ADR-0019~0021）、`007-settlement`（ADR-0022~0023，按最简单实现落地）。`mvn test` 全量通过。
 - **当前 Feature**：`010-distributed-evolution`（Roadmap Phase 10 分布式演进）——**刻意不拆服务**，改为把「按证据演进」落成门禁：新增 `architecture-tests` 模块用 ArchUnit 强制四条服务边界不变量（含防空转门禁）、提供运行手册与拆分提案模板。代码已落地、全量测试通过，ADR-0029~0033 待负责人确认。
 - **Feature 状态**：001/003/004/005/006/007/009/010 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
-- **当前能力**：`mvn -o verify -fae` 全量 **14** 模块 BUILD SUCCESS（含新增 `architecture-tests`）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
-- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）、`0009-risk-security-decisions.md`（**ADR-0024~0028**）、`0010-distributed-evolution-decisions.md`（**ADR-0029~0033**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
-- **当前阻塞**：ADR-0022~0033 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项；ADR-0024 遗留「出站内部服务令牌拦截器」（见 `009-risk-security` tasks T013），`payment.security.internal-auth-enabled` 因此默认关闭。
+- **当前能力**：`mvn -o verify -fae` 全量 BUILD SUCCESS（14 个 Maven 模块 + root，共 15 个 reactor 条目，含 `architecture-tests`）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
+- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）、`0009-risk-security-decisions.md`（**ADR-0024~0028**）、`0010-distributed-evolution-decisions.md`（**ADR-0029~0033**）、`0011-internal-token-decisions.md`（**ADR-0034~0037**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
+- **当前阻塞**：ADR-0022~0037 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项。
+- **已完成的安全闭环（2026-08-30）**：`009-risk-security` T013 落地——出站内部服务令牌拦截器 + 入站令牌回退 + 拒绝埋点，`internal-auth-enabled=true` 已具备开启条件（开启顺序见 `docs/operations/runbook.md` §4）。剩余残余风险见 ADR-0035：其余 7 个服务的 `/internal/**` 仍无入站鉴权，依赖网络层隔离。
 
 ## Next Feature
 
@@ -419,9 +420,11 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 | 敏感数据脱敏和密钥管理 | `SensitiveDataMasker`（common-core）；三类密钥经 env 注入 |
 | 最小风控规则 | `RiskCheckService`（`SINGLE_MAX_AMOUNT` / `WINDOW_LIMIT_COUNT`，只观测不拦截，默认关闭） |
 
+**补充落地（2026-08-30，T013）**：出站内部服务令牌闭环——`InternalTokenRequestInterceptor`（common-core，仅对含 `/internal/` 段的目标附加 `X-Service-Token`，默认关闭）+ 入站令牌回退到 `platform.security.internal-token` + 拒绝埋点 `payment.internal_auth_rejected`（带 `reason`）。决策见 `docs/adr/0011-internal-token-decisions.md`（ADR-0034~0037，Proposed 待确认）。
+
 ### 不包含
 
-不包含一开始就建设复杂风控平台或全量合规体系。**未做**：mTLS / OAuth2、密钥管理服务（Vault/KMS）、统一出站内网令牌拦截器、规则引擎。
+不包含一开始就建设复杂风控平台或全量合规体系。**未做**：mTLS / OAuth2、密钥管理服务（Vault/KMS）、规则引擎、入站鉴权推广到 payment 以外的服务（ADR-0035）、双令牌平滑轮换（ADR-0036）。
 
 ### 验收标准
 

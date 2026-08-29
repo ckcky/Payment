@@ -27,6 +27,12 @@
 - [x] 启用但未配置 `PAYMENT_INTERNAL_TOKEN` → `503`，不静默放行（FR-003）
 - [x] 开关关闭（默认 `false`）→ 放行，不破坏既有本地联调与集成测试（FR-003）
 - [x] 渠道回调路径不要求内部服务令牌（外部渠道不持有），其安全性由 HMAC 验签独立保证（SC-002）
+- [x] **出站令牌闭环（T013 / ADR-0034）**：`common-core` 提供 `InternalTokenRequestInterceptor`，仅对含 `/internal/` 段的目标附加 `X-Service-Token`
+- [x] 出站拦截器默认关闭（`platform.security.outbound-token-enabled=false`），既有调用行为零改动（含 5 个服务的既有集成测试）
+- [x] 出站令牌**不外泄**到对外 API / 渠道 URL（`/payments`、`/skus`、`/internal-payments/...` 均不加头，单测断言）
+- [x] 入站令牌回退到平台级 `platform.security.internal-token`，与出站同源 → `internal-auth-enabled=true` 后调用方不会被全线 403
+- [x] 鉴权失败埋点（ADR-0037）：`payment.internal_auth_rejected` 带 `reason=unconfigured|missing_token|token_mismatch`
+- [x] 自动配置无副作用：未引入 OpenFeign 的服务（merchant / catalog / entitlement）整类跳过，上下文正常加载
 
 ### US3 - 密钥与敏感数据（Priority: P2）
 
@@ -60,9 +66,16 @@
 - [ ] ADR-0027（脱敏口径与字段清单）经负责人确认并置 Accepted
 - [ ] ADR-0028（最小风控只观测不拦截）经负责人确认并置 Accepted
 - [ ] 新增入站端点 `POST /internal/payments/{id}/channel-callback` 经确认（§8.4）
+- [ ] ADR-0034（出站令牌传播：全平台一把 / 仅 `/internal/` 目标 / 默认关闭）经负责人确认并置 Accepted
+- [ ] ADR-0035（入站鉴权仅 payment，其余 7 个服务依赖网络层隔离）经负责人确认并置 Accepted
+- [ ] ADR-0036（不支持双令牌平滑轮换）经负责人确认并置 Accepted
+- [ ] ADR-0037（鉴权失败只埋点不告警）经负责人确认并置 Accepted
+- [ ] 新增环境变量 `PLATFORM_INTERNAL_TOKEN` 纳入部署配置经确认（§8.4）
 
 ## 已知未闭环（不在本期范围，需后续 Feature）
 
-1. **出站内部服务令牌缺失**：`internal-auth-enabled=true` 时调用方必须带 `X-Service-Token`，但 common-core 尚无统一出站令牌拦截器 → 一开就全线 403。已记为 tasks T013。
+1. ~~**出站内部服务令牌缺失**~~ → **已闭环**（2026-08-30，T013）：出站拦截器 + 入站令牌回退已落地，`internal-auth-enabled=true` 具备开启条件（需先全平台注入同一把 `PLATFORM_INTERNAL_TOKEN` 并打开 `outbound-token-enabled`）。
 2. **风控窗口计数为进程内**：多实例部署不精确（ADR-0028 已知简化）。
 3. **回调验签仅覆盖 payment-service**：refund / settlement 等暂无入站外部回调面，接入真实渠道时需按同一 `SignatureVerifier` 复用。
+4. **入站鉴权仅覆盖 payment-service**：其余 7 个服务（ledger / order / refund / settlement / reconciliation / fulfillment / entitlement）的 `/internal/**` 仍无鉴权，依赖网络层隔离。见 ADR-0035，建议独立 Feature 立项（tasks T015）。
+5. **令牌无平滑轮换**：不支持双令牌并存，轮换需全平台统一切换并短暂无鉴权。见 ADR-0036。

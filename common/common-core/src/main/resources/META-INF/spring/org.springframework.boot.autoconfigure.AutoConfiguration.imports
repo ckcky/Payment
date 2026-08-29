@@ -1,2 +1,3 @@
 com.payment.common.core.config.CommonCoreAutoConfiguration
 com.payment.common.core.config.FeignTraceAutoConfiguration
+com.payment.common.core.config.FeignInternalTokenAutoConfiguration

@@ -14,6 +14,9 @@
 | [0006](0006-refund-decisions.md) | 退款决策集合（ADR-0016~0018） | Proposed（待负责人确认） | Feature 005；含：部分退款支持模型 / refund→fulfillment 编排 / refund→ledger 记账接入（与 004 的归属划分） |
 | [0007](0007-reconciliation-decisions.md) | 对账决策集合（ADR-0019~0021） | Proposed（待负责人确认） | Feature 006；含：批次差异处理生命周期 / 渠道账单按周期 fixture + 显式回退 / 事实读取 RPC 弹性（不引 Resilience4j） |
 | [0008](0008-settlement-decisions.md) | 结算决策集合（ADR-0022~0023） | Proposed（待负责人确认） | Feature 007；含：调整项模型（方向/持久化/门禁/净额公式） / 闸门纵深防御 + settlement→ledger 记账归属与时机 / 幂等键错配行为变更 / N1 商户维度缺口归属 |
+| [0009](0009-risk-security-decisions.md) | 风险 / 安全决策集合（ADR-0024~0028） | Proposed（待负责人确认） | Feature 009；含：内部服务鉴权 / 渠道回调 HMAC 验签 + 防重放 / 密钥 env 注入 / 脱敏口径 / 最小风控只观测 |
+| [0010](0010-distributed-evolution-decisions.md) | 分布式演进决策集合（ADR-0029~0033） | Proposed（待负责人确认） | Feature 010；含：不拆分转而建门禁 / 拆库触发判据 / 引入异步消息判据 / T0~T3 分层 / 提案模板与运行手册作为门禁 |
+| [0011](0011-internal-token-decisions.md) | 内部服务令牌闭环（ADR-0034~0037） | Proposed（待负责人确认） | Feature 009 收尾 T013；含：出站令牌传播范围 / 入站鉴权推广范围 / 令牌轮换 / 鉴权失败可观测 |
 
 ## 状态机
 
