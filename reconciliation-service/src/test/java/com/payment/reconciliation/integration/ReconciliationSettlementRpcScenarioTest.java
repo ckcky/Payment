@@ -1,13 +1,16 @@
 package com.payment.reconciliation.integration;
 
 import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.reconciliation.api.ReconciliationSettlementFact;
 import com.payment.reconciliation.api.ReconciliationSettlementSummaryResponse;
+import com.payment.reconciliation.application.ChannelStatementLoadResult;
 import com.payment.reconciliation.application.ChannelStatementLoader;
 import com.payment.reconciliation.application.PaymentFactsClient;
 import com.payment.reconciliation.application.ReconciliationApplicationService;
 import com.payment.reconciliation.application.RefundFactsClient;
 import com.payment.reconciliation.domain.ChannelStatement;
+import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
@@ -87,7 +90,7 @@ class ReconciliationSettlementRpcScenarioTest {
         ReconciliationSettlementSummaryResponse before = service.settlementSummary("2026-08");
         assertThat(before.unresolvedDifferenceCount()).isEqualTo(1);
 
-        service.resolveDifference(batch.getId(), "pay-1", "渠道金额修正");
+        service.resolveDifference(batch.getId(), "pay-1", "渠道金额修正", "ops-1", null);
 
         ReconciliationSettlementSummaryResponse after = service.settlementSummary("2026-08");
         assertThat(after.unresolvedDifferenceCount()).isZero();
@@ -125,8 +128,9 @@ class ReconciliationSettlementRpcScenarioTest {
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
         PaymentFactsClient paymentClient = () -> payments;
         RefundFactsClient refundClient = () -> refunds;
-        ChannelStatementLoader loader = period -> statements;
+        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(statements,
+                new ChannelStatementSource("FIXTURE", "inline", statements.size(), false));
         return new ReconciliationApplicationService(repository, paymentClient, refundClient, loader,
-                new NoopBusinessMetrics());
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 }

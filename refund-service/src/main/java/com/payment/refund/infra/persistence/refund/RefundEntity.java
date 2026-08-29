@@ -14,6 +14,8 @@ public class RefundEntity extends BaseEntity {
     private String userId;
     /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
+    /** 已确认退款金额（最小货币单位）；部分退款时小于 amountMinor。 */
+    private Long refundedAmountMinor;
     private String currencyCode;
     private String reason;
     /** 幂等键：数据库唯一约束兜底，杜绝并发重复退款。 */
@@ -52,6 +54,14 @@ public class RefundEntity extends BaseEntity {
 
     public void setAmountMinor(Long amountMinor) {
         this.amountMinor = amountMinor;
+    }
+
+    public Long getRefundedAmountMinor() {
+        return refundedAmountMinor;
+    }
+
+    public void setRefundedAmountMinor(Long refundedAmountMinor) {
+        this.refundedAmountMinor = refundedAmountMinor;
     }
 
     public String getCurrencyCode() {

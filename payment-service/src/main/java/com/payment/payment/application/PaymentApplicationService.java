@@ -6,11 +6,11 @@ import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
-import com.payment.payment.application.channel.PaymentChannel;
 import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,26 +26,40 @@ public class PaymentApplicationService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentPersistence paymentPersistence;
-    private final PaymentChannel channel;
     private final PaymentRetryService retryService;
+    private final LedgerPostingGateway ledgerGateway;
     private final FulfillmentGateway fulfillmentGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
+    /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
+    @Autowired
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
-                                     PaymentChannel channel,
                                      PaymentRetryService retryService,
+                                     LedgerPostingGateway ledgerGateway,
                                      FulfillmentGateway fulfillmentGateway,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
         this.paymentPersistence = paymentPersistence;
-        this.channel = channel;
         this.retryService = retryService;
+        this.ledgerGateway = ledgerGateway;
         this.fulfillmentGateway = fulfillmentGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
+    }
+
+    /** 兼容构造：不接账本时使用空记账网关（测试/账本未接入场景）。 */
+    public PaymentApplicationService(PaymentRepository paymentRepository,
+                                     PaymentPersistence paymentPersistence,
+                                     PaymentRetryService retryService,
+                                     FulfillmentGateway fulfillmentGateway,
+                                     BusinessMetrics metrics,
+                                     StructuredAuditLogger auditLogger) {
+        this(paymentRepository, paymentPersistence, retryService,
+                (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
+                }, fulfillmentGateway, metrics, auditLogger);
     }
 
     /**
@@ -65,21 +79,17 @@ public class PaymentApplicationService {
         }
         metrics.counter("payment.created", 1.0, "module", MODULE);
 
-        // 渠道扣款在事务之外执行
-        ChannelResult result = channel.charge(new ChargeRequest(pending.payment().getId(),
-                pending.payment().getCurrentAttemptId(), cmd.amountMinor(), cmd.currencyCode(),
-                cmd.channelCode()));
+        // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
+        // 重试期间不落库，最终结果与重试次数一次性写入。
+        PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(
+                new ChargeRequest(pending.payment().getId(),
+                        pending.payment().getCurrentAttemptId(), cmd.amountMinor(), cmd.currencyCode(),
+                        cmd.channelCode()));
+        ChannelResult result = outcome.result();
 
-        // 瞬时失败且未达重试上限 → 安排退避重试，支付保持 PROCESSING（spec US3 / FR-005）
-        Payment retryHandled = retryService.tryHandleRetryable(
-                pending.payment().getId(), pending.payment().getCurrentAttemptId(), result);
-        if (retryHandled != null) {
-            return retryHandled;
-        }
-
-        // 应用渠道结果并落库（独立短事务）
+        // 应用渠道结果并落库（独立短事务，含本次实际重试次数）
         PaymentPersistence.AppliedPayment applied = paymentPersistence.applyAndPersist(
-                pending.payment().getId(), pending.payment().getCurrentAttemptId(), result);
+                pending.payment().getId(), pending.payment().getCurrentAttemptId(), result, outcome.retries());
         if (applied.changed()) {
             recordTransition(applied.payment(), applied.fromStatus(), result);
         }
@@ -92,6 +102,11 @@ public class PaymentApplicationService {
             } catch (RuntimeException ignored) {
                 // 履约 RPC 失败不得回滚支付成功事实（跨服务一致性由幂等 + 后续对账收敛）。
             }
+            // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
+            // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009，手续费 MVP 计 0）。
+            ledgerGateway.postPaymentCapture(applied.payment().getIdempotencyKey(),
+                    applied.payment().getId(), applied.payment().getAmountMinor(), 0L,
+                    applied.payment().getCurrencyCode());
         }
         return applied.payment();
     }

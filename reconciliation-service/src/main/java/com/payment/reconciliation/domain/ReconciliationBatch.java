@@ -6,6 +6,9 @@ import com.payment.common.core.error.ErrorCodes;
 import java.util.List;
 import java.util.Objects;
 
+import java.util.List;
+import java.util.Objects;
+
 /**
  * 对账批次聚合根：某个周期内平台事实与渠道账单的比对结果（匹配 + 差异）。
  *
@@ -22,6 +25,11 @@ public class ReconciliationBatch {
     private ReconciliationStatus status = ReconciliationStatus.PENDING;
     private List<Match> matches = List.of();
     private List<Difference> differences = List.of();
+    /** 本批对账比对的渠道账单来源溯源（ADR-0020）；随批次持久化，供事后追溯。 */
+    private ChannelStatementSource statementSource;
+    /** 关闭操作人与关闭时间（ISO-8601），仅 CLOSED 态有意义（ADR-0019）。 */
+    private String closedBy;
+    private String closedAt;
 
     public ReconciliationBatch(String period, String source) {
         this.period = Objects.requireNonNull(period, "period");
@@ -34,13 +42,17 @@ public class ReconciliationBatch {
     /** 持久化重建：还原聚合与历史状态，绕过创建期校验（不改变业务规则）。 */
     public static ReconciliationBatch rehydrate(Long id, Integer version, String period, String source,
                                                 ReconciliationStatus status, List<Match> matches,
-                                                List<Difference> differences) {
+                                                List<Difference> differences, ChannelStatementSource statementSource,
+                                                String closedBy, String closedAt) {
         ReconciliationBatch batch = new ReconciliationBatch(period, source);
         batch.id = id;
         batch.version = version;
         batch.status = status;
         batch.matches = List.copyOf(matches == null ? List.of() : matches);
         batch.differences = List.copyOf(differences == null ? List.of() : differences);
+        batch.statementSource = statementSource;
+        batch.closedBy = closedBy;
+        batch.closedAt = closedAt;
         return batch;
     }
 
@@ -62,19 +74,40 @@ public class ReconciliationBatch {
                 : ReconciliationStatus.HAS_DIFFERENCE;
     }
 
-    /** HAS_DIFFERENCE → PROCESSING。 */
+    /** HAS_DIFFERENCE → PROCESSING；PROCESSING 为幂等空操作（ADR-0019）。 */
     public void beginProcessing() {
+        if (status == ReconciliationStatus.PROCESSING) {
+            return;
+        }
         requireStatus(ReconciliationStatus.HAS_DIFFERENCE, "beginProcessing");
         this.status = ReconciliationStatus.PROCESSING;
     }
 
-    /** CONSISTENT / PROCESSING → CLOSED。 */
-    public void close() {
+    /**
+     * CONSISTENT / PROCESSING → CLOSED（ADR-0019）。
+     * 关闭门禁：尚有未处理差异 ⇒ 抛 {@code UNRESOLVED_DIFFERENCES}；CLOSED → CLOSED 幂等空操作。
+     * 「收口」是审计动作，由资金运营显式调用，不自动触发。
+     */
+    public void close(String operator, String closedAtIso) {
+        if (status == ReconciliationStatus.CLOSED) {
+            return;
+        }
+        if (unresolvedDifferenceCount() > 0) {
+            throw BizException.of(ErrorCodes.UNRESOLVED_DIFFERENCES,
+                    "cannot close batch with " + unresolvedDifferenceCount() + " unresolved differences");
+        }
         if (status == ReconciliationStatus.CONSISTENT || status == ReconciliationStatus.PROCESSING) {
             this.status = ReconciliationStatus.CLOSED;
+            this.closedBy = operator;
+            this.closedAt = closedAtIso;
             return;
         }
         throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION, "illegal close from " + this.status);
+    }
+
+    /** 未处理差异数（ADR-0019 关闭门禁口径）。 */
+    public long unresolvedDifferenceCount() {
+        return differences.stream().filter(d -> !d.isResolved()).count();
     }
 
     private void requireStatus(ReconciliationStatus expected, String op) {
@@ -82,6 +115,11 @@ public class ReconciliationBatch {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "illegal " + op + " from " + this.status + " (expected " + expected + ")");
         }
+    }
+
+    /** 应用层在比对完成后登记账单来源（ADR-0020 溯源）。 */
+    public void setStatementSource(ChannelStatementSource statementSource) {
+        this.statementSource = statementSource;
     }
 
     public void setId(Long id) {
@@ -118,5 +156,17 @@ public class ReconciliationBatch {
 
     public List<Difference> getDifferences() {
         return differences;
+    }
+
+    public ChannelStatementSource getStatementSource() {
+        return statementSource;
+    }
+
+    public String getClosedBy() {
+        return closedBy;
+    }
+
+    public String getClosedAt() {
+        return closedAt;
     }
 }

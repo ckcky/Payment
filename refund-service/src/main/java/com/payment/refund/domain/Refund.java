@@ -30,6 +30,8 @@ public class Refund {
     private final List<RefundItem> items;
     private RefundStatus status = RefundStatus.REQUESTED;
     private String failureReason;
+    /** 已确认退款金额（最小货币单位）；创建期为 0，仅成功类状态写入。不变量 0 <= r <= amountMinor。 */
+    private long refundedAmountMinor;
 
     public Refund(String orderId, Long paymentId, String userId, long amountMinor,
                   String currencyCode, String reason, String idempotencyKey, List<RefundItem> items) {
@@ -44,6 +46,7 @@ public class Refund {
         this.reason = Objects.requireNonNull(reason, "reason");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         this.items = List.copyOf(items == null ? List.of() : items);
+        this.refundedAmountMinor = 0L;
     }
 
     /**
@@ -52,13 +55,19 @@ public class Refund {
     public static Refund rehydrate(Long id, String orderId, Long paymentId, String userId,
                                    long amountMinor, String currencyCode, String reason,
                                    String idempotencyKey, List<RefundItem> items,
-                                   RefundStatus status, String failureReason, Integer version) {
+                                   RefundStatus status, String failureReason, Integer version,
+                                   long refundedAmountMinor) {
         Refund refund = new Refund(orderId, paymentId, userId, amountMinor, currencyCode,
                 reason, idempotencyKey, items);
         refund.id = id;
         refund.status = status;
         refund.failureReason = failureReason;
         refund.version = version;
+        if (refundedAmountMinor < 0 || refundedAmountMinor > amountMinor) {
+            throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
+                    "refundedAmountMinor out of range: " + refundedAmountMinor + " > " + amountMinor);
+        }
+        refund.refundedAmountMinor = refundedAmountMinor;
         return refund;
     }
 
@@ -77,15 +86,27 @@ public class Refund {
         this.failureReason = reason;
     }
 
-    /** PROCESSING/UNKNOWN → SUCCEEDED；终态冲突被吸收（返回 false）。 */
+    /** PROCESSING/UNKNOWN → SUCCEEDED（全额退款）；终态冲突被吸收（返回 false）。 */
     public boolean succeed() {
-        return transitionTo(RefundStatus.SUCCEEDED, "succeed", RefundStatus.PROCESSING, RefundStatus.UNKNOWN);
+        boolean changed = transitionTo(RefundStatus.SUCCEEDED, "succeed", RefundStatus.PROCESSING, RefundStatus.UNKNOWN);
+        if (changed) {
+            this.refundedAmountMinor = this.amountMinor;
+        }
+        return changed;
     }
 
-    /** PROCESSING/UNKNOWN → PARTIALLY_SUCCEEDED；终态冲突被吸收（返回 false）。 */
-    public boolean partiallySucceed() {
-        return transitionTo(RefundStatus.PARTIALLY_SUCCEEDED, "partiallySucceed",
+    /** PROCESSING/UNKNOWN → PARTIALLY_SUCCEEDED（部分退款）；终态冲突被吸收（返回 false）。 */
+    public boolean partiallySucceed(long refundedAmount) {
+        if (refundedAmount <= 0 || refundedAmount >= this.amountMinor) {
+            throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
+                    "partial refund amount must be in (0, amountMinor): " + refundedAmount);
+        }
+        boolean changed = transitionTo(RefundStatus.PARTIALLY_SUCCEEDED, "partiallySucceed",
                 RefundStatus.PROCESSING, RefundStatus.UNKNOWN);
+        if (changed) {
+            this.refundedAmountMinor = refundedAmount;
+        }
+        return changed;
     }
 
     /** PROCESSING/UNKNOWN → FAILED；终态冲突被吸收（返回 false）。 */
@@ -199,5 +220,10 @@ public class Refund {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    /** 已确认退款金额（最小货币单位）；仅成功类状态非零。 */
+    public long getRefundedAmountMinor() {
+        return refundedAmountMinor;
     }
 }

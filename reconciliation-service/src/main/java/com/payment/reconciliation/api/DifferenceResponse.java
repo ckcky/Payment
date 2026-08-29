@@ -7,7 +7,7 @@ import com.payment.reconciliation.domain.Difference;
  */
 public record DifferenceResponse(String reference, String type, String resolutionStatus,
                                  String resolutionNote, Long platformAmountMinor,
-                                 Long channelAmountMinor) {
+                                 Long channelAmountMinor, String resolvedBy, String resolvedAt) {
 
     public static DifferenceResponse from(Difference difference) {
         return new DifferenceResponse(
@@ -16,6 +16,8 @@ public record DifferenceResponse(String reference, String type, String resolutio
                 difference.getResolutionStatus(),
                 difference.getResolutionNote(),
                 difference.getPlatformAmountMinor(),
-                difference.getChannelAmountMinor());
+                difference.getChannelAmountMinor(),
+                difference.getResolvedBy(),
+                difference.getResolvedAt());
     }
 }

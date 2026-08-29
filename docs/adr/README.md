@@ -9,8 +9,11 @@
 | [0001](0001-adopt-spring-cloud-microservices.md) | 采用 Spring Cloud 微服务架构 | Accepted | 取代 Constitution §3.1；→ 0002 |
 | [0002](0002-technology-stack.md) | 技术栈选型 | Accepted | ← 0001 |
 | [0003](0003-payment-reliability-decisions.md) | 支付可靠性决策集合（ADR-0003~0007） | 混合 | Feature 003；含：UNKNOWN 收敛触发(Accepted) / 超时进 UNKNOWN(Accepted) / 重试模型(Accepted) / 人工收敛(**Not Implemented，延后 Phase 9**) / 终态冲突(Accepted) |
-| [0004](0004-ledger-design-decisions.md) | Ledger 设计决策集合（ADR-0008~0011） | 混合（全 Proposed） | Feature 004；含：复式记账数据模型(Proposed) / 记账触发与一致性(Proposed) / 金额表示 Money VO(Proposed) / MVP 记账范围(Proposed) — **待负责人确认** |
-| [0005](0005-payment-reliability-impl-decisions.md) | 支付可靠性**实现期**决策集合（ADR-0012~0015） | Proposed（**已按最简方式生效运行，待确认**） | Feature 003；含：重试错误分类与 UNKNOWN 不重试 / 重试调度载体（字段最小化） / 同 attempt 重放 / UNKNOWN 真实时长度量 — 若被否决需回滚对应实现 |
+| [0004](0004-ledger-design-decisions.md) | Ledger 设计决策集合（ADR-0008~0011） | **Accepted**（2026-08-29 确认；0010 已修订） | Feature 004；含：复式记账数据模型(Accepted) / 记账触发与一致性(Accepted) / **金额只用 long 分、不启用 Money VO(Accepted·修订)** / MVP 记账范围(Accepted) |
+| [0005](0005-payment-reliability-impl-decisions.md) | 支付可靠性**实现期**决策集合（ADR-0012~0015） | **Accepted**（2026-08-29 确认；0012/0013 已修订） | Feature 003；含：**双响应码错误分类 + 通信失败一律重试(修订)** / **重试不落库、请求内联重试(修订)** / 同 attempt 重放 / UNKNOWN 真实时长度量 / **超时口径 RPC 1s·HTTP 1.5s(新增)** |
+| [0006](0006-refund-decisions.md) | 退款决策集合（ADR-0016~0018） | Proposed（待负责人确认） | Feature 005；含：部分退款支持模型 / refund→fulfillment 编排 / refund→ledger 记账接入（与 004 的归属划分） |
+| [0007](0007-reconciliation-decisions.md) | 对账决策集合（ADR-0019~0021） | Proposed（待负责人确认） | Feature 006；含：批次差异处理生命周期 / 渠道账单按周期 fixture + 显式回退 / 事实读取 RPC 弹性（不引 Resilience4j） |
+| [0008](0008-settlement-decisions.md) | 结算决策集合（ADR-0022~0023） | Proposed（待负责人确认） | Feature 007；含：调整项模型（方向/持久化/门禁/净额公式） / 闸门纵深防御 + settlement→ledger 记账归属与时机 / 幂等键错配行为变更 / N1 商户维度缺口归属 |
 
 ## 状态机
 

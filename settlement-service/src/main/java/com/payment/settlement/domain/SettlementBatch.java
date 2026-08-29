@@ -29,6 +29,10 @@ public class SettlementBatch {
     private SettlementStatus status = SettlementStatus.PENDING;
     private final List<SettlementItem> items;
     private final String idempotencyKey;
+    /** 参与净额计算的事实条数（ADR-0023：让「明细 = 金额」可事后核对）。 */
+    private int factCount;
+    /** 来源对账周期（ADR-0023）。 */
+    private String sourcePeriod;
 
     /**
      * 创建新批次（状态 PENDING，金额 0）。金额经 {@link #calculate} 填充。
@@ -42,17 +46,18 @@ public class SettlementBatch {
     }
 
     /**
-     * 计算金额：净额 = 收入 − 退款 − 调整。净额可为负（MVP 不拒绝）。
+     * 计算金额：净额 = 收入 − 退款 + 调整（ADR-0022：adjustment 为带符号合计，CREDIT 取正、DEBIT 取负）。
+     * 净额可为负（MVP 不拒绝，仅递增 {@code settlement.negative_net} 由编排层关注）。
      */
     public void compute(long income, long refund, long adjustment, String currency) {
-        if (income < 0 || refund < 0 || adjustment < 0) {
+        if (income < 0 || refund < 0) {
             throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
-                    "settlement amounts must be >= 0");
+                    "settlement income/refund must be >= 0");
         }
         this.incomeMinor = income;
         this.refundMinor = refund;
         this.adjustmentMinor = adjustment;
-        this.netMinor = income - refund - adjustment;
+        this.netMinor = income - refund + adjustment;
         if (currency != null) {
             this.currencyCode = currency;
         }
@@ -109,7 +114,8 @@ public class SettlementBatch {
     public static SettlementBatch rehydrate(Long id, String merchantId, String period, String currencyCode,
                                             long incomeMinor, long refundMinor, long adjustmentMinor, long netMinor,
                                             SettlementStatus status, List<SettlementItem> items,
-                                            String idempotencyKey, Integer version) {
+                                            String idempotencyKey, Integer version,
+                                            int factCount, String sourcePeriod) {
         SettlementBatch batch = new SettlementBatch(merchantId, period, currencyCode, idempotencyKey);
         batch.id = id;
         batch.incomeMinor = incomeMinor;
@@ -118,10 +124,18 @@ public class SettlementBatch {
         batch.netMinor = netMinor;
         batch.status = status;
         batch.version = version;
+        batch.factCount = factCount;
+        batch.sourcePeriod = sourcePeriod;
         if (items != null) {
             batch.items.addAll(items);
         }
         return batch;
+    }
+
+    /** 记录来源事实条数与来源周期（建批后由编排层回填，ADR-0023）。 */
+    public void recordSource(int factCount, String sourcePeriod) {
+        this.factCount = factCount;
+        this.sourcePeriod = sourcePeriod;
     }
 
     public void addItem(SettlementItem item) {
@@ -211,5 +225,13 @@ public class SettlementBatch {
 
     public String getIdempotencyKey() {
         return idempotencyKey;
+    }
+
+    public int getFactCount() {
+        return factCount;
+    }
+
+    public String getSourcePeriod() {
+        return sourcePeriod;
     }
 }

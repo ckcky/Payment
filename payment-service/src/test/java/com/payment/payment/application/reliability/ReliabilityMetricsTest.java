@@ -7,6 +7,7 @@ import com.payment.payment.application.PaymentResultProcessor;
 import com.payment.payment.application.PaymentUnknownResolutionService;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
+import com.payment.payment.application.reliability.PaymentRetryService.RetryOutcome;
 import com.payment.payment.application.channel.PaymentChannel;
 import com.payment.payment.application.channel.QueryStatusRequest;
 import com.payment.payment.application.channel.RefundRequest;
@@ -45,7 +46,7 @@ class ReliabilityMetricsTest {
 
         @Override
         public ChannelResult refund(RefundRequest request) {
-            return ChannelResult.unknown("not used");
+            return ChannelResult.businessUnknown("not used");
         }
 
         @Override
@@ -69,7 +70,7 @@ class ReliabilityMetricsTest {
     private final PaymentUnknownResolutionService resolution =
             new PaymentUnknownResolutionService(payments, processor, metrics, new StructuredAuditLogger());
     private final PaymentRetryService retryService =
-            new PaymentRetryService(payments, attempts, channel, processor, config, metrics);
+            new PaymentRetryService(channel, config, metrics);
     private final ChannelQueryService queryService =
             new ChannelQueryService(payments, channel, resolution, config, metrics);
 
@@ -79,7 +80,7 @@ class ReliabilityMetricsTest {
         payments.save(payment);
         attempts.save(PaymentAttempt.rehydrate(attemptId, paymentId, "mock", 0,
                 Instant.now().minusSeconds(120), null, null, PaymentAttemptStatus.ACCEPTED,
-                null, null, null, 0));
+                null, null, 0));
         return payment;
     }
 
@@ -99,21 +100,20 @@ class ReliabilityMetricsTest {
     }
 
     @Test
-    void transientRetryAndExhaustionEmitCounters() {
-        config.setRetryMaxAttempts(2);
+    void transportFailureRetryAndExhaustionEmitCounters() {
+        config.setRetryMaxAttempts(2); // 含首次共 2 次渠道调用
         config.setRetryBackoff(List.of(Duration.ofMillis(1)));
-        channel.chargeResult = ChannelResult.transientFailure("blip");
+        channel.chargeResult = ChannelResult.timeout("blip");
         savePayment(2L, 20L, PaymentStatus.PROCESSING);
 
-        // 第一次瞬时失败 → 安排重试（payment.retry）
-        retryService.tryHandleRetryable(2L, 20L, channel.charge(null));
+        // 通信失败在本次调用内联重放一次后耗尽（ADR-0012/0013）
+        RetryOutcome outcome = retryService.chargeWithRetry(null);
+
+        assertThat(outcome.retries()).isEqualTo(1);
         assertThat(countOf("payment.retry")).isEqualTo(1.0);
-
-        // 重放第二次 → 耗尽进 UNKNOWN（payment.retry_exhausted）
-        retryService.retryDue(Instant.now().plusSeconds(1));
-
         assertThat(countOf("payment.retry_exhausted")).isEqualTo(1.0);
-        assertThat(payments.findById(2L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(outcome.result().reason()).isEqualTo(PaymentRetryService.EXHAUSTED_REASON);
+        assertThat(outcome.result().status()).isEqualTo(ChannelResult.Status.UNKNOWN);
     }
 
     @Test

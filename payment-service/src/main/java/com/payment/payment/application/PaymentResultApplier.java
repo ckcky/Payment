@@ -17,6 +17,8 @@ final class PaymentResultApplier {
     }
 
     static boolean apply(Payment payment, PaymentAttempt attempt, ChannelResult result) {
+        // 错误分类由双响应码派生后落库，供观测排障（ADR-0012）；不参与重试判定。
+        attempt.setErrorType(result.errorType());
         return switch (result.status()) {
             case SUCCESS -> {
                 if (result.channelReference() != null) {

@@ -53,12 +53,26 @@ public class PaymentPersistence {
     /** 把权威渠道结果应用到支付与尝试状态机并落库（独立短事务）。 */
     @Transactional
     public AppliedPayment applyAndPersist(Long paymentId, Long attemptId, ChannelResult result) {
+        return applyAndPersist(paymentId, attemptId, result, 0);
+    }
+
+    /**
+     * 同上，并落库本次渠道调用实际发生的重试次数（ADR-0013 修订）。
+     *
+     * <p>重试在请求内联完成、期间不写库；{@code retries} 在最终收敛时随本次写入一并落库，
+     * 保证「这次支付重放了几轮」可观测，同时不引入每次重试一条写。</p>
+     */
+    @Transactional
+    public AppliedPayment applyAndPersist(Long paymentId, Long attemptId, ChannelResult result, int retries) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId));
         PaymentAttempt attempt = attemptRepository.findById(attemptId)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "attempt not found: " + attemptId));
         PaymentStatus fromStatus = payment.getStatus();
         boolean changed = PaymentResultApplier.apply(payment, attempt, result);
+        for (int i = 0; i < retries; i++) {
+            attempt.recordRetry();
+        }
         paymentRepository.save(payment);
         attemptRepository.save(attempt);
         return new AppliedPayment(payment, fromStatus, changed);

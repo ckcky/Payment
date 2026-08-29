@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     payment_id BIGINT NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
+    refunded_amount_minor BIGINT NOT NULL DEFAULT 0,
     currency_code VARCHAR(8) NOT NULL,
     reason VARCHAR(255) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
@@ -46,4 +47,23 @@ CREATE TABLE IF NOT EXISTS refund_items (
 CREATE TABLE IF NOT EXISTS refund_intake_locks (
     payment_id BIGINT NOT NULL,
     PRIMARY KEY (payment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 退款后处理尝试记录（ADR-0017）：每次后处理目标（履约/权益/记账）一次调用的结果，
+-- 失败不回滚退款成功事实（Saga），但 MUST 留下可追溯记录供运营按 refund_id 查询与重放。
+CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    refund_id BIGINT NOT NULL,
+    target VARCHAR(32) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    detail VARCHAR(512),
+    attempt_count INT NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_rppa_refund_target (refund_id, target),
+    KEY idx_rppa_refund_id (refund_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

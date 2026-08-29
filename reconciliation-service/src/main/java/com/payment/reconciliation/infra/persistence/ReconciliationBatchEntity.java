@@ -16,6 +16,9 @@ public class ReconciliationBatchEntity extends BaseEntity {
     private String status;
     private String matchesJson;
     private String differencesJson;
+    private String closedAt;
+    private String closedBy;
+    private String statementSource;
 
     public String getPeriod() {
         return period;
@@ -55,5 +58,29 @@ public class ReconciliationBatchEntity extends BaseEntity {
 
     public void setDifferencesJson(String differencesJson) {
         this.differencesJson = differencesJson;
+    }
+
+    public String getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(String closedAt) {
+        this.closedAt = closedAt;
+    }
+
+    public String getClosedBy() {
+        return closedBy;
+    }
+
+    public void setClosedBy(String closedBy) {
+        this.closedBy = closedBy;
+    }
+
+    public String getStatementSource() {
+        return statementSource;
+    }
+
+    public void setStatementSource(String statementSource) {
+        this.statementSource = statementSource;
     }
 }

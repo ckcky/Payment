@@ -26,10 +26,11 @@ public class PaymentAttempt {
     private PaymentAttemptStatus status = PaymentAttemptStatus.PENDING;
     private String failureReason;
     private int retryCount;
-    /** 失败的错误分类（决定可重试性，spec US3 / ADR-0012）。 */
+    /**
+     * 最后一次失败的错误分类（由双响应码派生，供观测排障；<b>不参与重试判定</b>，ADR-0012）。
+     * 重试判定只看通信响应码 {@code TransportCode}。
+     */
     private PaymentAttemptErrorType errorType;
-    /** 计划下次重试时刻（退避计算），为空表示不再重试（spec US3）。 */
-    private Instant nextRetryAt;
 
     public PaymentAttempt(Long paymentId, String channelCode, int retryCount) {
         this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
@@ -45,7 +46,7 @@ public class PaymentAttempt {
     public static PaymentAttempt rehydrate(Long id, Long paymentId, String channelCode, int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType, Instant nextRetryAt,
+                                           PaymentAttemptErrorType errorType,
                                            Integer version) {
         PaymentAttempt attempt = new PaymentAttempt(paymentId, channelCode, retryCount);
         attempt.id = id;
@@ -55,7 +56,6 @@ public class PaymentAttempt {
         attempt.status = status;
         attempt.failureReason = failureReason;
         attempt.errorType = errorType;
-        attempt.nextRetryAt = nextRetryAt;
         attempt.version = version;
         return attempt;
     }
@@ -172,7 +172,7 @@ public class PaymentAttempt {
         return retryCount;
     }
 
-    /** 记录一次重试（spec US3）：重试序号自增，用于与重试上限比较。 */
+    /** 记录一次重试（ADR-0014）：重试序号自增，用于观测本次渠道调用实际重放了几轮。 */
     public void recordRetry() {
         this.retryCount++;
     }
@@ -183,13 +183,5 @@ public class PaymentAttempt {
 
     public void setErrorType(PaymentAttemptErrorType errorType) {
         this.errorType = errorType;
-    }
-
-    public Instant getNextRetryAt() {
-        return nextRetryAt;
-    }
-
-    public void setNextRetryAt(Instant nextRetryAt) {
-        this.nextRetryAt = nextRetryAt;
     }
 }

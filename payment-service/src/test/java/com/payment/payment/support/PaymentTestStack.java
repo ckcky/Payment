@@ -17,6 +17,7 @@ import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.application.reliability.ReliabilityConfig;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,11 +40,18 @@ public final class PaymentTestStack {
             new PaymentCallbackService(processor, payments, new NoopBusinessMetrics(),
                     new StructuredAuditLogger());
 
+    /** 退避压到 1ms 的可靠性配置：重试已改为请求内联，避免测试真实等待（ADR-0013）。 */
+    public static ReliabilityConfig fastRetryConfig() {
+        ReliabilityConfig config = new ReliabilityConfig();
+        config.setRetryBackoff(List.of(Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofMillis(1)));
+        return config;
+    }
+
     public PaymentApplicationService appService(PaymentChannel channel) {
         PaymentPersistence persistence = new PaymentPersistence(payments, attempts);
-        PaymentRetryService retryService = new PaymentRetryService(payments, attempts, channel, processor,
-                new ReliabilityConfig(), new NoopBusinessMetrics());
-        return new PaymentApplicationService(payments, persistence, channel, retryService, fulfillment,
+        PaymentRetryService retryService = new PaymentRetryService(channel, fastRetryConfig(),
+                new NoopBusinessMetrics());
+        return new PaymentApplicationService(payments, persistence, retryService, fulfillment,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 

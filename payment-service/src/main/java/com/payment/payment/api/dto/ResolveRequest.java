@@ -18,7 +18,7 @@ public record ResolveRequest(
     public ChannelResult toResult() {
         return switch (result) {
             case "SUCCESS" -> ChannelResult.success(channelReference);
-            case "FAILURE" -> ChannelResult.failure(channelReference, reason);
+            case "FAILURE" -> ChannelResult.businessFailure(channelReference, reason);
             default -> throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "invalid result: " + result);
         };
     }

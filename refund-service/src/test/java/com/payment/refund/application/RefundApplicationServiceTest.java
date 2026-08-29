@@ -72,4 +72,42 @@ class RefundApplicationServiceTest {
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.REJECTED);
         assertThat(stack.payment.attemptRequests).isEmpty();
     }
+
+    @Test
+    void partialRefundReachesPartiallySucceededAndTracksConfirmedAmount() {
+        // 渠道实际只退回 300（申请 1000）→ 部分成功，已确认金额 = 300。
+        stack.payment.refundedAmountMinor = 300L;
+
+        Refund refund = stack.appService().createRefund(cmd());
+
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PARTIALLY_SUCCEEDED);
+        assertThat(refund.getRefundedAmountMinor()).isEqualTo(300L);
+        assertThat(stack.entitlement.postProcessRequests).hasSize(1);
+    }
+
+    @Test
+    void invalidRefundedAmountFallsToUnknown() {
+        // 渠道回传金额非法（> 申请额）：禁止资金放大，落 UNKNOWN 待收敛。
+        stack.payment.refundedAmountMinor = 2000L;
+
+        Refund refund = stack.appService().createRefund(cmd());
+
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
+        assertThat(stack.entitlement.postProcessRequests).isEmpty();
+    }
+
+    @Test
+    void cumulativeUsesConfirmedAmountForTerminalAndRequestedForInTransit() {
+        // 第一笔部分退款 300（终态，计已确认额 300）；第二笔在途 400（计申请额 400）。
+        // 已支付 1000，累计 = 300 + 400 = 700 <= 1000，可批准。
+        stack.payment.refundedAmountMinor = 300L;
+        stack.appService().createRefund(
+                new CreateRefundCommand("order-1", 1L, "user-1", 300L, "CNY", "customer",
+                        "idem-1", List.of()));
+
+        Refund second = stack.appService().createRefund(
+                new CreateRefundCommand("order-1", 1L, "user-1", 400L, "CNY", "customer",
+                        "idem-2", List.of()));
+        assertThat(second.getStatus()).isEqualTo(RefundStatus.PROCESSING);
+    }
 }

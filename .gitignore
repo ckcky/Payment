@@ -16,6 +16,9 @@ target/
 *.log
 logs/
 
+# 构建产物 / 运行日志 / 链路 Demo 输出：统一落在 deployment/output/，一律不跟踪
+deployment/output/
+
 # OS
 .DS_Store
 Thumbs.db

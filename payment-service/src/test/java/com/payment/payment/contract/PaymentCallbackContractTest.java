@@ -50,7 +50,7 @@ class PaymentCallbackContractTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
 
         boolean changed = stack.callback.handleCallback(
-                payment.getId(), ChannelResult.failure("ref", "late decline"));
+                payment.getId(), ChannelResult.businessFailure("ref", "late decline"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
     }
@@ -62,7 +62,7 @@ class PaymentCallbackContractTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
 
-        boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.unknown("still unknown"));
+        boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.businessUnknown("still unknown"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);

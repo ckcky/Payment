@@ -11,9 +11,9 @@ spring:
       client:
         config:
           default:
-            # 全链路超时（修复：原无超时，下游挂起将耗尽连接池）
-            connect-timeout: 2000
-            read-timeout: 5000
+            # 出站 RPC 超时：connect/read 各 1s（ADR-0012 超时口径，全服务统一）
+            connect-timeout: 1000
+            read-timeout: 1000
       # 熔断：为所有 Feign 客户端包裹 circuit breaker（依赖 spring-cloud-starter-circuitbreaker-resilience4j）
       circuitbreaker:
         enabled: true
@@ -21,8 +21,12 @@ spring:
 server:
   port: 8084
 
-# 出站 RPC 弹性参数（仅对幂等 sink 调用生效）
+# 出站调用参数
 payment:
+  channel:
+    # 对外（渠道 / 外部系统）HTTP 调用超时预算：1.5s（ADR-0012 超时口径，全服务统一）
+    http-timeout-ms: 1500
+  # 出站 RPC 弹性参数（仅对幂等 sink 调用生效）
   fulfillment:
     retry:
       max-attempts: 3
@@ -31,12 +35,12 @@ payment:
     # /payments/{id}/resolve 收敛端点鉴权开关；启用但未配置 token 时返回 503 拒绝
     auth-enabled: true
     admin-token: ${PAYMENT_ADMIN_TOKEN:}
-  # 支付可靠性（Feature 003 / ADR-0003~0005）
+  # 支付可靠性（Feature 003 / ADR-0003~0005、ADR-0012~0015）
   reliability:
     timeout: 30s                       # PROCESSING 超此阈值且无明确结果 → UNKNOWN（ADR-0004）
     timeout-scan-interval-ms: 10000    # 超时扫描调度间隔（ADR-0004）
-    retry-max-attempts: 3              # 幂等调用重试上限（含首次，ADR-0005）
-    retry-scan-interval-ms: 5000       # 重试扫描调度间隔（退避由 next_retry_at 控制）
+    retry-max-attempts: 3              # 渠道调用上限（含首次，ADR-0005）
+    retry-backoff: 1s,2s,4s            # 第 n 次重试的退避（越界取最后一项）；不落库，请求内联等待
     query-max-attempts: 5              # UNKNOWN 主动查询尝试上限，达此停止自动查询（ADR-0003）
     query-interval-ms: 15000           # UNKNOWN 主动查询调度间隔（ADR-0003）
 

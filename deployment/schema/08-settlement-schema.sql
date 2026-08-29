@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS settlement_batches (
     net_minor BIGINT NOT NULL,
     status VARCHAR(32) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
+    fact_count INT NOT NULL DEFAULT 0,
+    source_period VARCHAR(32),
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     created_by VARCHAR(64),
@@ -40,4 +42,25 @@ CREATE TABLE IF NOT EXISTS settlement_items (
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
     KEY idx_settlement_items_batch_id (batch_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS settlement_adjustments (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    idempotency_key VARCHAR(128) NOT NULL,
+    merchant_id VARCHAR(32) NOT NULL,
+    period VARCHAR(32) NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    direction VARCHAR(16) NOT NULL,
+    currency_code VARCHAR(8) NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    operator VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_settlement_adjustments_idem (idempotency_key),
+    KEY idx_settlement_adjustments_scope (merchant_id, period, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

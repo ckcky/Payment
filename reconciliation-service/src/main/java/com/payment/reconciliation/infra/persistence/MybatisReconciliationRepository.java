@@ -30,6 +30,8 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
     };
     private static final TypeReference<List<Difference>> DIFFERENCE_LIST = new TypeReference<>() {
     };
+    private static final TypeReference<ChannelStatementSource> SOURCE = new TypeReference<>() {
+    };
 
     private final ReconciliationBatchMapper mapper;
 
@@ -84,7 +86,8 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
     private ReconciliationBatch toDomain(ReconciliationBatchEntity entity) {
         return ReconciliationBatch.rehydrate(entity.getId(), entity.getVersion(), entity.getPeriod(),
                 entity.getSource(), ReconciliationStatus.valueOf(entity.getStatus()),
-                parseMatches(entity.getMatchesJson()), parseDifferences(entity.getDifferencesJson()));
+                parseMatches(entity.getMatchesJson()), parseDifferences(entity.getDifferencesJson()),
+                parseSource(entity.getStatementSource()), entity.getClosedBy(), entity.getClosedAt());
     }
 
     private ReconciliationBatchEntity toEntity(ReconciliationBatch batch) {
@@ -95,6 +98,9 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
         entity.setStatus(batch.getStatus().name());
         entity.setMatchesJson(serializeMatches(batch.getMatches()));
         entity.setDifferencesJson(serializeDifferences(batch.getDifferences()));
+        entity.setStatementSource(serializeSource(batch.getStatementSource()));
+        entity.setClosedBy(batch.getClosedBy());
+        entity.setClosedAt(batch.getClosedAt());
         entity.setVersion(batch.getVersion());
         return entity;
     }
@@ -134,6 +140,28 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
             return MAPPER.readValue(json, DIFFERENCE_LIST);
         } catch (JsonProcessingException e) {
             throw new BizException(ErrorCodes.INTERNAL_ERROR, "failed to deserialize differences", e);
+        }
+    }
+
+    private String serializeSource(ChannelStatementSource source) {
+        if (source == null) {
+            return null;
+        }
+        try {
+            return MAPPER.writeValueAsString(source);
+        } catch (JsonProcessingException e) {
+            throw new BizException(ErrorCodes.INTERNAL_ERROR, "failed to serialize statement source", e);
+        }
+    }
+
+    private ChannelStatementSource parseSource(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return MAPPER.readValue(json, SOURCE);
+        } catch (JsonProcessingException e) {
+            throw new BizException(ErrorCodes.INTERNAL_ERROR, "failed to deserialize statement source", e);
         }
     }
 }

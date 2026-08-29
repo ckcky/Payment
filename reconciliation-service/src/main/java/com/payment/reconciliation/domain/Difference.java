@@ -3,6 +3,8 @@ package com.payment.reconciliation.domain;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.payment.common.core.error.BizException;
+import com.payment.common.core.error.ErrorCodes;
 
 import java.util.Objects;
 
@@ -24,6 +26,8 @@ public final class Difference {
     private final String channelStatus;
     private String resolutionStatus;
     private String resolutionNote;
+    private String resolvedBy;
+    private String resolvedAt;
 
     @JsonCreator
     public Difference(
@@ -34,7 +38,9 @@ public final class Difference {
             @JsonProperty("platformStatus") String platformStatus,
             @JsonProperty("channelStatus") String channelStatus,
             @JsonProperty("resolutionStatus") String resolutionStatus,
-            @JsonProperty("resolutionNote") String resolutionNote) {
+            @JsonProperty("resolutionNote") String resolutionNote,
+            @JsonProperty("resolvedBy") String resolvedBy,
+            @JsonProperty("resolvedAt") String resolvedAt) {
         this.reference = Objects.requireNonNull(reference, "reference");
         this.type = Objects.requireNonNull(type, "type");
         this.platformAmountMinor = platformAmountMinor;
@@ -43,19 +49,26 @@ public final class Difference {
         this.channelStatus = channelStatus;
         this.resolutionStatus = resolutionStatus;
         this.resolutionNote = resolutionNote;
+        this.resolvedBy = resolvedBy;
+        this.resolvedAt = resolvedAt;
     }
 
     /** 新建差异工厂：初始未处理。 */
     public static Difference of(String reference, DifferenceType type, Long platformAmountMinor,
                                 Long channelAmountMinor, String platformStatus, String channelStatus) {
         return new Difference(reference, type, platformAmountMinor, channelAmountMinor,
-                platformStatus, channelStatus, null, null);
+                platformStatus, channelStatus, null, null, null, null);
     }
 
-    /** 标记为已处理（唯一处理状态变更入口）。 */
-    public void resolve(String note) {
+    /** 标记为已处理（唯一处理状态变更入口）：依据 MUST 非空，并记录操作人与时间（ADR-0019）。 */
+    public void resolve(String note, String actor, String atIso) {
+        if (note == null || note.isBlank()) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "resolution note must not be blank");
+        }
         this.resolutionStatus = RESOLVED;
         this.resolutionNote = note;
+        this.resolvedBy = actor;
+        this.resolvedAt = atIso;
     }
 
     @JsonIgnore
@@ -93,5 +106,13 @@ public final class Difference {
 
     public String getResolutionNote() {
         return resolutionNote;
+    }
+
+    public String getResolvedBy() {
+        return resolvedBy;
+    }
+
+    public String getResolvedAt() {
+        return resolvedAt;
     }
 }

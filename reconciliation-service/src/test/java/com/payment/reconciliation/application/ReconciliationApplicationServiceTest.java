@@ -1,7 +1,10 @@
 package com.payment.reconciliation.application;
 
 import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
+import com.payment.reconciliation.application.ChannelStatementLoadResult;
 import com.payment.reconciliation.domain.ChannelStatement;
+import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
@@ -27,15 +30,16 @@ class ReconciliationApplicationServiceTest {
     private final RefundFactsClient refunds = () -> List.of(
             new PlatformFact("refund-1", "REFUND", 500L, "CNY", "SUCCEEDED"));
 
-    private final ChannelStatementLoader loader = period -> List.of(
+    private final ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(List.of(
             new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
             new ChannelStatement("mock-ref-2", 2000L, "CNY", "SUCCEEDED"),
             new ChannelStatement("refund-1", 500L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"));
+            new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED")),
+            new ChannelStatementSource("FIXTURE", "inline", 4, false));
 
     private ReconciliationApplicationService service() {
         return new ReconciliationApplicationService(repository, payments, refunds, loader,
-                new NoopBusinessMetrics());
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     @Test
@@ -64,13 +68,48 @@ class ReconciliationApplicationServiceTest {
                 repository,
                 () -> List.of(new PlatformFact("ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
                 () -> List.of(),
-                period -> List.of(new ChannelStatement("ref-1", 1000L, "CNY", "SUCCEEDED")),
-                new NoopBusinessMetrics());
+                period -> new ChannelStatementLoadResult(
+                        List.of(new ChannelStatement("ref-1", 1000L, "CNY", "SUCCEEDED")),
+                        new ChannelStatementSource("FIXTURE", "inline", 1, false)),
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
 
         ReconciliationBatch batch = service.runReconciliation("2026-09");
 
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CONSISTENT);
         assertThat(batch.getMatches()).hasSize(1);
         assertThat(batch.getDifferences()).isEmpty();
+    }
+
+    @Test
+    void closeBatchWithUnresolvedDifferencesIsRejected() {
+        ReconciliationApplicationService service = service();
+        ReconciliationBatch batch = service.runReconciliation("2026-08");
+
+        assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.HAS_DIFFERENCE);
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.payment.common.core.error.BizException.class,
+                () -> service.closeBatch(batch.getId(), "ops-1"));
+    }
+
+    @Test
+    void resolveDifferenceThenCloseReachesClosed() {
+        ReconciliationApplicationService service = service();
+        ReconciliationBatch batch = service.runReconciliation("2026-08");
+
+        service.resolveDifference(batch.getId(), "channel-extra-1", "渠道多笔，确认无误", "ops-1", null);
+        ReconciliationBatch closed = service.closeBatch(batch.getId(), "ops-1");
+
+        assertThat(closed.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
+        assertThat(closed.getClosedBy()).isEqualTo("ops-1");
+        assertThat(closed.getClosedAt()).isNotNull();
+    }
+
+    @Test
+    void statementSourceIsRecordedOnBatch() {
+        ReconciliationApplicationService service = service();
+        ReconciliationBatch batch = service.runReconciliation("2026-08");
+
+        assertThat(batch.getStatementSource()).isNotNull();
+        assertThat(batch.getStatementSource().fallbackUsed()).isFalse();
     }
 }

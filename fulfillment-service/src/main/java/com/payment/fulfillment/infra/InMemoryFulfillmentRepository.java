@@ -32,6 +32,13 @@ public class InMemoryFulfillmentRepository implements FulfillmentRepository {
     }
 
     @Override
+    public Optional<Fulfillment> findByOrderId(String orderId) {
+        return byId.values().stream()
+                .filter(f -> orderId.equals(f.getOrderId()))
+                .findFirst();
+    }
+
+    @Override
     public Fulfillment save(Fulfillment fulfillment) {
         if (fulfillment.getId() == null) {
             fulfillment.setId(idGenerator.incrementAndGet());

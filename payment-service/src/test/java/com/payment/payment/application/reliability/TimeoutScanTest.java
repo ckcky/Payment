@@ -35,7 +35,7 @@ class TimeoutScanTest {
 
     private PaymentAttempt attempt(long aid, long pid, Instant requestedAt) {
         return PaymentAttempt.rehydrate(aid, pid, "mock", 0,
-                requestedAt, null, null, PaymentAttemptStatus.PENDING, null, null, null, 0);
+                requestedAt, null, null, PaymentAttemptStatus.PENDING, null, null, 0);
     }
 
     @Test

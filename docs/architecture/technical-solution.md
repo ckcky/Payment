@@ -23,10 +23,10 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 ### 1.2 当前现状（Phase 0 — Foundation）
 
 - 架构基线已确认：**Spring Cloud 微服务**，按限界上下文划分（ADR-0001），技术栈 Java 21 + Spring Boot 3.x + MyBatis-Plus + Nacos + OpenFeign（ADR-0002）。
-- 已建 **9 个服务模块 + 3 个共享库**（见 §3），`gateway` 本 MVP 延后；`ledger-service` 已在 Feature 004 前置实现（文档先行，待 ADR-0008~0011 确认后编码）。
+- 已建 **9 个服务模块 + 3 个共享库**（见 §3），`gateway` 本 MVP 延后；`ledger-service` 已按 `004-ledger` 前置实现并接入 payment/refund/settlement 侧记账（ADR-0008~0011 已于 2026-08-29 Accepted）。
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
 - 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**部分已落地**，退款/对账/结算多数仍是骨架，未形成完整业务闭环。
-- **尚未引入**：真实支付渠道（当前 Mock Channel）、Ledger 复式记账、MQ / 跨服务异步事件、API 网关、熔断组件、K8s/服务网格。
+- **尚未引入**：真实支付渠道（当前 Mock Channel）、MQ / 跨服务异步事件、API 网关、熔断组件、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现）。
 
 ---
 
@@ -45,7 +45,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 ### 2.3 非目标（MVP 明确不做）
 
 - 不接真实支付机构、不做真实出款/入账（当前仅 Mock Channel + 模拟业务事实）。
-- 不实现 Ledger 复式记账（延后 Phase 8）。
+- （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
 - 不引入 MQ / Kafka / Redis / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
 
@@ -81,7 +81,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
 | ledger-service | Ledger | 复式记账（资金核心） | 已实现（`004-ledger` 前置，8090） |
 | reconciliation-service | Reconciliation | 异步对账 | 骨架 |
-| settlement-service | Settlement | 结算批次与结果（不真实出款） | 骨架 |
+| settlement-service | Settlement | 结算批次、调整项、已确认事实闸门、收敛/关闭与结算侧记账（不真实出款） | 已实现（ADR-0022/0023 缺口补齐） |
 
 > Channel 不单独成服务：以「接口 + 模块」内聚在 payment-service（`application/channel` 接口 + `infra/channel` 实现），落实 Payment ≠ Channel。
 
@@ -356,7 +356,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 | Phase 4 · Fulfillment & Entitlement | 支付成功后履约 → 权益授予 | 不含复杂仓储物流、权益商城、退款回收政策 |
 | Phase 5 · Refund | 部分/全部退款、幂等、退款后处理 | 不含审批、权益回收政策、真实出款、Ledger 冲正 |
 | Phase 6 · Reconciliation | 平台事实与渠道账单比对、差异处理 | 不含真实账单、自动调账、真实资金修正 |
-| Phase 7 · Settlement | 商户周期结算批次、模拟结算结果 | 不真实出款、不接银行、无 Ledger、无多币种 |
+| Phase 7 · Settlement | 商户周期结算批次、调整项、模拟结算结果 | 不真实出款、不接银行、不接多币种清分（结算侧记账经 ledger-service，见 §4.3.5） |
 | Phase 8 · Ledger | 复式记账、科目、分录、记账幂等 | 不含复杂会计准则、多币种清分、总账 |
 | Phase 9 · Risk / Security | 认证、授权、签名校验、敏感数据、最小风控 | 不含全量合规、复杂风控平台 |
 | Phase 10 · Distributed Evolution | 有证据地独立数据库/服务治理演进 | 不默认引入 Service Mesh/K8s/CQRS/ES |

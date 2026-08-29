@@ -3,6 +3,7 @@ package com.payment.settlement.infra;
 import com.payment.settlement.domain.SettlementBatch;
 import com.payment.settlement.domain.SettlementRepository;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,14 @@ public class InMemorySettlementRepository implements SettlementRepository {
         return byId.values().stream()
                 .filter(b -> idempotencyKey.equals(b.getIdempotencyKey()))
                 .findFirst();
+    }
+
+    @Override
+    public List<SettlementBatch> listBatches(String merchantId, String period) {
+        return byId.values().stream()
+                .filter(b -> merchantId == null || merchantId.isBlank() || merchantId.equals(b.getMerchantId()))
+                .filter(b -> period == null || period.isBlank() || period.equals(b.getPeriod()))
+                .toList();
     }
 
     @Override

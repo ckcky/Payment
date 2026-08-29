@@ -22,10 +22,8 @@ public class PaymentAttemptEntity extends BaseEntity {
     private String status;
     private String failureReason;
     private Integer retryCount;
-    /** 错误分类枚举名（TRANSIENT/HARD/UNKNOWN），决定可重试性（spec US3）。 */
+    /** 错误分类枚举名（TRANSIENT/HARD/UNKNOWN）：由双响应码派生，仅用于观测（ADR-0012/0013）。 */
     private String errorType;
-    /** 计划下次重试时刻，为空表示不再重试。 */
-    private Instant nextRetryAt;
 
     public Long getPaymentId() {
         return paymentId;
@@ -97,13 +95,5 @@ public class PaymentAttemptEntity extends BaseEntity {
 
     public void setErrorType(String errorType) {
         this.errorType = errorType;
-    }
-
-    public Instant getNextRetryAt() {
-        return nextRetryAt;
-    }
-
-    public void setNextRetryAt(Instant nextRetryAt) {
-        this.nextRetryAt = nextRetryAt;
     }
 }

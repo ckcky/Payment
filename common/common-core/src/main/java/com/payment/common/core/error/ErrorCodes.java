@@ -14,7 +14,11 @@ public final class ErrorCodes {
     public static final String CONFLICT = "CONFLICT";
     public static final String DUPLICATE = "DUPLICATE";
     public static final String STATE_TRANSITION_VIOLATION = "STATE_TRANSITION_VIOLATION";
+    /** 对账批次尚有未处理差异却尝试关闭（ADR-0019 关闭门禁）。 */
+    public static final String UNRESOLVED_DIFFERENCES = "UNRESOLVED_DIFFERENCES";
     public static final String AMOUNT_INVARIANT_VIOLATION = "AMOUNT_INVARIANT_VIOLATION";
     public static final String UNKNOWN_STATUS = "UNKNOWN_STATUS";
+    /** 复式记账借贷不平衡：数据质量门禁，拒绝落任何分录（Feature 004 / FR-002）。 */
+    public static final String LEDGER_UNBALANCED = "LEDGER_UNBALANCED";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
 }

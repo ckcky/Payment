@@ -1,0 +1,42 @@
+﻿==================== PAYMENT ARCH 鈥?绔埌绔摼璺?DEMO ====================
+period = 2026-08-29-1078775467
+
+[1] 娉ㄥ唽鍟嗘埛 merchant-service
+  -> MerchantResponse: {"id":6,"code":"M-1078775467","name":"Demo Merchant","status":"PENDING_REVIEW","settlementEligible":false}
+[2] 瀹℃壒鍟嗘埛 -> ACTIVE & settlementEligible
+  -> status=ACTIVE settlementEligible=True
+  -> productId=1
+[4] 鍒涘缓 SKU
+  -> skuId=1 priceMinor=1000
+[5] 婵€娲?SKU -> SELLABLE
+  -> sku status=SELLABLE
+  -> CreateOrderResponse: {"orderId":1,"transactionId":1,"status":"PENDING_PAYMENT","totalMinor":2000,"currencyCode":"CNY","paymentId":1,"paymentStatus":"SUCCEEDED"}
+  -> orderId=1 paymentId=1 paymentStatus=SUCCEEDED totalMinor=2000
+
+[7] payment-service: GET /payments/1
+  -> {"id":1,"transactionId":"1","orderId":"1","userId":"U001","amountMinor":2000,"currencyCode":"CNY","status":"SUCCEEDED","failureReason":null}
+
+[8] ledger-service: GET /internal/ledger/balance
+  -> {"balanced":true,"diffByCurrency":{"CNY":0}}
+    ledger entries for payment: GET /internal/ledger/entries?sourceType=PAYMENT&sourceId=1
+  -> entries={"value":[{"id":2093629697331462145,"accountId":1,"direction":"DEBIT","amountMinor":2000,"currency":"CNY","entryType":"PAYMENT_CAPTURE"},{"id":2093629697331462146,"accountId":2,"direction":"CREDIT","amountMinor":2000,"currency":"CNY","entryType":"PAYMENT_CAPTURE"}],"Count":2}
+  -> {"id":1,"paymentId":1,"orderId":"1","amountMinor":500,"currencyCode":"CNY","status":"SUCCEEDED","failureReason":null}
+
+[10] reconciliation-service: POST /internal/reconciliation/batches period=2026-08-29-1078775467
+  -> {"id":1,"period":"2026-08-29-1078775467","source":"mock-channel","status":"HAS_DIFFERENCE","matchCount":1,"differenceCount":4}
+  -> differenceCount=4
+    resolve difference reference=channel-extra-1 type=CHANNEL_ONLY amount=
+      -> resolved ok
+    resolve difference reference=mock-ref-1 type=CHANNEL_ONLY amount=
+      -> resolved ok
+    resolve difference reference=mock-ref-2 type=CHANNEL_ONLY amount=
+      -> resolved ok
+    resolve difference reference=mock-ref-fdbdd39dd667-6 type=PLATFORM_ONLY amount=
+      -> resolved ok
+  -> {"period":"2026-08-29-1078775467","facts":[{"reference":"refund-1","type":"REFUND","amountMinor":500,"currencyCode":"CNY"}],"unresolvedDifferenceCount":0}
+
+[13] settlement-service: POST /internal/settlements/batches
+  -> {"id":1,"merchantId":"6","period":"2026-08-29-1078775467","currencyCode":"CNY","incomeMinor":0,"refundMinor":500,"adjustmentMinor":0,"netMinor":-500,"status":"UNKNOWN"}
+
+==================== DEMO COMPLETE ====================
+log written to .workbuddy/tools/demo-chain.log

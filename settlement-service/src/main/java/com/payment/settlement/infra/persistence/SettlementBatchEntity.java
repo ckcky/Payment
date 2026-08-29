@@ -21,6 +21,10 @@ public class SettlementBatchEntity extends BaseEntity {
     private String status;
     /** 幂等键：数据库唯一约束兜底，杜绝并发重复结算。 */
     private String idempotencyKey;
+    /** 参与净额计算的事实条数（ADR-0023）。 */
+    private Integer factCount;
+    /** 来源对账周期（ADR-0023）。 */
+    private String sourcePeriod;
 
     public String getMerchantId() {
         return merchantId;
@@ -92,5 +96,21 @@ public class SettlementBatchEntity extends BaseEntity {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public Integer getFactCount() {
+        return factCount;
+    }
+
+    public void setFactCount(Integer factCount) {
+        this.factCount = factCount;
+    }
+
+    public String getSourcePeriod() {
+        return sourcePeriod;
+    }
+
+    public void setSourcePeriod(String sourcePeriod) {
+        this.sourcePeriod = sourcePeriod;
     }
 }

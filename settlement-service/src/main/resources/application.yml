@@ -6,6 +6,14 @@ spring:
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            # 出站 RPC 超时：connect/read 各 1s（ADR-0012 超时口径，全服务统一）
+            connect-timeout: 1000
+            read-timeout: 1000
 
 server:
   port: 8089
@@ -24,6 +32,8 @@ services:
     url: http://localhost:8081
   reconciliation:
     url: http://localhost:8088
+  ledger:
+    url: http://localhost:8090
 
 mybatis-plus:
   configuration:

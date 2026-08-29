@@ -4,11 +4,14 @@
 > 编号为内部决策标签（ADR-0008 ~ ADR-0011）保持不变，状态独立标注。
 > 涉及 Constitution §8「人类决策边界」（新增服务、数据所有权、领域模型、资金表）的决策，均**待负责人确认**后生效。
 
+> **2026-08-29 负责人裁决**：ADR-0008~0011 **全部 Accepted**；其中 **ADR-0010 改为「金额只用分」**
+> （否决 Money VO 路线，详见该条目）。见 `docs/adr/0004` 各条目末尾的「负责人裁决」小节。
+
 ---
 
 ## ADR-0008: Ledger 数据模型（复式记账 + 科目/分录结构）
 
-- **状态**：**Proposed**（待负责人确认）
+- **状态**：**Accepted**（2026-08-29 负责人确认）
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec FR-001~FR-003、data-model.md）
@@ -48,7 +51,7 @@ Constitution §II.3 规定「任何资金变动 MUST 经 ledger-service 复式�
 
 ## ADR-0009: 记账触发与一致性（同步 RPC 幂等记账 + 失败兜底）
 
-- **状态**：**Proposed**（待负责人确认）
+- **状态**：**Accepted**（2026-08-29 负责人确认）
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec FR-006、FR-010；data-model.md §6）
@@ -87,7 +90,7 @@ Constitution §II.3 规定「任何资金变动 MUST 经 ledger-service 复式�
 
 ## ADR-0010: 金额表示（Ledger 启用 Money 值对象 vs 仅 long 分）
 
-- **状态**：**Proposed**（待负责人确认）
+- **状态**：**Accepted（已修订，2026-08-29 负责人确认）**
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec FR-009；审计 P0-1「Money VO 死代码」）
@@ -96,22 +99,29 @@ Constitution §II.3 规定「任何资金变动 MUST 经 ledger-service 复式�
 
 Constitution §II.2 要求「封装 `Money` 值对象（金额+币种），禁止裸 long 满天飞」，但审计（2026-08-28）发现 `Money` VO 当前是**死代码**（零引用）。Ledger 作为「资金正确性核心」，应率先示范金额封装。需要决定：**Ledger 内部金额用 Money VO 还是 bare long 分**。
 
-### Decision（决策 · 推荐方案）
+### Decision（决策 · 负责人裁决）
 
-**Ledger 内部启用 `Money` 值对象**（来自 `common-core`），在 ledger 边界做 `long 分 ↔ Money` 转换；**跨服务全量 Money 激活**（payment/order/refund/settlement 等 ~50 处裸 long 元组）不阻塞本 Feature，另行排期（审计 P0-1）。
+**金额一律只用「分」（`long` 最小货币单位），不引入 `Money` 值对象。**
 
-> 推荐 **Accepted（渐进式）**。理由：Ledger 是资金正确性最敏感处，应率先消除裸 long；全量迁移范围过大、风险高，与「正确实现较小范围 > 大而不实」原则冲突，故渐进。
+- 所有金额的字段、参数、DTO、落库列统一为 `long` + 独立 `currencyCode` 字段（现状即如此，保持不变）。
+- `common-core` 的 `Money` VO **不启用**；它是零引用死代码（审计 P0-1），本决策下按「未采纳方案」保留源码与单测，
+  但**不得**在 `src/main` 中新增引用。
+
+> 负责人裁决理由（2026-08-29）：Money 封装带来的类型安全收益，小于它在 ~50 处调用点引入的转换成本与
+> 认知负担；`long 分 + 显式币种` 已是支付行业通行且够用的表示， Constitution §II.1 禁止 `float/double`
+> 的硬红线靠命名约定（`*Minor` 后缀）+ 代码评审即可守住。
 
 ### 备选方案
 
-- **A. 全仓立即改用 Money**：正确性最佳，但触碰 ~50 处（审计 P0-1），范围与风险过大，且非本 Feature 必要（否决，单独排期）。
-- **B. Ledger 仅用 long 分**：改动最小，但错过激活 Money VO 的机会，且账本作为资金核心未示范封装（不优先）。
-- **C. Ledger 启用 Money、其余沿用 long 分（采纳，渐进）**。
+- **A. 全仓立即改用 Money**：正确性最佳，但触碰 ~50 处（审计 P0-1），范围与风险过大（否决）。
+- **B. 金额只用 `long` 分（采纳）**：零改动、语义明确，与 Constitution §II.1 一致。
+- **C. Ledger 启用 Money、其余沿用 long 分**：半吊子状态，两套表示并存最易出错（否决）。
 
 ### Consequences（后果）
 
-**正面**：激活死代码 Money VO、账本金额类型安全、为全量迁移探路。
-**代价**：ledger 边界需 long↔Money 转换；全量 Money 激活仍待办（已在审计 P0-1 记录）。
+**正面**：金额表示全仓唯一，无转换成本，`*Minor` 后缀 + 币种字段即可追溯口径。
+**代价**：失去编译期的「金额+币种」绑定保护；靠命名约定与评审守红线（已写入本 ADR 与 Constitution §II.1 检查项）。
+**残留项**：`Money` VO 及其单测成为未采纳的死代码，后续若裁员或重审可整包删除（不阻塞任何 Feature）。
 
 ### 关联
 
@@ -123,7 +133,7 @@ Constitution §II.2 要求「封装 `Money` 值对象（金额+币种），禁�
 
 ## ADR-0011: MVP 记账范围（支付 / 退款 / 结算哪些首批）
 
-- **状态**：**Proposed**（待负责人确认）
+- **状态**：**Accepted**（2026-08-29 负责人确认）
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec US1~US3；data-model.md §5）

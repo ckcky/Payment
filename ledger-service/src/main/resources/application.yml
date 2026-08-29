@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: ledger-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/ledger?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+server:
+  port: 8090
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

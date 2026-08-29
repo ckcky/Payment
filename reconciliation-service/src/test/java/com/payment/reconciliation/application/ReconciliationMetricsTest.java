@@ -1,7 +1,10 @@
 package com.payment.reconciliation.application;
 
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
+import com.payment.reconciliation.application.ChannelStatementLoadResult;
 import com.payment.reconciliation.domain.ChannelStatement;
+import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
@@ -29,13 +32,14 @@ class ReconciliationMetricsTest {
         PaymentFactsClient payments = () -> List.of(
                 new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
         RefundFactsClient refunds = () -> List.of();
-        ChannelStatementLoader loader = period -> List.of(
+        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(List.of(
                 new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
                 new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("channel-extra-2", 998L, "CNY", "SUCCEEDED"));
+                new ChannelStatement("channel-extra-2", 998L, "CNY", "SUCCEEDED")),
+                new ChannelStatementSource("FIXTURE", "inline", 3, false));
 
         ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository, payments, refunds, loader, metrics);
+                repository, payments, refunds, loader, metrics, new StructuredAuditLogger());
 
         ReconciliationBatch batch = service.runReconciliation("2026-08");
 

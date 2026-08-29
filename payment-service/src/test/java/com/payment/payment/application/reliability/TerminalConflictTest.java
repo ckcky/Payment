@@ -35,7 +35,7 @@ class TerminalConflictTest {
                 100, "CNY", "idem-" + paymentId, status, attemptId, null, 0, null, 0);
         payments.save(payment);
         attempts.save(PaymentAttempt.rehydrate(attemptId, paymentId, "mock", 0,
-                Instant.now(), null, null, PaymentAttemptStatus.ACCEPTED, null, null, null, 0));
+                Instant.now(), null, null, PaymentAttemptStatus.ACCEPTED, null, null, 0));
         return payment;
     }
 
@@ -55,7 +55,7 @@ class TerminalConflictTest {
     void lateFailureDoesNotOverwriteSucceededPayment() {
         savePayment(2L, 20L, PaymentStatus.SUCCEEDED);
 
-        boolean changed = processor.applyAndNotify(2L, ChannelResult.failure("late-ref", "late decline"));
+        boolean changed = processor.applyAndNotify(2L, ChannelResult.businessFailure("late-ref", "late decline"));
 
         assertThat(changed).isFalse();
         assertThat(payments.findById(2L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
@@ -65,7 +65,7 @@ class TerminalConflictTest {
     void unknownDoesNotOverwriteTerminalPayment() {
         savePayment(3L, 30L, PaymentStatus.SUCCEEDED);
 
-        boolean changed = processor.applyAndNotify(3L, ChannelResult.unknown("channel glitch"));
+        boolean changed = processor.applyAndNotify(3L, ChannelResult.timeout("channel glitch"));
 
         assertThat(changed).isFalse();
         assertThat(payments.findById(3L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);

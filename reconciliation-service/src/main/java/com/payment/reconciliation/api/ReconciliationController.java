@@ -46,8 +46,14 @@ public class ReconciliationController {
     @PostMapping("/batches/{id}/differences/resolve")
     public DifferenceResponse resolveDifference(@PathVariable Long id,
                                                 @RequestBody ResolveDifferenceRequest request) {
-        return DifferenceResponse.from(
-                applicationService.resolveDifference(id, request.reference(), request.resolutionNote()));
+        return DifferenceResponse.from(applicationService.resolveDifference(
+                id, request.reference(), request.resolutionNote(), request.resolvedBy(), request.resolvedAt()));
+    }
+
+    @PostMapping("/batches/{id}/close")
+    public ReconciliationBatchResponse closeBatch(@PathVariable Long id,
+                                                  @RequestBody CloseBatchRequest request) {
+        return ReconciliationBatchResponse.from(applicationService.closeBatch(id, request.operator()));
     }
 
     @GetMapping("/settlement-summary")

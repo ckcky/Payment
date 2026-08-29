@@ -51,6 +51,20 @@ public class MybatisSettlementRepository implements SettlementRepository {
     }
 
     @Override
+    public List<SettlementBatch> listBatches(String merchantId, String period) {
+        var query = Wrappers.<SettlementBatchEntity>lambdaQuery();
+        if (merchantId != null && !merchantId.isBlank()) {
+            query.eq(SettlementBatchEntity::getMerchantId, merchantId);
+        }
+        if (period != null && !period.isBlank()) {
+            query.eq(SettlementBatchEntity::getPeriod, period);
+        }
+        return batchMapper.selectList(query).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public SettlementBatch save(SettlementBatch batch) {
         if (batch.getId() == null) {
             SettlementBatchEntity entity = toEntity(batch);
@@ -93,7 +107,9 @@ public class MybatisSettlementRepository implements SettlementRepository {
                 entity.getCurrencyCode(), entity.getIncomeMinor(), entity.getRefundMinor(),
                 entity.getAdjustmentMinor(), entity.getNetMinor(),
                 SettlementStatus.valueOf(entity.getStatus()), loadItems(entity.getId()),
-                entity.getIdempotencyKey(), entity.getVersion());
+                entity.getIdempotencyKey(), entity.getVersion(),
+                entity.getFactCount() == null ? 0 : entity.getFactCount(),
+                entity.getSourcePeriod());
     }
 
     private SettlementBatchEntity toEntity(SettlementBatch batch) {
@@ -108,6 +124,8 @@ public class MybatisSettlementRepository implements SettlementRepository {
         entity.setNetMinor(batch.getNetMinor());
         entity.setStatus(batch.getStatus().name());
         entity.setIdempotencyKey(batch.getIdempotencyKey());
+        entity.setFactCount(batch.getFactCount());
+        entity.setSourcePeriod(batch.getSourcePeriod());
         entity.setVersion(batch.getVersion());
         return entity;
     }

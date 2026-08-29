@@ -5,7 +5,6 @@ import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.reliability.PaymentRetryService;
-import com.payment.payment.application.reliability.ReliabilityConfig;
 import com.payment.payment.application.PaymentPersistence;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
@@ -36,10 +35,10 @@ class PaymentMetricsTest {
     private PaymentApplicationService appService(MockChannelAdapter channel) {
         PaymentResultProcessor processor =
                 new PaymentResultProcessor(payments, attempts, fulfillment, order);
-        PaymentRetryService retryService = new PaymentRetryService(payments, attempts, channel, processor,
-                new ReliabilityConfig(), metrics);
+        PaymentRetryService retryService = new PaymentRetryService(channel,
+                PaymentTestStack.fastRetryConfig(), metrics);
         return new PaymentApplicationService(payments, new PaymentPersistence(payments, attempts),
-                channel, retryService, fulfillment, metrics, audit);
+                retryService, fulfillment, metrics, audit);
     }
 
     private CreatePaymentCommand command(String idempotencyKey) {

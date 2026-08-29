@@ -3,8 +3,11 @@ package com.payment.fulfillment.application;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
+import com.payment.common.dto.rpc.RefundFulfillmentRequest;
+import com.payment.common.dto.rpc.RefundFulfillmentResponse;
 import com.payment.fulfillment.domain.Fulfillment;
 import com.payment.fulfillment.domain.FulfillmentRepository;
+import com.payment.fulfillment.domain.FulfillmentStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -67,5 +70,26 @@ public class FulfillmentApplicationService {
     /** 测试缝隙：供单测注入可失败的 mock 交付（不改动状态机）。 */
     Fulfillment newFulfillment(String orderId, String sourcePaymentId) {
         return new Fulfillment(orderId, null, "mock delivery", sourcePaymentId);
+    }
+
+    /**
+     * 退款 → 履约撤销（ADR-0017）：仅「请求撤销」而非「保证撤销」，尊重履约自身状态机。
+     *
+     * <p>PENDING 履约可取消（返回 CANCELLED）；其余状态（PROCESSING/DELIVERED/已取消等）不可逆，
+     * 返回 SKIPPED（可解释、非错误）；找不到履约也返回 SKIPPED。已交付履约的回收不在本 Feature。</p>
+     */
+    public RefundFulfillmentResponse onRefund(RefundFulfillmentRequest request) {
+        Optional<Fulfillment> opt = repository.findByOrderId(request.orderId());
+        if (opt.isEmpty()) {
+            return new RefundFulfillmentResponse(request.refundId(), "SKIPPED");
+        }
+        Fulfillment fulfillment = opt.get();
+        if (fulfillment.getStatus() == FulfillmentStatus.PENDING) {
+            fulfillment.cancel();
+            repository.save(fulfillment);
+            metrics.counter("fulfillment.refund_cancelled", 1.0, "module", MODULE);
+            return new RefundFulfillmentResponse(request.refundId(), "CANCELLED");
+        }
+        return new RefundFulfillmentResponse(request.refundId(), "SKIPPED");
     }
 }

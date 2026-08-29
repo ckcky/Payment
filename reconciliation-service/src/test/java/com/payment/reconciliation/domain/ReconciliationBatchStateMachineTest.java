@@ -46,7 +46,7 @@ class ReconciliationBatchStateMachineTest {
         batch.beginProcessing();
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.PROCESSING);
 
-        batch.close();
+        batch.close("ops", "2026-08-29T00:00:00Z");
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
     }
 
@@ -55,8 +55,29 @@ class ReconciliationBatchStateMachineTest {
         ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
         batch.start();
         batch.finish(List.of(), List.of());
-        batch.close();
+        batch.close("ops", "2026-08-29T00:00:00Z");
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
+    }
+
+    @Test
+    void closeWithUnresolvedDifferencesIsRejected() {
+        ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
+        batch.start();
+        batch.finish(List.of(), List.of(channelOnly()));
+        batch.beginProcessing();
+
+        assertThatThrownBy(() -> batch.close("ops", "2026-08-29T00:00:00Z"))
+                .isInstanceOf(BizException.class);
+    }
+
+    @Test
+    void beginProcessingIsIdempotentOnProcessing() {
+        ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
+        batch.start();
+        batch.finish(List.of(), List.of(channelOnly()));
+        batch.beginProcessing();
+        batch.beginProcessing();
+        assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.PROCESSING);
     }
 
     @Test

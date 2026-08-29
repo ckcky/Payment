@@ -8,6 +8,7 @@ import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,15 +23,30 @@ public class PaymentResultProcessor {
     private final PaymentAttemptRepository attemptRepository;
     private final FulfillmentGateway fulfillmentGateway;
     private final OrderGateway orderGateway;
+    private final LedgerPostingGateway ledgerGateway;
 
+    /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
+    @Autowired
     public PaymentResultProcessor(PaymentRepository paymentRepository,
                                   PaymentAttemptRepository attemptRepository,
                                   FulfillmentGateway fulfillmentGateway,
-                                  OrderGateway orderGateway) {
+                                  OrderGateway orderGateway,
+                                  LedgerPostingGateway ledgerGateway) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.fulfillmentGateway = fulfillmentGateway;
         this.orderGateway = orderGateway;
+        this.ledgerGateway = ledgerGateway;
+    }
+
+    /** 兼容构造：不接账本时使用空记账网关（测试/账本未接入场景）。 */
+    public PaymentResultProcessor(PaymentRepository paymentRepository,
+                                  PaymentAttemptRepository attemptRepository,
+                                  FulfillmentGateway fulfillmentGateway,
+                                  OrderGateway orderGateway) {
+        this(paymentRepository, attemptRepository, fulfillmentGateway, orderGateway,
+                (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
+                });
     }
 
     /** 返回支付是否真正发生了状态迁移（据此决定是否已触发履约 RPC）。 */
@@ -55,6 +71,10 @@ public class PaymentResultProcessor {
             } catch (RuntimeException ignored) {
                 // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）。
             }
+            // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
+            // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009）。
+            ledgerGateway.postPaymentCapture(payment.getIdempotencyKey(), payment.getId(),
+                    payment.getAmountMinor(), 0L, payment.getCurrencyCode());
         }
         return changed;
     }

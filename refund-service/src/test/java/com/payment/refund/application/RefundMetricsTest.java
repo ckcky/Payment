@@ -24,12 +24,20 @@ class RefundMetricsTest {
             new RefundTestStack.RecordingPaymentRefundGateway();
     private final RefundTestStack.RecordingEntitlementGateway entitlement =
             new RefundTestStack.RecordingEntitlementGateway();
+    private final RefundTestStack.RecordingFulfillmentGateway fulfillment =
+            new RefundTestStack.RecordingFulfillmentGateway();
+    private final RefundTestStack.RecordingLedgerGateway ledger =
+            new RefundTestStack.RecordingLedgerGateway();
+    private final RefundTestStack.InMemoryRefundPostProcessAttemptRepository attempts =
+            new RefundTestStack.InMemoryRefundPostProcessAttemptRepository();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final BusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
     private final StructuredAuditLogger audit = new StructuredAuditLogger();
 
     private RefundApplicationService appService() {
-        return new RefundApplicationService(refunds, payment, entitlement, metrics, audit);
+        RefundPostProcessOrchestrator orchestrator = new RefundPostProcessOrchestrator(
+                fulfillment, entitlement, ledger, attempts, metrics, audit);
+        return new RefundApplicationService(refunds, payment, orchestrator, metrics, audit);
     }
 
     private CreateRefundCommand cmd() {

@@ -1,18 +1,27 @@
 package com.payment.payment.application.channel;
 
+import com.payment.common.core.rpc.BusinessCode;
+import com.payment.common.core.rpc.TransportCode;
 import com.payment.payment.domain.PaymentAttemptErrorType;
 
 /**
  * 渠道交互结果：成功 / 失败 / 未知（超时、断连或不完整响应）。
  *
- * <p>只有渠道明确成功/失败才进入对应终态；{@link Status#UNKNOWN} 绝不臆断成败。</p>
+ * <p>只有渠道明确成功/失败才进入对应终态；{@link Status#UNKNOWN} 绝不臆断成败（Constitution §V.7）。</p>
  *
- * <p>{@code errorType} 描述失败的可重试性（spec US3 / ADR-0012）：{@link PaymentAttemptErrorType#TRANSIENT}
- * 表示幂等可重试的瞬时错误；{@link PaymentAttemptErrorType#HARD} 表示硬拒绝不重试；
- * {@link PaymentAttemptErrorType#UNKNOWN} 表示结果不明确，不重试。</p>
+ * <h3>双响应码是错误分类的唯一来源（ADR-0012）</h3>
+ * <ul>
+ *   <li>{@code transportCode}（通信响应码）：通信层面是否成功完成。<b>非 SUCCESS 一律可重试</b>，
+ *       包括 {@link TransportCode#TIMEOUT}（超时算通信失败）。</li>
+ *   <li>{@code businessCode}（业务响应码）：通信成功后下游的业务结论。业务拒绝是明确结论，
+ *       <b>不重试</b>（FR-006）；无结论时为 {@link BusinessCode#UNKNOWN}。</li>
+ * </ul>
+ *
+ * <p>{@link #status()} 由双码推导，不靠调用方自报；{@link #errorType()} 同样是派生值。</p>
  */
 public record ChannelResult(Status status, String channelReference, String reason,
-                            PaymentAttemptErrorType errorType) {
+                            TransportCode transportCode, BusinessCode businessCode,
+                            Long refundedMinor) {
 
     public enum Status {
         SUCCESS,
@@ -20,22 +29,86 @@ public record ChannelResult(Status status, String channelReference, String reaso
         UNKNOWN
     }
 
+    /** 通信成功 + 业务成功 → 成功（退款金额未知，由调用方按全退处理）。 */
     public static ChannelResult success(String channelReference) {
-        return new ChannelResult(Status.SUCCESS, channelReference, null, null);
+        return success(channelReference, null);
     }
 
-    /** 硬拒绝：明确不可重试（FR-006）。 */
-    public static ChannelResult failure(String channelReference, String reason) {
-        return new ChannelResult(Status.FAILURE, channelReference, reason, PaymentAttemptErrorType.HARD);
+    /** 通信成功 + 业务成功 → 成功，并携带渠道实际退款金额（部分退款场景）。 */
+    public static ChannelResult success(String channelReference, Long refundedMinor) {
+        return new ChannelResult(Status.SUCCESS, channelReference, null,
+                TransportCode.SUCCESS, BusinessCode.SUCCESS, refundedMinor);
     }
 
-    /** 瞬时错误：幂等可重试（FR-005）。 */
-    public static ChannelResult transientFailure(String reason) {
-        return new ChannelResult(Status.FAILURE, null, reason, PaymentAttemptErrorType.TRANSIENT);
+    /** 通信成功 + 业务明确拒绝 → 业务失败，不重试（FR-006）。 */
+    public static ChannelResult businessFailure(String channelReference, String reason, BusinessCode code) {
+        if (code == BusinessCode.SUCCESS) {
+            throw new IllegalArgumentException("business failure must not use BusinessCode.SUCCESS");
+        }
+        return of(TransportCode.SUCCESS, code, channelReference, reason);
     }
 
-    /** 渠道响应不明确：不重试，进 UNKNOWN 由查询收敛（ADR-0012）。 */
-    public static ChannelResult unknown(String reason) {
-        return new ChannelResult(Status.UNKNOWN, null, reason, PaymentAttemptErrorType.UNKNOWN);
+    /** 通信成功 + 业务拒绝（未细分原因，默认 {@link BusinessCode#DECLINED}）。 */
+    public static ChannelResult businessFailure(String channelReference, String reason) {
+        return businessFailure(channelReference, reason, BusinessCode.DECLINED);
+    }
+
+    /** 通信成功但业务无明确结论 → 不重试，进 UNKNOWN 由主动查询收敛。 */
+    public static ChannelResult businessUnknown(String reason) {
+        return of(TransportCode.SUCCESS, BusinessCode.UNKNOWN, null, reason);
+    }
+
+    /** 通信失败（含超时）→ 可重试（ADR-0012）；重试耗尽后保持本结果的 UNKNOWN 语义。 */
+    public static ChannelResult transportFailure(TransportCode transportCode, String reason) {
+        if (transportCode == TransportCode.SUCCESS) {
+            throw new IllegalArgumentException("transport failure must not use TransportCode.SUCCESS");
+        }
+        return of(transportCode, BusinessCode.UNKNOWN, null, reason);
+    }
+
+    /** 超时快捷方式：等价于 {@code transportFailure(TransportCode.TIMEOUT, reason)}。 */
+    public static ChannelResult timeout(String reason) {
+        return transportFailure(TransportCode.TIMEOUT, reason);
+    }
+
+    private static ChannelResult of(TransportCode transport, BusinessCode business,
+                                    String channelReference, String reason) {
+        return new ChannelResult(deriveStatus(transport, business), channelReference, reason, transport, business, null);
+    }
+
+    private static Status deriveStatus(TransportCode transport, BusinessCode business) {
+        if (!transport.isSuccess()) {
+            return Status.UNKNOWN; // 通信失败：既不能算成功也不能算失败
+        }
+        if (business.isSuccess()) {
+            return Status.SUCCESS;
+        }
+        return business.isConclusive() ? Status.FAILURE : Status.UNKNOWN;
+    }
+
+    /**
+     * 错误分类（由双响应码派生，供落库观测）：
+     * 通信失败 → {@link PaymentAttemptErrorType#TRANSIENT}（可重试，重试耗尽后仍记此值）；
+     * 业务明确拒绝 → {@link PaymentAttemptErrorType#HARD}；
+     * 业务无结论 → {@link PaymentAttemptErrorType#UNKNOWN}；成功时为 {@code null}。
+     */
+    public PaymentAttemptErrorType errorType() {
+        if (!transportCode.isSuccess()) {
+            return PaymentAttemptErrorType.TRANSIENT;
+        }
+        if (businessCode.isSuccess()) {
+            return null;
+        }
+        return businessCode.isConclusive() ? PaymentAttemptErrorType.HARD : PaymentAttemptErrorType.UNKNOWN;
+    }
+
+    /** 是否可重试：<b>只看通信响应码</b>，非 SUCCESS 即重试（ADR-0012）。 */
+    public boolean retryable() {
+        return transportCode.isRetryable();
+    }
+
+    /** 返回携带新 reason 的副本（重试耗尽时用它标注 {@code RETRY_EXHAUSTED}）。 */
+    public ChannelResult withReason(String newReason) {
+        return new ChannelResult(status, channelReference, newReason, transportCode, businessCode, refundedMinor);
     }
 }

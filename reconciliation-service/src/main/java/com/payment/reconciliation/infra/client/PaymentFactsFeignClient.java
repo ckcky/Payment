@@ -8,7 +8,8 @@ import java.util.List;
 /**
  * reconciliation-service → payment-service 的 Feign 适配器（已确认支付事实查询）。
  */
-@FeignClient(name = "payment-service", url = "${services.payment.url:http://localhost:8084}")
+@FeignClient(name = "payment-service", url = "${services.payment.url:http://localhost:8084}",
+        configuration = FactsClientConfig.class)
 public interface PaymentFactsFeignClient {
 
     @GetMapping("/internal/payments/confirmed-facts")

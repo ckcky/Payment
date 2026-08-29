@@ -39,6 +39,13 @@ public class MybatisFulfillmentRepository implements FulfillmentRepository {
     }
 
     @Override
+    public Optional<Fulfillment> findByOrderId(String orderId) {
+        FulfillmentEntity entity = fulfillmentMapper.selectOne(
+                Wrappers.<FulfillmentEntity>lambdaQuery().eq(FulfillmentEntity::getOrderId, orderId));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
     public Fulfillment save(Fulfillment fulfillment) {
         if (fulfillment.getId() == null) {
             FulfillmentEntity entity = toEntity(fulfillment);

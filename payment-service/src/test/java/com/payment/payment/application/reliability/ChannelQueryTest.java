@@ -31,17 +31,17 @@ class ChannelQueryTest {
     /** 可控渠道桩：queryStatus 返回测试设定的结果，并记录被调用次数。 */
     private static final class StubChannel implements PaymentChannel {
 
-        private ChannelResult result = ChannelResult.unknown("inconclusive");
+        private ChannelResult result = ChannelResult.businessUnknown("inconclusive");
         private int queryCalls;
 
         @Override
         public ChannelResult charge(ChargeRequest request) {
-            return ChannelResult.unknown("not used");
+            return ChannelResult.businessUnknown("not used");
         }
 
         @Override
         public ChannelResult refund(RefundRequest request) {
-            return ChannelResult.unknown("not used");
+            return ChannelResult.businessUnknown("not used");
         }
 
         @Override
@@ -77,7 +77,7 @@ class ChannelQueryTest {
             payments.save(payment);
             attempts.save(PaymentAttempt.rehydrate(attemptId, paymentId, "mock", 0,
                     Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
-                    null, null, null, 0));
+                    null, null, 0));
             return payment;
         }
     }
@@ -100,7 +100,7 @@ class ChannelQueryTest {
     void authoritativeFailureConvergesWithoutSuccessNotification() {
         Harness h = new Harness();
         h.unknownPayment(2L, 20L);
-        h.channel.result = ChannelResult.failure("ch-ref-2", "declined by channel");
+        h.channel.result = ChannelResult.businessFailure("ch-ref-2", "declined by channel");
 
         int converged = h.queryService.queryRound();
 
@@ -115,7 +115,7 @@ class ChannelQueryTest {
         Harness h = new Harness();
         h.config.setQueryMaxAttempts(2);
         h.unknownPayment(3L, 30L);
-        h.channel.result = ChannelResult.unknown("still processing");
+        h.channel.result = ChannelResult.businessUnknown("still processing");
 
         assertThat(h.queryService.queryRound()).isZero();
         assertThat(h.payments.findById(3L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.UNKNOWN);

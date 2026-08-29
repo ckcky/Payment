@@ -37,10 +37,8 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     status VARCHAR(32) NOT NULL,
     failure_reason VARCHAR(255),
     retry_count INT NOT NULL DEFAULT 0,
+    -- 错误分类（由双响应码派生，仅观测用；重试判定不读它，ADR-0012/0013）
     error_type VARCHAR(16) NULL,
-    next_retry_at DATETIME NULL,
-    -- 重试调度扫描：next_retry_at 到期且非空的尝试（spec US3）
-    KEY idx_attempts_next_retry_at (next_retry_at),
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     created_by VARCHAR(64),

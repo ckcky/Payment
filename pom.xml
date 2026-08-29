@@ -42,6 +42,7 @@
         <module>entitlement-service</module>
         <module>reconciliation-service</module>
         <module>settlement-service</module>
+        <module>ledger-service</module>
     </modules>
 
     <properties>
@@ -140,7 +141,23 @@
     <build>
         <pluginManagement>
             <plugins>
-                <!-- spring-boot-maven-plugin 与 maven-compiler-plugin（release=java.version）已由父 POM 管理 -->
+                <!--
+                    spring-boot-maven-plugin 与 maven-compiler-plugin（release=java.version）版本由父 POM 管理，
+                    此处只统一 repackage 的产物输出目录，不改动版本。
+
+                    可执行 jar 统一落到 deployment/output/jars（不再散落到各模块 target/）：
+                      · ${maven.multiModuleProjectDirectory} = 仓库根目录（Maven 启动器依据 .mvn 上溯得到），
+                        因此从任意模块目录执行 mvn 都会指向同一个输出目录。
+                      · 该目录已加入 .gitignore，产物不入库。
+                      · repackage 后原始 jar 仍保留在各模块 target/ 下并重命名为 *.jar.original。
+                -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <outputDirectory>${maven.multiModuleProjectDirectory}/deployment/output/jars</outputDirectory>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>

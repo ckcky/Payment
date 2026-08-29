@@ -12,5 +12,8 @@ public interface FulfillmentRepository {
     /** 按支付幂等键查询，用于保证同一支付成功事件只创建一条履约。 */
     Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentId);
 
+    /** 按订单查询，用于退款时定位需撤销的履约。 */
+    Optional<Fulfillment> findByOrderId(String orderId);
+
     Fulfillment save(Fulfillment fulfillment);
 }

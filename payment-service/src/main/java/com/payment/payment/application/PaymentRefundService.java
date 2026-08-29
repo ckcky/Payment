@@ -63,6 +63,7 @@ public class PaymentRefundService {
             case FAILURE -> "FAILED";
             case UNKNOWN -> "UNKNOWN";
         };
-        return new RefundAttemptResponse(request.refundId(), mappedStatus, result.channelReference());
+        Long refundedMinor = result.status() == ChannelResult.Status.SUCCESS ? result.refundedMinor() : null;
+        return new RefundAttemptResponse(request.refundId(), mappedStatus, result.channelReference(), refundedMinor);
     }
 }

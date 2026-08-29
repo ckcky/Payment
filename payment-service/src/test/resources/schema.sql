@@ -34,7 +34,6 @@ CREATE TABLE payment_attempts (
     failure_reason VARCHAR(255),
     retry_count INT NOT NULL DEFAULT 0,
     error_type VARCHAR(16) NULL,
-    next_retry_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     created_by VARCHAR(64),
