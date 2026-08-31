@@ -5,6 +5,16 @@
 > 本文件**只定义补齐部分退款与后处理追踪所需的实体变更与不变量**，不重复已稳定的既有模型（完整基线见 `docs/architecture/systems/refund-service.md` §2）。
 > 标注：无标记 = 已实现；`[改]` = 本 Feature 修改；`[新]` = 本 Feature 新增。
 
+> ## ⛔ 负责人裁决（2026-08-30）· 落地（2026-08-31）：部分退款不做，代码已回退
+>
+> **ADR-0016 = Rejected。** 本节中所有 `refundedAmountMinor` / `refunded_amount_minor` / 「`PARTIALLY_SUCCEEDED` 可达」相关内容
+> **仅作为历史决策记录保留，不代表当前代码状态**。当前实现：
+>
+> - `Refund` **无** `refundedAmountMinor` 字段；DDL **无** `refunded_amount_minor` 列。
+> - 累计口径**一律按申请额 `amountMinor`**（含在途 `PROCESSING` / `UNKNOWN` 保守占位），见下方 §3 的修订版。
+> - `PARTIALLY_SUCCEEDED` 枚举与 `partiallySucceed(long)` **保留但无调用方**（删除枚举会让历史行在 `RefundStatus.valueOf` 处抛异常，打挂退款受理路径）。
+> - 后处理与记账金额一律取 `amountMinor`（成功退款恒为全额）。
+
 ## 1. 实体关系
 
 ```text
@@ -21,32 +31,38 @@ Refund (1) ──── (0..1) Posting（ledger-service，经 RPC，不落本地
 |---|---|---|---|
 | id | Long | 已实现 | 退款 ID |
 | orderId / paymentId / userId | String / Long / String | 已实现 | 关联引用 |
-| **amountMinor** | long | 已实现 | **申请**退款金额（最小货币单位）；不变量 `> 0`（`Refund.java:39`） |
-| **refundedAmountMinor** | long | **[改] 新增** | **已确认**退款金额；不变量 `0 <= refundedAmountMinor <= amountMinor`；初始 0 |
+| **amountMinor** | long | 已实现 | **申请**退款金额（最小货币单位）；不变量 `> 0`（`Refund.java:39`）。**ADR-0016 回退后：它同时就是「已确认退款金额」**——成功退款恒为全额 |
+| ~~refundedAmountMinor~~ | ~~long~~ | ❌ **ADR-0016 已回退** | 曾新增的「已确认退款金额」字段，**2026-08-31 已从领域/实体/DDL 全链路删除** |
 | currencyCode / reason / idempotencyKey | String | 已实现 | 币种 / 原因 / 幂等键（`uk_refunds_idempotency_key`） |
-| status | RefundStatus | 已实现 + **[改]** | `PARTIALLY_SUCCEEDED` 由不可达变为可达（见 §5） |
+| status | RefundStatus | 已实现 | `PARTIALLY_SUCCEEDED` **保持不可达**（ADR-0016 裁决不做；枚举保留仅为避免 `valueOf` 对历史行抛异常） |
 | failureReason / version | String / Integer | 已实现 | 失败原因 / 乐观锁 |
 
 **DDL 变更（`deployment/schema/06-refund-schema.sql`）**：
 
 ```sql
-ALTER TABLE refunds
-    ADD COLUMN refunded_amount_minor BIGINT NOT NULL DEFAULT 0 AFTER amount_minor;
+-- ❌ ADR-0016 已否决（负责人决议「部分退款不做」）：refunds 不再有 refunded_amount_minor 列。
+-- 已部署环境若曾加过该列，需手工执行下迁移：
+--   ALTER TABLE `refund`.`refunds` DROP COLUMN `refunded_amount_minor`;
 ```
 
-> 该列属**新增关键资金字段**，须负责人确认（Constitution §8.3 / ADR-0016）。存量行默认 0，语义为「尚未确认任何退款金额」；历史 `SUCCEEDED` 行需按 ADR-0016 的回填策略处理（建议：`SUCCEEDED` 回填为 `amount_minor`，其余保持 0）。
+> 该列曾属**新增关键资金字段**（Constitution §8.3），ADR-0016 裁决不做后**已回退**：
+> 领域层字段、MyBatis 实体映射、DDL、测试 Schema 一并删除，契约 DTO 也回到无该字段的形态。
+> 重新开放部分退款时，本节与 ADR-0016 内的「回退落地记录」即为复原清单。
 
 ## 3. 累计额度不变量（防超退，H1）
 
-`RefundPolicy.decide` 的累计口径（`[改]`，`domain/RefundPolicy.java`）：
+**当前口径（ADR-0016 回退后，`RefundApplicationService` 内实现）**：
 
 ```text
 cumulative(paymentId) = Σ over Refund r where status ∈ 计额状态:
-    r.status ∈ {SUCCEEDED, PARTIALLY_SUCCEEDED}  →  r.refundedAmountMinor   （已确认额）
-    r.status ∈ {PROCESSING, UNKNOWN}              →  r.amountMinor          （在途占位）
-    r.status ∈ {FAILED, REJECTED, CLOSED}         →  不计入
+    r.status ∈ {SUCCEEDED, PARTIALLY_SUCCEEDED, PROCESSING, UNKNOWN}  →  r.amountMinor （一律按申请额）
+    r.status ∈ {FAILED, REJECTED, CLOSED}                              →  不计入
 约束：cumulative + requestedMinor <= paidAmountMinor
 ```
+
+> 原设计（已随 ADR-0016 作废）曾区分「终态按已确认额、在途按申请额占位」。
+> 部分退款不做后，`amountMinor` 即最终金额，故**统一按申请额累计**，不再分态。
+> 在途（`PROCESSING` / `UNKNOWN`）仍按申请额**保守占用**，这是防并发超退（H1）的关键。
 
 **为什么在途按申请额占位**：在途退款尚无已确认金额，若按 0 计，并发多笔在途退款可各自通过校验并累计超退（资金正确性 > 一切，Constitution 冲突优先级 1）。
 
@@ -55,13 +71,11 @@ cumulative(paymentId) = Σ over Refund r where status ∈ 计额状态:
 | # | 不变量 | 校验位置 |
 |---|---|---|
 | INV-1 | `0 < amountMinor` | `Refund` 构造（已实现，`Refund.java:39`） |
-| INV-2 | `0 <= refundedAmountMinor <= amountMinor` | `Refund.partiallySucceed/succeed`（新增） |
-| INV-3 | `refundedAmountMinor == 0` 当 `status ∈ {REQUESTED, PROCESSING, UNKNOWN, REJECTED, FAILED}` | 领域状态迁移（新增） |
-| INV-4 | `refundedAmountMinor == amountMinor` 当 `status == SUCCEEDED` | 领域状态迁移（新增） |
-| INV-5 | `0 < refundedAmountMinor < amountMinor` 当 `status == PARTIALLY_SUCCEEDED` | 领域状态迁移（新增） |
-| INV-6 | 同 `paymentId`：`cumulative + requested <= paidAmountMinor` | `RefundPolicy.decide` + `refund_intake_locks` 悲观锁（已实现 / 口径扩展） |
+| INV-2 | `0 < amountMinor`（申请额恒为正，且成功时即为已退金额） | `Refund` 构造（已实现） |
+| INV-3 | 同 `paymentId`：`cumulative + requested <= paidAmountMinor` | `RefundPolicy.decide` + `refund_intake_locks` 悲观锁（已实现） |
 
-> INV-2~INV-5 为领域层强校验；数据库层以 `BIGINT NOT NULL DEFAULT 0` 保证非空，金额上限与状态一致性由领域状态机唯一入口保证（Constitution §V.2）。
+> ❌ 原 INV-2~INV-5（`refundedAmountMinor` 的范围/与状态的一致性约束）**已随 ADR-0016 回退一并删除**。
+> 重新开放部分退款时须原样恢复这四条不变量。
 
 ## 4. RefundPostProcessAttempt（后处理尝试，`[新]`）
 
@@ -102,33 +116,38 @@ CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
 ## 5. 状态机变更（`domain/RefundStatus.java` / `Refund.java`）
 
 ```text
-REQUESTED --process()--> PROCESSING --succeed()---------------> SUCCEEDED            (refundedAmountMinor = amountMinor)
-                              |      \--partiallySucceed(r)---> PARTIALLY_SUCCEEDED  (0 < r < amountMinor)  [改：可达]
-                              |      \--fail(reason)----------> FAILED               (refundedAmountMinor = 0)
-                              \--markUnknown(reason)---------> UNKNOWN              (refundedAmountMinor = 0)
+REQUESTED --process()--> PROCESSING --succeed()-------> SUCCEEDED
+                              |      \--fail(reason)---> FAILED
+                              \--markUnknown(reason)--> UNKNOWN
 REQUESTED --reject(reason)--> REJECTED
-SUCCEEDED / PARTIALLY_SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
-UNKNOWN --succeed()/partiallySucceed()/fail()--> SUCCEEDED / PARTIALLY_SUCCEEDED / FAILED
+SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
+UNKNOWN --succeed()/fail()--> SUCCEEDED / FAILED
+
+                    ⛔ 以下迁移当前【无调用方】（ADR-0016 已否决，但未删除枚举）：
+PROCESSING/UNKNOWN --partiallySucceed(r)--> PARTIALLY_SUCCEEDED
 ```
 
-**变更点（仅 2 处，均经 `transitionTo` 唯一入口）**：
+**ADR-0016 回退后的实际形态**：
 
-1. `partiallySucceed(long refundedMinor)`：校验 `0 < refundedMinor < amountMinor` 后迁移并写入 `refundedAmountMinor`（违反则抛 `AMOUNT_INVARIANT_VIOLATION`，不静默降级为 SUCCEEDED/FAILED）。
-2. `succeed()`：迁移成功后置 `refundedAmountMinor = amountMinor`（保持 INV-4）。
+1. `succeed()`：仅做 `PROCESSING`/`UNKNOWN` → `SUCCEEDED` 状态迁移，**不写任何金额字段**（成功恒为全额，`amountMinor` 即已退金额）。
+2. `partiallySucceed(long)`：**保留但无调用方**。Javadoc 已显式标注「ADR-0016 已否决」。
+   保留理由：若删除 `PARTIALLY_SUCCEEDED` 枚举，历史 `status='PARTIALLY_SUCCEEDED'` 行会在
+   `MybatisRefundRepository#toDomain` 的 `RefundStatus.valueOf(...)` 处抛 `IllegalArgumentException`，
+   连带打挂 `findByPaymentId` → **整条退款受理路径**。保留一个空方法远低于数据迁移风险。
 
 **未改变的语义**：终态吸收（`SUCCEEDED/PARTIALLY_SUCCEEDED/FAILED/REJECTED/CLOSED` 吸收一切迟到冲突结果，`transitionTo` 返回 `false`）；`markUnknown` 仅 `PROCESSING → UNKNOWN`；`close()` 仅终态可关闭。
 
 ## 6. RefundItem（`domain/RefundItem.java`，不变）
 
-`record RefundItem(String orderItemId, long amountMinor)` —— 明细金额仍为**申请**金额，不记录逐明细的已确认金额（MVP 只跟踪整单已确认金额；按明细跟踪属 `[待定]`，见 ADR-0016 备选方案 B）。
+`record RefundItem(String orderItemId, long amountMinor)` —— 明细金额即**申请**金额，也是最终退款金额（部分退款不做，无需跟踪逐明细的已确认金额）。
 
 ## 7. 契约侧字段变更（跨服务，向后兼容）
 
 | 契约 DTO | 变更 | 兼容性 |
 |---|---|---|
-| `RefundAttemptResponse` | 新增 `refundedAmountMinor`（渠道实际退款金额） | 向后兼容（新增字段，默认值语义由 ADR-0016 定） |
-| `RefundFulfillmentRequest` / `Response` | 新增（refund → fulfillment） | 新端点 |
-| `RefundResponse` | 新增 `refundedAmountMinor` | 向后兼容 |
+| `RefundAttemptResponse` | ❌ 回退：回到 3 分量 `(refundId, status, channelReference)` | 与既有实现一致 |
+| `RefundFulfillmentRequest` / `Response` | ✅ 新增（refund → fulfillment，ADR-0017 Accepted） | 新端点 |
+| `RefundResponse` | ❌ 回退：回到 7 分量，不含 `refundedAmountMinor` | 与既有实现一致 |
 | `PostingRequest` | 复用既有（refund → ledger），`sourceType=REFUND` | 不变 |
 
 详见 [contracts/refund-orchestration.md](contracts/refund-orchestration.md)。

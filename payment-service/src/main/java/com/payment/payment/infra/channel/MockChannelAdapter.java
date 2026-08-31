@@ -44,11 +44,6 @@ public class MockChannelAdapter implements PaymentChannel {
     private final String runId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     private final AtomicLong refGen = new AtomicLong();
     private ChannelResult queryResult = ChannelResult.businessUnknown("mock query inconclusive");
-    /**
-     * 可配置的「渠道实际退款金额」（最小货币单位）。为 {@code null} 时表示全额退款（= 申请金额）；
-     * 设为小于申请金额的正值即可模拟「部分退款」场景（ADR-0016）。仅 SUCCESS 场景生效。
-     */
-    private Long configuredRefundMinor;
 
     public MockChannelAdapter() {
         this(Scenario.SUCCESS);
@@ -74,11 +69,6 @@ public class MockChannelAdapter implements PaymentChannel {
         this.queryResult = queryResult;
     }
 
-    /** 设定「渠道实际退款金额」（部分退款模拟）。{@code null} 表示全额退款。 */
-    public void setRefundMinor(Long refundMinor) {
-        this.configuredRefundMinor = refundMinor;
-    }
-
     @Override
     public ChannelResult charge(ChargeRequest request) {
         return switch (scenario) {
@@ -96,10 +86,7 @@ public class MockChannelAdapter implements PaymentChannel {
     @Override
     public ChannelResult refund(RefundRequest request) {
         return switch (scenario) {
-            case SUCCESS -> {
-                long refunded = configuredRefundMinor != null ? configuredRefundMinor : request.amountMinor();
-                yield ChannelResult.success("mock-refund-ref-" + runId + "-" + refGen.incrementAndGet(), refunded);
-            }
+            case SUCCESS -> ChannelResult.success("mock-refund-ref-" + runId + "-" + refGen.incrementAndGet());
             case FAILURE -> ChannelResult.businessFailure("mock-refund-ref-" + runId + "-" + refGen.incrementAndGet(),
                     "mock refund declined");
             case TIMEOUT -> ChannelResult.timeout(

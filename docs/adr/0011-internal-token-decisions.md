@@ -2,27 +2,49 @@
 
 **Feature**：`009-risk-security` 收尾（Roadmap Phase 9 遗留项 T013）
 **日期**：2026-08-30
-**状态**：全部 **Proposed**（按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地最简代码，负责人确认后无需改实现）
+**状态**：全部 ⛔ **Not Implemented（不做）** —— 2026-08-30 负责人裁决「**出入站鉴权令牌都先不做**」；2026-08-31 **已按裁决清理代码**
+
+> **负责人裁决（2026-08-30，落地 2026-08-31）：本集合整体不做，入站与出站鉴权令牌均不启用。**
+> - **ADR-0034 出站令牌传播** → Not Implemented。出站拦截器与自动配置**已删除**（代码清空，非降级为挂点）。
+> - **ADR-0035 入站鉴权推广** → Not Implemented。不推广到任何服务；入站侧仅保留 `InternalServiceAuthInterceptor` 空实现骨架（见 ADR-0024）。
+> - **ADR-0036 令牌轮换** → Not Implemented（依赖 0034/0035 生效，无独立意义）。
+> - **ADR-0037 鉴权失败可观测** → Not Implemented（鉴权恒放行，无拒绝事件可观测）。
+>
+> **2026-08-31 清理记录**（按「不做即删除，不留半截实现」的口径）：
+>
+> | 已删除 | 说明 |
+> |---|---|
+> | `common-core/client/InternalTokenRequestInterceptor.java`（+ 其测试） | 出站令牌拦截器 |
+> | `common-core/config/FeignInternalTokenAutoConfiguration.java` | 出站自动配置；`AutoConfiguration.imports` 中的注册行已同步移除 |
+> | `payment-service/infra/client/InternalTokenOutboundTest.java` | 出站集成测试 |
+> | `payment-service/web/InternalServiceAuthInterceptorTest.java` | 入站单测（鉴权已为空实现，无行为可断言） |
+> | 5 个服务 `application.yml` 的 `platform.security.*` 配置块 | payment / refund / settlement / reconciliation / fulfillment |
+>
+> **保留**：`InternalServiceAuthInterceptor` 空实现骨架（ADR-0024 的接入点，见 `0009-risk-security-decisions.md`）。
+>
+> 启用条件：需要服务间网络边界防护时，将 0034 + 0035 **成对**立项启用，本文件所记的四条决策即为实施方案。
 **关联**：`0009-risk-security-decisions.md`（ADR-0024 入站鉴权 / ADR-0026 密钥管理）
 
 > 背景一句话：ADR-0024 给 `payment-service` 的 `/internal/**` 加了 `X-Service-Token` 入站守卫，但**调用方没有地方带令牌**，所以 `payment.security.internal-auth-enabled` 只能默认 `false`——一开就全线 403。本集合补上「出站」这一半，把闭环合上。
 
-## 落地清单（代码已按最简实现，确认后无需改动实现）
+## 落地清单（2026-08-31 最终状态）
 
-| ADR | 落地位置 |
+| ADR | 本期形态 |
 | --- | --- |
-| 0034 出站令牌传播 | `common-core/client/InternalTokenRequestInterceptor.java`；`common-core/config/FeignInternalTokenAutoConfiguration.java`；`AutoConfiguration.imports` 追加注册；`payment-service/web/InternalServiceAuthInterceptor.java` 入站令牌回退 |
-| 0035 入站推广范围 | 本期**不推广**（仅 payment 有入站鉴权）；无代码改动，风险记于本文档 |
-| 0036 令牌轮换 | 本期**不支持**双令牌并存；无代码改动，轮换步骤记于 `docs/operations/runbook.md` |
-| 0037 鉴权失败可观测 | `InternalServiceAuthInterceptor#reject`：`payment.internal_auth_rejected` 指标（带 `reason`）+ WARN 日志 |
+| 0034 出站令牌传播 | **不实现**。原有代码已删除；本 ADR 保留为「将来要做出站时的实施方案」 |
+| 0035 入站推广范围 | **不推广**到任何服务；仅 payment 保留空实现挂点 |
+| 0036 令牌轮换 | **不支持**双令牌并存；轮换步骤记于 `docs/operations/runbook.md`（待启用时复用） |
+| 0037 鉴权失败可观测 | **不实现**（无拒绝事件）；接入鉴权时按本文档补 `payment.internal_auth_rejected` 指标 |
 
-配置：5 个服务的 `application.yml` 新增 `platform.security.internal-token`（env `PLATFORM_INTERNAL_TOKEN`）与 `platform.security.outbound-token-enabled`（默认 `false`）。
+配置：**无**。`platform.security.*` 已从 5 个服务的 `application.yml` 移除。
 
-验证：`mvn -o clean verify -fae` 全量 BUILD SUCCESS（14 个 Maven 模块 + root，共 15 个 reactor 条目）；新增测试 `InternalTokenRequestInterceptorTest`（6）、`InternalTokenOutboundTest`（3）、`InternalServiceAuthInterceptorTest`（6），`InternalServiceAuthTest` 新增 `PlatformTokenFallback` 嵌套用例（2）。
+验证：`mvn -o clean verify -fae` 全量 **BUILD SUCCESS**（15 个 reactor 条目，2026-08-31）。
 
 ---
 
 ## ADR-0034 出站内部服务令牌的传播
+
+> ⛔ **本期不实现（2026-08-30 裁决）**。以下「决策 / 实现要点」是**将来要启用出站令牌时的实施方案与踩坑记录**，不是当前代码状态。
 
 **背景**：ADR-0024 只做了**入站**守卫。要让它真正生效，所有调用 `payment-service` `/internal/**` 的兄弟服务（refund 调 `query-amount`/`refund-attempt`，reconciliation 调 `confirmed-facts`）必须在出站 Feign 请求上带 `X-Service-Token`。缺了这一环，`internal-auth-enabled=true` 就是一次全站故障。
 
@@ -54,6 +76,8 @@
 
 ## ADR-0035 入站鉴权的推广范围
 
+> ⛔ **本期不推广（2026-08-30 裁决）**。以下为启用时的范围方案与残余风险登记，当前仅 `payment-service` 保留空实现挂点。
+
 **背景**：当前有 **8 个**服务暴露 `/internal/**` 端点（ledger、order、refund、settlement、reconciliation、fulfillment、entitlement、payment），但**只有 payment-service 有入站鉴权**。其余 7 个的越权面与 payment 同类（例如 ledger 的 `/internal/ledger/postings` 可被直接伪造记账请求）。
 
 **决策（最简）**：本期**不推广**入站鉴权，只补出站拦截器。
@@ -75,6 +99,8 @@
 
 ## ADR-0036 令牌轮换策略
 
+> ⛔ **本期不实现（2026-08-30 裁决）**。依赖 0034/0035 生效，无独立意义；以下为启用时的轮换方案。
+
 **背景**：共享密钥长期使用会放大泄漏影响面，ADR-0026 只定了「env 注入」，没定轮换。
 
 **决策（最简）**：**不支持双令牌并存 / 平滑轮换**。
@@ -91,6 +117,8 @@
 ---
 
 ## ADR-0037 鉴权失败的可观测性
+
+> ⛔ **本期不实现（2026-08-30 裁决）**。鉴权恒放行，无拒绝事件；以下为接入鉴权时的埋点方案。
 
 **背景**：ADR-0028 的风控已确立「只观测、不阻断」的口径，但鉴权侧原本**完全无埋点**——拒绝时只回一个 403/503，既不打指标也不记日志。这带来一个现实问题：开启 `internal-auth-enabled` 后一旦出问题，无法区分是「配置漂移导致全线 503」还是「真实越权尝试 403」，运维只能靠猜。
 

@@ -4,6 +4,21 @@
 
 > 本文件汇总 refund-service 作为**编排方**的全部出站 RPC 契约。
 > 标注：**已实现** = 代码中已存在；**[改]** = 本 Feature 变更（向后兼容）；**[新]** = 本 Feature 新增。
+
+> ## ⛔ 负责人裁决（2026-08-30）· 落地（2026-08-31）：ADR-0016「部分退款」不做
+>
+> 本契约中所有 `refundedAmountMinor` 相关内容**已回退，不生效**；`PARTIALLY_SUCCEEDED` 不作为可达状态。
+> 当前生效契约：
+>
+> | 位置 | 最终形态 |
+> |---|---|
+> | §1.2 `RefundAttemptResponse` | 3 分量 `(refundId, status, channelReference)`，**无** `refundedAmountMinor` |
+> | §3 entitlement 请求体 | **不扩展** `refundedAmountMinor`（维持整单吊销语义） |
+> | §4 记账金额 | 一律 `refund.getAmountMinor()`（成功退款恒为全额） |
+> | §5 R1 | 触发条件 = **仅 `SUCCEEDED`** |
+>
+> 以下标注 ~~删除线~~ 的部分为历史决策记录，重新开放部分退款时按此复原。
+
 > 统一约定：同步 HTTP + OpenFeign；错误响应体 `ApiError`（common-core）；跨服务只传 `common-dto` 中的 DTO，不共享实体。
 
 ## 0. 契约总览
@@ -36,19 +51,19 @@ refund-service (8085, schema `refund`)
 `POST /internal/payments/refund-attempt` → `200`
 
 - **请求** `RefundAttemptRequest { refundId, paymentId, orderId, userId, amountMinor, currencyCode, reason, idempotencyKey }`
-- **响应** `RefundAttemptResponse { refundId, status, channelReference, refundedAmountMinor }` —— `refundedAmountMinor` 为 **[改] 新增**
+- **响应** `RefundAttemptResponse { refundId, status, channelReference }` —— 3 分量（⭐ **最终形态**，ADR-0016 回退后）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | status | String | `SUCCEEDED` / `FAILED` / `UNKNOWN`（渠道结果，UNKNOWN 不得被当作成功或失败） |
 | channelReference | String | 渠道退款引用 |
-| **refundedAmountMinor** | long | **[改] 新增**：渠道**实际**退回金额（最小货币单位） |
+| ~~refundedAmountMinor~~ | ~~long~~ | ❌ **ADR-0016 已回退删除**（2026-08-31） |
 
-**规则**：
+**规则（最终）**：
 
-- `refundedAmountMinor` 仅在 `status = SUCCEEDED` 时有业务意义；`FAILED` 为 0；`UNKNOWN` 为 0（未确认）。
-- refund-service 侧按 `refundedAmountMinor` 判定全额/部分成功：`== amountMinor` → `SUCCEEDED`；`0 < r < amountMinor` → `PARTIALLY_SUCCEEDED`；其余非法组合 → `UNKNOWN` + 告警（data-model INV-2/INV-5）。
-- **兼容性**：新增字段为向后兼容扩展；未升级的 payment-service 返回缺失值时，refund-service MUST 按 ADR-0016 的默认策略处理（建议：缺失 → 视为全额成功，保持既有行为）。
+- 渠道结果**只有三态**，不回传金额。`SUCCEEDED` → `refund.succeed()`（全额成功）；`FAILED` → `refund.fail()`；其余 → `refund.markUnknown()`。
+- 若渠道实际发生了部分退回，在本契约下无法表达 → 走 `UNKNOWN` + 对账收敛（`PARTIALLY_SUCCEEDED` 不可达）。
+- 累计额度一律按**申请额** `amountMinor` 计（在途亦占位），防并发超退（H1）。
 
 **错误**：`NOT_FOUND`（支付不存在）、`STATE_TRANSITION_VIOLATION`（支付非 `SUCCEEDED`）。
 
@@ -114,7 +129,7 @@ refund-service (8085, schema `refund`)
 - **请求** `RefundPostProcessRequest { refundId, paymentId, orderId, userId, reason }`
 - **响应** `RefundPostProcessResponse { refundId, status }` —— `status` 取值 `REVOKED` / `NOOP` / `FAILED`
 - **规则**：退款成功后请求权益吊销；下游按自身规则处理，refund-service 不直接改 entitlement 内部状态；失败不回滚退款成功。
-- **[改] 建议扩展**（依赖 ADR-0016）：请求体增 `refundedAmountMinor` / `currencyCode`，使部分退款可按实际金额处理权益；未升级时下游维持整单吊销语义。
+- ~~[改] 建议扩展（依赖 ADR-0016）：请求体增 `refundedAmountMinor` / `currencyCode`~~ ⛔ **不做**：ADR-0016 裁决后维持整单吊销语义，请求体不扩展。
 
 > **现状问题（本 Feature 修复）**：`RefundApplicationService.java:113` 当前为 `catch (RuntimeException ignored)`，后处理失败被静默吞掉，无法满足「后处理失败可独立追踪」。修复后改为落 `RefundPostProcessAttempt` + `refund.post_process_failed`。
 
@@ -160,8 +175,8 @@ refund-service (8085, schema `refund`)
 
 ### 规则
 
-- **记账金额 = `refundedAmountMinor`（实际退款金额）**，非申请金额（FR-009 / spec US4 场景 2）。
-- 仅对**已确认**退款（`SUCCEEDED` / `PARTIALLY_SUCCEEDED`）记账；`UNKNOWN` / `PROCESSING` / `FAILED` / `REJECTED` **不记账**（Constitution §V.7）。
+- **记账金额 = `refund.getAmountMinor()`（申请金额）** —— ADR-0016 回退后成功退款恒为全额，无独立的「实际退款金额」概念。
+- 仅对**已确认**退款（`SUCCEEDED`）记账；`UNKNOWN` / `PROCESSING` / `FAILED` / `REJECTED` **不记账**（Constitution §V.7）。
 - 幂等：相同 `idempotencyKey` 返回首次 `Posting`，不重复生成分录。
 - 借贷不平衡 → 账本侧拒绝（`Posting` 聚合根强校验），不落任何分录。
 - **失败兜底**：RPC 失败/超时 → **不回滚**退款成功事实，记 `ledger.posting_failed` + `RefundPostProcessAttempt(target=LEDGER, status=FAILED)`，由重试/对账补齐（ADR-0018，Saga 禁 2PC）。
@@ -178,9 +193,9 @@ refund-service (8085, schema `refund`)
 
 | # | 规则 | 说明 |
 |---|---|---|
-| R1 | 后处理与记账的**触发条件唯一**：仅 `SUCCEEDED` / `PARTIALLY_SUCCEEDED` | `UNKNOWN` 不触发（FR-007） |
+| R1 | 后处理与记账的**触发条件唯一**：**仅 `SUCCEEDED`**（~~`PARTIALLY_SUCCEEDED`~~ ⛔ 不可达） | `UNKNOWN` 不触发（FR-007） |
 | R2 | 每个目标（FULFILLMENT / ENTITLEMENT / LEDGER）一次调用 = 一条 `RefundPostProcessAttempt` | 失败可独立追踪（FR-005） |
 | R3 | 任一目标失败**不回滚**退款成功，也不影响其他目标继续编排 | Saga + 幂等，禁 2PC（Constitution §IV） |
 | R4 | 幂等依据统一：`refundId`（后处理）/ `REFUND:<refundIdempotencyKey>`（记账） | 重复收敛只触发一次（FR-006） |
-| R5 | 金额一律 `long` 最小货币单位；校验在 refund 受理、渠道结果回传、记账三处**分别**执行 | 不依赖上游校验（technical-solution §4.5） |
+| R5 | 金额一律 `long` 最小货币单位；校验在 refund 受理、记账两处**分别**执行（~~渠道结果回传处~~ ⛔ 契约已不回传金额） | 不依赖上游校验（technical-solution §4.5） |
 | R6 | 出站 Feign 超时 `[目标]` connect 1s / read 3s；后处理有限退避重试（3 次 / 1s-2s-4s） | 当前沿用 OpenFeign 默认值 |

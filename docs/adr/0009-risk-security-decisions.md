@@ -1,27 +1,49 @@
 # ADR 集合：Phase 9 风险 / 安全（ADR-0024 ~ ADR-0028）
 
 **Feature**：`009-risk-security`（Roadmap Phase 9）
-**日期**：2026-08-29
-**状态**：全部 **Proposed**（按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地最简代码，负责人确认后无需改实现）
+**日期**：2026-08-29（裁决 2026-08-30，落地 2026-08-31）
+
+## 状态总览（2026-08-30 负责人裁决，2026-08-31 落定）
+
+| ADR | 方案状态 | 本期实现 | 裁决原文 |
+|---|---|---|---|
+| ADR-0024 内部服务间调用鉴权 | ✅ Accepted | **预留空函数** | 「鉴权预留函数空实现」 |
+| ADR-0025 渠道回调签名校验 | ✅ Accepted | **预留空函数** | 「加验签预留函数空实现就行」 |
+| ADR-0026 密钥管理 | ✅ Accepted | **明文配置** | 「目前就用明文就行了」 |
+| ADR-0027 敏感数据脱敏 | ⛔ Not Implemented | **不做** | 「敏感数据不管」 |
+| ADR-0028 最小风控规则 | ⛔ Not Implemented | **不做（留空）** | 「忽略，风控先不做，留空」 |
+
+> **口径说明**：ADR-0024 / 0025 的方案（共享密钥 `X-Service-Token`、HMAC-SHA256 过滤器层验签）**经裁决确认为最终方案**，
+> 但本期**只落结构骨架 + 一个空实现的预留函数**，真正接入时只需实现一个方法、无需改动调用链。
+> ADR-0027 / 0028 为本期**明确不做**，`SensitiveDataMasker` 与 `RiskCheckService` 已从代码库删除，
+> 待接入真实卡号/凭证/真实渠道时重新立项。
+>
+> 「预留空实现」的四条硬性约定与风险接受说明见
+> [technical-solution §2.4](../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
+
 **范围**：服务/操作权限、渠道回调签名校验、密钥管理、敏感数据脱敏、最小风控。
 
-> 复用现状：`payment-service` 已有 `ResolveAuthorizationInterceptor` + `WebConfig`，对 `/payments/*/resolve` 收敛端点做 `X-Admin-Token` 鉴权（`payment.resolve.auth-enabled` / `PAYMENT_ADMIN_TOKEN`）。本集合在既有基础上补齐「入站渠道回调签名」与「内部服务间调用鉴权」，并落地脱敏/风控占位。
+> 复用现状：`payment-service` 已有 `ResolveAuthorizationInterceptor` + `WebConfig`，对 `/payments/*/resolve` 收敛端点做 `X-Admin-Token` 鉴权（`payment.resolve.auth-enabled` / `PAYMENT_ADMIN_TOKEN`）。该端点属**运维收敛面**，与 ADR-0024 的「服务间调用面」是两个独立关注点，**不在本次裁决范围、维持原样**。
 
-## 落地清单（代码已按最简实现，确认后无需改动实现）
+## 落地清单（2026-08-31 最终状态）
 
-| ADR | 落地位置 |
-| --- | --- |
-| 0024 内部服务鉴权 | `payment-service/web/InternalServiceAuthInterceptor.java`；`WebConfig#addInterceptors` 注册到 `/internal/**`（排除回调路径） |
-| 0025 回调验签 | `common-core/security/SignatureVerifier.java`；`payment-service/web/ChannelCallbackSignatureFilter.java` + `CachedBodyHttpServletRequest.java` + `api/ChannelCallbackController.java` + `api/dto/ChannelCallbackRequest.java`；`WebConfig` 以 `FilterRegistrationBean` 注册 |
-| 0026 密钥管理 | `payment-service/src/main/resources/application.yml` 的 `payment.security.*`（env 占位：`PAYMENT_INTERNAL_TOKEN` / `PAYMENT_CHANNEL_SECRET`）；复用既有 `PAYMENT_ADMIN_TOKEN` |
-| 0027 敏感脱敏 | `common-core/security/SensitiveDataMasker.java` |
-| 0028 最小风控 | `payment-service/application/risk/RiskCheckService.java`；`application.yml` 的 `payment.risk.*`；挂点 `PaymentApplicationService#createPaymentIntent` |
+| ADR | 落地位置 | 本期形态 |
+| --- | --- | --- |
+| 0024 内部服务鉴权 | `payment-service/web/InternalServiceAuthInterceptor.java`；`WebConfig#addInterceptors` 注册到 `/internal/**`（排除回调路径） | 骨架保留，`verifyServiceToken(...)` **空实现恒放行**，带 `TODO(ADR-0024)` |
+| 0025 回调验签 | `common-core/security/SignatureVerifier.java`（工具类保留，未被任何生产代码调用）；`payment-service/web/ChannelCallbackSignatureFilter.java` + `CachedBodyHttpServletRequest.java` + `WebConfig` 的 `FilterRegistrationBean` | 骨架保留（路径匹配、原始 body 读取 + 可重复读包装），`verifySignature(...)` **空实现恒通过**，带 `TODO(ADR-0025)` |
+| 0026 密钥管理 | —— | **明文配置**；不引入 KMS/Vault。因鉴权/验签均空实现，**`payment.security.*` 配置块已整体移除**，接入时补回 |
+| 0027 敏感脱敏 | —— | **已删除** `SensitiveDataMasker` 及其测试 |
+| 0028 最小风控 | `PaymentApplicationService#createPaymentIntent` | **已删除** `RiskCheckService` 及其测试；挂点处保留 `TODO(ADR-0028)` 注释，`payment.risk.*` 配置已移除 |
 
-验证：`mvn -o verify -fae` 全量 13 模块 BUILD SUCCESS，新增测试 `SignatureVerifierTest` / `SensitiveDataMaskerTest` / `ChannelCallbackSecurityTest` / `InternalServiceAuthTest` / `RiskCheckServiceTest`。
+**验证**：`mvn -o clean verify -fae` 全量 15 模块 **BUILD SUCCESS**（2026-08-31）。
+保留的测试：`SignatureVerifierTest`（工具类自测）、`ChannelCallbackSecurityTest`、`InternalServiceAuthTest`——后两者已改写为**断言占位期放行契约**，
+并在 Javadoc 中写明「实现鉴权/验签后必须整体反转」的反转清单。
 
 ---
 
 ## ADR-0024 内部服务间调用鉴权
+
+**状态**：✅ **Accepted**（方案确认）／ 实现 = **预留空函数**（2026-08-30 裁决「鉴权预留函数空实现」）
 
 **背景**：`/internal/**` 端点（退款金额查询、退款尝试、对账确认事实等）当前**无鉴权**，任何能触达端口的调用方均可调用，属跨服务越权面。
 
@@ -43,6 +65,8 @@
 ---
 
 ## ADR-0025 渠道回调签名校验
+
+**状态**：✅ **Accepted**（方案确认）／ 实现 = **预留空函数**（2026-08-30 裁决「加验签预留函数空实现就行」）
 
 **背景**：Technical-Solution 明确要求「渠道回调 MUST 验证签名与来源，防止伪造回调」（当前 Mock Channel 未接真实签名，Phase 9 落地）。伪造回调可把支付翻转为 SUCCESS 并触发下游履约，是最高危外部面。
 
@@ -68,6 +92,8 @@
 
 ## ADR-0026 密钥管理
 
+**状态**：✅ **Accepted**（2026-08-30 裁决「目前就用明文就行了」；env 注入 + 明文配置，不引入 KMS/Vault）
+
 **背景**：Phase 9 引入 `admin-token`、`service-token`、`channelSecret` 三类密钥，需明确管理边界。
 
 **决策（最简）**：**配置项 + 环境变量注入**，不引入 Vault/KMS。
@@ -81,6 +107,8 @@
 
 ## ADR-0027 敏感数据脱敏
 
+**状态**：⛔ **Not Implemented（不做）** —— 2026-08-30 裁决「**敏感数据不管**」；`SensitiveDataMasker` 已删除
+
 **背景**：审计日志、响应、异常中不得出现明文密钥/全卡号/凭证。
 
 **决策（最简）**：提供 `SensitiveDataMasker` 工具（置于 `common-core`）：
@@ -93,6 +121,8 @@
 ---
 
 ## ADR-0028 最小风控规则
+
+**状态**：⛔ **Not Implemented（不做）** —— 2026-08-30 裁决「**忽略，风控先不做，留空**」；`RiskCheckService` 已删除，挂点处留 `TODO(ADR-0028)`
 
 **背景**：Roadmap Phase 9 含「与支付流程匹配的最小风控规则」，但当前阶段重心是签名/鉴权底座。
 

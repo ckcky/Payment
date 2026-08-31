@@ -53,8 +53,6 @@ public final class RefundTestStack {
         public PaymentAmountQueryResponse amount =
                 new PaymentAmountQueryResponse(1L, "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
         public String attemptStatus = "SUCCEEDED";
-        /** 渠道实际退款金额（部分退款模拟）；{@code null} 表示全额（= 申请金额）。 */
-        public Long refundedAmountMinor = null;
         public final List<RefundAttemptRequest> attemptRequests = new ArrayList<>();
 
         @Override
@@ -65,8 +63,7 @@ public final class RefundTestStack {
         @Override
         public RefundAttemptResponse attemptRefund(RefundAttemptRequest request) {
             attemptRequests.add(request);
-            Long refunded = refundedAmountMinor != null ? refundedAmountMinor : request.amountMinor();
-            return new RefundAttemptResponse(request.refundId(), attemptStatus, "mock-refund-ref", refunded);
+            return new RefundAttemptResponse(request.refundId(), attemptStatus, "mock-refund-ref");
         }
     }
 

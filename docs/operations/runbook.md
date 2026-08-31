@@ -54,27 +54,27 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 
 ## 4. 环境变量（密钥）
 
-Phase 9 引入的密钥一律经环境变量注入，**禁止硬编码、禁止入库、禁止明文日志**（ADR-0026）：
+密钥一律经环境变量注入，**禁止硬编码、禁止入库、禁止明文日志**（ADR-0026，Accepted：明文 env 即可，不接 Vault）。
 
-| 环境变量 | 用途 | 未配置时的行为 |
+> ⛔ **2026-08-31 现状（负责人 2026-08-30 裁决后的最终形态）**：鉴权与验签**均为预留空函数**，因此 **不再有任何需要注入的安全密钥**。下表仅保留仍在生效的 `PAYMENT_ADMIN_TOKEN`；其余三项目前**无对应代码**，接入真实鉴权/验签时按表补回。
+
+| 环境变量 | 用途 | 当前状态 |
 | --- | --- | --- |
-| `PAYMENT_ADMIN_TOKEN` | `/payments/{id}/resolve` 人工收敛端点的 `X-Admin-Token` | 端点返回 `503`（拒绝而非放行） |
-| `PAYMENT_INTERNAL_TOKEN` | `/internal/**` 内部端点的 `X-Service-Token` | 开关默认关闭；一旦开启而未配置 → `503` |
-| `PAYMENT_CHANNEL_SECRET` | 渠道回调 HMAC-SHA256 验签密钥 | 回调端点返回 `503`（验签不可关闭） |
-| `PLATFORM_INTERNAL_TOKEN` | **全平台共享**的内部服务令牌；出站侧由 Feign 拦截器附加到 `/internal/**` 调用，入站侧由 payment 校验 | 出站不加头（对端开启鉴权后会 403）；payment 入站在 `PAYMENT_INTERNAL_TOKEN` 也缺失时 → `503` |
+| `PAYMENT_ADMIN_TOKEN` | `/payments/{id}/resolve` 人工收敛端点的 `X-Admin-Token` | ✅ **生效**；未配置时端点返回 `503`（拒绝而非放行） |
+| ~~`PAYMENT_INTERNAL_TOKEN`~~ | ~~`/internal/**` 的 `X-Service-Token`~~ | ⛔ **已移除**（ADR-0024 鉴权改为空实现，配置块已删） |
+| ~~`PAYMENT_CHANNEL_SECRET`~~ | ~~渠道回调 HMAC-SHA256 验签密钥~~ | ⛔ **已移除**（ADR-0025 验签改为空实现，配置块已删） |
+| ~~`PLATFORM_INTERNAL_TOKEN`~~ | ~~全平台共享的内部服务令牌（出站附加 / 入站校验）~~ | ⛔ **已移除**（ADR-0034 出站令牌不做，拦截器与配置已删） |
 
-**令牌优先级（ADR-0034）**：payment 入站取「首个非空」——`PAYMENT_INTERNAL_TOKEN` → `PLATFORM_INTERNAL_TOKEN`。**只注入 `PLATFORM_INTERNAL_TOKEN` 即可两端同源**；`PAYMENT_INTERNAL_TOKEN` 仅作为本服务覆盖值保留。
+**接入真实鉴权 / 验签时**（当前不需要执行）：
 
-**开启内部端点鉴权的正确顺序**（顺序错了会全站 403）：
+1. 实现 `InternalServiceAuthInterceptor#verifyServiceToken`（读 `X-Service-Token` 与配置令牌常数时间比对：未配置 → `503`，缺失/不匹配 → `403`）；
+2. 实现 `ChannelCallbackSignatureFilter#verifySignature`（用 common-core 的 `SignatureVerifier` 校验 `timestamp + "." + rawBody` 的 HMAC-SHA256，配防重放窗口）；
+3. **必须同时**补出站令牌拦截器（否则启用入站鉴权后调用方全线 `403`）——即 ADR-0034 记录的拓扑约束：入站与出站成对启用；
+4. 补回对应配置项与环境变量，并恢复 `payment.internal_auth_rejected` / `payment.callback_signature_rejected` 埋点。
 
-1. 全平台（payment + 5 个调用方）注入同一把 `PLATFORM_INTERNAL_TOKEN`；
-2. 先开 `platform.security.outbound-token-enabled=true` 并滚动重启**调用方**，确认出站已带令牌；
-3. 再开 `payment.security.internal-auth-enabled=true` 重启 payment；
-4. 观察 `payment.internal_auth_rejected` 的 `reason` 维度应归零。
+> **当前无需「开启顺序」**：整条令牌链已删除，不存在「顺序错了会全站 403」的情形。
 
-> 注意：拦截器的目标判定是**路径含 `/internal/` 段**，因此把内部令牌发给外部/渠道 URL 的情况不会发生；但反过来，若将来新增一个"路径不含 `/internal/` 但需鉴权"的端点，拦截器不会覆盖（见 ADR-0034 待确认项 2）。
-
-相关配置：`payment-service/src/main/resources/application.yml` 的 `payment.resolve.*`、`payment.security.*`、`payment.risk.*`；各服务的 `platform.security.*`。
+相关配置：`payment-service/src/main/resources/application.yml` 的 `payment.resolve.*`（唯一在用的安全配置；`payment.security.*` / `payment.risk.*` 与各服务的 `platform.security.*` 已按裁决移除）。
 
 ## 5. 关键指标
 
@@ -82,9 +82,9 @@ Phase 9 引入的密钥一律经环境变量注入，**禁止硬编码、禁止�
 | --- | --- | --- |
 | `payment.succeeded` / `payment.failed` / `payment.unknown` | 支付终态分布 | `unknown` 持续升高说明渠道不稳定，需人工收敛 |
 | `payment.duplicate` / `payment.duplicate_callback` | 幂等命中 | 突增可能是上游重试风暴 |
-| `payment.callback_signature_rejected` | 渠道回调验签被拒（带 `reason` 维度） | **出现即需排查**：可能是密钥不一致或伪造回调 |
-| `payment.risk_triggered` | 最小风控命中（带 `rule` 维度） | 默认配置下不启用；启用后只记录不拦截 |
-| `payment.internal_auth_rejected` | 内部端点鉴权被拒（带 `reason` 维度） | `unconfigured`=配置故障；`missing_token`=某调用方出站拦截器没开；`token_mismatch`=令牌不同源或已轮换 |
+| ~~`payment.callback_signature_rejected`~~ | ~~渠道回调验签被拒~~ | ⛔ **已移除**：验签为空实现（ADR-0025），回调一律放行，无此埋点 |
+| ~~`payment.risk_triggered`~~ | ~~最小风控命中~~ | ⛔ **已移除**：风控不做（ADR-0028），类已删除 |
+| ~~`payment.internal_auth_rejected`~~ | ~~内部端点鉴权被拒~~ | ⛔ **已移除**：鉴权为空实现（ADR-0024），无此埋点 |
 | `ledger.posting_failed` | 记账失败 | 出现后资金事实与账本不一致，需补记账 |
 | `FINANCIAL_AUDIT` 日志 | 资金动作审计（独立 logger） | 支付/退款/结算/记账各一条，含 traceId |
 
@@ -94,11 +94,11 @@ Phase 9 引入的密钥一律经环境变量注入，**禁止硬编码、禁止�
 | --- | --- | --- |
 | `POST /payments` 500 `DuplicateKeyException` | `MockChannelAdapter` 重启后渠道引用从 1 重新计数，撞 `payment_attempts.uk_attempts_channel_reference` | 已用运行级 UUID 前缀修复；若仍出现，清空历史 `payment_attempts` 后重启 |
 | 支付长时间 `UNKNOWN` | 渠道超时后主动查询未收敛 | 用 `POST /payments/{id}/resolve` 带 `X-Admin-Token` 人工裁定（仅接受 SUCCESS/FAILURE） |
-| 渠道回调全部 `403` | 验签密钥不一致 / 时间戳超窗 / 未配 `PAYMENT_CHANNEL_SECRET` | 核对 `X-Channel-Timestamp`（毫秒）与 5min 窗口；核对密钥；看 `payment.callback_signature_rejected` 的 `reason` |
-| 回调验签通过但 Controller 报 body 为空 | 过滤器消费了原始 body 却未换包装器 | 不应发生（`CachedBodyHttpServletRequest` 已处理）；若出现检查 `WebConfig` 过滤器注册 |
-| 内部端点 `403`（`reason=missing_token`） | 对端开启了 `internal-auth-enabled`，但调用方未开 `platform.security.outbound-token-enabled` 或未注入 `PLATFORM_INTERNAL_TOKEN` | 按「开启内部端点鉴权的正确顺序」§4 复核；出站拦截器只对含 `/internal/` 段的目标生效 |
-| 内部端点 `403`（`reason=token_mismatch`） | 两端令牌不同源，或轮换过程中新旧值混用 | 统一 `PLATFORM_INTERNAL_TOKEN`；轮换需全平台同时切换（ADR-0036 不支持平滑轮换） |
-| 内部端点 `503`（`reason=unconfigured`） | 开关开了但令牌为空 | 注入 `PLATFORM_INTERNAL_TOKEN`（或 `PAYMENT_INTERNAL_TOKEN`）；`unconfigured` 意味着整条内部调用链已断，应优先告警 |
+| ~~渠道回调全部 `403`~~ | ~~验签失败~~ | ⛔ **不会发生**：验签为空实现（ADR-0025），回调一律放行。若将来接入验签后出现，核对 `X-Channel-Timestamp`（毫秒）与窗口、核对密钥、看 `payment.callback_signature_rejected` 的 `reason` |
+| 回调 Controller 报 body 为空 | 过滤器消费了原始 body 却未换包装器 | 不应发生（`CachedBodyHttpServletRequest` 已处理）；若出现检查 `WebConfig` 过滤器注册 |
+| ~~内部端点 `403` / `503`~~ | ~~鉴权失败~~ | ⛔ **不会发生**：鉴权为空实现（ADR-0024），`/internal/**` 恒定放行。接入真实鉴权后按 §4「接入真实鉴权/验签时」的 4 步复核（入站与出站**必须成对启用**） |
+| **疑似伪造渠道回调把支付翻转为 SUCCESS** | 验签为空实现（ADR-0025 已知风险） | 本期**无技术拦截手段**。处置：以 `FINANCIAL_AUDIT` 日志 + 对账差异定位，人工 `POST /payments/{id}/resolve` 收敛；**根本解法是网络层**：payment-service 不得暴露公网 |
+| **疑似越权调用 `/internal/**`** | 鉴权为空实现（ADR-0024 已知风险） | 同上：依赖安全组 / 服务网格隔离；以审计日志 + 对账差异兜底核对 |
 | 对账差异全为 `PLATFORM_ONLY` | 渠道账单是静态 fixture（`sample.csv`），真实渠道引用带 runId 前缀 | 设计内表现，非故障；如需复位用 `.workbuddy/tools/cleanup.py` |
 | `orders` 表缺 `payment_id` 导致 order 500 | 用户库是旧 schema 建的 | `ALTER TABLE orders ADD COLUMN payment_id BIGINT NULL` |
 | `GlobalExceptionHandler` 把异常吞成 `INTERNAL_ERROR` | 未捕获异常统一转 `{"code":"INTERNAL_ERROR"}` | 定位需看服务 err 日志或临时加堆栈输出（定位后还原） |

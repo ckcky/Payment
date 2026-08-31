@@ -73,9 +73,11 @@ public class RefundApplicationService {
             return insertNew(refund);
         }
 
+        // ADR-0016 已否决（部分退款不做）：累计一律按「申请额」占位，不再区分终态/在途。
+        // 在途按申请额保守占用可退款额度，防并发超退（H1）。
         long cumul = refundRepository.findByPaymentId(cmd.paymentId()).stream()
                 .filter(r -> isCounted(r.getStatus()))
-                .mapToLong(r -> isTerminal(r.getStatus()) ? r.getRefundedAmountMinor() : r.getAmountMinor())
+                .mapToLong(Refund::getAmountMinor)
                 .sum();
 
         RefundDecision decision = RefundPolicy.decide(cmd.amountMinor(), cmd.currencyCode(),
@@ -96,20 +98,10 @@ public class RefundApplicationService {
                 new RefundAttemptRequest(refund.getId(), cmd.paymentId(), cmd.orderId(), cmd.userId(),
                         cmd.amountMinor(), cmd.currencyCode(), cmd.reason(), cmd.idempotencyKey()));
 
-        // 实际退款金额：渠道未回传（向后兼容）视为全额；部分退款按渠道实际退回金额推导状态。
-        long refunded = attempt.refundedAmountMinor() != null ? attempt.refundedAmountMinor() : cmd.amountMinor();
+        // 渠道结果只有三态：成功/失败/未知。ADR-0016 已否决（部分退款不做），
+        // 渠道回传金额不再参与状态推导，SUCCEEDED 一律按全额成功收敛。
         switch (attempt.status()) {
-            case "SUCCEEDED" -> {
-                if (refunded == cmd.amountMinor()) {
-                    refund.succeed();
-                } else if (refunded > 0 && refunded < cmd.amountMinor()) {
-                    refund.partiallySucceed(refunded);
-                } else {
-                    // 渠道回传金额非法（<=0 或 > 申请额）：禁止资金放大，落 UNKNOWN 待收敛。
-                    refund.markUnknown("invalid refunded amount vs requested: " + refunded);
-                    metrics.counter("refund.invalid_amount", 1.0, "module", MODULE);
-                }
-            }
+            case "SUCCEEDED" -> refund.succeed();
             case "FAILED" -> refund.fail("channel refund failed");
             default -> refund.markUnknown("channel refund unknown");
         }
@@ -117,7 +109,7 @@ public class RefundApplicationService {
         refundRepository.save(refund);
         recordFinalTransition(refund, RefundStatus.PROCESSING);
 
-        // 确认退款（全额/部分成功）后统一编排后处理：履约撤销 → 权益吊销 → 记账。
+        // 确认退款成功后统一编排后处理：履约撤销 → 权益吊销 → 记账。
         // 任一目标失败不回滚退款成功事实（Saga），由编排器落尝试记录、递增指标、写审计。
         if (refund.getStatus() == RefundStatus.SUCCEEDED
                 || refund.getStatus() == RefundStatus.PARTIALLY_SUCCEEDED) {
@@ -144,11 +136,6 @@ public class RefundApplicationService {
                 || status == RefundStatus.PARTIALLY_SUCCEEDED
                 || status == RefundStatus.PROCESSING
                 || status == RefundStatus.UNKNOWN;
-    }
-
-    /** 终态（成功类）按「已确认退款金额」计入累计；在途按「申请额」保守占位防并发超退。 */
-    private boolean isTerminal(RefundStatus status) {
-        return status == RefundStatus.SUCCEEDED || status == RefundStatus.PARTIALLY_SUCCEEDED;
     }
 
     /** 渠道退款尝试后的最终状态：记录业务指标与资金审计（fire-and-forget，不改变控制流）。 */

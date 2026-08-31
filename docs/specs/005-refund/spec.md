@@ -9,7 +9,22 @@
 **Input**: 用户描述：为 Roadmap Phase 5 · Refund 建立 Spec Kit 产物。本 Feature **不是从零构建**——`refund-service`（端口 8085，Schema `refund`）核心链路已实现，本 Spec 是**缺口补齐 / 收口**型 Spec。
 
 > 本 Feature 对应 `docs/architecture/roadmap.md` 的 **Phase 5 · Refund（Roadmap 标签「003 Refund」）**，但本仓库 `init-options.json` 规定 spec 目录采用**顺序编号**，故物理目录为 `005-refund`，与 Roadmap 阶段标签**解耦**（同 `003-payment-reliability`、`004-ledger` 既定约定，见 Clarifications）。
-> 所有开放性设计分歧点已落到 ADR-0016~0018（状态 **Proposed**，供负责人按 Constitution §8 确认）。实现前 MUST 先确认这 3 条 ADR。
+> 所有开放性设计分歧点已落到 ADR-0016~0018，**已由负责人裁决（2026-08-30）**：ADR-0016 **Rejected（不做）**、ADR-0017 / ADR-0018 **Accepted**。实现已于 2026-08-31 完成并验收。
+
+> ## 负责人裁决（2026-08-30）· 落地（2026-08-31）
+>
+> | ADR | 裁决 | 影响 |
+> |---|---|---|
+> | **ADR-0016 部分退款** | ❌ **Rejected（不做）** | **US1 整体移除**；`PARTIALLY_SUCCEEDED` 与 `partiallySucceed()` 保留为**无调用方的不可达实现**；累计口径**一律按申请额** |
+> | **ADR-0017 refund→fulfillment** | ✅ **Accepted** | US2 全量落地 |
+> | **ADR-0018 refund→ledger** | ✅ **Accepted** | US4 全量落地，记账金额 = `amountMinor` |
+>
+> - 裁决口径：**单笔退款没有「部分成功」**。渠道只回三态（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功即视为该笔申请额全额退回；若真实发生部分退回，走 `UNKNOWN` + 对账收敛，**不落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`**。
+> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
+> - ⚠️ **落地补充说明（2026-08-31）**：ADR-0016 曾按最简实现落地过（`refundedAmountMinor` 全链路），裁决后**已整体回退**。
+>   回退清单见 [ADR-0016 回退落地记录](../adr/0006-refund-decisions.md)。
+> - US2 / US3 中涉及 `PARTIALLY_SUCCEEDED` 的验收条款**一并移除**；**全额路径的条款全部保持有效**。
+> - 落地口径见 [technical-solution §2.4](../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
 
 ## 当前代码现实（已核实，禁止按绿地项目理解）
 
@@ -39,8 +54,8 @@
 | 退款后权益吊销 RPC | 已实现（失败被静默吞掉） | `RefundApplicationService.java:113` |
 | 指标 + 资金审计（5 个计数 + `FINANCIAL_AUDIT`） | 已实现 | `refund.created/duplicate/rejected/succeeded/failed/unknown` |
 | 单元 + Testcontainers 集成测试 | 已实现 | `refund-service/src/test/...`（6 个测试类） |
-| **部分退款（部分金额追踪、`PARTIALLY_SUCCEEDED` 可达）** | **[目标]（缺口 G1）** | 状态存在但无调用方 |
-| **refund → fulfillment 撤销 RPC** | **骨架 / 缺失（缺口 G2）** | 无网关、无下游端点 |
+| ~~部分退款（部分金额追踪、`PARTIALLY_SUCCEEDED` 可达）~~ | ⛔ **裁决不做（ADR-0016 Rejected）**，曾实现后回退 | `PARTIALLY_SUCCEEDED` 枚举保留但无调用方 |
+| **refund → fulfillment 撤销 RPC** | ✅ **已补齐（ADR-0017）** | `FulfillmentGateway` + `FulfillmentRefundController` |
 | **后处理失败可独立追踪** | **[目标]（缺口 G2 衍生）** | 当前 `catch (RuntimeException ignored)` |
 | **`resolve` 防御性前置断言** | **[目标]（缺口 G3）** | 依赖状态机通用异常 |
 | **refund → ledger 记账** | **[目标]（承接 004 US2）** | 账本侧已实现，退款侧未接入 |
@@ -52,7 +67,13 @@
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[P1/P2/P3]` = 优先级。
 
-### User Story 1 - 部分退款可追踪且累计金额不超限 (Priority: P1)
+### ~~User Story 1 - 部分退款可追踪且累计金额不超限 (Priority: P1)~~ ⛔ 不做（ADR-0016 Rejected）
+
+> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../adr/0006-refund-decisions.md) 的「回退落地记录」即为准绳。
+>
+> ⭐ **替代口径（当前生效）**：累计额度一律按**申请额 `amountMinor`** 计（含在途 `PROCESSING`/`UNKNOWN` 保守占位），
+> 超额申请 `REJECTED` 且不发起渠道尝试——防超退不变量（H1）不受影响。用例见
+> `RefundApplicationServiceTest#cumulativeCountsRequestedAmountForBothTerminalAndInTransit`。
 
 作为平台资金运营，我希望当渠道只退回了申请金额的一部分时，这笔退款被明确记录为「部分成功」并记下**实际退款金额**，剩余可退额度据此正确释放，从而让「部分/全部退款可追踪、累计金额不超限」成立。
 
@@ -173,29 +194,29 @@
 
 ### Functional Requirements
 
-- **FR-001**: 系统 MUST 区分退款的「申请金额 `amountMinor`」与「已确认退款金额 `refundedAmountMinor`」，并维持不变量 `0 <= refundedAmountMinor <= amountMinor`（部分退款追踪，G1）。
-- **FR-002**: 渠道实际退回金额 `r` 满足 `0 < r < amountMinor` 时，退款 MUST 落 `PARTIALLY_SUCCEEDED` 并记录 `refundedAmountMinor = r`；`r == amountMinor` 时落 `SUCCEEDED`；`r <= 0` 或 `r > amountMinor` MUST NOT 落成功类状态。
-- **FR-003**: 同一支付的可退款额度 MUST 按「终态计已确认金额、在途（`PROCESSING`/`UNKNOWN`）计申请金额」累计，且累计 + 申请额 MUST NOT 超过已支付金额（超额落 `REJECTED`，不发起渠道尝试）。
-- **FR-004**: 退款确认（`SUCCEEDED` 或 `PARTIALLY_SUCCEEDED`）后，系统 MUST 编排**两侧**后处理：向 fulfillment-service 请求撤销（**新增 RPC**，G2）与向 entitlement-service 请求吊销（已实现）。
+- ~~**FR-001**: 系统 MUST 区分「申请金额 `amountMinor`」与「已确认退款金额 `refundedAmountMinor`」~~ ⛔ **不适用（ADR-0016 不做）**。当前**只有 `amountMinor` 一个金额口径**，成功退款恒为全额。
+- ~~**FR-002**: 渠道实际退回金额 `r` 的分态处理~~ ⛔ **不适用（ADR-0016 不做）**。渠道仅回三态：`SUCCEEDED` → `succeed()`；`FAILED` → `fail()`；其余 → `markUnknown()`。
+- **FR-003**: 同一支付的可退款额度 MUST 按**申请金额 `amountMinor` 累计（终态与在途一视同仁）**，且累计 + 申请额 MUST NOT 超过已支付金额（超额落 `REJECTED`，不发起渠道尝试）。⭐ *（ADR-0016 回退后的最终口径）*
+- **FR-004**: 退款确认（`SUCCEEDED`）后，系统 MUST 编排**三侧**后处理：向 fulfillment-service 请求撤销（**ADR-0017 已补齐**）、向 entitlement-service 请求吊销（已实现）、向 ledger-service 记账（**ADR-0018 已补齐**）。
 - **FR-005**: 每次后处理调用 MUST 落一条可查询的尝试记录（目标服务、结果状态、失败原因、时间），失败 MUST NOT 回滚退款成功事实（Saga，禁 2PC/XA），且 MUST 产出 `refund.post_process_failed` 指标。
 - **FR-006**: 后处理 RPC MUST 携带幂等依据（以退款为粒度，如 `refundId` + 目标），下游 MUST 幂等吸收重复请求。
 - **FR-007**: `UNKNOWN` 状态的退款 MUST NOT 被重复发起渠道退款尝试，且 MUST NOT 触发任何后处理或记账；收敛仅依据权威结果。
 - **FR-008**: `resolve` 入口 MUST 显式校验当前状态为 `UNKNOWN`（防御性前置断言，G3）；对 `REQUESTED` MUST 返回明确的 `STATE_TRANSITION_VIOLATION`；对已终态 MUST 幂等吸收（返回当前状态，不重复推进）。
-- **FR-009**: 已确认退款（含部分成功）MUST 经 `LedgerPostingGateway` 以幂等键 `REFUND:<refundIdempotencyKey>` 向 `ledger-service` 提交**借贷平衡**的冲正分录，金额取 `refundedAmountMinor`（Constitution §II.3，ADR-0018）。
+- **FR-009**: 已确认退款（`SUCCEEDED`）MUST 经 `LedgerPostingGateway` 以幂等键 `REFUND:<refundIdempotencyKey>` 向 `ledger-service` 提交**借贷平衡**的冲正分录，金额取 **`amountMinor`**（成功退款恒为全额，Constitution §II.3，ADR-0018）。
 - **FR-010**: 记账失败或超时 MUST NOT 回滚退款成功事实，MUST 记录 `ledger.posting_failed` 并进入重试/对账兜底。
-- **FR-011**: 金额一律最小货币单位 `long` 分或 `BigDecimal`（明确 scale），**MUST NOT** 使用 `float`/`double`；校验在退款受理、渠道结果回传、记账三处**分别**执行，不依赖上游（Constitution §II.1、technical-solution §4.5）。
+- **FR-011**: 金额一律最小货币单位 `long` 分或 `BigDecimal`（明确 scale），**MUST NOT** 使用 `float`/`double`；校验在退款受理、记账两处**分别**执行（渠道契约已不回传金额），不依赖上游（Constitution §II.1、technical-solution §4.5）。
 - **FR-012**: 所有退款状态迁移 MUST 经 `Refund` 状态机唯一入口（`transitionTo`，`Refund.java:119`），MUST NOT 散落 `setStatus`；乐观锁 + 悲观锁并发保护保持不变。
 - **FR-013**: 跨服务交互（payment / fulfillment / entitlement / ledger）MUST 沿用同步 RPC（OpenFeign）+ 幂等，**MUST NOT** 引入 MQ、跨服务异步事件或 2PC/XA（Constitution §IV、ADR-0001）。
 - **FR-014**: Database-per-service：refund-service 只读写自有 `refund` Schema，MUST NOT 直接 SQL 他服务表（Constitution §IV.4）。
-- **FR-015**: 系统 MUST 产出退款业务指标 `refund.created` / `refund.duplicate` / `refund.rejected` / `refund.succeeded` / `refund.partially_succeeded` / `refund.failed` / `refund.unknown` / `refund.post_process_failed`，并为每次资金状态迁移写入 `FINANCIAL_AUDIT`（含幂等键、金额、前后状态、traceId）。
-- **FR-016**: 对账事实接口 `GET /internal/refunds/confirmed-facts` MUST 覆盖已确认退款并以**实际退款金额**暴露 [目标]（口径见 ADR-0016）。
-- **FR-017**: 资金路径（部分金额计算、累计额度、幂等吸收、记账、后处理失败追踪）MUST 有单元测试与集成测试；**MUST NOT** 删测试或改测试迎合错误实现（Constitution §VIII.3/4）。
+- **FR-015**: 系统 MUST 产出退款业务指标 `refund.created` / `refund.duplicate` / `refund.rejected` / `refund.succeeded` / `refund.failed` / `refund.unknown` / `refund.post_process_failed`（⛔ ~~`refund.partially_succeeded`~~ 随 ADR-0016 不做），并为每次资金状态迁移写入 `FINANCIAL_AUDIT`（含幂等键、金额、前后状态、traceId）。
+- **FR-016**: 对账事实接口 `GET /internal/refunds/confirmed-facts` MUST 覆盖已确认退款（`SUCCEEDED`）并以 **`amountMinor`** 暴露（无「实际退款金额」概念）。
+- **FR-017**: 资金路径（累计额度、幂等吸收、记账、后处理失败追踪）MUST 有单元测试与集成测试；**MUST NOT** 删测试或改测试迎合错误实现（Constitution §VIII.3/4）。
 
 ### Key Entities
 
-- **Refund（退款聚合根，已实现 + 扩展）**：一次退款申请与平台退款状态。本 Feature 新增 `refundedAmountMinor`（已确认退款金额）以支撑部分退款；状态机新增可达的 `PARTIALLY_SUCCEEDED`。位置 `refund-service/.../domain/Refund.java`。
+- **Refund（退款聚合根）**：一次退款申请与平台退款状态。⛔ **不新增 `refundedAmountMinor`**（ADR-0016 回退）；`PARTIALLY_SUCCEEDED` 枚举保留但**无调用方**。位置 `refund-service/.../domain/Refund.java`。
 - **RefundItem（退款明细，已实现）**：`orderItemId + amountMinor`（最小货币单位）。后处理可据此定位具体明细，但处理结果由下游领域决定。
-- **RefundPolicy（领域纯函数，已实现 + 扩展）**：可退款金额计算与资格判定（币种一致、金额为正、累计不超限）。本 Feature 扩展其累计口径（终态计已确认额 / 在途计申请额）。
+- **RefundPolicy（领域纯函数，已实现）**：可退款金额计算与资格判定（币种一致、金额为正、累计不超限）。累计口径**未改动**，一律按申请额（实现在 `RefundApplicationService`）。
 - **RefundPostProcessAttempt（后处理尝试，新增）**：每次退款后处理 RPC 的独立记录（目标服务、退款 ID、结果状态、失败原因、尝试次数、时间），支撑「后处理失败可独立追踪」（FR-005）。
 - **LedgerPostingGateway（出站端口，新增）**：refund → ledger-service 的 Feign 出站网关（与 payment-service 既有 `LedgerPostingGateway` 同模式），提供超时/幂等/失败兜底（FR-009）。
 - **FulfillmentGateway（出站端口，新增）**：refund → fulfillment-service 的 Feign 出站网关（G2，FR-004）。
@@ -204,22 +225,22 @@
 
 ### Measurable Outcomes
 
-- **SC-001**: 部分退款 100% 落 `PARTIALLY_SUCCEEDED` 并记录实际退款金额；全额退款 100% 落 `SUCCEEDED`；「部分/全部退款可追踪」成立。
+- ~~**SC-001**: 部分退款 100% 落 `PARTIALLY_SUCCEEDED`~~ ⛔ **不适用（ADR-0016 不做）**。全额退款 100% 落 `SUCCEEDED`；「全额退款可追踪」成立。
 - **SC-002**: 同一支付的累计退款 100% 不超过已支付金额（并发受理含悲观锁串行化），超额申请 100% 落 `REJECTED` 且不发起渠道尝试。
 - **SC-003**: 重复幂等键退款 100% 被吸收（不产生第二次渠道尝试）；`UNKNOWN` 退款 100% 不被重复执行资金动作；`resolve` 对 `REQUESTED` 100% 显式拒绝、对终态 100% 幂等吸收。
 - **SC-004**: 确认退款 100% 触发 fulfillment + entitlement 两侧后处理；后处理失败 100% 被独立记录（可查询、含原因）且 100% 不回滚退款成功。
-- **SC-005**: 已确认退款 100% 在 `ledger-service` 留下借贷平衡冲正分录，金额 = 实际退款金额；重复记账 100% 幂等吸收；记账失败 100% 进入兜底且不回滚。
-- **SC-006**: 全部退款分支（成功/部分成功/失败/未知/拒绝）100% 产出业务指标与 `FINANCIAL_AUDIT`；`confirmed-facts` 覆盖已确认退款（含部分）且金额口径正确。
+- **SC-005**: 已确认退款 100% 在 `ledger-service` 留下借贷平衡冲正分录，金额 = **`amountMinor`**；重复记账 100% 幂等吸收；记账失败 100% 进入兜底且不回滚。
+- **SC-006**: 全部退款分支（成功/失败/未知/拒绝）100% 产出业务指标与 `FINANCIAL_AUDIT`；`confirmed-facts` 覆盖已确认退款（`SUCCEEDED`）且金额口径正确。
 
 ## Assumptions
 
 - `refund-service`（8085 / Schema `refund`）核心链路已实现，本 Feature 只补缺口与扩展，**不重写**既有领域模型、持久化与幂等机制。
 - 不引入 MQ / 分布式事务 / 跨服务异步事件；后处理与记账均为同步 RPC + 幂等 + 有限重试/对账兜底（Constitution §IV、ADR-0001）。
 - 当前单节点/单机部署；出站 Feign 超时建议 `[目标]` connect 1s / read 3s（当前沿用 OpenFeign 默认值，见 `refund-service.md` §5.4）；熔断/降级 `[Phase 按需延后]`。
-- 渠道「部分退回」由 payment-service 的 `RefundAttemptResponse` 回传实际金额；在 Mock Channel 中可通过配置模拟部分退回。真实渠道对接不在本 Feature。
+- ⛔ ~~渠道「部分退回」由 `RefundAttemptResponse` 回传实际金额~~ —— ADR-0016 裁决后**不成立**：渠道只回三态，成功即全额。真实渠道对接不在本 Feature。
 - `ledger-service` 与 payment 侧记账网关已实现并接入（端口 8090），退款侧接入复用该既有能力与科目表；科目编码与账户 ID 以账本侧预置为准（ADR-0018）。
 - 复杂退款审批流程、已消费权益的统一回收政策、真实出款均**不在本 Feature**（Roadmap Phase 5「不包含」）。
-- 具体取舍（部分退款模型、fulfillment 编排、ledger 接入时机）见 ADR-0016~0018，**实现前 MUST 由负责人确认**（Constitution §8.3 新增关键资金字段/表、§8.8 状态机变更）。
+- 具体取舍见 ADR-0016~0018，**已于 2026-08-30 由负责人裁决**：ADR-0016 Rejected / ADR-0017、ADR-0018 Accepted（Constitution §8.3、§8.4、§8.8）。
 
 ## Dependencies（依赖与前置）
 
@@ -239,7 +260,7 @@
 - **编号约定**：spec 目录采用顺序编号 `005-refund`，与 Roadmap 阶段标签「003 Refund / Phase 5」**解耦**（Roadmap 标签为阶段描述，非 spec ID；同 `003-payment-reliability`「Roadmap 002」、`004-ledger`「Roadmap 006」的既定约定）。
 - **Spec 性质**：本 Spec 为**缺口补齐型**（gap-closing / completion），非绿地构建。三项缺口 G1/G2/G3 见文首表格，均已核实到 `file:line`。
 - **分歧点 → ADR**（`docs/adr/0006-refund-decisions.md`，状态 **Proposed**，待负责人决策）：
-  - 部分退款支持模型（如何让 `PARTIALLY_SUCCEEDED` 可达 / 部分金额如何跟踪）→ **ADR-0016**。
+  - ~~部分退款支持模型~~ → **ADR-0016** ❌ **Rejected（不做）**。
   - refund → fulfillment 编排（补齐缺失 RPC vs 修改文档声明）→ **ADR-0017**。
   - refund → ledger 记账接入（与 spec `004-ledger` US2 的归属与时机）→ **ADR-0018**。
 - **新发现的矛盾（未写入 ADR，供负责人知悉）**：

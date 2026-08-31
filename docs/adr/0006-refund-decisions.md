@@ -1,21 +1,52 @@
-# ADR-0016 ~ ADR-0018：退款（Feature 005）架构决策集合
+# ADR-0016 ~ ADR-0018、ADR-0047：退款（Feature 005）架构决策集合
 
 > 本文件合并 Feature `005-refund` 的架构决策为单一决策记录，便于集中审阅（同 `0003` / `0004` 的合并风格）。
-> 编号为内部决策标签（ADR-0016 ~ ADR-0018），状态独立标注。
+> 编号为内部决策标签（**ADR-0016 ~ ADR-0018、ADR-0047**），状态独立标注。
+> **ADR-0047 的编号说明**：它产生于 ADR-0016 回退后的文档同步阶段（2026-08-31），主题仍属退款领域，故并入本文件而非新开文档。之所以跳到 0047，是因为 `docs/architecture/next-stage-design.md` §9 已把 **ADR-0038~0046 整段预留**给下一阶段提案清单（Mock 收银台 / 幂等键 / 库存域 / Redis 等）；为避免编号冲突，新提案自 **ADR-0047** 起。
 > 涉及 Constitution §8「人类决策边界」的决策，均**待负责人确认**（2026-08-29）。
 
 > ✅ **编号冲突已解决（2026-08-29）**：本文件最初位于 `docs/adr/0005-refund-decisions.md` 并使用 ADR-0012~0014，与既有的 `docs/adr/0005-payment-reliability-impl-decisions.md`（Feature 003 实现期决策，占用 **ADR-0012~0015**）**冲突**。
 > 已采用推荐方案 ① 解决：文件重命名为 `0006-refund-decisions.md`，标签重编号为 **ADR-0016~0018**，既有 `0005-payment-reliability-impl-decisions.md` 与其 ADR-0012~0015 **保持不变**，全局引用已同步更新。编号现已唯一，无歧义。
 
+> **负责人裁决（2026-08-30，落地 2026-08-31）**
+> - **ADR-0016 部分退款** → ❌ **Rejected（不做）**。本期只支持**全额退款**：`PARTIALLY_SUCCEEDED` 枚举保留但**无调用方、不可达**；渠道侧若返回部分成功按 `UNKNOWN` 处理走对账收敛；累计口径一律按**申请额**占位（在途保守占用，防并发超退 H1）。已实现的 `refundedAmountMinor` 全链路**已回退**，清单见 ADR-0016 内的「回退落地记录」。重新开放时须同步解决：退款单拆分模型、多次退累计口径、权益/履约按比例回收、Ledger 部分冲正分录（Constitution §8 边界，须重新确认）。
+> - **ADR-0017 refund → fulfillment 编排** → ✅ **Accepted**。
+> - **ADR-0018 refund → ledger 记账接入** → ✅ **Accepted**。
+> - **ADR-0047 退款金额校验口径（是否强制「申请额 = 可退全额」）** → 🟡 **Proposed（实现已按「只做累计不超付」落地，待确认）**，见文末。
+>
+> 落地口径见 [technical-solution §2.4](../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
+
 ---
 
 ## ADR-0016: 部分退款支持模型（如何让 PARTIALLY_SUCCEEDED 可达、部分金额如何跟踪）
 
-- **状态**：**Proposed**（待负责人确认）
-- **日期**：2026-08-29
-- **决策者**：待人类（项目 Owner）
+- **状态**：❌ **Rejected / Not Implemented（延后）** —— 2026-08-30 负责人裁决「**部分退款不做**」；代码已按裁决**回退**（2026-08-31 完成）
+- **日期**：2026-08-29（裁决 2026-08-30，回退落地 2026-08-31）
+- **决策者**：项目 Owner
 - **关联 Feature**：`005-refund`（spec US1 / FR-001~FR-003 / 缺口 G1）
 - **关联 Constitution 条款**：§8.3（新增关键资金字段/表）、§8.8（状态机变更）
+
+> ### 回退落地记录（2026-08-31）
+>
+> 原始方案曾按最简实现落地，裁决后**整体回退**，受影响清单与处置：
+>
+> | 位置 | 回退动作 |
+> |---|---|
+> | `common-dto/rpc/RefundAttemptResponse` | 回到 3 分量 `(refundId, status, channelReference)`，删除 `refundedMinor` |
+> | `payment/application/channel/ChannelResult` | 回到 5 分量，删除 `refundedMinor` 与 2 参 `success(...)` 重载 |
+> | `payment/infra/channel/MockChannelAdapter` | 删除 `configuredRefundMinor` / `setRefundMinor` 与部分退款分支 |
+> | `payment/application/PaymentRefundService` | 组装回复不再传实退金额 |
+> | `refund/domain/Refund` | 删除 `refundedAmountMinor` 字段、`getRefundedAmountMinor()`；`rehydrate` 回到 13 参；`succeed()` 收敛为无条件全额成功 |
+> | `refund/application/RefundApplicationService` | 累计口径回到「一律按**申请额**」占位（在途保守占用，防并发超退 H1）；`switch` 回到三态 |
+> | `refund/api/RefundResponse` | 回到 7 分量，删除 `refundedAmountMinor` |
+> | `refund/application/RefundPostProcessOrchestrator` | 记账金额一律取 `refund.getAmountMinor()` |
+> | `refund/infra/persistence/refund/{RefundEntity, MybatisRefundRepository}` | 删除该字段的列映射与读写 |
+> | `deployment/schema/06-refund-schema.sql`、`refund-service/src/test/resources/schema.sql` | 删除 `refunded_amount_minor` 列（已部署环境需手工 `ALTER TABLE \`refund\`.\`refunds\` DROP COLUMN \`refunded_amount_minor\`;`） |
+>
+> **刻意保留（不可达但保留）**：`RefundStatus.PARTIALLY_SUCCEEDED` 枚举与 `Refund.partiallySucceed(long)`。
+> 理由：若删除枚举，任何历史 `status='PARTIALLY_SUCCEEDED'` 行在 `MybatisRefundRepository#toDomain` 的 `RefundStatus.valueOf(...)` 处抛 `IllegalArgumentException`，
+> 会连带打挂 `findByPaymentId` → 整条退款受理路径。保留一个**无调用方**的方法，代价远低于数据迁移风险。
+> 该方法 Javadoc 已显式标注「ADR-0016 已否决、当前无调用方」。
 
 ### Context（背景）
 
@@ -69,9 +100,9 @@
 
 ## ADR-0017: refund → fulfillment 编排（补齐缺失 RPC vs 修改文档声明）
 
-- **状态**：**Proposed**（待负责人确认）
-- **日期**：2026-08-29
-- **决策者**：待人类（项目 Owner）
+- **状态**：✅ **Accepted**（2026-08-30 负责人裁决 accept；实现已落地）
+- **日期**：2026-08-29（裁决 2026-08-30）
+- **决策者**：项目 Owner
 - **关联 Feature**：`005-refund`（spec US2 / FR-004~FR-006 / 缺口 G2）
 - **关联 Constitution 条款**：§8.4（跨服务接口变更）、§III 边界 #6（Fulfillment 不强耦合）
 
@@ -127,8 +158,8 @@
 
 ## ADR-0018: refund → ledger 记账接入（与 spec 004-ledger 的归属与时机）
 
-- **状态**：**Proposed**（待负责人确认）
-- **日期**：2026-08-29
+- **状态**：✅ **Accepted**（2026-08-30 负责人裁决 accept；实现已落地）
+- **日期**：2026-08-29（裁决 2026-08-30）
 - **决策者**：待人类（项目 Owner）
 - **关联 Feature**：`005-refund`（spec US4 / FR-009~FR-010）；与 `004-ledger` US2 / T013~T014 重叠
 - **关联 Constitution 条款**：§II.3（一切资金变动 MUST 经 ledger-service）、§8.4
@@ -185,3 +216,67 @@
 - `docs/adr/0004-ledger-design-decisions.md`（ADR-0008~0011，其中 ADR-0009 记账触发与一致性、ADR-0011 MVP 记账范围）
 - `005-refund` spec：US4、FR-009~FR-010；contracts/refund-orchestration.md §4
 - `ledger-service/.../api/LedgerController.java`、`payment-service/.../infra/client/FeignLedgerPostingGateway.java`、`common/common-dto/.../rpc/PostingRequest.java`
+
+---
+
+## ADR-0047: 退款金额校验口径（ADR-0016 回退后，是否强制「申请额 = 可退全额」）
+
+**状态**：🟡 **Proposed**（实现已按「只做累计不超付」落地并通过全量测试，待负责人确认）
+**日期**：2026-08-31
+**触发**：ADR-0016（部分退款）被裁决 Rejected 并回退后，`docs/architecture/technical-solution.md` §8.3 遗留一条未闭环要求——「退款资格判断除『累计不超付』外，MUST 增加**全额校验**：申请金额 ≠ 可退全额 → 直接 `REJECTED`」。本次文档同步时必须对此给出确定口径。
+
+### Context（背景）
+
+ADR-0016 裁决「部分退款不做」后，同一个「不做」有两种截然不同的落地强度：
+
+- **强度 A（严格全额）**：任何 `requestedMinor != refundableAmount` 的申请一律 `REJECTED`。即一笔 1000 的支付，第一次只能退 1000，退 300 会被拒。
+- **强度 B（单笔全额 + 多笔累计）**：不校验单笔是否等于可退全额，只校验「累计申请额 + 本次申请额 ≤ 已支付金额」（H1 防超退）。即一笔 1000 的支付，可分多次退 300 / 400 / 300，每次要么全额成功要么失败，**不存在「一笔退款部分成功」**。
+
+关键事实与约束：
+
+1. `001-core-business-model/spec.md` 第 66–67、289 行明确规定：*「订单取消、部分退款、全部退款……必须依据可退款金额判断」*、*「部分退款、多次退款的累计金额不得超过已支付且尚未退款金额」*、*「退款默认支持部分退款和多次退款」* —— 强度 A 与这条**已 Accepted 的基线 spec 直接冲突**。
+2. 现有 `RefundPolicy.decide` 只做强度 B，且 `RefundApplicationServiceTest#cumulativeCountsRequestedAmountForBothTerminalAndInTransit` 用 **300 + 400 + 400（paid=1000）** 的多笔场景验证防超退；改强度 A 会使第一笔 300 即被拒，该测试直接失效。
+3. `005-refund/spec.md` FR-003 与 data-model §3 已按强度 B 定稿：累计一律按申请额（终态与在途一视同仁）。
+4. ADR-0016 回退掉的实体是 `refundedAmountMinor` 与 `PARTIALLY_SUCCEEDED`——即**「单笔退款内部的部分成功追踪」**；它从未触及「同一支付能否分多笔退款」。
+
+### Decision（决策）
+
+**采纳强度 B：只做「累计不超付」（H1），不引入全额等值校验。**
+
+- `RefundPolicy.decide` 保持三条校验（币种一致 / 金额为正 / 累计 + 申请 ≤ 已付），**不新增** `requestedMinor == refundableAmount` 约束。
+- 「部分退款不做」的准确含义收敛为：**单笔退款没有「部分成功」这一状态**——渠道只回 `SUCCEEDED / FAILED / UNKNOWN` 三态，成功即视为该笔申请额全额退回；若真实发生部分退回，按 `UNKNOWN` 处理并走对账收敛，**不落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`**。
+- 同一支付**允许多笔退款**（每笔独立幂等键、每笔按申请额累计占用额度），由 `refund_intake_locks` 行锁串行化受理，累计超额者落 `REJECTED` 且不发起渠道尝试。
+- `technical-solution.md` §8.3 的「全额校验 MUST」要求**撤销**，改为上述口径；§10 风险表中「不支持部分退款」的应对条款同步改为「累计口径 + 超额显式 `REJECTED`」。
+
+### 备选方案
+
+- **A. 强制全额等值（严格全额）**：语义最贴合「只支持全额退款」的字面表述。但违反 `001-core-business-model` 已 Accepted 的「支持部分退款和多次退款」基线，且需重写防超退测试与 FR-003。**否决**（属 Constitution §8 边界，且与既有 spec 冲突，不能由实现侧单方面收紧）。
+- **C. 全额校验做成可配置开关（默认关）**：保留两种口径。但会引入「同一份数据两种语义」的运维分叉，且当前无真实需求驱动。**否决**（违反最简实现原则）。
+- **D. 只做累计不超付（采纳）**：与 001 基线一致、与现有测试一致、改动量 0，且 H1 防超退不变量完整保留。**采纳**。
+
+### Consequences（后果）
+
+**正面**
+
+- 与 `001-core-business-model` 的「支持部分退款和多次退款」基线自洽，无需改 spec 或破坏既有验收。
+- H1 防超退不变量（累计 + 申请 ≤ 已付，并发由行锁串行化）完整保留，资金正确性不受影响。
+- 实现改动量 0，全量 15 reactor 条目保持 BUILD SUCCESS。
+
+**负面 / 已知取舍**
+
+- 语义上**确实**支持了「对 1000 的支付退 300」这种业务意义上的部分退款，与「部分退款不做」的字面表述存在张力。**本文档即为该张力的显式记录**：被否掉的是**单笔退款的部分成功追踪**，不是**多笔退款**。
+- 权益/履约回收仍按「整笔退款」处理（`RefundPostProcessOrchestrator` 对每笔退款各撤销一次），多笔场景下下游会收到多次撤销请求，依赖其幂等。
+- 若将来业务方要求「只允许一次性退全额」，须另立 ADR 并同步修订 `001-core-business-model`。
+
+**待负责人确认点**
+
+1. 是否接受「部分退款不做 = 不做单笔部分成功追踪，但保留多笔退款」这一口径？
+2. 若不接受，则须同时修订 `001-core-business-model/spec.md` 第 66–67、289 行，并重写 `005-refund` FR-003 与防超退测试 —— 属 Constitution §8 边界，需显式裁决。
+
+### 关联
+
+- ADR-0016（部分退款 Rejected，本 ADR 为其回退后的口径收口）
+- `docs/specs/001-core-business-model/spec.md`（第 66–67、289 行：部分/多次退款基线）
+- `docs/specs/005-refund/spec.md` FR-003、`data-model.md` §3（累计口径）
+- `docs/architecture/technical-solution.md` §2.4 #6、§8.3、§10
+- `refund-service/.../domain/RefundPolicy.java`、`RefundApplicationServiceTest#cumulativeCountsRequestedAmountForBothTerminalAndInTransit`

@@ -4,7 +4,9 @@
 
 **生效日期**：2026-08-26
 
-**关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)
+**最近修订**：2026-08-31（2026-08-30 负责人裁决的**落地同步**：鉴权 / 验签 = 预留空函数；出站令牌 / 风控 / 脱敏 = 代码已删除；部分退款 = 代码已回退；退款金额校验口径新增 ADR-0047 —— 见 §2.4、§4.3.3、§8.3、§10）
+
+**关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)、[ADR-0006](../adr/0006-refund-decisions.md)、[ADR-0009](../adr/0009-risk-security-decisions.md)、[ADR-0011](../adr/0011-internal-token-decisions.md)
 
 **权威来源**：本文是 Constitution（最高约束）、ADR（决策日志）、Spec 001（业务模型）在「当前系统」层面的**落地化综合**。本文不得与 [Constitution](../../.specify/memory/constitution.md) 冲突；若需调整领域边界、服务边界、状态机或数据层，属于 Constitution §8 人类决策边界，须另立 ADR / 提案并经人类确认。
 
@@ -48,6 +50,52 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 - （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
 - 不引入 MQ / Kafka / Redis / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
+
+**本阶段范围裁剪（2026-08-30 负责人裁决）**：以下能力**明确不做**，只保留预留挂点，落地形态与启用条件见 §2.4：
+
+- 不做**出站内部服务令牌**（`X-Service-Token` 传播）—— 代码已清理（ADR-0034）。
+- ⭕ **入站内部鉴权**（`/internal/**` 守卫）只**预留空函数**、恒放行，不推广到其余服务（ADR-0024 / 0035）。
+- 不做**对外 API 鉴权 / 身份体系**（Spring Security、OAuth2、用户态 API Key）—— 预留空实现函数。
+- 不做**部分退款**—— 本期只支持**全额退款**，代码已回退（§4.3.3 / ADR-0016）。
+- 不做**敏感数据脱敏治理**—— 类与配置一并删除（ADR-0027）。
+- 不做**风控规则与判定**—— `RiskCheckService` 已删除，不留挂点（ADR-0028）。
+- ⭕ **渠道回调验签**只**预留空函数**、恒通过（ADR-0025）。
+
+---
+
+## 2.4 本阶段范围裁剪与预留契约
+
+> **本节是 2026-08-30 负责人裁决的落地口径**，裁决范围涵盖鉴权、内部令牌、部分退款、敏感数据、风控五类能力。相关 ADR（[0006](../adr/0006-refund-decisions.md) / [0009](../adr/0009-risk-security-decisions.md) / [0011](../adr/0011-internal-token-decisions.md)）中对应条目以本节裁决为准，状态标注见 [ADR 索引](../adr/README.md)。
+
+### 2.4.1 裁决总表
+
+| # | 能力 | 裁决 | 落地形态 | 代码现状（预留位置） | 启用条件 / 后续路径 |
+|---|---|---|---|---|---|
+| 1 | 出站内部令牌（`X-Service-Token` 传播） | ⛔ **不做（代码已删除）** | 整条链路**已清理**：拦截器、Feign 自动配置、`platform.security.*` 配置全部移除，调用链零改动 | 无（原 `common-core/client/InternalTokenRequestInterceptor.java` 与 `config/FeignInternalTokenAutoConfiguration.java` 已删除） | 需要服务间网络边界防护时**重新立项**（ADR-0034） |
+| 2 | 入站内部鉴权（`/internal/**` 守卫） | ⭕ **预留空函数** | 拦截器保留并仍挂载在 `/internal/**`，`verifyServiceToken()` **恒放行**；无开关（开关语义随实现一并移除）；**不推广**到其余 7 个服务 | `payment-service/web/InternalServiceAuthInterceptor.java`（唯一接入点）；`WebConfig` 注册保留 | 接入时只改 `verifyServiceToken()`，**且必须同时**补出站令牌，否则调用方全线 `403`（ADR-0024 / 0034 / 0035） |
+| 3 | 对外 API 鉴权 / 身份体系 | ⭕ **预留空实现鉴权函数** | 不接入 Spring Security / OAuth2 | `payment-service/web/ResolveAuthorizationInterceptor.java`（admin 端点守卫，默认关闭）；鉴权扩展点见 §2.4.2 | 引入外部调用方 / 多租户时立项（Phase 9） |
+| 4 | 风控 | ⛔ **不做（代码已删除）** | 原「只预留空实现」裁决已被 2026-08-30 裁决**覆盖为不做**：`RiskCheckService` 类、`payment.risk.*` 配置、`PaymentApplicationService` 调用点全部移除 | 无（原 `payment-service/application/risk/RiskCheckService.java` 已删除） | 需风控时**重新立项**（ADR-0028） |
+| 5 | 敏感数据脱敏 | ⛔ **不做（代码已删除）** | 原「工具类保留」裁决已被 2026-08-30 裁决**覆盖为不管**：`SensitiveDataMasker` 类与测试移除；不新增脱敏点、不做响应层统一脱敏 | 无（原 `common-core/security/SensitiveDataMasker.java` 已删除） | 接入真实卡号 / 凭证 / 真实渠道时**重新引入**（ADR-0027） |
+| 6 | 部分退款（单笔退款的部分成功追踪） | ⛔ **不做（代码已回退）** | **单笔退款只回三态**（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功恒为全额；`PARTIALLY_SUCCEEDED` 枚举与 `partiallySucceed()` 保留为**不可达的预留实现**，不开放任何入口。实体 `refundedAmountMinor` 字段与 DDL 列**已回退删除**。**同一支付的多笔退款仍支持**（每笔独立幂等键、按申请额累计占用额度，ADR-0047） | `refund-service/domain/RefundStatus.java`（枚举保留）；`RefundApplicationService.java:99-103` 当前只处理 `SUCCEEDED/FAILED/UNKNOWN`；回退清单见 [ADR-0016](../adr/0006-refund-decisions.md#adr-0016-部分退款支持模型如何让-partially_succeeded-可达部分金额如何跟踪)、口径收口见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额) | 需支持「单笔退款部分成功」时立项，届时须同步改状态机与退款单模型（属 Constitution §8 边界） |
+| 7 | 渠道回调验签（HMAC） | ⭕ **预留空函数** | **过滤器骨架保留**（路径 Ant 匹配、原始 body 读、`CachedBodyHttpServletRequest` 可重复读包装、403 拒绝分支），`verifySignature()` **恒通过**，回调一律放行 | `common-core/security/SignatureVerifier.java`（算法工具类保留，8 单测覆盖）；`payment-service/web/ChannelCallbackSignatureFilter.java`（空实现接入点） | 接入真实渠道时只实现 `verifySignature()`（ADR-0025） |
+
+> **关于 #7 的补充说明（2026-08-30 裁决已覆盖原边界说明）**：负责人裁决**明确包含渠道回调验签**——「ADR-0025 加验签预留函数空实现就行」。因此原「验签不在裁剪范围、默认开启不可关闭」的表述已失效。当前**伪造渠道回调可翻转支付状态**，这是**已知且已被负责人接受的风险**。
+>
+> **部署前置条件**：payment-service **不得暴露到公网**，仅内网 / VPC 可达；`/internal/**` 同理依赖安全组 / 服务网格做网络层隔离。上述两条与 #2 / #7 的空实现直接相关，接入真实渠道或生产部署前必须先补齐实现。
+
+### 2.4.2 预留契约（空实现的硬性约定）
+
+凡标注「⭕ 预留空实现」的能力，其实现 MUST 满足以下四条，防止占位代码演化为隐性故障源：
+
+1. **纯 no-op，不干扰主流程**：不抛异常、不修改任何状态、不改变资金主链路的返回结果。调用方无需感知其存在。
+2. **不得留下"假绿"**：空实现必须在**测试与命名上显式暴露**——测试方法名带 `...IsAllowedWhileXxxIsStubbed`，Javadoc 标明「本期为空实现」，方法内留 `TODO(ADR-00xx)`。禁止让后人误以为校验已生效。
+3. **失败不静默、也不阻断**：预留点自身出错时，只记录日志/指标，**不得**导致业务主流程失败；同时不得吞掉业务异常。
+4. **挂点位置即契约**：预留点必须挂在**明确、单一**的位置，后续启用时不得散落到业务代码各处。当前挂点：
+   - 入站内部鉴权 → `payment-service/web/InternalServiceAuthInterceptor#verifyServiceToken`（MVC 拦截器层，覆盖 `/internal/**`）
+   - 渠道回调验签 → `payment-service/web/ChannelCallbackSignatureFilter#verifySignature`（Servlet 过滤器层，业务 Controller 之前）
+   - 对外 API 鉴权 → `payment-service/web/ResolveAuthorizationInterceptor`（admin 端点，默认关闭）
+
+> **关于「显式开关」的调整**：2026-08-30 裁决后，鉴权与验签的空实现**不再带开关**（`payment.security.internal-auth-enabled` / `platform.security.outbound-token-enabled` 已随实现一并移除）。理由：恒放行的空实现配一个开关只会造成「开关已开但没生效」的错觉。将来接入真实实现时，由实现方自行决定是否需要开关与灰度策略（建议保留，见 ADR-0024 / 0025）。
 
 ---
 
@@ -143,7 +191,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | Transaction | 商业交易如何关联订单与支付、是否完成 | 渠道通信、履约交付、权益管理 | Transaction、Transaction Relation | 待处理 → 处理中 → 成功/失败/取消/未知 |
 | Payment | 一次资金收取意图与支付尝试的生命周期 | 商品、履约、具体渠道协议 | Payment、Payment Attempt、Payment Result | 待支付 → 处理中 → 成功/失败/未知 → 已关闭 |
 | Payment Channel | 如何与外部支付机构交互并解释其结果 | 平台订单、履约、权益、最终业务判断 | Channel、Channel Attempt、Channel Reference | 可用 → 不可用/停用 |
-| Refund | 为什么退、退多少、是否可退、退款整体进度 | 单独替代支付退款、履约撤销、对账 | Refund、Refund Item、Refund Decision | 申请中 → 处理中 → 成功/部分/失败/未知/拒绝/关闭 |
+| Refund | 为什么退、退多少、是否可退、退款整体进度 | 单独替代支付退款、履约撤销、对账 | Refund、Refund Item、Refund Decision | 申请中 → 处理中 → 成功/部分/失败/未知/拒绝/关闭（**本期只做全额退款，「部分」不开放，见 §2.4**） |
 | Fulfillment | 如何交付商品或服务、交付是否完成 | 支付结果确认、权益内部生命周期 | Fulfillment、Fulfillment Item、Delivery | 待履约 → 履约中 → 已交付/部分/失败/取消 |
 | Entitlement | 用户获得什么消费权利、如何用与撤销 | 判断是否已付款、渠道退款 | Entitlement、Grant、Consumption | 待授予 → 可用 → 部分/已用尽 → 过期/撤销/失败 |
 | Reconciliation | 平台事实与外部事实是否一致、差异如何处理 | 资金划转、修改原始交易事实 | Batch、Match、Difference | 待处理 → 对账中 → 一致/有差异 → 处理中/关闭 |
@@ -169,7 +217,7 @@ Order (1) ───── (1) Transaction (1) ───── (1) Payment (1) �
 | PaymentAttempt | 待处理 → 已受理 → 成功/失败/未知 |
 | Fulfillment | 待履约 → 履约中 → 已交付/部分交付/失败/取消 |
 | Entitlement | 待授予 → 可用 → 部分使用/已用尽 → 已过期/已撤销/失败 |
-| Refund | 申请中 → 处理中 → 成功/部分成功/失败/未知/拒绝/关闭 |
+| Refund | 申请中 → 处理中 → 成功/部分成功/失败/未知/拒绝/关闭（**部分成功本期不开放**，见 §2.4 #6） |
 | Reconciliation | 待处理 → 对账中 → 一致/有差异 → 处理中/关闭 |
 | Settlement | 待结算 → 计算中 → 待执行 → 执行中 → 成功/失败/未知/关闭 |
 
@@ -226,6 +274,14 @@ flowchart LR
     C --> D["履约/权益处理<br/>(refund→fulfillment/entitlement RPC)"]
     C --> E["对账<br/>(refund 事实纳入 Reconciliation)"]
 ```
+
+**本期范围：单笔退款无「部分成功」，只支持「整笔全额」结果**（§2.4 #6，2026-08-30 负责人裁决；金额校验口径见 **ADR-0047**）：
+
+- **单笔退款只有两种终局：全额成功或失败**。渠道只回 `SUCCEEDED / FAILED / UNKNOWN` 三态，成功即视为该笔申请额全额退回；若真实发生部分退回，按 `UNKNOWN` 处理并走对账收敛，**不得**落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`。
+- **不做**「申请额 = 可退全额」的等值校验（ADR-0047 决策）：`RefundPolicy.decide` 只做三条校验——币种一致 / 金额为正 / **累计申请额 + 本次申请额 ≤ 已支付金额**（H1 防超退，超额 `REJECTED` 且不发起渠道尝试）。同一支付**允许多笔退款**（每笔独立幂等键），由 `refund_intake_locks` 行锁串行化受理。
+  > **为何不强制全额等值**：`001-core-business-model/spec.md` 第 66–67、289 行明确「退款默认支持部分退款和多次退款，累计不得超过已支付且尚未退款金额」，强制等值会与这条已 Accepted 的基线冲突，并使现有防超退测试（300 + 400 + 400 / paid=1000）失效。取舍全记录见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
+- `RefundStatus.PARTIALLY_SUCCEEDED` 与 `partiallySucceed()` 仅作为**状态机枚举/方法保留**，本期无任何入口可到达该状态（枚举删除会导致历史行 `valueOf` 抛异常，故保留）。
+- 后续若要开放**单笔退款的部分成功追踪**，须先解决：退款单与支付尝试的拆分模型、多次退的累计口径、权益/履约的按比例回收、Ledger 冲正的部分金额分录 —— 属 Constitution §8 人类决策边界，须另立 ADR。
 
 #### 4.3.4 履约与权益
 
@@ -309,10 +365,23 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 
 ### 5.2 安全
 
-- 密钥、签名、金额等禁止硬编码，走环境变量 / 配置中心 / 密钥管理。
-- 渠道回调 MUST 验证签名与来源，防止伪造回调（当前 Mock Channel 未接真实签名，Phase 9 落地）。
-- 对外 API 有鉴权（Spring Security / OAuth2）与输入校验（Bean Validation）。
-- 敏感信息（卡号、密钥）进日志前脱敏（`StructuredAuditLogger.mask`）。
+> **本节口径已按 2026-08-30 负责人裁决修订**：鉴权、内部令牌、敏感数据脱敏 **本阶段不做**，仅保留预留挂点（§2.4）。下文分「本期强制」与「本期不做（有意接受）」两组，避免把未实现能力写成现状。
+
+**本期强制（MUST）**：
+
+- 密钥、签名、金额等禁止硬编码，走环境变量 / 配置中心 / 密钥管理（ADR-0026）。
+- **渠道回调 MUST 验证签名与来源**，防止伪造回调 —— HMAC-SHA256 + 防重放，**默认开启、不可关闭**（ADR-0025；不在本次裁剪范围，理由见 §2.4 #7）。
+- 对外入参 MUST 做输入校验（Bean Validation）。
+- 资金动作 MUST 有审计日志（§5.3）。
+
+**本期不做（有意接受的风险，见 §8）**：
+
+- **对外 API 鉴权 / 身份体系**：不做，预留空实现函数（§2.4 #3）。所有 REST 端点当前**无身份校验**，任何人可直连服务端口调用。
+- **内部服务间鉴权令牌**：不做，出站不发、入站不校验，且**不推广**（§2.4 #1 / #2）。8 个服务的 `/internal/**` 端点全部裸奔，防护完全依赖网络层隔离（同 VPC、不对公网暴露）。
+- **敏感数据脱敏**：本阶段不管（§2.4 #5），不新增脱敏点、不做响应层统一脱敏。当前项目无真实卡号/凭证，风险敞口有限；接入真实渠道前 MUST 重新评估。
+- **风控**：只预留空实现挂点，不启用任何规则（§2.4 #4）。
+
+**运维前提**：上述「本期不做」成立的前提是**部署环境不对公网暴露**（当前为单机/Compose 本地部署，§6）。一旦服务暴露到不可信网络，鉴权 MUST 先于功能上线补齐。
 
 ### 5.3 可观测性（全局）
 
@@ -354,7 +423,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 | Phase 2 · Payment Core | Payment/Attempt/Channel Adapter + Mock Channel | 不含真实渠道、Ledger、路由/风控/多币种 |
 | Phase 3 · Payment Reliability | UNKNOWN 收敛、重复/乱序/延迟回调、有限重试、审计 | 不含生产级 SLA、多活、复杂风控、自动补偿 |
 | Phase 4 · Fulfillment & Entitlement | 支付成功后履约 → 权益授予 | 不含复杂仓储物流、权益商城、退款回收政策 |
-| Phase 5 · Refund | 部分/全部退款、幂等、退款后处理 | 不含审批、权益回收政策、真实出款、Ledger 冲正 |
+| Phase 5 · Refund | **单笔退款只回三态**（成功恒为全额；部分退款追踪本期不做，§2.4 #6 / ADR-0047）、支持同一支付多笔退款、幂等、退款后处理 | 不含单笔部分成功追踪、审批、权益回收政策、真实出款、Ledger 冲正 |
 | Phase 6 · Reconciliation | 平台事实与渠道账单比对、差异处理 | 不含真实账单、自动调账、真实资金修正 |
 | Phase 7 · Settlement | 商户周期结算批次、调整项、模拟结算结果 | 不真实出款、不接银行、不接多币种清分（结算侧记账经 ledger-service，见 §4.3.5） |
 | Phase 8 · Ledger | 复式记账、科目、分录、记账幂等 | 不含复杂会计准则、多币种清分、总账 |
@@ -388,6 +457,10 @@ Phase 0 Foundation → 001 Core Business Model → 002 Payment Reliability → 0
 | **结算基于未确认事实** | 错误结算批次 | 结算只消费已确认且差异可解释的事实；商户-周期批次幂等 | 未确认/重大差异暂停批次或进 UNKNOWN，禁止重复结算 |
 | **单服务故障** | 影响该链路，不拖垮全局 | 服务独立进程/端口，故障隔离 | 依赖同步 RPC 超时 + 幂等重试，跨服务不共享状态 |
 | **金额溢出/浮点** | 资金计算错误 | 金额用 long 分 + `Math.addExact/multiplyExact` 防溢出；禁 float/double | 金额不变量校验（AMOUNT_INVARIANT_VIOLATION）拒绝非法金额 |
+| **服务无鉴权（本期有意接受，§2.4 #1~#3）** | 任何能触达端口者可调用资金入口与 `/internal/**`，含伪造退款请求 | 仅本地 / 内网部署，**不对公网暴露**（§5.2 运维前提）；预留鉴权挂点待启用 | 暴露到不可信网络前 MUST 先补齐鉴权或加网络层 ACL；怀疑越权时以审计日志 + 对账差异兜底核对 |
+| **单笔退款无部分成功（§2.4 #6 / ADR-0047）** | 渠道实际只退回一部分时，系统会按 `UNKNOWN` 挂起而非记为部分成功 | 渠道只回三态；部分退回按 `UNKNOWN` 收敛；**累计一律按申请额**占位，超额显式 `REJECTED` 且**不静默截断** | 靠对账差异发现并人工收敛（与支付侧 UNKNOWN 同一口径）；**禁止**绕过状态机直改退款金额/状态 |
+| **风控缺失（§2.4 #4，代码已删）** | 异常交易模式无拦截、无埋点 | 资金正确性由幂等 + 状态机 + 对账保障 | 靠对账差异与人工复核发现异常；需风控时重新立项（ADR-0028） |
+| **鉴权/验签为空实现（§2.4 #2 / #7）** | 伪造渠道回调可翻转支付状态；`/internal/**` 可越权调用 | 仅内网/VPC 部署，**payment-service 不得暴露公网**；`/internal/**` 依赖安全组/服务网格隔离 | 接入真实渠道前 MUST 先实现 `verifySignature` 与 `verifyServiceToken`；怀疑越权时以审计日志 + 对账差异兜底核对 |
 
 ---
 

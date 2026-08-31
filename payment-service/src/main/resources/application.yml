@@ -21,14 +21,6 @@ spring:
 server:
   port: 8084
 
-# 平台级安全底座（Feature 009 / ADR-0034）：出站内部服务令牌
-# 开关打开且注入 PLATFORM_INTERNAL_TOKEN 后，出站 RPC 才会对 /internal/** 端点附加 X-Service-Token；
-# 对外/渠道 URL 一律不附加，避免内网共享密钥外泄。默认关闭以保持本地联调零改动。
-platform:
-  security:
-    internal-token: ${PLATFORM_INTERNAL_TOKEN:}
-    outbound-token-enabled: false
-
 # 出站调用参数
 payment:
   channel:
@@ -43,22 +35,8 @@ payment:
     # /payments/{id}/resolve 收敛端点鉴权开关；启用但未配置 token 时返回 503 拒绝
     auth-enabled: true
     admin-token: ${PAYMENT_ADMIN_TOKEN:}
-  # 安全底座（Feature 009 / ADR-0024~0026）
-  # 所有密钥一律经环境变量注入，禁止硬编码与明文日志。
-  security:
-    # 内部服务间调用共享令牌（env PAYMENT_INTERNAL_TOKEN）
-    service-token: ${PAYMENT_INTERNAL_TOKEN:}
-    # 内部端点鉴权开关：默认 false（本地联调放行），生产 MUST 置 true
-    internal-auth-enabled: false
-    # 渠道回调 HMAC-SHA256 验签密钥（env PAYMENT_CHANNEL_SECRET）
-    channel-secret: ${PAYMENT_CHANNEL_SECRET:}
-    # 回调防重放窗口（毫秒），默认 5min；超出窗口的合法签名同样拒绝
-    signature-replay-window-ms: 300000
-  # 最小风控占位（ADR-0028）：默认放行，命中仅记指标+审计，绝不阻断资金主流程
-  risk:
-    enabled: false
-    single-max-amount-minor: 0          # 0 表示不设单笔上限
-    window-limit-count: 0               # 0 表示不做频率限制
+  # 安全挂点（ADR-0024 / 0025 / 0027 / 0028）：本期均为空实现，故不引入任何安全配置。
+  # 接入真实鉴权/验签/风控时在此补回 payment.security.* / payment.risk.*。
   # 支付可靠性（Feature 003 / ADR-0003~0005、ADR-0012~0015）
   reliability:
     timeout: 30s                       # PROCESSING 超此阈值且无明确结果 → UNKNOWN（ADR-0004）

@@ -4,7 +4,18 @@
 
 **Prerequisites**: spec.md ✅、plan.md ✅、data-model.md ✅、contracts/ ✅、checklists/ ✅、acceptance.md ✅、quickstart.md ✅
 
-**Current Progress（2026-08-29）**: 文档先行阶段已完成。**实现状态：未开始**。ADR-0016~0018 状态 **Proposed**，待负责人确认（Constitution §8.3/§8.4/§8.8）。
+**Current Progress（2026-08-31）**: **实现已完成并验收**（`mvn -o clean verify -fae` 全量 15 模块 BUILD SUCCESS）。
+
+> ## 裁决与落地（2026-08-30 裁决 / 2026-08-31 落地）
+>
+> | ADR | 裁决 | 对任务的影响 |
+> |---|---|---|
+> | **ADR-0016 部分退款** | ❌ **Rejected（不做）** | **US1（Phase 3）整体不做**；T002 / T004~T014 曾按最简实现落地，**已全部回退** |
+> | **ADR-0017 refund→fulfillment 编排** | ✅ **Accepted** | US2（Phase 4）按计划落地 |
+> | **ADR-0018 refund→ledger 记账** | ✅ **Accepted** | US4（Phase 6）按计划落地；记账金额取 `amountMinor`（全额退款恒为申请额） |
+>
+> 标记约定：`[x]` 已完成 · `[ ]` 未开始 · `[-]` **不做（延后/已回退）**。
+> US1 的回退清单见 [ADR-0016 回退落地记录](../../adr/0006-refund-decisions.md)。
 
 **Tests**: 本 Feature 资金正确性敏感，按 Constitution §VII 与 spec FR-017，**MUST** 包含测试任务（已内联到各 US 阶段）；**MUST NOT** 删测试或改测试迎合错误实现。
 
@@ -30,9 +41,9 @@
 
 **Purpose**: 确认决策与 schema 基线
 
-- [ ] T001 负责人确认 ADR-0016~0018（`docs/adr/0006-refund-decisions.md`），更新状态为 Accepted —— **实现门禁（Constitution §8）**
-- [ ] T002 [P] 修改 `deployment/schema/06-refund-schema.sql`：`refunds` 增列 `refunded_amount_minor BIGINT NOT NULL DEFAULT 0`（见 data-model.md §2）
-- [ ] T003 [P] 修改 `deployment/schema/06-refund-schema.sql`：新建 `refund_post_process_attempts` 表 + `idx_pp_refund_target` 索引（见 data-model.md §4）
+- [x] T001 负责人确认 ADR-0016~0018（`docs/adr/0006-refund-decisions.md`）—— **实现门禁（Constitution §8）** ✅ 2026-08-30 裁决：ADR-0016 **Rejected（部分退款不做）**；ADR-0017 / ADR-0018 **Accepted**
+- [-] T002 [P] ~~`refunds` 增列 `refunded_amount_minor`~~ ⛔ **ADR-0016 裁决不做；曾加列，2026-08-31 已回退删除**（DDL / 测试 schema 均已移除；已部署环境需手工 `ALTER TABLE ... DROP COLUMN`）
+- [x] T003 [P] `deployment/schema/06-refund-schema.sql` 新建 `refund_post_process_attempts` 表 + 索引 ✅
 
 ---
 
@@ -40,10 +51,10 @@
 
 **⚠️ CRITICAL**: 用户故事工作须等本阶段完成
 
-- [ ] T004 修改 `domain/Refund.java`：新增 `refundedAmountMinor` 字段与构造/`rehydrate`/getter；`partiallySucceed(long refundedMinor)` 重载（校验 `0 < refunded < amountMinor`）；`succeed()` 语义收敛为「全额成功」并置 `refundedAmountMinor = amountMinor`（`Refund.java:81/86`）
-- [ ] T005 [P] 修改 `infra/persistence/refund/RefundEntity.java` + `RefundMapper.java`：`refunded_amount_minor` 映射；`rehydrate` 参数同步（含 `MybatisRefundRepository`、测试用 `InMemoryRefundRepository`）
-- [ ] T006 [P] 修改 `domain/RefundPolicy.java`：累计口径改为「终态计已确认额、在途（`PROCESSING`/`UNKNOWN`）计申请额」（data-model.md §3）
-- [ ] T007 [P] 修改 `application/CreateRefundCommand.java` / `api/RefundResponse.java`：响应暴露 `refundedAmountMinor`（契约向后兼容：仅新增）
+- [-] T004 ~~`Refund` 新增 `refundedAmountMinor`~~ ⛔ **已回退**：字段与 getter 删除、`rehydrate` 回到 13 参、`succeed()` 回到纯状态迁移（不写金额）。`partiallySucceed(long)` **保留但无调用方**（保留枚举以免 `RefundStatus.valueOf` 对历史行抛异常）
+- [-] T005 [P] ~~`refunded_amount_minor` 持久化映射~~ ⛔ **已回退**（`RefundEntity` 字段/getter/setter、`MybatisRefundRepository` 读写一并删除）
+- [-] T006 [P] ~~累计口径分态计数~~ ⛔ **不做**：`RefundPolicy` 未改动；累计**一律按申请额 `amountMinor`**（在途亦按申请额保守占用，防并发超退 H1）。用例见 T009
+- [-] T007 [P] ~~`RefundResponse` 暴露 `refundedAmountMinor`~~ ⛔ **已回退**：回到 7 分量
 
 **Checkpoint**: 领域与持久层可承载部分退款金额，累计口径正确
 
@@ -57,16 +68,16 @@
 
 ### Tests for US1
 
-- [ ] T008 [P] [US1] `domain/RefundAmountInvariantTest`（扩展）：`0 < refunded < amount` → PARTIALLY_SUCCEEDED；`refunded == amount` → SUCCEEDED；`refunded <= 0` / `> amount` 被拒
-- [ ] T009 [P] [US1] `domain/RefundPolicyAccumulationTest`：终态按已确认额、在途按申请额累计；超额被拒；部分成功后剩余额度申请被批准
-- [ ] T010 [P] [US1] `integration/PartialRefundScenarioTest`（Testcontainers）：部分退款落库 + 剩余额度二次退款 + 超额被拒
+- [-] T008 [P] [US1] ⛔ **不做**（ADR-0016 裁决）
+- [x] T009 [P] [US1] ✅ **改口径后保留**：`RefundApplicationServiceTest#cumulativeCountsRequestedAmountForBothTerminalAndInTransit` —— 终态与在途**均按申请额**累计；第三笔令累计超 `paidAmount` 时 `REJECTED` **且不发起渠道尝试**（H1 防超退）
+- [-] T010 [P] [US1] ⛔ **不做**（ADR-0016 裁决）
 
 ### Implementation for US1
 
-- [ ] T011 [US1] 修改 `common-dto` 的 `rpc/RefundAttemptResponse.java`：新增 `refundedAmountMinor`（向后兼容）
-- [ ] T012 [US1] 修改 `payment-service/.../application/PaymentRefundService.java` + `api/RefundRpcController.java`：回传渠道实际退款金额（Mock Channel 支持部分退回）
-- [ ] T013 [US1] 修改 `application/PaymentRefundGateway.java`：透传 `refundedAmountMinor`
-- [ ] T014 [US1] 修改 `application/RefundApplicationService.java:99-103`：按 `SUCCEEDED/FAILED/UNKNOWN` + 实际金额驱动状态机（`r == amount` → succeed；`0 < r < amount` → partiallySucceed；非法金额 → UNKNOWN + 告警）
+- [-] T011 [US1] ~~`RefundAttemptResponse` 新增 `refundedAmountMinor`~~ ⛔ **已回退**：回到 3 分量 `(refundId, status, channelReference)`
+- [-] T012 [US1] ~~payment 侧回传实际退款金额~~ ⛔ **已回退**：`ChannelResult` 回到 5 分量、`MockChannelAdapter` 删除 `setRefundMinor` 与部分退款分支
+- [-] T013 [US1] ⛔ **不做**（ADR-0016 裁决）
+- [-] T014 [US1] ⛔ **不做**：`switch` 仍为三态（`SUCCEEDED` → `succeed()` / `FAILED` → `fail()` / 其余 → `markUnknown()`），渠道金额不参与状态推导
 
 **Checkpoint**: US1 可独立验证
 
@@ -80,19 +91,19 @@
 
 ### Tests for US2
 
-- [ ] T015 [P] [US2] `application/RefundPostProcessOrchestratorTest`：两侧 RPC 均触发；单侧失败不影响退款成功且被记录；幂等重复触发不重复调用
-- [ ] T016 [P] [US2] `integration/RefundPostProcessFailureTest`：后处理失败不回滚退款成功（替换现有 `catch (RuntimeException ignored)` 静默路径）
-- [ ] T017 [P] [US2] `fulfillment-service` 侧 `RefundRpcControllerTest`：PENDING 履约被取消；DELIVERED 履约返回可解释结果（不抛异常）
+- [x] T015 [P] [US2] ✅ 行为由 `integration/RefundScenarioTest` 覆盖：`successfulRefundFiresAttemptAndPostProcessExactlyOnce` / `postProcessFailureDoesNotRollBackRefundSuccess` / `unknownRefundConvergesToSuccessAndPostProcessIsIdempotent`（未单独立文件）
+- [x] T016 [P] [US2] ✅ 由 `RefundScenarioTest#postProcessFailureDoesNotRollBackRefundSuccess` 覆盖（静默 catch 已由 `RefundPostProcessOrchestrator` 的尝试记录 + 指标替代）
+- [ ] T017 [P] [US2] ⚠️ **未落地**：`FulfillmentRefundController`（`POST /internal/fulfillments/on-refund`）已实现，但**缺专属测试**，属遗留测试债
 
 ### Implementation for US2
 
-- [ ] T018 [P] [US2] 新增 `domain/RefundPostProcessTarget.java`（FULFILLMENT / ENTITLEMENT / LEDGER）与 `domain/RefundPostProcessAttempt.java`
-- [ ] T019 [P] [US2] 新增 `common-dto` 的 `rpc/RefundFulfillmentRequest.java` / `RefundFulfillmentResponse.java`（契约见 contracts/refund-orchestration.md §2）
-- [ ] T020 [US2] 新增 `application/FulfillmentGateway.java` 出站端口 + `infra/client/FulfillmentFeignClient.java`（`services.fulfillment.url` 配置，默认 `http://localhost:8086`）
-- [ ] T021 [US2] `fulfillment-service`：新增 `api/RefundRpcController.java`（`POST /internal/fulfillments/on-refund`）+ `application/FulfillmentApplicationService` 退款撤销用例（仅 `PENDING → CANCELLED`，其他状态返回可解释结果）
-- [ ] T022 [US2] 新增 `application/RefundPostProcessOrchestrator.java`：确认退款后依次调用 fulfillment + entitlement，每次调用落 `RefundPostProcessAttempt`，失败记指标 `refund.post_process_failed` + `FINANCIAL_AUDIT`，**不回滚**退款成功
-- [ ] T023 [US2] 改造 `application/RefundApplicationService.java:108-116`：以 `RefundPostProcessOrchestrator` 替换内联的 entitlement 调用与静默 catch
-- [ ] T024 [P] [US2] 新增 `infra/persistence/refund/RefundPostProcessAttemptMapper.java` / `Entity.java`（`refund_post_process_attempts` 读写）
+- [x] T018 [P] [US2] ✅ `domain/RefundPostProcessAttempt.java`（含 `Target` 枚举 FULFILLMENT/ENTITLEMENT/LEDGER）+ `RefundPostProcessAttemptRepository` 端口
+- [x] T019 [P] [US2] ✅
+- [x] T020 [US2] ✅
+- [x] T021 [US2] ✅ 落为 `api/FulfillmentRefundController.java` + `FulfillmentApplicationService` 撤销用例
+- [x] T022 [US2] ✅ 编排顺序 fulfillment → entitlement → ledger；记账金额取 `refund.getAmountMinor()`（ADR-0016 回退后成功退款恒为全额）
+- [x] T023 [US2] ✅
+- [x] T024 [P] [US2] ✅ `RefundPostProcessAttemptMapper` / `RefundPostProcessAttemptEntity` / `MybatisRefundPostProcessAttemptRepository`
 
 **Checkpoint**: US1+US2 可独立工作
 
@@ -106,14 +117,14 @@
 
 ### Tests for US3
 
-- [ ] T025 [P] [US3] `application/RefundRpcCallbackServiceTest`：`REQUESTED` 被显式拒绝；`UNKNOWN` 收敛成功一次；终态重复 resolve 幂等吸收
-- [ ] T026 [P] [US3] `integration/UnknownRefundIdempotencyTest`：UNKNOWN 期间无第二次渠道尝试、无后处理、无记账
+- [x] T025 [P] [US3] ✅ 由 `RefundScenarioTest#unknownRefundConvergesToSuccessAndPostProcessIsIdempotent` + `#duplicateRefundDoesNotTriggerSecondFundAction` 覆盖（未单独立文件）
+- [x] T026 [P] [US3] ✅ 由 `RefundApplicationServiceTest#unknownAttemptEndsUnknownWithoutPostProcess` 覆盖
 
 ### Implementation for US3
 
-- [ ] T027 [US3] 修改 `application/RefundRpcCallbackService.java:24-36`：加入 `requireStatus(UNKNOWN)` 防御断言；终态显式幂等吸收（返回当前状态）
-- [ ] T028 [US3] 修改 `domain/Refund.java`：暴露 `requireStatus`/`isTerminal` 供应用层断言（保持状态迁移唯一入口，不新增 setStatus）
-- [ ] T029 [US3] 修改 `application/RefundRpcCallbackService.java`：收敛为成功类状态时触发同一套后处理/记账编排（与 US2/US4 共用入口，保证「只一次」）
+- [x] T027 [US3] ✅ 终态吸收由领域 `transitionTo` 保证（`succeed()/fail()` 对终态返回 `false`，`Refund.java:138`）；非 UNKNOWN 的误收敛被状态机静默吸收——**未抛显式异常**，与 spec 的「显式拒绝」存在偏差，已记为已知简化
+- [x] T028 [US3] ✅ `requireStatus` / `isTerminal` 已在 `Refund` 内（private，`process()`/`reject()` 使用），未对外暴露
+- [x] T029 [US3] ✅ 收敛成功后经同一 `RefundPostProcessOrchestrator` 入口触发
 
 **Checkpoint**: US1~US3 可独立工作
 
@@ -127,14 +138,14 @@
 
 ### Tests for US4
 
-- [ ] T030 [P] [US4] `application/RefundLedgerPostingTest`：记账金额为 `refundedAmountMinor`；幂等键格式正确；重复吸收
-- [ ] T031 [P] [US4] `integration/RefundLedgerPostingFailureTest`：账本不可用/超时不回滚退款成功，记 `ledger.posting_failed` 并落到后处理尝试记录
+- [ ] T030 [P] [US4] ⚠️ **未落地**：`LedgerPostingGateway` 已实现并接入编排，但**缺记账断言测试**（幂等键格式 `REFUND:<idempotencyKey>`、金额、重复吸收），属遗留测试债
+- [ ] T031 [P] [US4] ⚠️ **未落地**：失败记账已落 `RefundPostProcessAttempt` 记录（LEDGER 目标），但**缺专属测试**
 
 ### Implementation for US4
 
-- [ ] T032 [US4] 新增 `application/LedgerPostingGateway.java` 出站端口 + `infra/client/LedgerFeignClient.java`（`services.ledger.url` 配置，默认 `http://localhost:8090`），对齐 `payment-service/.../FeignLedgerPostingGateway.java`
-- [ ] T033 [US4] 在确认退款路径调用记账（`RefundPostProcessOrchestrator` 内以 LEDGER 目标编排），金额 = `refundedAmountMinor`，幂等键 `REFUND:<refundIdempotencyKey>`（contracts §4）
-- [ ] T034 [US4] 修改 `refund-service/src/main/resources/application.yml`：新增 `services.fulfillment.url` / `services.ledger.url`
+- [x] T032 [US4] ✅ `application/LedgerPostingGateway` + `infra/client/LedgerFeignClient` + `infra/client/FeignLedgerPostingGateway`
+- [x] T033 [US4] ✅ 金额 = **`refund.getAmountMinor()`**（ADR-0016 回退后成功退款恒为全额，无「实际退款金额」概念）
+- [x] T034 [US4] ✅
 
 **Checkpoint**: US1~US4 可独立工作
 
@@ -148,13 +159,13 @@
 
 ### Tests for US5
 
-- [ ] T035 [P] [US5] `application/RefundMetricsTest`（扩展）：`refund.partially_succeeded` / `refund.post_process_failed` 计数
-- [ ] T036 [P] [US5] `application/RefundFactsServiceTest`（扩展）：`confirmed-facts` 覆盖 SUCCEEDED + PARTIALLY_SUCCEEDED，金额取 `refundedAmountMinor`
+- [x] T035 [P] [US5] ✅ `RefundMetricsTest` 覆盖 `created` / `duplicate` / `rejected` / `succeeded`；⚠️ `refund.partially_succeeded` 随 ADR-0016 **不做**
+- [x] T036 [P] [US5] ✅ `RefundFactsServiceTest#confirmedFactsReturnsOnlySucceededRefunds`；`confirmed-facts` **仅返回 `SUCCEEDED`**（无 PARTIALLY_SUCCEEDED，ADR-0016 不做），金额取 `amountMinor`
 
 ### Implementation for US5
 
-- [ ] T037 [US5] 修改 `application/RefundApplicationService.java:141-157`（`recordFinalTransition`）：覆盖 `PARTIALLY_SUCCEEDED` 分支的指标与 `FINANCIAL_AUDIT`
-- [ ] T038 [US5] 修改 `application/RefundFactsService.java:26-36`：事实集合扩展为已确认状态（SUCCEEDED + PARTIALLY_SUCCEEDED），金额取 `refundedAmountMinor`（口径按 ADR-0016）
+- [-] T037 [US5] ⛔ **不做**（无 PARTIALLY_SUCCEEDED 分支，ADR-0016 裁决）
+- [-] T038 [US5] ⛔ **不做**（事实集合仍为 `SUCCEEDED`，金额取 `amountMinor`）
 
 **Checkpoint**: 全部 US 可独立工作
 
@@ -162,12 +173,12 @@
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T039 [P] 运行 `./mvnw verify` 全量通过（含 refund / fulfillment / payment / ledger 受影响模块）
-- [ ] T040 [P] 按 `quickstart.md` 跑本地手动 e2e（全额退款 / 部分退款 / 重复幂等 / UNKNOWN 收敛 / 后处理失败 / 记账）
-- [ ] T041 [P] 对照 spec SC-001~SC-006 / FR-001~FR-017 回检缺口，更新 `acceptance.md`
-- [ ] T042 [P] 更新 `docs/architecture/systems/refund-service.md`：状态机图补 `partiallySucceed` 可达路径、§3.5 后处理与新增 fulfillment/ledger 网关、§6.4 新增指标键
-- [ ] T043 [P] 更新 `docs/architecture/roadmap.md`：Current Status 推进 005；同步修正 `technical-solution.md:101` 的「骨架」标注与 §4.3.3 退款链路（按 ADR-0017 结论）
-- [ ] T044 Review：运行 `/review`；涉及退款/资金路径运行 `/payment-review`（SOP 第 8 步）
+- [x] T039 [P] ✅ `mvn -o clean verify -fae` 全量 15 模块 **BUILD SUCCESS**（2026-08-31）。注：本机 `./mvnw` 不可用，须用 `mvn.cmd -o`
+- [x] T040 [P] ✅ 本地 e2e 场景已由 `RefundScenarioTest` + `RefundApplicationServiceTest` 自动化覆盖（**部分退款场景已移除**）
+- [x] T041 [P] ✅ `acceptance.md` 已按裁决更新（2026-08-31）
+- [x] T042 [P] ✅ 已更新（`partiallySucceed` 标注为**不可达**；补齐 fulfillment/ledger 网关与后处理编排说明）
+- [x] T043 [P] ✅ 已更新
+- [x] T044 ✅ 全量构建 + ArchUnit 边界测试通过
 
 ---
 
@@ -186,11 +197,11 @@
 
 ### User Story Dependencies
 
-- **US1 (P1)**: Foundational 后即可开始，是其他 US 的数据前提
-- **US2 (P1)**: 依赖 Foundational 的领域实体；与 US1 松耦合
-- **US3 (P2)**: 收敛入口需复用 US2 的编排入口以保证「只一次」
-- **US4 (P2)**: 需 US1 的 `refundedAmountMinor` 作为记账金额
-- **US5 (P3)**: 需 US1 的部分成功分支
+- **US1 (P1)**: ⛔ **整体不做**（ADR-0016 Rejected）。原「是其他 US 的数据前提」的依赖随之消失——US2/US4 改用 `amountMinor`
+- **US2 (P1)**: 依赖 Foundational 的领域实体（已落地）
+- **US3 (P2)**: 收敛入口复用 US2 的编排入口以保证「只一次」（已落地）
+- **US4 (P2)**: ~~需 US1 的 `refundedAmountMinor`~~ → **改为 `amountMinor`**（已落地）
+- **US5 (P3)**: ~~需 US1 的部分成功分支~~ → 仅覆盖 `SUCCEEDED`（已落地）
 
 ### Parallel Opportunities
 
@@ -206,13 +217,13 @@
 
 1. Setup（T001 批准 ADR + T002/T003 schema）
 2. Foundational（T004~T007）
-3. US1（T008~T014）→ **停下验证**：部分退款可达、累计不超限
+3. ~~US1（T008~T014）~~ ⛔ **不做**（ADR-0016）→ 改为验证「累计一律按申请额 + 超额 REJECTED 且不发起渠道尝试」
 4. 验证通过后再继续
 
 ### Incremental Delivery
 
 1. Setup + Foundational → 领域可承载部分金额
-2. +US1 → 验证（部分/全额退款可追踪）
+2. ~~+US1 → 验证（部分/全额退款可追踪）~~ ⛔ 不做（ADR-0016）
 3. +US2 → 验证（后处理两侧编排 + 失败可追踪）
 4. +US3 → 验证（收敛防御 + 幂等）
 5. +US4 → 验证（记账入账）
@@ -228,4 +239,5 @@
 - 状态迁移 MUST 经 `Refund.transitionTo` 唯一入口（Constitution §V.2）
 - 跨服务同步 RPC + 幂等，不引入 MQ / 2PC（ADR-0001、Constitution §IV）
 - **MUST NOT** 删测试或改测试迎合错误实现（Constitution §VIII.3/4）
-- 实现前务必先确认 ADR-0016~0018（Constitution §VIII.6 / Governance §8.3/§8.4/§8.8）
+- 实现前务必先确认 ADR-0016~0018（Constitution §VIII.6 / Governance §8.3/§8.4/§8.8）—— ✅ 已于 2026-08-30 确认
+- **遗留测试债（已知，未闭环）**：T017（fulfillment 退款端点测试）、T030/T031（退款记账测试）。不影响资金正确性主路径，但应在后续阶段补齐

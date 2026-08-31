@@ -53,9 +53,10 @@ public class RefundPostProcessOrchestrator {
         runStep("ENTITLEMENT", refund, () -> entitlement.notifyRefundPostProcess(
                 new RefundPostProcessRequest(refund.getId(), refund.getPaymentId(), refund.getOrderId(),
                         refund.getUserId(), refund.getReason())));
+        // 记账金额 = 申请金额：ADR-0016（部分退款）已否决，成功退款恒为全额。
         runStep("LEDGER", refund, () -> ledger.postRefundCapture(
                 "REFUND:" + refund.getIdempotencyKey(), refund.getId(),
-                refund.getRefundedAmountMinor(), refund.getCurrencyCode()));
+                refund.getAmountMinor(), refund.getCurrencyCode()));
     }
 
     private void runStep(String target, Refund refund, Runnable action) {
@@ -76,7 +77,7 @@ public class RefundPostProcessOrchestrator {
         attempts.save(new RefundPostProcessAttempt(refund.getId(), target, ok ? "SUCCEEDED" : "FAILED", detail, tries));
         if (!ok) {
             metrics.counter("refund.post_process_failed", 1.0, "module", MODULE, "target", target);
-            audit.audit("refund.post_process_failed", refund.getIdempotencyKey(), refund.getRefundedAmountMinor(),
+            audit.audit("refund.post_process_failed", refund.getIdempotencyKey(), refund.getAmountMinor(),
                     refund.getCurrencyCode(), "POST_PROCESS", target, "refund", String.valueOf(refund.getId()));
         }
     }

@@ -65,11 +65,11 @@
 
 ```text
 REQUESTED --process()--> PROCESSING --succeed()--------> SUCCEEDED
-                              |      \--partiallySucceed()-> PARTIALLY_SUCCEEDED
+                              |    （\--partiallySucceed()-> PARTIALLY_SUCCEEDED  ⛔ 无调用方）
                               |      \--fail()-------------> FAILED
                               \--markUnknown()----------> UNKNOWN --succeed/fail--> SUCCEEDED/FAILED
 REQUESTED --reject()--------> REJECTED
-SUCCEEDED / PARTIALLY_SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
+SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 ```
 
 - `process()`：REQUESTED → PROCESSING（唯一发起渠道尝试入口，[Refund.java:68](../../refund-service/src/main/java/com/payment/refund/domain/Refund.java)）。
@@ -78,7 +78,11 @@ SUCCEEDED / PARTIALLY_SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 - `close()`：仅终态可关闭，否则抛 `STATE_TRANSITION_VIOLATION`（[Refund.java:110](../../refund-service/src/main/java/com/payment/refund/domain/Refund.java)）。
 - 所有迁移经唯一入口 `transitionTo(...)`（[Refund.java:119](../../refund-service/src/main/java/com/payment/refund/domain/Refund.java)），终态由 `isTerminal()` 吸收，禁止散落 `setStatus`。
 
-> **已核实**：`PARTIALLY_SUCCEEDED` 状态与 `partiallySucceed()` 已实现，但当前 `attemptRefund` 仅返回 `SUCCEEDED/FAILED/UNKNOWN`，`resolveRefund` 也只处理三者——`PARTIALLY_SUCCEEDED` **当前不可达**（`[待定]`：部分退款场景接入后启用）。
+> **⛔ 已裁决（ADR-0016，2026-08-30 裁决 / 2026-08-31 回退落地）**：`PARTIALLY_SUCCEEDED` 状态与 `partiallySucceed()` **保留但无任何调用方、本期不可达**。渠道只回 `SUCCEEDED/FAILED/UNKNOWN` 三态，成功恒为全额；真实发生部分退回时按 `UNKNOWN` 处理并走对账收敛。原 `refundedAmountMinor` 字段与 DDL 列**已回退删除**。
+>
+> **为何保留枚举而非删除**：`MybatisRefundRepository` 用 `RefundStatus.valueOf(entity.getStatus())` 反序列化，删除枚举会让任何历史 `status='PARTIALLY_SUCCEEDED'` 行抛 `IllegalArgumentException`，进而打断 `findByPaymentId` → 整条退款受理链路。同理 `partiallySucceed()` 一并保留。
+>
+> **金额校验口径（ADR-0047）**：`RefundPolicy.decide` 只做「币种一致 / 金额为正 / **累计申请额 + 本次申请额 ≤ 已支付金额**」，**不做**「申请额 = 可退全额」的等值校验。同一支付允许多笔退款（每笔独立幂等键），累计超额落 `REJECTED` 且不发起渠道尝试。
 
 ### 2.3 表结构与索引策略
 
@@ -196,8 +200,8 @@ SUCCEEDED / PARTIALLY_SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 1. `findByIdempotencyKey` 回查；命中 → 计数 `refund.duplicate` 并返回首次结果（幂等）。
 2. `lockForIntake(paymentId)`：以 `refund_intake_locks` 行锁串行化同一支付受理（H1 防超退）。
 3. `paymentRefundGateway.queryAmount(...)`：取支付状态 + `paidAmountMinor`；非 `SUCCEEDED` → 落 `REJECTED` 并登记原因后 `insertNew`（幂等同样兜底）。
-4. 累计该支付下所有「计额状态」（`SUCCEEDED/PARTIALLY_SUCCEEDED/PROCESSING/UNKNOWN`，[RefundApplicationService.java:133](../../refund-service/src/main/java/com/payment/refund/application/RefundApplicationService.java)）退款金额。
-5. `RefundPolicy.decide(...)`（[RefundPolicy.java:28](../../refund-service/src/main/java/com/payment/refund/domain/RefundPolicy.java)）：币种一致 + 金额为正 + 累计不超可退额；不通过 → 落 `REJECTED`。
+4. 累计该支付下所有「计额状态」（`SUCCEEDED/PROCESSING/UNKNOWN`；`PARTIALLY_SUCCEEDED` 虽在枚举中但**无调用方、不可达**，见 §2.2）的退款金额 —— **一律按「申请额 `amountMinor`」计**（终态与在途一视同仁，在途保守占用防并发超退；ADR-0016 回退 / ADR-0047 定稿），代码见 [RefundApplicationService.java:133](../../refund-service/src/main/java/com/payment/refund/application/RefundApplicationService.java)。
+5. `RefundPolicy.decide(...)`（[RefundPolicy.java:28](../../refund-service/src/main/java/com/payment/refund/domain/RefundPolicy.java)）：币种一致 + 金额为正 + **累计申请额 + 本次申请额 ≤ 已支付金额**（H1 防超退）；不通过 → 落 `REJECTED` 且**不发起渠道尝试**。**不做**「申请额 = 可退全额」的等值校验（ADR-0047）。
 6. `insertNew(refund)` → `refund.process()`（REQUESTED → PROCESSING）。
 7. `paymentRefundGateway.attemptRefund(...)`：调 payment-service 渠道退款，按 `SUCCEEDED/FAILED/UNKNOWN` 驱动状态机（UNKNOWN 原样登记，不臆断）。
 8. `save`（本地事务提交，悲观锁随事务释放）；`recordFinalTransition` 记指标 + `FINANCIAL_AUDIT`。

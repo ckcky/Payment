@@ -20,11 +20,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 内部服务间调用鉴权（ADR-0024 / FR-003 / SC-002）。
+ * 内部服务间调用鉴权（ADR-0024 / ADR-0034~0037）——<b>本期为占位放行契约</b>。
  *
- * <p>{@code /internal/**} 端点（退款金额查询、退款尝试、对账事实）一旦裸露即可被越权调用，
- * MVP 以共享令牌 {@code X-Service-Token} 守卫；渠道回调路径除外——外部渠道不持有内部令牌，
- * 其安全性由 HMAC 验签独立保证。</p>
+ * <p><b>契约变更（2026-08-30 负责人决议）</b>：ADR-0024 改为预留函数、空实现；出站令牌传播、
+ * 入站鉴权推广、令牌轮换、鉴权失败可观测性一并先不做。因此 {@link InternalServiceAuthInterceptor}
+ * 虽仍挂在 {@code /internal/**} 上作为鉴权的唯一接入点，但恒定放行。</p>
+ *
+ * <p>本测试因此断言<b>占位期的放行契约</b>，同时固化两条不可退化的结构保证：</p>
+ *
+ * <ol>
+ *   <li><b>鉴权挂点唯一且仍被注册</b>：拦截器仍挂载在 {@code /internal/**}，
+ *       将来只需实现 {@code verifyServiceToken} 一个方法，无需散落到各 Controller。</li>
+ *   <li><b>{@code payment.security.*} 配置不再影响准入</b>：开关开/关、令牌配置与否，
+ *       都不应改变放行结果——避免将来误以为「配了令牌就已经安全」。</li>
+ * </ol>
+ *
+ * <p>实现真实鉴权后，本类用例须整体反转为「缺失/错误令牌 403、未配置 503」，
+ * 反转清单见 ADR-0024 与 {@code docs/adr/0011-internal-token-decisions.md}。</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -54,20 +66,31 @@ class InternalServiceAuthTest {
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"));
     }
 
+    /** 占位期：缺失令牌仍放行。实现鉴权后本用例须反转为 403。 */
     @Test
-    void missingServiceTokenIsRejected() throws Exception {
-        mockMvc.perform(queryAmount(1L)).andExpect(status().isForbidden());
+    void missingServiceTokenIsAllowedWhileAuthIsStubbed() throws Exception {
+        Payment payment = newPayment();
+
+        mockMvc.perform(queryAmount(payment.getId())).andExpect(status().isOk());
     }
 
+    /** 占位期：错误令牌仍放行。实现鉴权后本用例须反转为 403。 */
     @Test
-    void invalidServiceTokenIsRejected() throws Exception {
-        mockMvc.perform(queryAmount(1L).header("X-Service-Token", "wrong-token"))
-                .andExpect(status().isForbidden());
+    void invalidServiceTokenIsAllowedWhileAuthIsStubbed() throws Exception {
+        Payment payment = newPayment();
+
+        mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", "wrong-token"))
+                .andExpect(status().isOk());
     }
 
-    /** 回调路径由 HMAC 验签单独守卫，不要求内部服务令牌（外部渠道不持有该令牌）。 */
+    /**
+     * 回调路径由 HMAC 验签单独守卫（占位期验签亦为空实现）。
+     *
+     * <p>保留此用例是为了锁定：回调路径<b>不会因为内部鉴权挂点的存在而被额外拦截</b>——
+     * 外部渠道不持有内部令牌，一旦被内部鉴权一并拦住，渠道回调将全线失效。</p>
+     */
     @Test
-    void channelCallbackPathIsExemptFromServiceToken() throws Exception {
+    void channelCallbackPathIsNotBlockedByInternalAuth() throws Exception {
         Payment payment = newPayment();
         String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = String.valueOf(System.currentTimeMillis());
@@ -80,7 +103,12 @@ class InternalServiceAuthTest {
                 .andExpect(status().isOk());
     }
 
-    /** 启用但未配置令牌：拒绝服务（503）而不是静默放行（ADR-0024）。 */
+    /**
+     * 启用但未配置令牌：占位期仍放行。
+     *
+     * <p>原契约是「拒绝服务 503 而不是静默放行」（ADR-0024）。鉴权改为空实现后，
+     * 该配置不再被读取，故断言放宽为放行。实现鉴权后本用例须反转回 503。</p>
+     */
     @Nested
     @SpringBootTest
     @AutoConfigureMockMvc
@@ -93,19 +121,26 @@ class InternalServiceAuthTest {
         @Autowired
         private MockMvc mockMvc;
 
+        @Autowired
+        private PaymentApplicationService applicationService;
+
         @Test
-        void returnsServiceUnavailable() throws Exception {
-            mockMvc.perform(queryAmount(1L).header("X-Service-Token", TOKEN))
-                    .andExpect(status().isServiceUnavailable());
+        void allowsRequestWhileAuthIsStubbed() throws Exception {
+            Payment payment = applicationService.createPaymentIntent(
+                    new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
+                            "idem-" + UUID.randomUUID(), "mock"));
+
+            mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", TOKEN))
+                    .andExpect(status().isOk());
         }
     }
 
     /**
-     * 入站令牌回退到平台级配置（ADR-0034）。
+     * 平台级令牌回退（ADR-0034）：占位期无影响。
      *
-     * <p>本服务专属令牌未配置时，回退到 {@code platform.security.internal-token}——正是出站
-     * {@code InternalTokenRequestInterceptor} 携带的那一把。两端同源，
-     * {@code internal-auth-enabled=true} 才可能安全开启（否则调用方全线 403）。</p>
+     * <p>原契约是「本服务专属令牌未配置时回退到 {@code platform.security.internal-token}」。
+     * 该配置与出站 {@code InternalTokenRequestInterceptor} 已随决议移除，
+     * 故此处只锁定「配置了平台令牌也不会引入新的拒绝分支」。</p>
      */
     @Nested
     @SpringBootTest
@@ -135,10 +170,15 @@ class InternalServiceAuthTest {
                     .andExpect(status().isOk());
         }
 
+        /** 占位期：其他令牌同样放行（已无比对逻辑）。 */
         @Test
-        void stillRejectsOtherTokens() throws Exception {
-            mockMvc.perform(queryAmount(1L).header("X-Service-Token", "some-other-token"))
-                    .andExpect(status().isForbidden());
+        void allowsOtherTokensWhileAuthIsStubbed() throws Exception {
+            Payment payment = applicationService.createPaymentIntent(
+                    new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
+                            "idem-" + UUID.randomUUID(), "mock"));
+
+            mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", "some-other-token"))
+                    .andExpect(status().isOk());
         }
     }
 

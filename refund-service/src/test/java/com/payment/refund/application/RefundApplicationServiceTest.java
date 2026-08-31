@@ -74,43 +74,29 @@ class RefundApplicationServiceTest {
     }
 
     @Test
-    void partialRefundReachesPartiallySucceededAndTracksConfirmedAmount() {
-        // 渠道实际只退回 300（申请 1000）→ 部分成功，已确认金额 = 300。
-        stack.payment.refundedAmountMinor = 300L;
-
-        Refund refund = stack.appService().createRefund(cmd());
-
-        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PARTIALLY_SUCCEEDED);
-        assertThat(refund.getRefundedAmountMinor()).isEqualTo(300L);
-        assertThat(stack.entitlement.postProcessRequests).hasSize(1);
-    }
-
-    @Test
-    void invalidRefundedAmountFallsToUnknown() {
-        // 渠道回传金额非法（> 申请额）：禁止资金放大，落 UNKNOWN 待收敛。
-        stack.payment.refundedAmountMinor = 2000L;
-
-        Refund refund = stack.appService().createRefund(cmd());
-
-        assertThat(refund.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
-        assertThat(stack.entitlement.postProcessRequests).isEmpty();
-    }
-
-    @Test
-    void cumulativeUsesConfirmedAmountForTerminalAndRequestedForInTransit() {
-        // 第一笔部分退款 300（终态，计已确认额 300）。
-        stack.payment.refundedAmountMinor = 300L;
-        stack.appService().createRefund(
+    void cumulativeCountsRequestedAmountForBothTerminalAndInTransit() {
+        // 第一笔 300 全额成功（终态，计申请额 300）。
+        assertThat(stack.appService().createRefund(
                 new CreateRefundCommand("order-1", 1L, "user-1", 300L, "CNY", "customer",
-                        "idem-1", List.of()));
+                        "idem-1", List.of())).getStatus())
+                .isEqualTo(RefundStatus.SUCCEEDED);
 
-        // 第二笔在途（渠道回 UNKNOWN，待权威结果收敛）：申请 400 计申请额。
-        // 累计 = 300(已确认) + 400(在途申请额) = 700 <= 1000，应被批准（不落 REJECTED）。
+        // 第二笔 400 在途（渠道回 UNKNOWN，待权威结果收敛）：同样按申请额保守占位。
+        // 累计 = 300 + 400 = 700 <= 1000，应被批准（不落 REJECTED）。
         stack.payment.attemptStatus = "UNKNOWN";
         Refund second = stack.appService().createRefund(
                 new CreateRefundCommand("order-1", 1L, "user-1", 400L, "CNY", "customer",
                         "idem-2", List.of()));
         assertThat(second.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
         assertThat(second.getStatus()).isNotEqualTo(RefundStatus.REJECTED);
+
+        // 第三笔 400 会令累计达 1100 > 1000：H1 防超退 MUST 拒绝，且不发起渠道尝试。
+        stack.payment.attemptStatus = "SUCCEEDED";
+        int attemptsBefore = stack.payment.attemptRequests.size();
+        Refund third = stack.appService().createRefund(
+                new CreateRefundCommand("order-1", 1L, "user-1", 400L, "CNY", "customer",
+                        "idem-3", List.of()));
+        assertThat(third.getStatus()).isEqualTo(RefundStatus.REJECTED);
+        assertThat(stack.payment.attemptRequests).hasSize(attemptsBefore);
     }
 }

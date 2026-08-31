@@ -7,7 +7,6 @@ CREATE TABLE refunds (
     payment_id BIGINT NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
-    refunded_amount_minor BIGINT NOT NULL DEFAULT 0,
     currency_code VARCHAR(8) NOT NULL,
     reason VARCHAR(255) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,

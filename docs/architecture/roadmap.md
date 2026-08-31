@@ -9,13 +9,17 @@
 ## Current Status
 
 - **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收；端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；`004-ledger` / `005-refund` / `006-reconciliation` / `007-settlement` 均已落地并接入指标与记账（详见 `docs/architecture/systems/`）。
-- **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016~0018）、`006-reconciliation`（ADR-0019~0021）、`007-settlement`（ADR-0022~0023，按最简单实现落地）。`mvn test` 全量通过。
+- **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016 ⛔ Rejected 已回退、ADR-0017~0018 Accepted）、`006-reconciliation`（ADR-0019~0021 Accepted）、`007-settlement`（ADR-0022~0023，按最简单实现落地）、`009-risk-security`（按 2026-08-30 裁决降级）、`010-distributed-evolution`（ADR-0029~0033 Accepted / 0031 不使用 MQ）。`mvn test` 全量通过。
 - **当前 Feature**：`010-distributed-evolution`（Roadmap Phase 10 分布式演进）——**刻意不拆服务**，改为把「按证据演进」落成门禁：新增 `architecture-tests` 模块用 ArchUnit 强制四条服务边界不变量（含防空转门禁）、提供运行手册与拆分提案模板。代码已落地、全量测试通过，ADR-0029~0033 待负责人确认。
 - **Feature 状态**：001/003/004/005/006/007/009/010 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
 - **当前能力**：`mvn -o verify -fae` 全量 BUILD SUCCESS（14 个 Maven 模块 + root，共 15 个 reactor 条目，含 `architecture-tests`）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
-- **ADR 状态**：`0004`（ADR-0008~0011）、`0005`（ADR-0012~0015）已 Accepted；`0006`（ADR-0016~0018 退款）、`0007`（ADR-0019~0021 对账）已实现；`0008-settlement-decisions.md`（**ADR-0022~0023**）、`0009-risk-security-decisions.md`（**ADR-0024~0028**）、`0010-distributed-evolution-decisions.md`（**ADR-0029~0033**）、`0011-internal-token-decisions.md`（**ADR-0034~0037**）状态 **Proposed**，按用户约定「先按最简单实现开发、生成 ADR 供决策」已落地代码，待负责人确认后无需改实现。
-- **当前阻塞**：ADR-0022~0037 待负责人决策（代码已按最简单实现完成，仅影响文档状态，不阻塞运行）；N1（对账事实无商户维度，可能跨商户串账）属已知遗留风险，已在 ADR-0023 记录，待单独立项。
-- **已完成的安全闭环（2026-08-30）**：`009-risk-security` T013 落地——出站内部服务令牌拦截器 + 入站令牌回退 + 拒绝埋点，`internal-auth-enabled=true` 已具备开启条件（开启顺序见 `docs/operations/runbook.md` §4）。剩余残余风险见 ADR-0035：其余 7 个服务的 `/internal/**` 仍无入站鉴权，依赖网络层隔离。
+- **ADR 状态（2026-08-30 负责人已裁决，2026-08-31 全部落定）**：
+  - ✅ **Accepted**：`0004`（0008~0011）、`0005`（0012~0015）、`0007`（0019~0021 对账）、`0010`（0029/0030/0032/0033 保持现状）、0006 的 `0017` / `0018`、0009 的 `0024`（实现=预留空函数）/ `0025`（实现=预留空函数）/ `0026`（明文 env）。
+  - ❌ **Rejected**：`0016`（部分退款不做，代码已回退）。
+  - ⛔ **Not Implemented（不做 / 代码已删除或清理）**：`0027`（脱敏）、`0028`（风控）、`0031`（不使用 MQ）、`0034`~`0037`（出入站鉴权令牌）。
+  - 裁决总表见 `docs/adr/README.md` 与各 ADR 文档头部；裁剪落地形态见 `docs/architecture/technical-solution.md` §2.4。
+- **当前阻塞**：无 ADR 阻塞。已知遗留风险：① N1（对账事实无商户维度，可能跨商户串账）已在 ADR-0023 记录，待单独立项；② 鉴权/验签空实现带来的部署风险（payment-service 不得暴露公网、`/internal/**` 依赖网络层隔离），见 §2.4 与 `009-risk-security/spec.md` §6。
+- **安全能力最终形态（2026-08-31）**：鉴权与验签**只保留接入点、校验为空实现**（`InternalServiceAuthInterceptor#verifyServiceToken` / `ChannelCallbackSignatureFilter#verifySignature` 恒放行）；脱敏、风控、出站令牌**代码已删除**。`009-risk-security` T013（出站令牌闭环）**整条已回退**，不再存在「开启顺序」，`docs/operations/runbook.md` §4 同步修订。
 
 ## Next Feature
 
@@ -411,26 +415,33 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 - 敏感数据脱敏和密钥管理。
 - 与支付流程匹配的最小风控规则。
 
-**落地情况（2026-08-29）**：以上四项已由 `009-risk-security` 一次性实现并通过全量验证，产物见 `docs/specs/009-risk-security/`，决策见 `docs/adr/0009-risk-security-decisions.md`（ADR-0024~0028，Proposed 待确认）：
+**最终落地情况（2026-08-31，按 2026-08-30 负责人裁决）**：四项范围中，**两项降级为「接入点保留 + 空实现」、两项直接不做**。产物见 `docs/specs/009-risk-security/`，决策见 `docs/adr/0009-risk-security-decisions.md`（ADR-0024~0028）与 `docs/adr/0011-internal-token-decisions.md`（ADR-0034~0037）。
 
-| Phase 9 范围 | 落地 |
-| --- | --- |
-| 服务和操作权限 | `InternalServiceAuthInterceptor`（`X-Service-Token`，`/internal/**`）；复用既有 resolve 端点 `X-Admin-Token` |
-| 渠道回调签名和来源校验 | `ChannelCallbackSignatureFilter`（HMAC-SHA256 + 防重放）+ `SignatureVerifier`（common-core） |
-| 敏感数据脱敏和密钥管理 | `SensitiveDataMasker`（common-core）；三类密钥经 env 注入 |
-| 最小风控规则 | `RiskCheckService`（`SINGLE_MAX_AMOUNT` / `WINDOW_LIMIT_COUNT`，只观测不拦截，默认关闭） |
+| Phase 9 范围 | 裁决 | 最终落地 |
+| --- | --- | --- |
+| 服务和操作权限 | ⭕ 预留空函数（ADR-0024 / 0035） | `InternalServiceAuthInterceptor` 仍挂 `/internal/**`，`verifyServiceToken()` **恒放行**；**不推广**到其余 7 个服务；出站令牌链路**已删除**（ADR-0034） |
+| 渠道回调签名和来源校验 | ⭕ 预留空函数（ADR-0025） | `ChannelCallbackSignatureFilter` 骨架保留（路径匹配 / body 读 / 可重复读包装 / 403 分支），`verifySignature()` **恒通过**；`SignatureVerifier`（HMAC-SHA256 + 防重放）作为 common-core 工具类保留，8 单测覆盖 |
+| 敏感数据脱敏和密钥管理 | ⛔ 不做（ADR-0027）／✅ 明文（ADR-0026） | `SensitiveDataMasker` **已删除**；密钥仍约定 env 注入（当前生效的仅 `PAYMENT_ADMIN_TOKEN`） |
+| 最小风控规则 | ⛔ 不做（ADR-0028） | `RiskCheckService` 与 `payment.risk.*` **已删除**，`PaymentApplicationService` 调用点已清理 |
 
-**补充落地（2026-08-30，T013）**：出站内部服务令牌闭环——`InternalTokenRequestInterceptor`（common-core，仅对含 `/internal/` 段的目标附加 `X-Service-Token`，默认关闭）+ 入站令牌回退到 `platform.security.internal-token` + 拒绝埋点 `payment.internal_auth_rejected`（带 `reason`）。决策见 `docs/adr/0011-internal-token-decisions.md`（ADR-0034~0037，Proposed 待确认）。
+> ~~**补充落地（2026-08-30，T013）**：出站内部服务令牌闭环……~~ ⛔ **整条已回退**（2026-08-31）：负责人裁决「出入站的鉴权令牌都先不做」，`InternalTokenRequestInterceptor` / `FeignInternalTokenAutoConfiguration` / `platform.security.*` / `payment.internal_auth_rejected` 埋点全部删除。决策见 `docs/adr/0011-internal-token-decisions.md`（ADR-0034~0037，均 ⛔ Not Implemented）。
 
 ### 不包含
 
-不包含一开始就建设复杂风控平台或全量合规体系。**未做**：mTLS / OAuth2、密钥管理服务（Vault/KMS）、规则引擎、入站鉴权推广到 payment 以外的服务（ADR-0035）、双令牌平滑轮换（ADR-0036）。
+不包含一开始就建设复杂风控平台或全量合规体系。**未做**：mTLS / OAuth2、密钥管理服务（Vault/KMS）、规则引擎、出站内部令牌（ADR-0034）、入站鉴权推广到 payment 以外的服务（ADR-0035）、双令牌平滑轮换（ADR-0036）、鉴权失败埋点告警（ADR-0037）、敏感数据脱敏（ADR-0027）、最小风控（ADR-0028）。
 
 ### 验收标准
 
-未授权请求被拒绝；伪造回调无法改变支付；敏感信息不进入日志；安全策略可审计。
+原标准：**未授权请求被拒绝；伪造回调无法改变支付；敏感信息不进入日志；安全策略可审计。**
 
-**达成情况**：四项均已由自动化测试覆盖并通过（见 `docs/specs/009-risk-security/acceptance.md`）。
+**达成情况（按裁决修订）**：
+
+- ⭕ **未授权请求被拒绝** → 本期**不适用**：鉴权为空实现，未授权请求**会被放行**。测试以 `...IsAllowedWhileAuthIsStubbed` 显式断言此行为。
+- ⭕ **伪造回调无法改变支付** → 本期**不适用**：验签为空实现，伪造回调**可翻转支付状态**。测试以 `...IsAllowedWhileSignatureVerificationIsStubbed` 显式断言此行为。
+- ⛔ **敏感信息不进入日志** → **ADR-0027 不做**，无脱敏工具。
+- ✅ **安全策略可审计** → 通过：所有裁决与空实现位置均在 ADR / spec / 代码 Javadoc 中留痕，无隐性占位。
+
+**已知的部署前置条件**（负责人已接受）：payment-service **不得暴露到公网**、`/internal/**` 依赖安全组 / 服务网格做网络层隔离。接入真实渠道前必须先实现 `verifySignature` 与 `verifyServiceToken`。详见 `docs/specs/009-risk-security/acceptance.md`。
 
 ### 完成后获得的能力
 

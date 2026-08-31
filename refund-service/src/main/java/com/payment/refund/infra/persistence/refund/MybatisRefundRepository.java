@@ -114,12 +114,10 @@ public class MybatisRefundRepository implements RefundRepository {
     }
 
     private Refund toDomain(RefundEntity entity) {
-        long refunded = entity.getRefundedAmountMinor() != null ? entity.getRefundedAmountMinor() : 0L;
         return Refund.rehydrate(entity.getId(), entity.getOrderId(), entity.getPaymentId(),
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
                 entity.getReason(), entity.getIdempotencyKey(), loadItems(entity.getId()),
-                RefundStatus.valueOf(entity.getStatus()), entity.getFailureReason(), entity.getVersion(),
-                refunded);
+                RefundStatus.valueOf(entity.getStatus()), entity.getFailureReason(), entity.getVersion());
     }
 
     private RefundEntity toEntity(Refund refund) {
@@ -129,7 +127,6 @@ public class MybatisRefundRepository implements RefundRepository {
         entity.setPaymentId(refund.getPaymentId());
         entity.setUserId(refund.getUserId());
         entity.setAmountMinor(refund.getAmountMinor());
-        entity.setRefundedAmountMinor(refund.getRefundedAmountMinor());
         entity.setCurrencyCode(refund.getCurrencyCode());
         entity.setReason(refund.getReason());
         entity.setIdempotencyKey(refund.getIdempotencyKey());

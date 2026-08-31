@@ -1,5 +1,10 @@
 -- 退款服务自有 Schema（Database-per-Service）：refunds / refund_items。
 -- 单机开发由 docker-compose 的 MySQL 8 实例承载（多库共实例，服务间不共享表）。
+--
+-- ADR-0016 已否决（负责人决议「部分退款不做」）：refunds 不再有 refunded_amount_minor 列。
+-- 已部署环境需手工执行下迁移（MySQL 不支持 DROP COLUMN IF EXISTS，故不写成幂等语句）：
+--   ALTER TABLE `refund`.`refunds` DROP COLUMN `refunded_amount_minor`;
+-- 全额退款语义下该列无信息量（恒等于 amount_minor 或 0），丢弃不丢数据。
 
 CREATE DATABASE IF NOT EXISTS `refund` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `refund`;
@@ -10,7 +15,6 @@ CREATE TABLE IF NOT EXISTS refunds (
     payment_id BIGINT NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
-    refunded_amount_minor BIGINT NOT NULL DEFAULT 0,
     currency_code VARCHAR(8) NOT NULL,
     reason VARCHAR(255) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,

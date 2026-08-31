@@ -20,8 +20,7 @@ import com.payment.payment.domain.PaymentAttemptErrorType;
  * <p>{@link #status()} 由双码推导，不靠调用方自报；{@link #errorType()} 同样是派生值。</p>
  */
 public record ChannelResult(Status status, String channelReference, String reason,
-                            TransportCode transportCode, BusinessCode businessCode,
-                            Long refundedMinor) {
+                            TransportCode transportCode, BusinessCode businessCode) {
 
     public enum Status {
         SUCCESS,
@@ -29,15 +28,15 @@ public record ChannelResult(Status status, String channelReference, String reaso
         UNKNOWN
     }
 
-    /** 通信成功 + 业务成功 → 成功（退款金额未知，由调用方按全退处理）。 */
+    /**
+     * 通信成功 + 业务成功 → 成功。
+     *
+     * <p><b>ADR-0016 已否决（部分退款不做）</b>：曾短暂存在携带渠道实际退款金额的
+     * {@code success(channelReference, refundedMinor)} 重载，现已移除。退款恒按全退处理。</p>
+     */
     public static ChannelResult success(String channelReference) {
-        return success(channelReference, null);
-    }
-
-    /** 通信成功 + 业务成功 → 成功，并携带渠道实际退款金额（部分退款场景）。 */
-    public static ChannelResult success(String channelReference, Long refundedMinor) {
         return new ChannelResult(Status.SUCCESS, channelReference, null,
-                TransportCode.SUCCESS, BusinessCode.SUCCESS, refundedMinor);
+                TransportCode.SUCCESS, BusinessCode.SUCCESS);
     }
 
     /** 通信成功 + 业务明确拒绝 → 业务失败，不重试（FR-006）。 */
@@ -73,7 +72,7 @@ public record ChannelResult(Status status, String channelReference, String reaso
 
     private static ChannelResult of(TransportCode transport, BusinessCode business,
                                     String channelReference, String reason) {
-        return new ChannelResult(deriveStatus(transport, business), channelReference, reason, transport, business, null);
+        return new ChannelResult(deriveStatus(transport, business), channelReference, reason, transport, business);
     }
 
     private static Status deriveStatus(TransportCode transport, BusinessCode business) {
@@ -109,6 +108,6 @@ public record ChannelResult(Status status, String channelReference, String reaso
 
     /** 返回携带新 reason 的副本（重试耗尽时用它标注 {@code RETRY_EXHAUSTED}）。 */
     public ChannelResult withReason(String newReason) {
-        return new ChannelResult(status, channelReference, newReason, transportCode, businessCode, refundedMinor);
+        return new ChannelResult(status, channelReference, newReason, transportCode, businessCode);
     }
 }
