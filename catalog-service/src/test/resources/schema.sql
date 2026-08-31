@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS stock_reservation;
+DROP TABLE IF EXISTS stock;
 DROP TABLE IF EXISTS skus;
 DROP TABLE IF EXISTS products;
 
@@ -28,4 +30,28 @@ CREATE TABLE skus (
     created_by VARCHAR(64),
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1
+);
+
+CREATE TABLE stock (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    sku_id BIGINT NOT NULL UNIQUE,
+    total BIGINT NOT NULL,
+    available BIGINT NOT NULL,
+    reserved BIGINT NOT NULL,
+    sold BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1
+);
+
+CREATE TABLE stock_reservation (
+    reservation_id VARCHAR(64) PRIMARY KEY,
+    sku_id BIGINT NOT NULL,
+    quantity BIGINT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    deduct_id VARCHAR(64),
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
 );

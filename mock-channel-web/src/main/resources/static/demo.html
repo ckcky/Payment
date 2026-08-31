@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaymentArch 演示控制台</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f6f9; color: #1f2937; padding: 24px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h1 { font-size: 20px; } h2 { font-size: 15px; margin-bottom: 12px; color: #374151; }
+  .sku { display: flex; align-items: center; justify-content: space-between; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
+  .sku .name { font-weight: 600; } .sku .price { color: #dc2626; font-weight: 700; } .sku .id { color: #9ca3af; font-size: 12px; }
+  input[type=number] { width: 64px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+  button { padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; color: #fff; background: #2563eb; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.ghost { background: #64748b; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+  .st { font-weight: 700; }
+  .st-PENDING_PAYMENT { color: #d97706; } .st-PAID, .st-SUCCEEDED, .st-AVAILABLE { color: #16a34a; }
+  .st-FAILED, .st-CANCELLED, .st-REVOKED { color: #dc2626; } .st-UNKNOWN, .st-PROCESSING { color: #d97706; }
+  #log { font-family: Consolas, monospace; font-size: 12px; background: #0f172a; color: #cbd5e1; border-radius: 8px; padding: 14px; max-height: 260px; overflow-y: auto; white-space: pre-wrap; line-height: 1.7; }
+  .note { font-size: 12px; color: #475569; line-height: 1.8; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>PaymentArch 演示控制台 <span style="font-size:12px;color:#9ca3af">（mock-channel-web :8091 · 同源代理，无 CORS）</span></h1>
+    <div class="note">链路：下单(order) → 跳转收银台(payUrl) → 渠道回调(验签) → 履约(fulfillment) → 权益(entitlement) → 记账(ledger)。
+      状态轮询经 /proxy 透传各服务只读接口。</div>
+  </div>
+
+  <div class="card">
+    <h2>① 商品与下单（种子 SKU，见 demo/reset.sh）</h2>
+    <div id="skus">加载中…</div>
+    <div class="note">userId=<input id="userId" value="demo-user" style="width:120px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
+      merchantId=<input id="merchantId" value="1" style="width:64px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px"></div>
+  </div>
+
+  <div class="card">
+    <h2>② 当前订单状态（每 2s 轮询）</h2>
+    <table id="orderTable"><tbody>
+      <tr><th>orderId</th><td id="t-orderId">—</td><th>order.status</th><td id="t-orderStatus">—</td></tr>
+      <tr><th>paymentId</th><td id="t-paymentId">—</td><th>payment.status</th><td id="t-paymentStatus">—</td></tr>
+      <tr><th>fulfillment</th><td id="t-fulfillment">—</td><th>entitlement</th><td id="t-entitlement">—</td></tr>
+    </tbody></table>
+    <div class="note">
+      <button class="ghost" onclick="pollOnce()">立即刷新</button>
+      <button class="ghost" onclick="stopPoll()">停止轮询</button>
+      <span id="pollHint" style="margin-left:8px;color:#9ca3af"></span>
+    </div>
+  </div>
+
+  <div class="card"><h2>操作日志</h2><div id="log">// 日志</div></div>
+</div>
+<script>
+// SKU 列表由 /proxy/catalog/skus 动态拉取（reset 后 id 为自增 1/2/3，不硬编码）
+const log = (m) => { const el = document.getElementById('log'); el.textContent += "\n" + m; el.scrollTop = el.scrollHeight; };
+let pollTimer = null, currentOrderId = null, currentPaymentId = null;
+
+async function api(method, path, body, headers) {
+  const opt = { method, headers: headers || {} };
+  if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const res = await fetch('/proxy' + path, opt);
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* 空响应 */ }
+  return { status: res.status, data };
+}
+
+async function loadSkus() {
+  const box = document.getElementById('skus');
+  box.innerHTML = '';
+  log('>> GET /proxy/catalog/skus');
+  const r = await api('GET', '/catalog/skus');
+  if (r.status !== 200 || !Array.isArray(r.data)) {
+    box.innerHTML = '<div class="sku">SKU 列表不可用（HTTP ' + r.status + '）—— 请先执行 demo/reset.sh</div>';
+    return;
+  }
+  if (r.data.length === 0) {
+    box.innerHTML = '<div class="sku">暂无 SKU —— 请先执行 demo/reset.sh</div>';
+    return;
+  }
+  for (const s of r.data) {
+    box.innerHTML += '<div class="sku"><div><div class="name">' + s.name + '</div>'
+      + '<div class="id">skuId=' + s.id + ' · ' + s.skuCode + ' · 状态 ' + s.status + '</div></div>'
+      + '<div><span class="price">' + (s.priceMinor / 100).toFixed(2) + ' ' + s.currencyCode + '</span> × '
+      + '<input type="number" id="qty-' + s.id + '" value="1" min="1"> <button onclick="placeOrder(' + s.id + ')">下单</button></div></div>';
+  }
+}
+
+async function placeOrder(skuId) {
+  const qty = Number(document.getElementById('qty-' + skuId).value) || 1;
+  const payload = {
+    userId: document.getElementById('userId').value,
+    merchantId: document.getElementById('merchantId').value,
+    items: [{ skuId: skuId, quantity: qty }]
+  };
+  // Phase 2 (012)：客户端生成 Idempotency-Key，演示同 key 幂等（并发 409 + 轮询 / 重放 200）
+  const idemKey = crypto.randomUUID();
+  log('>> POST /proxy/order/orders  Idempotency-Key=' + idemKey + '  ' + JSON.stringify(payload));
+  const r = await api('POST', '/order/orders', payload, { 'Idempotency-Key': idemKey });
+  log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
+  if (r.status !== 201) { alert('下单失败: HTTP ' + r.status + ' ' + JSON.stringify(r.data)); return; }
+  currentOrderId = r.data.orderId;
+  currentPaymentId = r.data.paymentId;
+  renderOrder(r.data);
+  if (r.data.payUrl) {
+    log('   payUrl: ' + r.data.payUrl);
+    log('   → 打开收银台（新窗口），并开始轮询订单状态');
+    window.open(r.data.payUrl, '_blank');
+  } else {
+    log('   （无 payUrl：mock-cashier 未开启，支付为同步内联成功路径）');
+  }
+  startPoll();
+}
+
+function renderOrder(o) {
+  document.getElementById('t-orderId').textContent = o.orderId;
+  document.getElementById('t-orderStatus').textContent = o.status;
+  document.getElementById('t-orderStatus').className = 'st st-' + o.status;
+  document.getElementById('t-paymentId').textContent = o.paymentId;
+  document.getElementById('t-paymentStatus').textContent = o.paymentStatus;
+  document.getElementById('t-paymentStatus').className = 'st st-' + o.paymentStatus;
+}
+
+async function pollOnce() {
+  if (!currentOrderId) return;
+  const o = await api('GET', '/order/orders/' + currentOrderId);
+  if (o.status === 200 && o.data) {
+    document.getElementById('t-orderStatus').textContent = o.data.status;
+    document.getElementById('t-orderStatus').className = 'st st-' + o.data.status;
+    const pid = o.data.paymentId || currentPaymentId;
+    if (pid) {
+      const p = await api('GET', '/payment/payments/' + pid);
+      if (p.status === 200 && p.data) {
+        document.getElementById('t-paymentStatus').textContent = p.data.status;
+        document.getElementById('t-paymentStatus').className = 'st st-' + p.data.status;
+      }
+    }
+    // fulfillment：单对象（未创建 404）；entitlement：数组（空数组 = 未发放）
+    const f = await api('GET', '/fulfillment/fulfillments/by-order/' + currentOrderId);
+    document.getElementById('t-fulfillment').textContent =
+      f.status === 200 ? f.data.status : (f.status === 404 ? '（未创建）' : 'HTTP ' + f.status);
+    const e = await api('GET', '/entitlement/entitlements/by-order/' + currentOrderId);
+    document.getElementById('t-entitlement').textContent =
+      Array.isArray(e.data) ? (e.data.length === 0 ? '（未发放）' : e.data.map(x => x.status).join(', ')) : 'HTTP ' + e.status;
+  }
+}
+function startPoll() {
+  stopPoll();
+  pollTimer = setInterval(pollOnce, 2000);
+  document.getElementById('pollHint').textContent = '轮询中…';
+}
+function stopPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  document.getElementById('pollHint').textContent = '已停止';
+}
+loadSkus();
+</script>
+</body>
+</html>

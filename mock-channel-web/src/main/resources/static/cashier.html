@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mock 渠道收银台 — PaymentArch 演示</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f6f9; color: #1f2937; padding: 24px; }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .badge { display: inline-block; font-size: 12px; background: #fef3c7; color: #92400e; border-radius: 4px; padding: 2px 8px; margin-left: 8px; }
+  .meta { font-size: 13px; color: #6b7280; margin: 10px 0 16px; line-height: 1.8; }
+  .meta b { color: #111827; }
+  .amount { font-size: 28px; font-weight: 700; color: #dc2626; margin: 6px 0 14px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button { padding: 12px 10px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .b-success { background: #16a34a; } .b-fail { background: #dc2626; }
+  .b-timeout { background: #64748b; } .b-unknown { background: #d97706; }
+  .b-dup { background: #2563eb; } .b-forged { background: #7c3aed; }
+  #log { font-family: Consolas, monospace; font-size: 12px; background: #0f172a; color: #cbd5e1; border-radius: 8px; padding: 14px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; line-height: 1.7; }
+  .note { font-size: 12px; color: #92400e; background: #fef3c7; border-radius: 6px; padding: 10px 12px; margin-top: 12px; line-height: 1.7; }
+  .back { font-size: 13px; color: #2563eb; text-decoration: none; display: inline-block; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/demo">&larr; 返回演示控制台</a>
+  <div class="card">
+    <h1>Mock 渠道收银台 <span class="badge">演示组件 · 非真实渠道</span></h1>
+    <div class="meta" id="meta">加载中…</div>
+    <div class="amount" id="amount">—</div>
+    <div class="grid">
+      <button class="b-success" onclick="pay('SUCCESS')">支付成功</button>
+      <button class="b-fail" onclick="pay('FAILURE')">支付失败</button>
+      <button class="b-timeout" onclick="noCallback()">超时不回调</button>
+      <button class="b-unknown" onclick="pay('UNKNOWN')">无结论 (UNKNOWN)</button>
+      <button class="b-dup" onclick="payTwice()">重复回调 ×2</button>
+      <button class="b-forged" onclick="payForged()">伪造签名</button>
+    </div>
+    <div class="note" id="note">
+      「超时不回调」不发送任何请求：payment 侧 30s 超时后支付转 UNKNOWN，主动查询不收敛 ——
+      这正是「不猜成败落账」要演示的正确性能力。「伪造签名」以错误密钥签名，payment 侧验签
+      失败返回 403（ADR-0052 fail-closed；需环境已配置 PAYMENT_CHANNEL_SECRET）。
+    </div>
+  </div>
+  <div class="card"><div id="log">// 操作日志</div></div>
+</div>
+<script>
+const qs = new URLSearchParams(location.search);
+const paymentId = qs.get('paymentId');
+const orderId = qs.get('orderId');
+const amountMinor = qs.get('amountMinor');
+const currencyCode = qs.get('currencyCode') || 'CNY';
+const log = (m) => { const el = document.getElementById('log'); el.textContent += "\n" + m; el.scrollTop = el.scrollHeight; };
+
+function fmt(minor, cur) {
+  return (minor / 100).toFixed(2) + ' ' + cur;
+}
+document.getElementById('meta').innerHTML =
+  'paymentId: <b>' + (paymentId || '缺失') + '</b> &nbsp; orderId: <b>' + (orderId || '—') + '</b>';
+document.getElementById('amount').textContent =
+  amountMinor ? fmt(Number(amountMinor), currencyCode) : '（金额未随链路携带）';
+
+async function sendCallback(status, signMode, extra) {
+  const payload = Object.assign({
+    paymentId: Number(paymentId),
+    status: status,
+    channelReference: 'demo-ref-' + Date.now(),
+    reason: null,
+    amountMinor: amountMinor ? Number(amountMinor) : null,
+    signMode: signMode || 'VALID'
+  }, extra || {});
+  log('>> POST /mock-channel/callback  status=' + status + '  signMode=' + (signMode || 'VALID'));
+  const res = await fetch('/mock-channel/callback', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  log('<< HTTP ' + res.status + '  ' + JSON.stringify(data));
+  if (data.body && data.body.indexOf('"status"') >= 0) {
+    try {
+      const p = JSON.parse(data.body);
+      log('   payment 状态 → ' + p.status);
+    } catch (e) { /* 保留原始 body 日志 */ }
+  }
+  return res;
+}
+
+async function pay(status) {
+  await sendCallback(status, 'VALID');
+}
+function noCallback() {
+  log('>> （不发送任何回调）');
+  log('   预期：payment 30s 后转 UNKNOWN（payment.reliability.timeout=30s），');
+  log('   随后主动查询（15s 间隔 × 5 次）仍无结论 → 停留 UNKNOWN，不履约不记账。');
+  log('   回演示控制台可继续观察轮询结果。');
+}
+async function payTwice() {
+  log('== 连发两次相同回调（演示幂等吸收）==');
+  await sendCallback('SUCCESS', 'VALID');
+  await sendCallback('SUCCESS', 'VALID');
+  log('   预期：第二次被终态吸收（payment.duplicate_callback 指标 +1，不重复入账）。');
+}
+async function payForged() {
+  await sendCallback('SUCCESS', 'FORGED');
+  log('   预期：HTTP 403 —— payment 验签失败拒绝，业务层零触达（ADR-0052）。');
+}
+if (!paymentId) { log('!! 缺少 paymentId 查询参数 —— 请从演示控制台下单后跳转。'); }
+</script>
+</body>
+</html>

@@ -25,8 +25,8 @@
 | **Redis** | ❌ 无 | 无依赖、无配置 |
 | **压测** | ❌ 无 | 无脚本；§5.1 性能目标标注为「`[目标]`，待确认，未测得」 |
 | 渠道"跳转 + 回调"形态 | ❌ 无 | `MockChannelAdapter` 为进程内函数直接返回，无收银台、无回调链路 |
-| 对账 batch 生命周期「处理中→关闭」 | ⚠️ 半实现 | `beginProcessing()` / `close()` 已定义但未被调用（ADR-0019 已登记） |
-| 对账按 period 取账单 | ⚠️ 半实现 | `CsvChannelStatementLoader.load(period)` 忽略入参，固定全局 fixture |
+| 对账 batch 生命周期「处理中→关闭」 | ✅ 已实现（2026-08-31 核验更正） | `resolveDifference()` 已调 `beginProcessing()`（ApplicationService:151）；`closeBatch` + 端点 `POST .../batches/{id}/close` 已存在 |
+| 对账按 period 取账单 | ✅ 已实现（回退留痕） | `load(period)` 已按 `{dir}/{period}.csv` 定位，未命中回退 `sample.csv`（WARN + 指标） |
 
 **结论**：本阶段不是"从零造功能"，而是**在已跑通的真实链路上，补齐「可演示」「可防重复」「可抗并发」「可度量」四件事**。
 
@@ -38,8 +38,12 @@
    **真实链路 + 确定性可控的外部环境 + 一键复现脚本 + 可视化**。
    演示脚本只做**编排与展示**，**MUST NOT** 直接写业务状态、跳过状态机或伪造事实。
 2. **Redis 不是真相源**。任何时刻 Redis 数据可全部丢失，系统仍**正确**（只是变慢）。资金判定、库存终扣、权益发放、记账 MUST 以 DB / Ledger 为准。
-3. **正确性先于性能**。幂等的兜底 MUST 落在 DB 唯一约束，Redis 去重窗口只是加速器，不是保证。
+3. **正确性先于性能**。资金入口（支付/退款/结算/记账）的幂等兜底 MUST 落在 DB 唯一约束。
+   > **2026-08-31 负责人裁决修订**：**订单创建**（商业意图入口，非资金入口）的去重按裁决改为
+   > **仅 Redis SETNX+TTL，不建 DB 幂等表**（ADR-0039/0040）；资金入口的 DB 唯一约束全部原样保留。
 4. **引入中间件必须有证据**。宪章 IV.6 + `010-distributed-evolution` 闸门：**先压测拿证据 → 填 `split-proposal-template.md` 四段 → ADR 五问论证 → 再引入**。顺序不可颠倒。
+   > **2026-08-31 负责人裁决修订**：Redis 引入已获负责人直接批准（ADR-0044），证据闸门豁免；
+   > k6 压测保留为**度量**（前后对比），不再作为引入前置。
 
 ---
 
@@ -107,30 +111,38 @@
 
 **脚本纪律**：每步打印 `curl` 命令 + 响应摘要 + 下一步提示；末尾 MUST 有**断言**（而非仅打印），失败非零退出。
 
-### 4.3 对账演示的前置修复（真实的既有缺陷）
+### 4.3 对账演示的前置确认（2026-08-31 核验更正：原两处"缺陷"均失实）
 
-对账要能"每日"演示，必须先修两处（已有 ADR-0019 登记，非本次新发现）：
+> **2026-08-31 核验更正**：本节原先列出的两处"既有缺陷"经对照真实代码**均不成立**，
+> 对账服务无需任何修复，演示只需补齐 per-period 素材（见 ADR-0050）：
 
-1. `beginProcessing()` / `close()` 未被调用 → batch 停在 `HAS_DIFFERENCE` 后无法推进，"处理中→关闭"演不出来。
-2. `CsvChannelStatementLoader.load(period)` 忽略 `period` 入参 → "每日对账"实际是假的（永远同一份 fixture）。
+1. ~~`beginProcessing()` / `close()` 未被调用~~ —— **失实**：`ReconciliationApplicationService.resolveDifference()`（:151）已调用 `beginProcessing()`；`closeBatch()`（:164-173）与端点 `POST /internal/reconciliation/batches/{id}/close`（ReconciliationController.java:53-57）均已存在。
+2. ~~`CsvChannelStatementLoader.load(period)` 忽略 `period` 入参~~ —— **失实**：loader **已按** `{dir}/{period}.csv` 定位（infra/CsvChannelStatementLoader.java:54-73），未命中才回退 `sample.csv` 且显式留痕（WARN + 指标）。真正的问题是 classpath 上只有一份 `sample.csv`（无周期素材），补 per-period fixture 即可，**无需改 loader**。
 
-修复后，对账演示才能真实呈现：**按 T-1 period 取账单 → 匹配 → 4 类差异 → 处理 → 关闭**。
+对账演示路径：**按 T-1 period 生成账单 CSV → 匹配 → 4 类差异 → resolve → close（断言 CLOSED）**。
 
 ---
 
 ## 5. F2 — `012-entry-idempotency`：用户点两次下单怎么办
 
-### 5.1 分层防御（明确每层"防得住什么、防不住什么"）
+### 5.1 分层防御（2026-08-31 裁决修订：L2 升格为唯一下单去重层，L3 不建）
+
+> **裁决修订**：负责人裁定下单幂等**仅用 Redis 防重（L2），不建 DB 幂等表（L3 不做）**，
+> key 由客户端生成（ADR-0039/0040）。资金入口的幂等仍由既有 DB 唯一约束兜底（不在本表范围）。
+> 下表保留原分析作为决策依据：
 
 | 层 | 手段 | 防住 | **防不住** |
 |---|---|---|---|
 | L0 客户端 | 按钮置灰 / loading / debounce | 手抖双击 | 刷新、后退、多标签、脚本、网关重试、网络重传 |
-| L1 前端幂等键 | 进入下单页向服务端申请 `Idempotency-Key`，重复提交带同一 key | 同页面重复提交（含刷新/多标签） | 换设备、key 过期后重下、用户真想买两件 |
-| L2 接入层去重窗口 | Redis `SETNX` + 短 TTL（**014 引入，可选增强**） | 真正的并发重复 | Redis 不可用（必须降级到 L3） |
-| L3 **服务端 DB 唯一约束** | `uk(idempotency_key)` | **唯一真正的兜底** | 无 key 的老客户端 |
+| L1 前端幂等键 | **客户端生成**（`crypto.randomUUID`）`Idempotency-Key`，重复提交带同一 key | 同页面重复提交（含刷新/多标签） | 换设备、key 过期后重下、用户真想买两件 |
+| L2 **服务端 Redis 去重（裁决选定为唯一服务端手段）** | `SETNX` + TTL，IN_PROGRESS → 409 轮询 / DONE → 200 重放 | 真正的并发重复 | Redis 不可用 → fail-open（接受重复窗口，崩溃窗口重复单为已接受代价，ADR-0040） |
+| ~~L3 服务端 DB 唯一约束~~ | ~~`uk(idempotency_key)`~~ | —— | **裁决不做**（订单非资金入口） |
 | L4 业务弱提示 | 同用户 + 同 SKU + 短窗内有待支付单 → 提示 | 体验问题 | 不能当正确性保证 |
 
-> **核心结论（面试高分点）**：前端只能**减少重复发生**，**不能保证不发生**。正确性兜底 MUST 在服务端 DB 唯一约束——因为 L0~L2 每一层都能被绕过（禁用 JS、换设备、并发、缓存失效），而 DB 唯一约束不会。
+> **面试表述口径（裁决后）**：前端只能**减少重复发生**，不能保证不发生；本项目的分层取舍是——
+> **资金正确性**由资金入口（Payment/Refund/Settlement/Ledger）的 DB 唯一约束 + 状态机兜底（宪章 V.1 强制），
+> **订单重复**这一商业意图层面的去重则用 Redis SETNX + fail-open，崩溃窗口的重复单是显式接受的代价。
+> 能讲清「哪层用强保证、哪层用弱保证、代价是什么」，比笼统说"DB 兜底"更能体现设计判断。
 
 ### 5.2 并发下的关键难点：不能"先查再建"
 
@@ -354,9 +366,11 @@ total = available + reserved + sold
 
 ---
 
-## 12. 待负责人决策（阻塞项）
+## 12. 负责人决策（已全部裁决，2026-08-31）
 
-1. **是否接受"演示"定位**：真实链路 + 脚本编排，而非商城 UI / 大屏。
-2. **ADR-0038~0046 九项决策**（见 §9）。
-3. **Redis 是否引入**：取决于 §7.1 第①步压测证据，证据不足则 014 降级为"只压测 + 只做 DB 版秒杀"。
-4. **是否先修既有缺陷**：对账 `beginProcessing/close` 未接线、`load(period)` 忽略入参（影响对账演示真实性）。
+> 原「待负责人决策（阻塞项）」4 项已全部裁决并落地执行，此处仅留档：
+
+1. **演示定位：接受** —— 真实链路 + 脚本编排 + 新增 `mock-channel-web` 收银台组件（见 ADR-0048 修订版）。
+2. **ADR-0038~0046 九项决策：全部 Accepted** —— 关键裁决：下单幂等只走 Redis（不建幂等表）、Stock 聚合放 catalog、下单预占+支付成功才扣、ZSet 时间轮、快速失败且拒绝不可重试、不接管+轮询。正式落 ADR 集合文档 `docs/adr/0014-next-stage-decisions.md`（Phase 5）。
+3. **Redis：引入**（通过 IV.6 五问门禁，ADR-0044），014 按完整方案执行。
+4. **既有缺陷：核验后失实** —— 对账 `beginProcessing/close` 已接线（`ReconciliationApplicationService.java:151`）、`load(period)` 已按期次加载（`:164-173`），无需修复；详见 §4.3 核验更正。

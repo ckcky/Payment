@@ -8,6 +8,7 @@ import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentUnknownResolutionService;
 import com.payment.payment.domain.Payment;
+import com.payment.payment.web.MockCashierProperties;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,21 +28,40 @@ public class PaymentController {
 
     private final PaymentApplicationService applicationService;
     private final PaymentUnknownResolutionService resolutionService;
+    private final MockCashierProperties mockCashier;
 
     public PaymentController(PaymentApplicationService applicationService,
-                             PaymentUnknownResolutionService resolutionService) {
+                             PaymentUnknownResolutionService resolutionService,
+                             MockCashierProperties mockCashier) {
         this.applicationService = applicationService;
         this.resolutionService = resolutionService;
+        this.mockCashier = mockCashier;
     }
 
+    /**
+     * 创建支付意图（ADR-0048 修订版）：mock-cashier.enabled=true 时跳过渠道内联调用
+     * （Payment 停留 PROCESSING 等收银台回调），并在响应附带 {@code payUrl}；
+     * 默认关闭时走既有同步 charge 主链，payUrl 为 null，既有行为与测试零变化。
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CreatePaymentResponse createPayment(@Valid @RequestBody CreatePaymentRequest request) {
         CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderId(),
                 request.userId(), request.amountMinor(), request.currencyCode(),
                 request.idempotencyKey(), request.channelCode());
-        Payment payment = applicationService.createPaymentIntent(command);
-        return new CreatePaymentResponse(payment.getId(), payment.getStatus().name());
+        boolean defer = mockCashier.isEnabled();
+        Payment payment = applicationService.createPaymentIntent(command, defer);
+        String payUrl = defer ? buildPayUrl(payment, request.orderId(), request.amountMinor(),
+                request.currencyCode()) : null;
+        return new CreatePaymentResponse(payment.getId(), payment.getStatus().name(), payUrl);
+    }
+
+    /** 收银台页链接：mock-channel-web 的 /cashier，页面从查询串自渲染。 */
+    private String buildPayUrl(Payment payment, String orderId, Long amountMinor, String currencyCode) {
+        return mockCashier.getBaseUrl() + "/cashier?paymentId=" + payment.getId()
+                + "&orderId=" + orderId
+                + "&amountMinor=" + amountMinor
+                + "&currencyCode=" + currencyCode;
     }
 
     @GetMapping("/{id}")

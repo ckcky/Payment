@@ -17,13 +17,19 @@
 | [0009](0009-risk-security-decisions.md) | 风险 / 安全决策集合（ADR-0024~0028） | **混合**（2026-08-30 裁决 / 2026-08-31 落地：0024 鉴权 ✅ **方案 Accepted／实现=预留空函数**；0025 验签 ✅ **方案 Accepted／实现=预留空函数**；0026 密钥 ✅ **Accepted（明文）**；0027 脱敏 ⛔ **Not Implemented（不管，类已删）**；0028 风控 ⛔ **Not Implemented（不管，类已删）**） | Feature 009；含：内部服务鉴权(**接入点保留**·`verifyServiceToken` 空实现恒放行，`/internal/**` 恒可达) / 渠道回调 HMAC 验签(**骨架保留**·`verifySignature` 空实现恒通过，`SignatureVerifier` 工具类留作接入时复用) / 密钥明文 env 注入(当前无密钥需注入) / **脱敏(不做，类已删)** / **风控(不做，类已删，不留挂点)** |
 | [0010](0010-distributed-evolution-decisions.md) | 分布式演进决策集合（ADR-0029~0033） | **混合**（2026-08-30 裁决：0029 / 0030 / 0032 / 0033 ✅ **Accepted（保持现状）**；0031 异步消息 ⛔ **Not Implemented（不使用 MQ）**） | Feature 010；含：不拆分转而建门禁 / 拆库触发判据(保持现状) / **引入异步消息判据(不做)** / T0~T3 分层 / 提案模板与运行手册作为门禁 |
 | [0011](0011-internal-token-decisions.md) | 内部服务令牌闭环（ADR-0034~0037） | ⛔ **Not Implemented（不做，2026-08-30 裁决「出入站鉴权令牌都先不做」，2026-08-31 代码已清理）** | Feature 009 收尾 T013；含：**出站令牌传播范围(不做·代码已删)** / **入站鉴权推广范围(不推广)** / **令牌轮换(不做)** / **鉴权失败可观测(不做)**；`platform.security.*` 配置已移除，将来启用时按本文档与 0009 的 0024 成对实施 |
+| [0012](0012-demo-showcase-decisions.md) | 端到端演示形态（ADR-0048~0051） | ✅ **Accepted**（2026-08-31 裁决；**ADR-0048 已修订**——推翻「不做 `mock-channel-web`」，改为**新增收银台组件**，含 payUrl 跳转链路与演示页面） | Feature 011；含：**演示形态(新增 `mock-channel-web`：收银台页+回调签名转发+演示控制台+同源代理)** / **Mock 渠道场景配置化(`payment.channel.mock-scenario`，已落地)** / **对账演示账单(生成 CSV 写入 `target/classes`，不改生产代码)** / **演示脚本纪律(只编排不伪造、断言失败即非零退出)** |
+| [0013](0013-channel-callback-signature-decisions.md) | 渠道回调验签接入（ADR-0052） | ⛔ **Not Implemented**（2026-08-31 用户确认回退到 ADR-0025 空实现） | Feature 011 前置候选；**不落地** `SignatureVerifier` 真实校验，代码维持 `ChannelCallbackSignatureFilter#verifySignature` 恒返回 `true`（占位放行）；`application.yml` 已移除 `payment.security.*` 配置；`ChannelCallbackSecurityTest` 维持占位期放行断言（`invalidSignatureIsAllowedWhileSignatureVerificationIsStubbed` 等） |
+| [0015](0015-wip-ahead-of-roadmap.md) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置（ADR-0053） | **Accepted**（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码） | 偏离 / 处置日志：working tree 含 013-inventory-reservation / 014-seckill-and-cache 实质性实现，**超前顺序、缺 spec/ADR-0041~0046、014 的 Redis 引入未经 roadmap §7 论证闸门**；决策=保留代码（编译+测试通过，且与 011 在 order-service 纠缠不可干净拆分），spec/ADR 补写列为 TODO，待复盘收口 |
 
 ## 编号规则
 
 - 编号**只增不改、不复用**；一个 ADR 文档可容纳同一 Feature 的多条决策标签（如 0006 含 0016~0018 与 0047）。
-- **下一可用编号：ADR-0048**。
+- **下一可用编号：ADR-0054**（ADR-0053 已用于「013/014 超前落地处置」，见 `0015-wip-ahead-of-roadmap.md`）。
 - ⚠️ **ADR-0038~0046 为预留号段**，已由 `docs/architecture/next-stage-design.md` §9 分配给下一阶段九项提案（Mock 收银台 / 幂等键签发 / 并发幂等接管 / 库存域归属 / 库存扣减时机 / 超时释放机制 / Redis 引入论证 / Redis 用途边界 / 秒杀限流）。这些编号**尚未写入 ADR 文档**，但在提案落地前不得挪作他用。
+  - ⚠️ **注意**：ADR-0038（演示形态）的议题已由 **ADR-0048** 处理；2026-08-31 负责人裁决修订后，结论与原提案一致（**做 `mock-channel-web` 收银台组件**）。0038 号段仍保留不动，避免打乱 §9 的编号对应关系。
 - ADR-0047 是预留段之后的第一条实际决策（退款金额校验口径），故跳号——详见 `0006-refund-decisions.md` 头部说明。
+- ADR-0048~0051 为 `011-demo-showcase` 的四条决策，见 `0012-demo-showcase-decisions.md`；其中 ADR-0048 已于 2026-08-31 按负责人裁决修订（新增收银台组件）。
+- ADR-0052 为渠道回调验签接入候选，见 `0013-channel-callback-signature-decisions.md`（⛔ **Not Implemented**：2026-08-31 用户确认回退到 ADR-0025 空实现，不落地真实验签）。
 
 ## 状态机
 

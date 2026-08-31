@@ -8,6 +8,7 @@ import com.payment.payment.application.channel.QueryStatusRequest;
 import com.payment.payment.application.channel.RefundRequest;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>所有结果都通过<b>双响应码</b>表达（ADR-0012）：{@code TransportCode} 描述通信是否成功，
  * {@code BusinessCode} 描述通信成功后的业务结论。重试判定只看通信码，本类不参与。</p>
+ *
+ * <p>场景由 {@code payment.channel.mock-scenario} 配置（默认 {@code SUCCESS}，ADR-0049）；
+ * 主动查询结果由 {@link #setQueryResult} 设定，默认「渠道无结论」。</p>
  */
 @Component
 public class MockChannelAdapter implements PaymentChannel {
@@ -57,6 +61,34 @@ public class MockChannelAdapter implements PaymentChannel {
                               @Value("${payment.channel.http-timeout-ms:1500}") long httpTimeoutMs) {
         this.scenario = scenario;
         this.httpTimeoutMs = httpTimeoutMs;
+    }
+
+    /**
+     * Spring 主构造（ADR-0049）：场景由 {@code payment.channel.mock-scenario} 决定，默认 {@code SUCCESS}。
+     *
+     * <p>场景原本硬编码为 {@code SUCCESS}，导致 UNKNOWN / 失败 / 超时三条路径在生产进程里演不出来
+     * （只有测试能通过构造参数覆盖）。配置化后演示脚本可用
+     * {@code --payment.channel.mock-scenario=BUSINESS_UNKNOWN} 复现「渠道不给结论」。</p>
+     *
+     * <p><b>取值必须严格等于 {@link Scenario} 枚举名</b>（大写下划线）。不做别名、不做大小写容错：
+     * 非法值直接让 Bean 创建失败并给出合法取值清单，避免「配错了却静默走默认成功」——
+     * 那是最难排查的假绿（ADR-0049 第 2 条）。</p>
+     */
+    @Autowired
+    public MockChannelAdapter(@Value("${payment.channel.mock-scenario:SUCCESS}") String scenario,
+                              @Value("${payment.channel.http-timeout-ms:1500}") long httpTimeoutMs) {
+        this(parseScenario(scenario), httpTimeoutMs);
+    }
+
+    private static Scenario parseScenario(String raw) {
+        String name = raw == null ? "" : raw.trim();
+        try {
+            return Scenario.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "invalid payment.channel.mock-scenario: '" + raw + "'; expected one of "
+                            + java.util.Arrays.toString(Scenario.values()), e);
+        }
     }
 
     /** 对外（渠道 / 外部系统）HTTP 调用的超时预算，全服务统一 1.5s（ADR-0012 超时口径）。 */

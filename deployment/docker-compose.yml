@@ -1,6 +1,7 @@
 # Commerce & Payment Platform MVP — 单机启动入口
 #
-# 本阶段只提供「最小运行依赖」：MySQL 8。
+# 运行依赖：MySQL 8（业务库）+ Redis 7（下单入口幂等防重，ADR-0039/0040/0044）。
+# Redis 为非数据源（fail-open），不可用时降级为不防重、记 order_idempotency_degraded_total。
 # 各微服务镜像与编排在 Dockerfile 就绪后补齐；
 # 当前本地运行以 `./mvnw` 直接启动各服务，服务端口（8081–8089）：
 #   merchant 8081 / catalog 8082 / order 8083 / payment 8084 / refund 8085
@@ -32,6 +33,17 @@ services:
 
   # 可观测：Prometheus 抓取各服务 /actuator/prometheus；Grafana 呈现业务指标看板。
   # 服务以宿主进程运行（非容器），抓取目标用 host.docker.internal 访问宿主。
+  redis:
+    image: redis:7
+    container_name: payment-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: payment-prometheus

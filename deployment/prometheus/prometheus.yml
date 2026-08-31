@@ -56,3 +56,14 @@ scrape_configs:
     metrics_path: "/actuator/prometheus"
     static_configs:
       - targets: ["host.docker.internal:8089"]
+
+  - job_name: "ledger"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets: ["host.docker.internal:8090"]
+
+  # mock-channel-web（演示组件，ADR-0048 修订版）：非领域服务，仅观测演示流量
+  - job_name: "mock-channel-web"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets: ["host.docker.internal:8091"]

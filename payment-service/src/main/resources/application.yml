@@ -35,8 +35,12 @@ payment:
     # /payments/{id}/resolve 收敛端点鉴权开关；启用但未配置 token 时返回 503 拒绝
     auth-enabled: true
     admin-token: ${PAYMENT_ADMIN_TOKEN:}
-  # 安全挂点（ADR-0024 / 0025 / 0027 / 0028）：本期均为空实现，故不引入任何安全配置。
-  # 接入真实鉴权/验签/风控时在此补回 payment.security.* / payment.risk.*。
+  # Mock 收银台（ADR-0048 修订版）：enabled=true 时 createPayment 跳过渠道内联调用，
+  # Payment 停留 PROCESSING 等收银台回调，响应附 payUrl。默认 false，既有行为零变化。
+  mock-cashier:
+    enabled: ${PAYMENT_MOCK_CASHIER_ENABLED:false}
+    base-url: ${PAYMENT_MOCK_CASHIER_BASE_URL:http://localhost:8091}
+  # 渠道回调验签（ADR-0025：本期为空实现（占位），回调一律放行；接入真实渠道时再实现 verifySignature）
   # 支付可靠性（Feature 003 / ADR-0003~0005、ADR-0012~0015）
   reliability:
     timeout: 30s                       # PROCESSING 超此阈值且无明确结果 → UNKNOWN（ADR-0004）

@@ -5,6 +5,7 @@ import com.payment.catalog.api.dto.CreateSkuRequest;
 import com.payment.catalog.api.dto.ProductResponse;
 import com.payment.catalog.api.dto.SkuResponse;
 import com.payment.catalog.application.CatalogApplicationService;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -65,6 +66,11 @@ public class CatalogController {
     @GetMapping("/skus/{id}")
     public SkuResponse getSku(@PathVariable Long id) {
         return SkuResponse.from(catalogService.getSku(id));
+    }
+
+    @GetMapping("/skus")
+    public List<SkuResponse> listSkus() {
+        return catalogService.listSkus().stream().map(SkuResponse::from).toList();
     }
 
     @GetMapping("/products/{id}")

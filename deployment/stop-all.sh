@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# 停止全部：9 个微服务（宿主进程） + 容器（保留 MySQL 数据卷）
+# 停止全部：9 个微服务 + mock-channel-web（演示组件，按 .pids 记录） + 容器（保留 MySQL 数据卷）
 # 用法：bash deployment/stop-all.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

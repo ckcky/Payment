@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: mock-channel-web
+
+server:
+  port: 8091
+
+# Mock 渠道配置（ADR-0048 修订版）
+mock-channel:
+  # 与 payment-service 的 PAYMENT_CHANNEL_SECRET 同源：转发回调用同一密钥签名，
+  # "伪造签名"演示（FORGED）才能在 payment 侧验签失败返回 403（ADR-0052 fail-closed）。
+  # 两侧都为空时 payment 侧放行 + WARN（开发态边界）——演示环境由 start-all.sh 显式 export。
+  secret: ${PAYMENT_CHANNEL_SECRET:}
+  # /proxy/{service}/** 的转发目标（同源代理，避免 CORS）
+  services:
+    merchant: http://localhost:8081
+    catalog: http://localhost:8082
+    order: http://localhost:8083
+    payment: http://localhost:8084
+    refund: http://localhost:8085
+    fulfillment: http://localhost:8086
+    entitlement: http://localhost:8087
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always

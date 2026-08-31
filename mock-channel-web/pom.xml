@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        mock-channel-web（ADR-0048 修订版，2026-08-31 负责人裁决）：Mock 渠道收银台 + 演示控制台。
+
+        定位：演示组件，非领域服务 —— 故不进入 architecture-tests 的 ServiceBoundaryTest.SERVICES
+        数组（纳入只增噪音）。它不依赖任何服务模块、不持有业务数据、不做资金操作：
+          · 收银台页（/cashier）：以"渠道"身份向 payment-service 发签名回调（含伪造签名演示）；
+          · 演示控制台（/demo）：同源代理（/proxy/**）转发到各服务，避免 CORS；
+          · 唯一共享依赖是 common-core 的 SignatureVerifier（与 payment-service 同一验签实现）。
+    -->
+    <parent>
+        <groupId>com.payment</groupId>
+        <artifactId>payment-arch</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>mock-channel-web</artifactId>
+    <name>mock-channel-web</name>
+    <description>Mock 渠道收银台与演示控制台（端口 8091，演示组件非领域服务）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- 健康检查 + Prometheus 指标（与其他服务口径一致，便于纳入同一套 Grafana） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- 仅用 SignatureVerifier（HMAC-SHA256），与 payment-service 验签同一实现 -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>common-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

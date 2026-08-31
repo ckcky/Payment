@@ -1,7 +1,7 @@
 # 运行手册（Runbook）
 
 **适用版本**：PaymentArch 0.1.0-SNAPSHOT（Roadmap Phase 0~10）
-**最后更新**：2026-08-30
+**最后更新**：2026-08-31
 **配套文档**：`docs/architecture/roadmap.md`、`docs/adr/`、`docs/specs/`
 
 > 本手册是 Phase 10 验收标准（ADR-0033）要求的运行手册。它只描述**当前实际形态**：单台机器、单一 MySQL 实例、10 个 JVM 进程、跨服务同步 HTTP/Feign。任何拆分或部署形态变更必须先走 `split-proposal-template.md` 评审，并在通过后回来更新本手册。
@@ -22,9 +22,11 @@
 | T1 | `reconciliation-service` | 8088 | `reconciliation` | payment, refund | `/actuator/health` |
 | T1 | `settlement-service` | 8089 | `settlement` | ledger, merchant, reconciliation | `/actuator/health` |
 | T0 | `ledger-service` | 8090 | `ledger` | — | `/actuator/health` |
+| —（演示） | `mock-channel-web` | 8091 | 无（演示组件，不进服务边界） | —（被 payment 收银台同源代理 `/proxy/**` 调用） | `/actuator/health` |
 
 - 全部服务暴露 `/actuator/health`、`/actuator/info`、`/actuator/metrics`、`/actuator/prometheus` 与 Swagger UI。
 - 关键等级（T0~T3）定义见 `docs/adr/0010-distributed-evolution-decisions.md` ADR-0032。
+- ⚠️ **`mock-channel-web`（8091）是 Feature 011 的演示组件，不是生产服务**：它**不进入** `architecture-tests` 的 `ServiceBoundaryTest.SERVICES` 边界（构建期门禁已验证），不承担任何资金/业务事实，仅用于演示收银台跳转、回调转发与演示控制台。舰队规模 = 10 个生产服务 + 1 个演示组件 = 11 个 JVM 进程。
 
 ## 2. 启动顺序
 
@@ -38,6 +40,8 @@ ledger-service (8090)  ← 资金事实底座，最先起
 entitlement-service (8087) → fulfillment-service (8086)
    ↓
 payment-service (8084) → order-service (8083)
+   ↓
+mock-channel-web (8091)  ← 演示组件：收银台页 + 回调转发 + 控制台；payment 收银台同源代理 /proxy/** 依赖它（任意时机起即可，建议与 payment 同批）
    ↓
 refund-service (8085) → reconciliation-service (8088) → settlement-service (8089)
    ↓
@@ -62,7 +66,7 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 | --- | --- | --- |
 | `PAYMENT_ADMIN_TOKEN` | `/payments/{id}/resolve` 人工收敛端点的 `X-Admin-Token` | ✅ **生效**；未配置时端点返回 `503`（拒绝而非放行） |
 | ~~`PAYMENT_INTERNAL_TOKEN`~~ | ~~`/internal/**` 的 `X-Service-Token`~~ | ⛔ **已移除**（ADR-0024 鉴权改为空实现，配置块已删） |
-| ~~`PAYMENT_CHANNEL_SECRET`~~ | ~~渠道回调 HMAC-SHA256 验签密钥~~ | ⛔ **已移除**（ADR-0025 验签改为空实现，配置块已删） |
+| ~~`PAYMENT_CHANNEL_SECRET`~~ | ~~渠道回调 HMAC-SHA256 验签密钥~~ | ⛔ **payment 已移除**（ADR-0025 验签改为空实现，配置块已删）；但 `deployment/start-all.sh` 仍导出该值供 `mock-channel-web` **演示签名用（demo-only，payment 不读取）** |
 | ~~`PLATFORM_INTERNAL_TOKEN`~~ | ~~全平台共享的内部服务令牌（出站附加 / 入站校验）~~ | ⛔ **已移除**（ADR-0034 出站令牌不做，拦截器与配置已删） |
 
 **接入真实鉴权 / 验签时**（当前不需要执行）：
@@ -122,3 +126,11 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 - **可用性**：某服务需要独立主从切换或跨可用区部署，共享实例无法满足 RTO/RPO。
 
 触发后按 `split-proposal-template.md` 填写提案，四段（问题/收益/成本/回滚）缺一不予评审。
+
+## 9. 演示组件与 demo 脚本（Feature 011）
+
+- **组件**：`mock-channel-web`（端口 8091），演示用，**非生产服务**，不进服务边界（见 §1）。
+- **能力**：① 收银台页（点支付后跳转，模拟渠道收银台，可触发 SUCCESS/FAILURE/UNKNOWN 等结果回传）；② 渠道回调转发（`/mock-channel/callback` 把结果回传 payment，支持 `signMode=VALID/FORGED/NONE`）；③ 演示控制台（按钮触发各场景）；④ 同源代理 `/proxy/{service}/**` 解决浏览器跨域。
+- **⚠️ 验签占位（ADR-0025 / ADR-0052 ⛔ Not Implemented）**：payment 的 `ChannelCallbackSignatureFilter#verifySignature` 恒放行。因此演示控制台的「伪造签名（FORGED）」按钮**点下去也会被 payment 放行**，不会 403。**本环境无法演示「伪造签名被拒」**——接入真实验签（实现 `verifySignature` + 补 ADR-0052）后才能演示。
+- **脚本**：`demo/` 提供 `run-all.sh` 串联四场景（happy-path / unknown / refund / reconciliation）与 `seed.sh` / `restart-payment.sh` / `start-stack.sh` / `stop-stack.sh`。脚本按真实 API 契约编写、断言失败即非零退出；**全栈实跑需 Docker + MySQL**（本环境不可用，见 `docs/specs/011-demo-showcase/acceptance.md` §4）。详细前置与断言表见 `demo/README.md`。
+- **配置**：payment 的 `payment.channel.mock-scenario`（ADR-0049）决定 Mock 渠道默认结果（`SUCCESS`/`FAILURE`/`BUSINESS_UNKNOWN`/`TIMEOUT` 等），构造期注入、坏值 FAIL FAST，运行时切换需重启 payment（见 `demo/restart-payment.sh`）。

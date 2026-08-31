@@ -3,6 +3,8 @@ package com.payment.catalog.infra;
 import com.payment.catalog.domain.Sku;
 import com.payment.catalog.domain.SkuRepository;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -26,6 +28,11 @@ public class InMemorySkuRepository implements SkuRepository {
         return store.values().stream()
                 .filter(s -> s.getSkuCode().equals(skuCode))
                 .findFirst();
+    }
+
+    @Override
+    public List<Sku> findAll() {
+        return new ArrayList<>(store.values());
     }
 
     @Override

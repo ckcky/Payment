@@ -1,6 +1,12 @@
 spring:
   application:
     name: order-service
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # Redis 用作下单入口幂等防重（非数据源，fail-open）。连接失败不阻断下单。
+      timeout: 1000ms
   datasource:
     url: jdbc:mysql://localhost:3306/order?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
@@ -30,3 +36,16 @@ management:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+
+# 订单超时（014）：Redis ZSet 时间轮。下单进入待支付后登记，到期未支付则取消并释放库存。
+order:
+  timeout:
+    enabled: true
+    ttl-seconds: 900
+    poll-millis: 5000
+    zset-key: order:timeouts
+  ratelimit:
+    enabled: true
+    capacity: 50
+    window-millis: 1000
+    bucket: /orders

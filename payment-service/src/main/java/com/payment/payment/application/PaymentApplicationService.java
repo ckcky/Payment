@@ -72,12 +72,30 @@ public class PaymentApplicationService {
      * 避免 DB 连接被网络调用长期占用（雪崩风险）。履约 RPC 失败不回滚支付成功事实。</p>
      */
     public Payment createPaymentIntent(CreatePaymentCommand cmd) {
+        return createPaymentIntent(cmd, false);
+    }
+
+    /**
+     * 支付意图创建（ADR-0048 修订版重载）：{@code deferChannel=true} 时跳过渠道内联同步调用，
+     * Payment 停留 PROCESSING 等待收银台回调驱动状态迁移（mock-cashier.enabled=true 演示路径）。
+     *
+     * <p>既有语义零变化：默认 {@code deferChannel=false} 与原方法完全等价；幂等重复
+     * （返回首次结果）与渠道调用无关，不受 defer 影响。</p>
+     */
+    public Payment createPaymentIntent(CreatePaymentCommand cmd, boolean deferChannel) {
         PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd);
         if (!pending.created()) {
             metrics.counter("payment.duplicate", 1.0, "module", MODULE);
             return pending.payment();
         }
         metrics.counter("payment.created", 1.0, "module", MODULE);
+
+        if (deferChannel) {
+            // 收银台路径：不调渠道、不落渠道结果。超时（30s）后由 TimeoutScanner 转 UNKNOWN，
+            // 主动查询不收敛即停留 UNKNOWN —— 演示「点了不回调」「不猜成败落账」。
+            metrics.counter("payment.deferred_to_cashier", 1.0, "module", MODULE);
+            return pending.payment();
+        }
 
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
         // 重试期间不落库，最终结果与重试次数一次性写入。

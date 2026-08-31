@@ -6,6 +6,12 @@ spring:
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # Redis 用作 SKU 读缓存（cache-aside）与秒杀配额预扣（Lua 原子），非数据源、fail-open。
+      timeout: 1000ms
 
 server:
   port: 8082
@@ -22,3 +28,13 @@ management:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+
+# SKU 读缓存（014，cache-aside）：命中 Redis 则跳过 DB；写入/状态流转时失效。Redis 不可用时 fail-open 直连 DB。
+catalog:
+  cache:
+    enabled: true
+    ttl-seconds: 300
+    key-prefix: "sku:"
+  # 秒杀配额预扣（014，Redis Lua 原子）：只有 seed 过的 SKU 才走秒杀快速准入；未播种视为普通 SKU 直接放行。
+  seckill:
+    enabled: true

@@ -6,6 +6,7 @@ import com.payment.catalog.domain.SkuRepository;
 import com.payment.catalog.domain.SkuStatus;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
@@ -32,6 +33,11 @@ public class MybatisSkuRepository implements SkuRepository {
         SkuEntity entity = skuMapper.selectOne(
                 Wrappers.<SkuEntity>lambdaQuery().eq(SkuEntity::getSkuCode, skuCode));
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public List<Sku> findAll() {
+        return skuMapper.selectList(null).stream().map(this::toDomain).toList();
     }
 
     @Override
