@@ -17,6 +17,8 @@
         <groupId>com.payment</groupId>
         <artifactId>payment-arch</artifactId>
         <version>0.1.0-SNAPSHOT</version>
+        <!-- 本模块收口在 deployment/ 下，需上溯两级到仓库根 -->
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>mock-channel-web</artifactId>

@@ -129,8 +129,13 @@ class ServiceBoundaryTest {
         rule.check(serviceClasses);
     }
 
-    /** 定位某服务的编译输出目录（ledger-service 的 artifactId 与目录名一致，无需特例）。 */
+    /**
+     * 定位某服务的编译输出目录（ledger-service 的 artifactId 与目录名一致，无需特例）。
+     *
+     * <p>本模块位于 {@code deployment/architecture-tests}，工作目录即该目录，
+     * 因此需上溯两级才到仓库根，再进入各服务模块。移动本模块目录时 MUST 同步调整此处层级。</p>
+     */
     private static Path moduleClassesDir(String service) {
-        return Paths.get("..", service + "-service", "target", "classes");
+        return Paths.get("..", "..", service + "-service", "target", "classes");
     }
 }

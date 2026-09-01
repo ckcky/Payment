@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCENARIO="${1:-SUCCESS}"
 MAVEN_CMD="${MAVEN_CMD:-./mvnw}"
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PID_FILE="$ROOT_DIR/deployment/logs/.pids"
 
 if [ -f "$PID_FILE" ]; then

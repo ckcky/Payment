@@ -91,11 +91,13 @@ public class OrderTimeoutScheduler {
                 && order.getStatus() != OrderStatus.PENDING_CONFIRMATION) {
             return; // 已支付/已取消等，跳过
         }
-        // 释放预占库存（幂等：无预占或已确认均吸收）
+        // 释放预占库存（幂等：无预占或已确认均吸收）+ 回补秒杀配额（漏了会永久少卖）
         for (OrderItem item : order.getItems()) {
+            Long skuId = Long.parseLong(item.getSkuId());
             catalogClient.releaseStock(new ReleaseStockCommand(
                     reservationId(orderId, item.getSkuId()),
-                    Long.parseLong(item.getSkuId()), item.getQuantity()));
+                    skuId, item.getQuantity()));
+            catalogClient.rollbackSeckill(skuId, item.getQuantity());
         }
         order.cancel();
         orderRepository.save(order);

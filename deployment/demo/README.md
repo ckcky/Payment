@@ -12,7 +12,7 @@
 1. **Docker Desktop**（MySQL / Prometheus / Grafana 容器）。本机无 Docker 时无法起栈。
 2. **Maven 可用**：`deployment/start-all.sh` 用 `./mvnw` 启动各服务。若 `./mvnw` 不可用，请改用本地 Maven
    （如 `export MAVEN_CMD="mvn"` 并相应改造启动命令，或直接 `java -jar` 各服务的 fat-jar）。
-3. **服务启动并开启 mock 收银台**：`bash demo/start-stack.sh`
+3. **服务启动并开启 mock 收银台**：`bash deployment/demo/start-stack.sh`
    - 默认会 `export PAYMENT_MOCK_CASHIER_ENABLED=true`（支付走「收银台跳转」路径，响应带 `payUrl`）。
    - 默认注入演示用 `PAYMENT_ADMIN_TOKEN=demo-admin-token`（UNKNOWN 收敛端点鉴权）。
    - 启动后等待所有服务 `/actuator/health` 返回 200。
@@ -21,22 +21,22 @@
 
 ```bash
 # 1) 起栈（Docker + 10 个进程）
-bash demo/start-stack.sh
+bash deployment/demo/start-stack.sh
 
 # 2) 复位并灌种子（重建 8 个业务 Schema + 商户/商品/SKU 种子）
-bash demo/reset.sh        # 需 Docker（docker exec mysql）；若仅重灌数据可用 demo/seed.sh
+bash deployment/demo/reset.sh        # 需 Docker（docker exec mysql）；若仅重灌数据可用 deployment/demo/seed.sh
 
 # 3) 跑四个场景（每个脚本自带断言，失败即非零退出）
-bash demo/scenario-happy-path.sh        # 主链：下单→收银台回调→履约/权益/记账
-bash demo/scenario-refund.sh           # 退款：累计不超额 + 幂等重放
+bash deployment/demo/scenario-happy-path.sh        # 主链：下单→收银台回调→履约/权益/记账
+bash deployment/demo/scenario-refund.sh           # 退款：累计不超额 + 幂等重放
 # 演示 UNKNOWN 需先切换支付场景为 BUSINESS_UNKNOWN：
-bash demo/restart-payment.sh BUSINESS_UNKNOWN
-bash demo/scenario-payment-unknown.sh  # UNKNOWN 权威收敛 + resolve 鉴权
-bash demo/restart-payment.sh SUCCESS   # 切回默认成功路径
-bash demo/scenario-reconciliation.sh   # 对账：跑批→差异→关闭门禁→处理→关账
+bash deployment/demo/restart-payment.sh BUSINESS_UNKNOWN
+bash deployment/demo/scenario-payment-unknown.sh  # UNKNOWN 权威收敛 + resolve 鉴权
+bash deployment/demo/restart-payment.sh SUCCESS   # 切回默认成功路径
+bash deployment/demo/scenario-reconciliation.sh   # 对账：跑批→差异→关闭门禁→处理→关账
 
 # 4) 收尾
-bash demo/stop-stack.sh
+bash deployment/demo/stop-stack.sh
 ```
 
 ## 控制台（浏览器）
@@ -61,8 +61,8 @@ bash demo/stop-stack.sh
 `payment.channel.mock-scenario` 是**构造期注入**的，运行期不可热切换。需要换场景时重启支付服务：
 
 ```bash
-bash demo/restart-payment.sh BUSINESS_UNKNOWN   # 渠道不给结论 → UNKNOWN 路径
-bash demo/restart-payment.sh SUCCESS            # 恢复默认成功路径
+bash deployment/demo/restart-payment.sh BUSINESS_UNKNOWN   # 渠道不给结论 → UNKNOWN 路径
+bash deployment/demo/restart-payment.sh SUCCESS            # 恢复默认成功路径
 ```
 
 可选值：`SUCCESS` / `FAILURE` / `TIMEOUT` / `TRANSPORT_ERROR` / `BUSINESS_UNKNOWN`。

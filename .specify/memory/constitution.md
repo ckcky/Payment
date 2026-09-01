@@ -17,6 +17,16 @@ Sync Impact Report:
 - TODO: 无
 -->
 
+<!--
+Sync Impact Report:
+- Version: 2.1.0 → 2.2.0（MINOR：新增治理流程原则「提交与合并节奏」）
+- 新增：Governance §提交与合并节奏（Commit & Merge Cadence）——每完成一个 Spec MUST 立即提交并 merge 到 master，
+  含合并前置校验四条（verify 全绿 / 验收清单勾选 / ADR 状态已决 / 文档无漂移）与 WIP 不得滞留工作区
+- 决策来源：2026-09-02 负责人裁决
+- Rationale：2026-08-30 审计发现工作区堆积 37 个未提交文件导致悬空引用、全量构建破损，且事后无法区分有意裁剪与意外删除
+- TODO: 无
+-->
+
 # PaymentArch Constitution
 
 > Commerce & Payment Platform — 长期有效的工程与架构约束（最高宪法）。
@@ -192,6 +202,28 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
 
 冲突无法用以上优先级解决时，提交人类裁决。
 
+### 提交与合并节奏（Commit & Merge Cadence）
+
+**每个 Spec 完成后 MUST 立即提交并合并到 master，不允许跨 Spec 长期堆积改动。**
+
+1. **完成即提交**：一个 Spec（feature）的验收项通过、且全量 `mvn clean verify` 通过后 MUST 立即提交，
+   不得与后续 Spec 的改动混合。
+2. **一个 Spec 一个提交单元**：提交信息格式 `feat(<spec-id>): <简述>`，例：`feat(011): demo-showcase 落地`。
+   同一 Spec 的多轮改动 SHOULD 压平为该 Spec 的单个提交。
+3. **必须走 merge 到 master**：Spec 在分支开发完成后，MUST 通过 merge 合回 `master`
+   （保留分支历史的 merge commit，非 fast-forward），使每个 Spec 的边界在提交历史上可追溯、可回滚。
+4. **合并前置校验**（四条全满足才允许 merge）：
+   ① 全量 `mvn clean verify` 通过；
+   ② Spec 验收清单逐项勾选；
+   ③ 涉及 ADR 的状态已更新（Accepted / Not Implemented），不得长期停留在 Proposed；
+   ④ 文档（技术方案 / roadmap / 相关 spec）与实现同步，无漂移。
+5. **未完成 Spec 不得滞留工作区**：跨 Spec 的 WIP 改动 MUST 以 `WIP(<spec-id>): <简述>` 显式提交并注明缺口，
+   禁止以未跟踪（untracked）文件形式长期挂起。
+
+> **Rationale**：2026-08-30 审计发现工作区堆积 37 个未提交文件（两条并行未完成的裁剪改动流），
+> 悬空引用导致全量构建破损；事后无法区分「有意裁剪」与「意外删除」，只能靠推断。
+> 每 Spec 一次 merge 可将任何构建破损定位到单一 Spec 边界，也让 `git log` 直接成为进度报告。
+
 ### 修订流程（Amendment）
 
 1. 任何修订以 PR/提案提出，说明动机、变更点、影响范围。
@@ -199,4 +231,4 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
 3. 修订后按语义化版本递增版本号：MAJOR（原则删除/重定义）、MINOR（新增原则/扩展）、PATCH（措辞/澄清）。
 4. 更新版本行并记录修订历史。
 
-**Version**: 2.1.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-08-28
+**Version**: 2.2.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-02

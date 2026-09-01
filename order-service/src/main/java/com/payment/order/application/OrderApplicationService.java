@@ -91,9 +91,9 @@ public class OrderApplicationService {
                 order.getTotalMinor(), order.getCurrencyCode(), "PURCHASE");
         transaction = transactionRepository.save(transaction);
 
-        // 下单预占库存：幂等键 = reservationKey（客户端幂等键）或 orderId。
-        String stableKey = (reservationKey != null && !reservationKey.isBlank())
-                ? reservationKey : ("order:" + order.getId());
+        // 注：库存预占幂等键统一取 reservationId()（order:{orderId}:sku:{skuId}），
+        // 因为 OrderTimeoutScheduler / onPaymentSucceeded 各自按同一公式重算该键；
+        // reservationKey（客户端 Idempotency-Key）仅用于下单入口去重（012），不参与库存键构造。
         List<ReservedLine> reserved = new ArrayList<>();
         List<ReservedLine> seckillDeducted = new ArrayList<>();
         try {

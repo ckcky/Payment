@@ -7,7 +7,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$HERE/.." && pwd)"
+ROOT_DIR="$(cd "$HERE/../.." && pwd)"
 # shellcheck source=lib.sh
 source "$HERE/lib.sh"
 

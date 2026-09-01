@@ -85,8 +85,10 @@ class OrderTimeoutSchedulerTest {
 
         scheduler.processExpired();
 
-        // 释放库存 + 取消订单 + 移除 ZSet 成员
+        // 释放库存 + 回补秒杀配额 + 取消订单 + 移除 ZSet 成员
         verify(catalogClient).releaseStock(org.mockito.ArgumentMatchers.any(ReleaseStockCommand.class));
+        // 不回补秒杀配额会导致超时订单的 Redis 配额永久泄漏（少卖），故必须一并回补
+        verify(catalogClient).rollbackSeckill(7L, 2L);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         verify(orderRepository).save(order);
         verify(zSet).remove("order:timeouts", "7");

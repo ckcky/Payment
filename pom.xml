@@ -43,10 +43,11 @@
         <module>reconciliation-service</module>
         <module>settlement-service</module>
         <module>ledger-service</module>
-        <!-- ADR-0048 修订版：Mock 渠道收银台（演示组件，非领域服务；不进 ServiceBoundaryTest.SERVICES） -->
-        <module>mock-channel-web</module>
+        <!-- ADR-0048 修订版：Mock 渠道收银台（演示组件，非领域服务；不进 ServiceBoundaryTest.SERVICES）
+             非领域资产统一收口在 deployment/ 下（同 demo/、performance/） -->
+        <module>deployment/mock-channel-web</module>
         <!-- Phase 10 服务边界测试：必须在所有服务之后构建（读取各服务 target/classes 做结构校验） -->
-        <module>architecture-tests</module>
+        <module>deployment/architecture-tests</module>
     </modules>
 
     <properties>

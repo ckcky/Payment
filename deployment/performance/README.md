@@ -2,7 +2,7 @@
 
 > 关联能力：catalog-service `cache-aside` SKU 读缓存（`catalog.cache.*`）、秒杀配额原子预扣
 >（`/internal/stock/seckill/*`，Redis Lua）、order-service 固定窗口限流（429 快速失败）。
-> 测试脚本：`performance/catalog-seckill-k6.js`（k6）。
+> 测试脚本：`deployment/performance/catalog-seckill-k6.js`（k6）。
 
 ## 1. 目标
 
@@ -36,7 +36,7 @@ bash demo/reset.sh
 
 # 3) 跑压测
 k6 run -e BASE_URL=http://localhost:8082 -e SKU_ID=103 -e SECKILL_SKU_ID=103 \
-    performance/catalog-seckill-k6.js
+    deployment/performance/catalog-seckill-k6.js
 ```
 
 可选对照：临时将 `catalog-service/src/main/resources/application.yml` 中 `catalog.cache.enabled`

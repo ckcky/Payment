@@ -2,6 +2,39 @@
 
 > 本地单机运行与 Docker Compose 的最小 how-to。完整架构见 [docs/architecture/technical-solution.md](../docs/architecture/technical-solution.md)。
 
+## 目录收口原则
+
+仓库根目录**只放领域服务模块与工程元数据**（`*-service/`、`common/`、`pom.xml`、`mvnw`、`README.md`、`CLAUDE.md`）。
+非领域资产一律收口在 `deployment/` 下：
+
+| 目录 | 用途 | Maven 模块 |
+|---|---|---|
+| `schema/` | 各服务建表脚本（当前手工执行，未挂 Flyway） | 否 |
+| `initdb/` | Compose 首次启动建库脚本 | 否 |
+| `docker-compose.yml` | MySQL + Prometheus + Grafana 本地编排 | 否 |
+| `mock-channel-web/` | Mock 渠道收银台 + 演示控制台（8091，演示组件非领域服务） | **是** |
+| `architecture-tests/` | ArchUnit 服务边界门禁（无业务代码，必须最后构建） | **是** |
+| `demo/` | 演示脚本：种子数据、四场景链路、复位 | 否 |
+| `performance/` | k6 压测脚本与报告 | 否 |
+| `output/` | 构建产物与运行日志（git 不跟踪） | 否 |
+| `logs/` | 服务进程运行日志（git 不跟踪） | 否 |
+
+> **构建输出与调试日志 MUST 落在 `deployment/output/logs/`**，不得写到仓库根目录。
+> `.gitignore` 已忽略 `*.log` 与 `deployment/output/`，但落在根目录仍会污染工作区视图。
+
+### 移动模块目录时的注意事项
+
+`architecture-tests` 与 `mock-channel-web` 是 Maven 模块，移动时 MUST 同步修改三处：
+
+1. 根 `pom.xml` 的 `<modules>` 路径
+2. 模块自身 `pom.xml` 的 `<parent><relativePath>`（收口在 `deployment/` 下需上溯两级：`../../pom.xml`）
+3. `architecture-tests` 的 `ServiceBoundaryTest#moduleClassesDir` —— 它以相对路径
+   `../../<service>-service/target/classes` 读取各服务编译产物，层级写错会导致结构规则**静默空转**
+   （已内置防空转断言兜底，会直接失败而非放行）
+
+`demo/*.sh` 用 `ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"` 反推仓库根，
+移动 demo 目录时 MUST 同步调整上溯层级。
+
 ## 服务与端口
 
 | 服务 | 模块名（`-pl` 参数） | 端口 | 健康检查 |
