@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "generated_at": "2026-09-02T11:41:29.991Z",
+    "tool": "node-stdlib-loadgen (k6 unavailable: binary download blocked by proxy)",
+    "base_url": "http://localhost:8082",
+    "sku_id": "1",
+    "seckill_sku_id": "1",
+    "note": "catalog-service 以 H2 内存库运行。Redis 实际可达且功能正常（秒杀 Lua 原子预扣实测可写：seckill:sku:1 由 932089 递减）。但 (1) /actuator/health 误报 redis=DOWN（false-negative，真实操作正常）；(2) SKU 读缓存(sku:*)未生效，GET /skus/{id} 全回源 H2（Redis 中无 sku:* 键）；(3) 秒杀配额 seckill:sku:1=932089 极大，压测全程 200 准入、未触发 409。"
+  },
+  "scenarios": {
+    "sku_cache_read": {
+      "name": "sku_cache_read",
+      "vus_peak": 200,
+      "duration_ms": 61182,
+      "total": 33627,
+      "rps": 549.62,
+      "status_hist": {
+        "200": 33627
+      },
+      "errors": 0,
+      "error_rate": 0,
+      "latency_ms": {
+        "avg": 5.92,
+        "min": 0.55,
+        "p50": 4.7,
+        "p90": 11.41,
+        "p95": 13.2,
+        "p99": 16.83,
+        "max": 39.51
+      },
+      "admitted": 33627,
+      "soldout": 0,
+      "sla": {
+        "p95<50ms": true,
+        "p99<120ms": true,
+        "errorRate<1%": true
+      }
+    },
+    "seckill_flash": {
+      "name": "seckill_flash",
+      "vus_peak": 500,
+      "duration_ms": 40157,
+      "total": 44502,
+      "rps": 1108.2,
+      "status_hist": {
+        "200": 44502
+      },
+      "errors": 0,
+      "error_rate": 0,
+      "latency_ms": {
+        "avg": 287.81,
+        "min": 1.11,
+        "p50": 362.51,
+        "p90": 396.11,
+        "p95": 415.7,
+        "p99": 434.27,
+        "max": 446.94
+      },
+      "admitted": 44502,
+      "soldout": 0,
+      "sla": {
+        "p95<50ms": false,
+        "p99<120ms": false
+      }
+    }
+  }
+}

@@ -60,12 +60,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- TEMP (perf test only): promote H2 to runtime so catalog-service can boot without MySQL.
-             Revert to <scope>test</scope> after the load test. -->
+        <!-- H2 for tests only; the perf test now runs against the local MySQL catalog DB. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>runtime</scope>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
