@@ -76,6 +76,13 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
+        <!-- R3 验证：嵌入式 Redis（in-JVM，无需 Docker）用于真实并发幂等/秒杀测试 -->
+        <dependency>
+            <groupId>com.github.codemonstur</groupId>
+            <artifactId>embedded-redis</artifactId>
+            <version>1.4.3</version>
+            <scope>test</scope>
+        </dependency>
 </dependencies>
 
     <build>
