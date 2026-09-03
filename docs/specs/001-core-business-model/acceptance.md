@@ -11,7 +11,7 @@
 | 测试用例规模 | ✅ 180 tests / 0 failures / 0 errors / 0 skipped | 50 个 surefire 报告文件汇总 |
 | Compose 配置语法 | ✅ 有效 YAML | Python `yaml.safe_load` 通过 |
 | Compose 实机编排 / 9 服务 HTTP 起停 | ⚠️ 未在本环境执行 | 本机未安装 Docker CLI（`docker: command not found`） |
-| initdb 建库脚本 | ✅ 8 个 schema 脚本齐全 | `docs/deployment/initdb/01–08` |
+| initdb 建库脚本 | ✅ 8 个 schema 脚本齐全 | `deployment/initdb/01–08` |
 | 资金记账 / 真实出款 | ✅ 未引入 | Settlement 仅产出模拟结果，Ledger 未实现 |
 
 ## 执行明细

@@ -25,9 +25,9 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 ### 1.2 当前现状（Phase 0 — Foundation）
 
 - 架构基线已确认：**Spring Cloud 微服务**，按限界上下文划分（ADR-0001），技术栈 Java 21 + Spring Boot 3.x + MyBatis-Plus + Nacos + OpenFeign（ADR-0002）。
-- 已建 **9 个服务模块 + 3 个共享库**（见 §3），`gateway` 本 MVP 延后；`ledger-service` 已按 `004-ledger` 前置实现并接入 payment/refund/settlement 侧记账（ADR-0008~0011 已于 2026-08-29 Accepted）。
+- 已建 **10 个服务模块 + 3 个共享库**（见 §3），`gateway` 不在本 MVP 范围；`ledger-service`（8090）已按 `004-ledger` 实现并接入 payment/refund/settlement 三处复式记账（ADR-0008~0011 已于 2026-08-29 Accepted）。
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
-- 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**部分已落地**，退款/对账/结算多数仍是骨架，未形成完整业务闭环。
+- 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**均已落地**，Ledger 复式记账已接入，形成完整业务闭环（roadmap 主链走至 `014-seckill-and-cache`）。
 - **尚未引入**：真实支付渠道（当前 Mock Channel）、MQ / 跨服务异步事件、API 网关、熔断组件、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现）。
 
 ---
@@ -120,15 +120,15 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | 服务 | 负责领域 | 核心职责 | 状态 |
 |---|---|---|---|
 | gateway | 接入层 | 统一入口、路由、鉴权、限流 | 延后 |
-| merchant-service | Merchant | 商户注册、资质、结算账户 | 骨架 |
+| merchant-service | Merchant | 商户注册、资质、结算账户 | 已实现 |
 | catalog-service | Product / SKU | 商品、SKU、价格、可售性 | 已实现 |
 | order-service | Order / Transaction | 订单、明细、价格快照、交易状态机 | 已实现 |
 | payment-service | Payment + Channel | 支付编排、幂等、渠道适配、回调、UNKNOWN 收敛 | 已实现 |
-| refund-service | Refund | 退款编排（渠道退款 + 权益撤销 + 对账） | 骨架 |
+| refund-service | Refund | 退款编排（渠道退款 + 权益撤销 + 对账） | 已实现（ADR-0016/0017/0018） |
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
 | ledger-service | Ledger | 复式记账（资金核心） | 已实现（`004-ledger` 前置，8090） |
-| reconciliation-service | Reconciliation | 异步对账 | 骨架 |
+| reconciliation-service | Reconciliation | 异步对账（状态机全链路 + 周期 fixture） | 已实现（ADR-0019/0020/0021） |
 | settlement-service | Settlement | 结算批次、调整项、已确认事实闸门、收敛/关闭与结算侧记账（不真实出款） | 已实现（ADR-0022/0023 缺口补齐） |
 
 > Channel 不单独成服务：以「接口 + 模块」内聚在 payment-service（`application/channel` 接口 + `infra/channel` 实现），落实 Payment ≠ Channel。
@@ -158,7 +158,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 **依赖方向**：领域依赖 MUST **单向、向内**——编排层（Order/Payment/Refund）可依赖底层领域，底层领域不得反向依赖编排层；`Ledger` 只被依赖；`Channel` 只依赖外部协议。
 
-**数据所有权**：每服务独占自己的 Schema（`merchant_schema` / `catalog_schema` / `order_schema` / `payment_schema` / `refund_schema` / `fulfillment_schema` / `entitlement_schema` / `reconciliation_schema` / `settlement_schema`，实际命名以 [deployment/schema/](../../deployment/schema/) DDL 为准）。跨服务读写一律经对方公开 API/RPC，**禁止**任何服务直接 SQL 他服务 Schema 的表。单机/Compose 阶段多服务可共用一个物理库，但必须独立 Schema。
+**数据所有权**：每服务独占自己的 Schema（`merchant` / `catalog` / `order` / `payment` / `refund` / `fulfillment` / `entitlement` / `reconciliation` / `settlement`；实际命名以 [deployment/schema/](../../deployment/schema/) DDL 为准；`merchant` 无独立数据源，使用内存 `ConcurrentHashMap`）。跨服务读写一律经对方公开 API/RPC，**禁止**任何服务直接 SQL 他服务 Schema 的表。单机/Compose 阶段多服务可共用一个物理库，但必须独立 Schema。
 
 ### 3.5 技术栈
 
@@ -168,13 +168,13 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | 框架 | Spring Boot 3.x + Spring Cloud | 主流企业级 |
 | 构建 | Maven（mvnw Wrapper 锁版本） | 父 POM + `dependencyManagement` 统一版本 |
 | ORM | MyBatis / MyBatis-Plus | SQL 显式可控，适合资金/对账复杂查询 |
-| 注册 + 配置 | Nacos | 同时提供注册与配置能力 |
+| 注册 + 配置 | Nacos | 同时提供注册与配置能力（**[目标] 未启用**，0 依赖 0 配置，见 ADR-0056） |
 | 服务调用 | Spring Cloud OpenFeign + LoadBalancer | 声明式服务间调用 |
 | API 网关 | Spring Cloud Gateway | 响应式网关（本 MVP 延后启用） |
 | 熔断 | Resilience4j 或 Sentinel | 延迟到需要时再引入 |
-| 可观测 | Micrometer + Micrometer Tracing | 指标与链路追踪 |
-| 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器 |
-| 代码质量 | Checkstyle + Spotless | CI 强制 |
+| 可观测 | Micrometer + Micrometer Tracing | 指标与链路追踪（**[目标] 未落地**：当前 0 依赖，实际为 `TraceIdFilter` + MDC，见宪法 §Obs.3） |
+| 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器（**[目标] 未落地**：实际全 H2 MySQL 兼容模式，见 backlog） |
+| 代码质量 | Checkstyle + Spotless | CI 强制（**[目标] 未落地**：根 pom 与 CI 均无插件） |
 
 ---
 
@@ -414,7 +414,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 
 ## 7. 项目计划与资源
 
-**当前阶段**：Phase 0 — Foundation；当前 Feature `001-core-business-model`。
+**当前阶段**：Roadmap 主链 Phase 0~10 已走完，终点 `014-seckill-and-cache`（含 Phase 4 压测）；当前处于演示/打磨期。
 
 | 阶段 | 目标 | 交付边界 |
 |---|---|---|
@@ -433,8 +433,9 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 **Feature 依赖图**：
 
 ```text
-Phase 0 Foundation → 001 Core Business Model → 002 Payment Reliability → 003 Refund
-→ 004 Reconciliation → 005 Settlement → 006 Ledger → 007 Risk/Security → 008 Distributed Evolution
+Phase 0 Foundation → 001 Core Business Model → 002 payment-order-callback → 003 payment-reliability → 004 ledger
+→ 005 refund → 006 reconciliation → 007 settlement → 009 → 010 → 011 → 012 → 013 → 014（含 Phase 4 压测）
+注：`008` 为历史缺口，有意保留不补号；`002~007` 均已落地，主链走至 `014-seckill-and-cache`。
 ```
 
 可并行不阻塞主链路：`009 Observability Baseline`、`010 Delivery/CI-CD Baseline`。
@@ -465,3 +466,51 @@ Phase 0 Foundation → 001 Core Business Model → 002 Payment Reliability → 0
 ---
 
 > 本文是「当前有效总体架构」的**综合快照**，随 Roadmap 阶段与 ADR 演进而更新。任何修改若触及领域边界、服务边界、状态机、数据库 Schema 或公共 API，须遵循 Constitution §8，先立提案并经人类确认。
+
+---
+
+---
+
+## 9. 已决策 ADR 在本文档的体现（追溯索引）
+
+> **审计要求（Phase 5）**：已决策的 ADR 必须在技术方案与系统设计文档中体现。全部 53 条 ADR 的「编号 → 承载文件 → 锚点」见 [`docs/adr/README.md` 跳转表](adr/README.md)。本节给出与本文档 / `systems/` 设计直接相关的决策落点，便于审计与防漂移。
+>
+> 标记：**【P0·内联】** = 本次审计已在正文对应章节修正并体现；**【P1·索引】** = 本表集中索引；**【ADR 文件】** = 仅纪录于 `docs/adr/`，正文未展开（按惯例以 ADR 文件为权威）。
+
+### 9.1 已在正文内联体现的 ADR（P0，本次审计修正）
+
+| ADR | 决策 | 落点 |
+|---|---|---|
+| ADR-0002 | 技术栈选型 | §3.5（Nacos 未启用见 ADR-0056） |
+| ADR-0010 | 金额表示：long 分 + currencyCode，Money VO 不启用 | §4.2 |
+| ADR-0018 | 退款 → Ledger 记账接入（冲正分录） | §7 Phase 5 |
+| ADR-0019 / ADR-0020 / ADR-0021 | 对账：状态机接线 / 渠道账单周期 fixture / 事实读取弹性 | §4.3.5（reconciliation-service.md） |
+| ADR-0021 | 不引入熔断中间件 | payment-service 弹性口径 |
+| ADR-0024 / ADR-0025 / ADR-0027 / ADR-0028 | 安全：鉴权空实现 / 验签空实现 / 脱敏不做 / 风控不做 | §2.4、§5.2 |
+| ADR-0026 | 密钥明文 env 注入 | §5.2 |
+| ADR-0039 / ADR-0040 | 下单入口幂等键（Redis 唯一存储、409+Retry-After） | order-service.md §4.3.1 |
+| ADR-0041 / ADR-0042 / ADR-0043 | 库存域归属 catalog / 三段式扣减 / ZSet 超时释放 | catalog-service.md、order-service.md |
+| ADR-0044 / ADR-0045 / ADR-0046 | Redis 引入论证 / 用途边界（非数据源）/ 固定窗口限流 | §2.3、§3.5、§5 |
+| ADR-0047 | 退款金额校验口径（累计不超付） | §4.3.3 |
+| ADR-0048 ~ ADR-0051 | 演示形态：收银台 / 场景配置化 / 演示账单 / 脚本纪律 | §3.1、§6、§4.3.5 |
+| ADR-0052 | 渠道回调验签接入（回退至 ADR-0025 空实现） | §5.2 |
+| ADR-0053 | 013/014 代码超前 roadmap 落地处置 | §7 |
+
+### 9.2 P1 决策索引（集中列出，避免散落漂移）
+
+| ADR | 决策要点 | 本文落点 | systems 落点 |
+|---|---|---|---|
+| ADR-0012 | 双响应码错误分类（通信失败一律重试，业务失败不重试） | §4.4 | payment-service 错误分类 |
+| ADR-0013 | 重试不落库、请求内联重试（3 次退避 1s/2s/4s） | §4.4 | payment-service |
+| ADR-0014 | 同 attempt 重放（重试复用同一 attempt，靠幂等吸收） | §4.4 | payment-service |
+| ADR-0015 | UNKNOWN 真实收敛时长度量（entered_unknown_at） | §5.1 / §5.3 | payment-service |
+| 超时口径 | 出站 RPC 1s / 对外 HTTP 1.5s（全服务统一） | §3.3 / §4.4 | 全服务 |
+| ADR-0038 | 演示形态 → **Superseded by ADR-0048** | §6 | — |
+| ADR-0048 | 新增 `mock-channel-web` 收银台组件（payUrl 跳转链路） | §3.1 / §6 | mock-channel-web (8091) |
+| ADR-0049 | Mock 渠道场景配置化（`payment.channel.mock-scenario`） | §4.3 | payment-service |
+| ADR-0050 | 对账演示账单生成 CSV 写入 `target/classes` | §4.3.5 | reconciliation-service |
+| ADR-0051 | 演示脚本纪律（只编排不伪造、断言失败即非零退出） | §6 | deployment/ |
+
+### 9.3 仅纪录于 ADR 文件（正文未展开，按惯例以 ADR 为权威）
+
+ADR-0001（Spring Cloud 架构）、ADR-0003~0007（支付可靠性集合）、ADR-0008~0011（Ledger 设计集合）、ADR-0016~0017（退款模型/编排）、ADR-0022~0023（结算调整项/闸门）、ADR-0029~0033（分布式演进）、ADR-0034~0037（内部令牌，已不做）、ADR-0054~0058（核心资金正确性 / 入口与基础设施 / 性能基线，见 `docs/adr/0016~0018-*.md`）。

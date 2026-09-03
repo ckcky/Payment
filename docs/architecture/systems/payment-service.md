@@ -364,3 +364,24 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 ```
 
 **关联字段**：`traceId`（`TraceContext` / `TraceIdFilter` 跨服务传播，`TraceIdRequestInterceptor` 透传 Feign）。
+
+---
+
+## 7. 回调与出站安全（Current Status）
+
+> 本节补全审计缺口：原文档缺失「渠道回调验签 / 出站安全」专章。决策以 ADR 为权威（见 `technical-solution.md` §2.4、§5.2 与 `docs/adr/README.md`）。
+
+| 能力 | 状态 | 接入点 | 决策 |
+|---|---|---|---|
+| 渠道回调验签（HMAC） | ⭕ 预留空实现（恒放行） | `ChannelCallbackSignatureFilter#verifySignature` | ADR-0025 / ADR-0052；伪造回调可翻转支付状态，**payment-service 不得暴露公网** |
+| 内部服务间鉴权 | ⭕ 预留空实现（恒放行） | `verifyServiceToken`（空实现） | ADR-0024 / ADR-0035；`/internal/**` 依赖网络层隔离 |
+| 对外 API 鉴权 | ⛔ 本期不做 | — | Constitution §Security.3；接入真实渠道前补齐 |
+| 出站内部令牌 | ⛔ 已删除 | — | ADR-0034；`platform.security.*` 已移除 |
+| 敏感数据脱敏 | ⛔ 本期不做 | — | ADR-0027；`StructuredAuditLogger.mask()` 保留但生产零调用 |
+| 最小风控 | ⛔ 本期不做 | — | ADR-0028 |
+
+**payUrl 链路（ADR-0048）**：`mock-channel-web`（8091）提供收银台页 + `payUrl` 跳转 + 回调签名转发 + 演示控制台（同源代理），仅演示用。
+
+**Mock 场景配置化（ADR-0049）**：`payment.channel.mock-scenario` 切换渠道模拟行为（成功/失败/超时/重复回调），供演示与测试断言。
+
+**部署前置条件**：上述「本期不做」成立的前提是**部署环境不对公网暴露**；一旦暴露，验签/对外鉴权 MUST 先于功能上线补齐。

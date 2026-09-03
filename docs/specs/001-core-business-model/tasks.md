@@ -42,7 +42,7 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 - [X] T002 创建各 `*-service/pom.xml` 和对应 `src/main/java/com/payment/<service>/*Application.java`，验证每个服务可以独立启动。
 - [X] T003 [P] 创建各 `*-service/src/main/resources/application.yml` 和本地配置样例，为每个服务分配不同端口和独立 Schema。
 - [X] T004 [P] 创建各 `*-service/src/test/java/` 下的上下文测试，验证服务应用上下文可以独立加载。
-- [X] T005 [P] 创建 `docs/deployment/docker-compose.yml`，提供多个独立服务、不同端口和最小数据库依赖的单机启动入口。
+- [X] T005 [P] 创建 `deployment/docker-compose.yml`，提供多个独立服务、不同端口和最小数据库依赖的单机启动入口。
 - [X] T006 [P] 更新 `README.md`，记录本地启动、Docker Compose 启动和当前 MVP 不包含真实资金记账的边界，文件路径：`README.md`。
 - [X] T007 配置 `.gitignore`、`mvnw`、`mvnw.cmd` 和 `pom.xml`，确保 `mvnw verify` 能成为统一验证入口，文件路径：`.gitignore`、`mvnw`、`mvnw.cmd`、`pom.xml`。
 
@@ -173,7 +173,7 @@ description: "Commerce & Payment Platform MVP 可执行任务清单"
 - [X] T071 [P] 在各服务 `src/main/java/com/payment/<service>/infra/observability/StructuredAuditLogger.java` 实现结构化业务日志和模拟资金动作审计字段，确保敏感信息脱敏。
 - [X] T072 [P] 在各资金服务 `src/test/java/` 验证所有必需业务指标在对应状态变化时递增或记录持续时间。
 - [X] T073 [P] 在各服务 `src/test/java/` 验证关联 ID 能贯穿订单、支付、回调、履约、权益、退款、对账和结算 RPC 流程。
-- [X] T074 在 `docs/deployment/docker-compose.yml` 和 `docs/deployment/README.md` 完成本地、Compose、单机启动、健康检查和基本回滚验证说明。
+- [X] T074 在 `deployment/docker-compose.yml` 和 `deployment/README.md` 完成本地、Compose、单机启动、健康检查和基本回滚验证说明。
 - [X] T075 [P] 在 `.github/workflows/verify.yml` 配置 `mvnw verify`、测试、格式检查和构建产物验证；不引入微服务部署流水线。
 - [X] T076 [P] 更新 `docs/specs/001-core-business-model/quickstart.md`，补充实际启动命令、验证命令和预期结果。
 - [X] T077 运行 `mvnw verify`、Compose 验证和 quickstart 全链路 RPC 回归，记录 `docs/specs/001-core-business-model/` 下的 MVP 验收结果；确认 Settlement 只生成模拟结算结果，不执行真实出款。

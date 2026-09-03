@@ -327,3 +327,13 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 - **业务指标**：`[待定]` 当前 order-service **未注入** `BusinessMetrics` / `StructuredAuditLogger`（资金审计由 payment-service 侧记录）；`[目标]` 建议补 `order.created` / `order.create_failed` 计数器。
 - **链路关联**：`traceId` 由 common-core `TraceIdFilter` 生成、`TraceIdRequestInterceptor` 透传 Feign（跨 order→catalog/payment 传播），无服务侧自定义埋点。
+
+---
+
+## 8. 超时与库存释放（ADR-0043）
+
+> 订单/支付超时未确认时，需释放已预占的库存，避免库存僵死。
+
+- **机制**：`StockReservation` 的超时释放由 **Redis ZSet 时间轮**驱动（`SeckillStockService`/定时扫描 `releaseAt` 快照），到点调用 `StockApplicationService.release(reservationId)`。
+- **归属**：库存聚合与预占/确认/释放三段式归 **catalog-service**（ADR-0041 / ADR-0042）；order-service 仅发起预占、在支付成功时确认、在取消/超时未支付时触发释放。
+- **不变量**：`total = available + reserved + sold` 始终成立；释放为幂等操作（同 reservationId 重复释放幂等吸收）。
