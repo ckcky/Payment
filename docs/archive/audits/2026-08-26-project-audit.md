@@ -2,7 +2,7 @@
 
 > **Status: superseded（已归档）**
 >
-> 本报告结论已并入 [docs/architecture/technical-solution.md](../architecture/technical-solution.md) 与 [docs/architecture/roadmap.md](../architecture/roadmap.md)，仅作历史留档，不再作为权威事实源。
+> 本报告结论已并入 [docs/architecture/technical-solution.md](../../architecture/technical-solution.md) 与 [docs/architecture/roadmap.md](../../architecture/roadmap.md)，仅作历史留档，不再作为权威事实源。
 
 > 审计日期：2026-08-26
 >
