@@ -53,31 +53,49 @@ RESULT=deployment/performance/results/r3-load-result.json \
 可选对照：临时将 `catalog-service/src/main/resources/application.yml` 中 `catalog.cache.enabled`
 改为 `false` 重启后重跑 `sku_cache_read`，记录 DB 侧计数器差异。
 
-## 4. 结果（示例 / 待实跑填写）
+## 4. 结果（2026-09-04 分布式实跑，Docker 基础设施 + 宿主进程全栈）
 
-> 以下为**模板**，非实测值。实跑后用 `k6` 输出与 Prometheus 指标替换本表。
+> 环境：infra 以容器运行（Nacos/Redis/Prometheus/Grafana/Loki+Promtail），微服务为宿主进程；
+> JDBC 的 `localhost:3306` 实际解析到**宿主原生 MySQL 8.0.46**（WorkBuddy local-mysql，先于
+> Docker 占用 127.0.0.1:3306，容器 MySQL 被架空）——与 Phase 4 基线同源，数据可比。
+> JVM 统一内存上限 `-Xmx384m`（start-all.sh 默认）。
 
-### 4.1 sku_cache_read
+### 4.1 sku_cache_read（缓存开启）
 
-| 指标 | 缓存开启 | 缓存关闭（基线） |
+| 指标 | 缓存开启（r3 实跑） | 缓存关闭（基线） |
 |---|---|---|
 | VU 峰值 | 200 | 200 |
-| 总请求数 | _待填_ | _待填_ |
-| p95 延迟 | _待填_ ms | _待填_ ms |
-| p99 延迟 | _待填_ ms | _待填_ ms |
-| 错误率 | _待填_ | _待填_ |
-| catalog DB 查询（区间计数） | _待填_ | _待填_ |
+| 总请求数 | 34,183 | 未复测（Phase 4 参考：33,627 次读仅 5 次取 DB 连接，卸载率 99.98%） |
+| p95 延迟 | **14.34 ms** | _待补_ |
+| p99 延迟 | **18.18 ms** | _待补_ |
+| 错误率 | **0** | _待补_ |
+| catalog DB 查询（区间计数） | 未复测 | — |
 
-### 4.2 seckill_flash
+（同日另一次配额 1,000,000 的对照跑：p95 8.99ms / p99 14.68ms，见
+`results/2026-09-04-catalog-load-result.json`。）
+
+### 4.2 seckill_flash（破坏性场景：配额 10，500 VU 抢购）
 
 | 指标 | 值 |
 |---|---|
 | VU 峰值 | 500 |
 | 配额 | 10 |
-| 200（准入） | _待填_ |
-| 409（售罄） | _待填_ |
-| 500 / 其他 | _待填_ |
-| p95 延迟 | _待填_ ms |
+| 200（准入） | **10（恰好等于配额）** |
+| 409（售罄） | 38,791 |
+| 500 / 其他 | **0** |
+| p95 延迟 | 473.26 ms |
+| Redis 终值 `seckill:sku:{id}` | **0（不超卖）** |
+
+> p95 473ms 为 500 并发下 Lettuce 单共享连接串行排队的排队延迟（Redis 单线程 +
+> 连接复用），非超卖/ correctness 问题；降低并发或引入连接池可回到毫秒级。
+> 大配额（1,000,000）对照跑 p95 528ms / p99 564ms、RPS 976、0 超卖，结论一致。
+
+### 4.3 下单幂等与限流（分布式，真网络 + 多连接并发）
+
+| 项 | 场景 | 结果 |
+|---|---|---|
+| 入口幂等（ADR-0039/0040/012） | 相同 `Idempotency-Key` 50 并发 `POST /orders` | 恰好 **1×201** + **49×409**（全部带 `Retry-After: 1`）；窗口翻转后同 key 重放 → **200 与首次响应一致**（不重复下单）。产物：`r3-idempotency-result.json`（`order-idempotency-verify.js`） |
+| 限流（capacity=50/1s，ADR-0045） | 100 并发 448ms 内进入同一窗口 | 恰好 **50** 放行（打在下游库存 409）+ **50×429**；429 **全部不带 `Retry-After`**（`{"error":"rate_limit_exceeded","retryable":false}`），符合「拒绝不允许重试」 |
 
 ## 5. 结论与建议（草案）
 

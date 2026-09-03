@@ -28,7 +28,7 @@
 | [0055](0017-entry-and-infra-decisions.md#adr-0055) | 支付意图幂等键由 order-service 生成 | 0017 |
 | [0056](0017-entry-and-infra-decisions.md#adr-0056) | Nacos 启用（落实 ADR-0002，撤销「暂不启用」偏离，见 ADR-0059） | 0017 |
 | [0057](0017-entry-and-infra-decisions.md#adr-0057) | 服务未容器化 | 0017 |
-| [0058](0018-performance-baseline.md#adr-0058) | 性能与容量目标基线（已建立，3 项🟡已落地为 JUnit 并发/量化测试） | 0018 |
+| [0058](0018-performance-baseline.md#adr-0058) | 性能与容量目标基线（已建立，3 项🟡已落地为 JUnit 并发/量化测试，并含分布式端到端验证 2026-09-04） | 0018 |
 | [0059](0019-enable-nacos.md#adr-0059) | 启用 Nacos 服务发现与注册中心（实施记录） | 0019 |
 
 > 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。

@@ -1,0 +1,27 @@
+{
+  "key": "r3-idem-1788467528506",
+  "concurrency": 50,
+  "by_status": {
+    "201": 1,
+    "409": 49
+  },
+  "created": 1,
+  "conflict": 49,
+  "conflict_with_retry_after": 49,
+  "failures": [],
+  "replay": {
+    "status": 200,
+    "sameOrderId": true
+  },
+  "order_id": {
+    "orderId": 7,
+    "transactionId": 7,
+    "status": "PENDING_PAYMENT",
+    "totalMinor": 100,
+    "currencyCode": "CNY",
+    "paymentId": 7,
+    "paymentStatus": "SUCCEEDED",
+    "payUrl": null
+  },
+  "pass": true
+}
