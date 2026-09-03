@@ -95,13 +95,16 @@ docker compose -f deployment/docker-compose.yml down -v
 项目提供两个脚本（Windows 在 **Git Bash** 里跑，macOS/Linux 直接跑）：
 
 ```sh
-bash deployment/start-all.sh   # 起 MySQL/Prometheus/Grafana + 9 个微服务，日志落 deployment/logs/
+bash deployment/start-all.sh   # 起 MySQL/Prometheus/Grafana + 10 个微服务（+ `mock-channel-web` 演示收银台），日志落 deployment/logs/
 bash deployment/stop-all.sh    # 停全部微服务 + 容器（保留 MySQL 数据卷）
 ```
 
-`start-all.sh` 依次做三件事：`docker compose up -d`（基础设施）→ `./mvnw -q install -DskipTests`（首次构建，后续可跳过）→ 后台启动 9 个服务，每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
+`start-all.sh` 依次做三件事：`docker compose up -d`（基础设施）→ `./mvnw -q install -DskipTests`（首次构建，后续可跳过）→ 后台启动 10 个服务（+ `mock-channel-web` 演示收银台，共 11 个进程），每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
 
 > 前提：已安装并**启动 Docker Desktop**（Windows/macOS）或 docker 引擎（Linux），且 `docker` 在 PATH 上。首次 `install` 较慢属正常。
+
+
+> **Redis 依赖（2026-09-03 补充）**：`014-seckill-and-cache` 已引入 Redis 7（端口 6379），由 `docker-compose.yml` 一并拉起。用途边界见 `docs/adr/0014-next-stage-decisions.md`（ADR-0044/0045）：仅入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，**非数据源**；秒杀预扣 fail-closed，其余 fail-open。
 
 ## 日志在哪看
 

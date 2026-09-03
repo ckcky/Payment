@@ -21,7 +21,7 @@ Spring Cloud 微服务（见 [docs/adr/0001](docs/adr/0001-adopt-spring-cloud-mi
 | `reconciliation-service` | 基础对账 |
 | `settlement-service` | 基础结算批次 |
 
-`gateway` 与 `ledger-service` 本 MVP 延后。
+`gateway` 不在本 MVP 范围；`ledger-service`（8090）**已实现**并接入 payment/refund/settlement 记账。
 
 ## 快速开始
 
@@ -35,7 +35,7 @@ Spring Cloud 微服务（见 [docs/adr/0001](docs/adr/0001-adopt-spring-cloud-mi
 mvnw.cmd verify
 ```
 
-**本地运行**：各服务用 `./mvnw -pl <service> spring-boot:run` 启动（端口见各服务 `application.yml`，8081–8089）。
+**本地运行**：各服务用 `./mvnw -pl <service> spring-boot:run` 启动（端口见各服务 `application.yml`，8081–8090（另 `mock-channel-web` 演示收银台 8091））。
 
 **Docker Compose**（最小依赖 MySQL）：`docker compose -f deployment/docker-compose.yml up -d`
 
@@ -52,6 +52,6 @@ mvnw.cmd verify
 
 ## 当前边界（重要）
 
-- 本 MVP **不包含真实资金记账**：Payment / Refund / Settlement 只模拟业务事实与状态闭环，`ledger-service`（复式记账）尚未实现，**不存在真实资金划转**。
+- Payment / Refund / Settlement 的资金变动**经 `ledger-service`（8090）复式记账**（ADR-0011/0018/0023）**，存在可追溯账务事实；仅出款/银行对接仍 mock。
 - 跨服务一致性用 Feign（同步）+ 事务性 Outbox（异步，无 MQ）；Database-per-Service；集成测试用 Testcontainers。
 - 任何真实资金路径必须先经 Ledger 建立可追溯账务事实（见宪法 §2.2）。
