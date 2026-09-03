@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 /**
  * settlement-service → merchant-service 的 Feign 客户端（原始出站契约）。
  */
-@FeignClient(name = "merchant-service", url = "${services.merchant.url:http://localhost:8081}",
+@FeignClient(name = "merchant-service"
         configuration = SettlementFeignConfig.class)
 public interface MerchantFeignClient {
 

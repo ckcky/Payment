@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * order-service 的 Feign 客户端：支付成功回写订单/交易状态。
  */
-@FeignClient(name = "order-service", url = "${services.order.url:http://localhost:8083}")
+@FeignClient(name = "order-service")
 public interface OrderFeignClient extends OrderGateway {
 
     @PostMapping("/internal/orders/on-payment-succeeded")

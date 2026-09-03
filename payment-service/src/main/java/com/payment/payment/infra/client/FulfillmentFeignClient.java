@@ -7,7 +7,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
-@FeignClient(name = "fulfillment-service", url = "${services.fulfillment.url:http://localhost:8086}", primary = false)
+@FeignClient(name = "fulfillment-service", primary = false)
 public interface FulfillmentFeignClient extends FulfillmentGateway {
 
     @PostMapping("/internal/fulfillments/on-payment-succeeded")

@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * settlement-service → reconciliation-service 的 Feign 客户端（原始出站契约）。
  */
-@FeignClient(name = "reconciliation-service", url = "${services.reconciliation.url:http://localhost:8088}",
+@FeignClient(name = "reconciliation-service"
         configuration = SettlementFeignConfig.class)
 public interface ReconciliationFeignClient {
 

@@ -13,7 +13,7 @@ import com.payment.order.application.ReserveStockCommand;
 /**
  * catalog-service 的 Feign 客户端。目标地址由 {@code services.catalog.url} 配置（本地默认端口）。
  */
-@FeignClient(name = "catalog-service", url = "${services.catalog.url:http://localhost:8082}")
+@FeignClient(name = "catalog-service")
 public interface CatalogFeignClient {
 
     @GetMapping("/skus/{id}")

@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * payment-service 的 Feign 客户端：创建支付意图。
  */
-@FeignClient(name = "payment-service", url = "${services.payment.url:http://localhost:8084}")
+@FeignClient(name = "payment-service")
 public interface PaymentFeignClient extends PaymentGateway {
 
     @PostMapping("/payments")

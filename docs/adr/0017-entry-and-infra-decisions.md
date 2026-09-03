@@ -1,9 +1,9 @@
 <a id="adr-0055"></a>
 
 
-- **状态**：Accepted（0056 涉及偏离既有 ADR-0002，按 §十 R1 待负责人二次确认）
-- **日期**：2026-09-03
-- **关联**：`002-payment-order-callback`、`deployment/`、`pom.xml` / `docker-compose.yml`
+- **状态**：Accepted（2026-09-04 负责人裁决：启用 Nacos，撤销「暂不启用」偏离，ADR-0002 维持有效，原 R1 待裁决项关闭）
+- **日期**：2026-09-03（决策更新 2026-09-04）
+- **关联**：`002-payment-order-callback`、`deployment/`、`pom.xml` / `docker-compose.yml`、`ADR-0059`（启用实施记录）
 
 ## ADR-0055：支付意图幂等键由 order-service 生成
 
@@ -14,9 +14,9 @@
 <a id="adr-0056"></a>
 
 
-- **决策**：注册中心/配置中心 **Nacos 暂不启用**（0 依赖、0 配置）；12 个 `@FeignClient` 全部硬编码 `url=`，无注册中心，LoadBalancer 未生效。
-- **偏离说明**：与 `ADR-0002`（技术栈含 Nacos）存在偏离。当前为单机/Compose 学习环境，硬编码 URL 可接受；**启用 Nacos 前 MUST 先补服务发现 + 配置中心接入**，并相应更新 `ADR-0002`。
-- **⚠️ 待裁决（R1）**：是否将本条正式 `Supersedes: ADR-0002（Nacos 部分）`，由负责人二次确认。
+- **决策（2026-09-04 负责人裁决）**：**启用 Nacos** 作为注册中心与服务发现（实施记录见 `ADR-0059`）。本环境为单机/Compose 学习环境，但服务发现为默认寻址方式；12 个 `@FeignClient` 的硬编码 `url=` 已移除，改由 Nacos 服务发现解析服务名。
+- **与 ADR-0002 的关系**：本决策**不 Supersede ADR-0002**，而是落实 ADR-0002（技术栈含 Nacos）的既有意图——此前 ADR-0056「暂不启用」属临时偏离，现已撤销。
+- **实施落点**：`pom.xml`（父 BOM 引入 `spring-cloud-alibaba` 2025.0.0.0）+ 各服务 `application.yml` 的 `spring.cloud.nacos.discovery` + `deployment/docker-compose.yml` 新增 `nacos` 容器（端口 8848）+ `start-all.sh` 启动顺序纳入 Nacos。
 
 <a id="adr-0057"></a>
 

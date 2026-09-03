@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * refund-service → entitlement-service 的 Feign 适配器（退款后权益处理）。
  */
-@FeignClient(name = "entitlement-service", url = "${services.entitlement.url:http://localhost:8087}")
+@FeignClient(name = "entitlement-service")
 public interface EntitlementFeignClient extends EntitlementGateway {
 
     @PostMapping("/internal/entitlements/on-refund")

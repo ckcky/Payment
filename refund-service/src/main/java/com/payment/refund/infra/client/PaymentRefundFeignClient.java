@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * refund-service → payment-service 的 Feign 适配器。
  */
-@FeignClient(name = "payment-service", url = "${services.payment.url:http://localhost:8084}")
+@FeignClient(name = "payment-service")
 public interface PaymentRefundFeignClient extends PaymentRefundGateway {
 
     @PostMapping("/internal/payments/query-amount")

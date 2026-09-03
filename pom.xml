@@ -86,6 +86,15 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- Spring Cloud Alibaba BOM（ADR-0059：启用 Nacos 服务发现，2025.0.0.0 适配 Boot 3.5 / Cloud 2025.0.x，内置 Nacos Client 3.0.3） -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>2025.0.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- MyBatis-Plus：统一 starter 版本，子服务声明依赖时无需写版本号 -->
             <dependency>
                 <groupId>com.baomidou</groupId>

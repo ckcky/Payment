@@ -21,8 +21,17 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> [1/3] 启动 MySQL + Prometheus + Grafana（容器）"
+echo "==> [1/3] 启动 MySQL + Prometheus + Grafana + Nacos（容器）"
 docker compose -f deployment/docker-compose.yml up -d
+
+echo "==> [1b] 等待 Nacos (8848) 就绪（ADR-0059：注册中心）..."
+for i in $(seq 1 45); do
+  if curl -fsS -o /dev/null "http://127.0.0.1:8848/nacos/actuator/health"; then
+    echo "    Nacos 已就绪"
+    break
+  fi
+  sleep 2
+done
 
 echo "==> [2/3] 构建并安装本地依赖（首次较慢，后续可跳过）"
 ./mvnw -q install -DskipTests

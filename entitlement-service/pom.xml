@@ -61,7 +61,17 @@
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
-    </dependencies>
+            <!-- ADR-0059：Nacos 服务发现 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- ADR-0059：Feign 经 Nacos 服务发现寻址，需 LoadBalancer 解析服务实例 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+</dependencies>
 
     <build>
         <plugins>

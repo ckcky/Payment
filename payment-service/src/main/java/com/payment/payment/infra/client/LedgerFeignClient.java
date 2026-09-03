@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * ledger-service 的 Feign 客户端（内部记账端点，FR-010 同步 RPC + 幂等）。
  */
-@FeignClient(name = "ledger-service", url = "${services.ledger.url:http://localhost:8090}")
+@FeignClient(name = "ledger-service")
 public interface LedgerFeignClient {
 
     @PostMapping("/internal/ledger/postings")

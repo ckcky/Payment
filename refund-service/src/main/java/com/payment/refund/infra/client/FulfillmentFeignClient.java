@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * refund-service → fulfillment-service 的 Feign 适配器（退款后履约撤销，ADR-0017）。
  */
-@FeignClient(name = "fulfillment-service", url = "${services.fulfillment.url:http://localhost:8086}")
+@FeignClient(name = "fulfillment-service")
 public interface FulfillmentFeignClient extends FulfillmentGateway {
 
     @PostMapping("/internal/fulfillments/on-refund")

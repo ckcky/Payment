@@ -22,13 +22,14 @@
 | [0014](0014-next-stage-decisions.md) | 下一阶段决策集合（ADR-0038~0046） | **Accepted**（0041~0046 于 2026-08-31 收口；**0038 Superseded by 0048**；**0039/0040 于 2026-09-02 补写**；0044 偏离 roadmap §7 论证闸门） | 012-entry-idempotency（0039 幂等键签发与存储 / 0040 并发幂等接管策略）+ 013-inventory-reservation（0041 库存域归属 / 0042 扣减时机 / 0043 超时释放机制）+ 014-seckill-and-cache（0044 Redis 引入论证·偏离 / 0045 用途边界 / 0046 限流策略）；代码先行，见 ADR-0053。**0039/0040 的补写消除了代码中已存在但文档缺失的悬空引用**（`OrderController` / `OrderEntryIdempotencyService` / `IdempotencyDecision` / `docker-compose.yml`） |
 | [0015](0015-wip-ahead-of-roadmap.md) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置（ADR-0053） | **Accepted**（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码） | 偏离 / 处置日志：working tree 含 013-inventory-reservation / 014-seckill-and-cache 实质性实现，**超前顺序、缺 spec/ADR-0041~0046、014 的 Redis 引入未经 roadmap §7 论证闸门**；决策=保留代码（编译+测试通过，且与 011 在 order-service 纠缠不可干净拆分），spec/ADR 补写列为 TODO，待复盘收口 |
 
-## ADR 编号速查（0001–0058）
+## ADR 编号速查（0001–0059）
 
 | [0054](0016-core-payment-correctness.md#adr-0054) | 核心支付正确性约束（确认性纪录） | 0016 |
 | [0055](0017-entry-and-infra-decisions.md#adr-0055) | 支付意图幂等键由 order-service 生成 | 0017 |
-| [0056](0017-entry-and-infra-decisions.md#adr-0056) | Nacos 暂不启用（偏离 ADR-0002） | 0017 |
+| [0056](0017-entry-and-infra-decisions.md#adr-0056) | Nacos 启用（落实 ADR-0002，撤销「暂不启用」偏离，见 ADR-0059） | 0017 |
 | [0057](0017-entry-and-infra-decisions.md#adr-0057) | 服务未容器化 | 0017 |
 | [0058](0018-performance-baseline.md#adr-0058) | 性能与容量目标基线（未验证目标） | 0018 |
+| [0059](0019-enable-nacos.md#adr-0059) | 启用 Nacos 服务发现与注册中心（实施记录） | 0019 |
 
 > 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 
