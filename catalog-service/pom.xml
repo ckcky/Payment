@@ -39,6 +39,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!-- Lettuce 连接池前提（ADR-0060）：默认单连接多路复用，秒杀 Lua 高并发下串行排队
+             （2026-09-04 实测 500 VU p95 528ms）；启用池化后并发 Lua 走多连接。版本由 Boot BOM 管理 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>

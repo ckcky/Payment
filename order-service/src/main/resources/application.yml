@@ -7,6 +7,13 @@ spring:
       port: 6379
       # Redis 用作下单入口幂等防重（非数据源，fail-open）。连接失败不阻断下单。
       timeout: 1000ms
+      lettuce:
+        # 连接池（ADR-0060）：幂等键读写高并发下避免单连接排队。需 commons-pool2 依赖。
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
   datasource:
     url: jdbc:mysql://localhost:3306/order?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root

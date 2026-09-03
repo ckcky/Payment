@@ -128,6 +128,31 @@ RESULT=deployment/performance/results/r3-load-result.json \
 
 Grafana「HTTP 请求量/P99」面板同步改为按**服务名**（Prometheus `job`）分组，不再按端口号。
 
+### 4.5 Lettuce 连接池调优（ADR-0060，2026-09-04）
+
+Lettuce 默认单连接多路复用，秒杀 Lua 高并发下客户端侧串行排队。catalog/order 启用
+`spring.data.redis.lettuce.pool`（max-active 16，需 commons-pool2）后复测
+（`catalog-seckill-k6.js`，500 VU，SKU 4 大配额）：
+
+| 指标 | 池化前（ADR-0058 破坏性场景基线） | 池化后（大配额场景） |
+|---|---|---|
+| seckill_deduct p95 | **528ms** | **278ms** |
+| seckill_deduct p99 | — | 290ms |
+| 秒杀吞吐 | ~976 rps | ~1,536 rps |
+| 错误率 | 0 | 0 |
+| sku_read p95（200 VU） | — | 6.8ms（SLO<50ms 达标） |
+
+> 条件差异：基线轮为配额耗尽破坏性场景（10 配额 / 38,801 次），本轮为大配额（~99 万）
+> 持续扣减 40s；两者同为 500 VU 打同一 Lua 端点，趋势可比、绝对值不可直接等同。
+> 池化后 500 VU 下 p95 仍高于 50ms 草案 SLO——瓶颈已从客户端单连接排队转移到
+> 服务吞吐容量（HTTP 层 + 单机 11 JVM 共享资源），后续如需逼近 SLO 应做 Tomcat/
+> Web 容器与 JVM 堆参数调优，或水平扩容 catalog。
+
+**同批遗留观察项收口**：压测产生的 52 笔 UNKNOWN 支付为**设计内收敛**（ADR-0048 收银台路径
+PROCESSING 超 30s 由 `TimeoutScanner` 转 UNKNOWN「点了不回调」→ `ChannelQueryService` 主动查询
+不收敛 → 订单 900s 超时取消）。状态机允许 UNKNOWN → SUCCEEDED/FAILED（迟到回调仍能权威收敛，
+冒烟已实证），不构成资金风险；`succeed()` 不清除 `failure_reason` 属审计残留，非缺陷。
+
 ## 5. 结论与建议（草案）
 
 - cache-aside 命中后应使 `GET /skus/{id}` 延迟稳定落在内存/Redis 量级（亚毫秒~低十毫秒），
