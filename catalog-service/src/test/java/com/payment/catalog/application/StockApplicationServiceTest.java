@@ -29,8 +29,23 @@ class StockApplicationServiceTest {
     void setUp() {
         stockRepo = new FakeStockRepository();
         reservationRepo = new FakeReservationRepository();
-        service = new StockApplicationService(stockRepo, reservationRepo);
+        service = new StockApplicationService(stockRepo, reservationRepo, noopTxManager());
         stockRepo.save(new Stock(1L, 10));
+    }
+
+    /** 测试用无操作事务管理器：fake 仓储不依赖真实数据库事务。 */
+    private org.springframework.transaction.PlatformTransactionManager noopTxManager() {
+        return new org.springframework.transaction.PlatformTransactionManager() {
+            @Override
+            public org.springframework.transaction.TransactionStatus getTransaction(
+                    org.springframework.transaction.TransactionDefinition definition) {
+                return new org.springframework.transaction.support.SimpleTransactionStatus();
+            }
+            @Override
+            public void commit(org.springframework.transaction.TransactionStatus status) { }
+            @Override
+            public void rollback(org.springframework.transaction.TransactionStatus status) { }
+        };
     }
 
     @Test

@@ -137,13 +137,13 @@ class SuccessfulPurchaseScenarioTest {
         public SeckillResult trySeckillDeduct(Long skuId, long quantity) {
             Long remaining = seckillStock.get(skuId);
             if (remaining == null) {
-                return new SeckillResult(true, -2); // 未播种秒杀配额 → 普通品放行
+                return new SeckillResult(true, -2, true); // 未播种秒杀配额 → 普通品放行（bypass，不回滚）
             }
             if (remaining < quantity) {
-                return new SeckillResult(false, -1);
+                return new SeckillResult(false, -1, false);
             }
             seckillStock.put(skuId, remaining - quantity);
-            return new SeckillResult(true, remaining - quantity);
+            return new SeckillResult(true, remaining - quantity, false);
         }
 
         @Override

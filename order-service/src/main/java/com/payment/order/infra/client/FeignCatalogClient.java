@@ -67,10 +67,10 @@ public class FeignCatalogClient implements CatalogClient {
     public SeckillResult trySeckillDeduct(Long skuId, long quantity) {
         try {
             SeckillDeductResponse r = feign.seckillDeduct(skuId, quantity);
-            return new SeckillResult(true, r.remaining());
+            return new SeckillResult(true, r.remaining(), r.bypassed());
         } catch (FeignException e) {
             if (e.status() == 409) {
-                return new SeckillResult(false, -1);
+                return new SeckillResult(false, -1, false);
             }
             throw e;
         }

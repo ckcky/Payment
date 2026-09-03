@@ -104,7 +104,11 @@ public class OrderApplicationService {
                 if (!sr.allowed()) {
                     throw BizException.of(ErrorCodes.CONFLICT, "seckill stock insufficient sku=" + item.getSkuId());
                 }
-                seckillDeducted.add(new ReservedLine(reservationId(order.getId(), item.getSkuId()), skuId, item.getQuantity()));
+                // 仅真实扣减（bypassed=true 表示未播种配额、未动 Redis）才登记回滚：
+                // 否则失败回滚的 INCREMENT 会凭空造出配额键，之后正常下单反被误判"秒杀库存不足"
+                if (!sr.bypassed()) {
+                    seckillDeducted.add(new ReservedLine(reservationId(order.getId(), item.getSkuId()), skuId, item.getQuantity()));
+                }
                 ReservedLine rl = new ReservedLine(reservationId(order.getId(), item.getSkuId()),
                         skuId, item.getQuantity());
                 catalogClient.reserveStock(new ReserveStockCommand(rl.reservationId(), rl.skuId(), rl.quantity()));

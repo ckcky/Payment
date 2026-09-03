@@ -31,10 +31,19 @@ wait_for_services
 echo "==> [3/3] 灌种子数据（API，幂等：reset 后库已清空，直接创建）"
 # --- 商户（内存仓储）：注册 + 审批 ---
 http POST "$MERCHANT_URL/merchants" '{"code":"DEMO-M1","name":"演示商户一号","settlementAccountRef":"acct-demo-1"}'
-assert_status 201 "商户注册"
-jget "d['id']"; MERCHANT_ID="$VALUE"
+# 商户注册可能返回：201 新建 / 409 code 已存在（内存仓储不随 DB reset 清空，此时取回确定性 id=1）
+case "$STATUS" in
+  200|201) info "PASS: 商户注册 (== $STATUS)"; jget "d['id']"; MERCHANT_ID="$VALUE" ;;
+  409) warn "商户已存在（内存仓储），取回 id=1"; MERCHANT_ID=1 ;;
+  *)   fail "商户注册: 非预期状态 [$STATUS]" ;;
+esac
+# 审批：200 正常 / 409 已审批过（内存仓储跨 reset 保留），二者皆视为就绪
 http POST "$MERCHANT_URL/merchants/$MERCHANT_ID/approve"
-assert_status 200 "商户审批（id=$MERCHANT_ID）"
+case "$STATUS" in
+  200) info "PASS: 商户审批（id=$MERCHANT_ID）" ;;
+  409) warn "商户已审批过，跳过（id=$MERCHANT_ID）" ;;
+  *)   fail "商户审批（id=$MERCHANT_ID）: 非预期状态 [$STATUS]" ;;
+esac
 
 # --- 商品：1 个已上架商品 ---
 http POST "$CATALOG_URL/products" '{"productCode":"DEMO-P1","name":"演示商品·数字会员","type":"DIGITAL"}'
@@ -54,9 +63,9 @@ create_sku() {
   # 预置库存（三段式：下单预占 → 支付成功确认扣减）
   http POST "$CATALOG_URL/internal/stock/seed" "{\"skuId\":$id,\"total\":$4}"
   assert_status 200 "库存预置 $1（skuId=$id, total=$4）"
-  # 可选：秒杀配额预扣（Phase 4，Redis Lua 原子准入）
+  # 可选：秒杀配额预扣（Phase 4，Redis Lua 原子准入）。端点为 @RequestParam 形态，参数走查询串
   if [ -n "${5:-}" ]; then
-    http POST "$CATALOG_URL/internal/stock/seckill/seed" "{\"skuId\":$id,\"total\":$5}"
+    http POST "$CATALOG_URL/internal/stock/seckill/seed?skuId=$id&total=$5"
     assert_status 200 "秒杀配额预置 $1（skuId=$id, total=$5）"
   fi
 }

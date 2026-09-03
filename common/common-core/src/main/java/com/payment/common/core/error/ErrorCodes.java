@@ -12,6 +12,8 @@ public final class ErrorCodes {
     public static final String INVALID_ARGUMENT = "INVALID_ARGUMENT";
     public static final String NOT_FOUND = "NOT_FOUND";
     public static final String CONFLICT = "CONFLICT";
+    /** 乐观锁版本冲突：业务上可安全重试（读-改-写重放），与不可重试的 CONFLICT 区分。 */
+    public static final String CONCURRENT_UPDATE = "CONCURRENT_UPDATE";
     public static final String DUPLICATE = "DUPLICATE";
     public static final String STATE_TRANSITION_VIOLATION = "STATE_TRANSITION_VIOLATION";
     /** 对账批次尚有未处理差异却尝试关闭（ADR-0019 关闭门禁）。 */

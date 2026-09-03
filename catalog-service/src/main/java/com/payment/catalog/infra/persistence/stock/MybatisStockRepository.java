@@ -38,7 +38,8 @@ public class MybatisStockRepository implements StockRepository {
         }
         StockEntity entity = toEntity(stock);
         if (stockMapper.updateById(entity) == 0) {
-            throw BizException.of(ErrorCodes.CONFLICT, "stock concurrent update sku=" + stock.getSkuId());
+            // 乐观锁版本冲突：单独的错误码，供上层做有界重试（区别于不可重试的 CONFLICT）
+            throw BizException.of(ErrorCodes.CONCURRENT_UPDATE, "stock concurrent update sku=" + stock.getSkuId());
         }
         stock.setVersion(stock.getVersion() + 1);
         return stock;

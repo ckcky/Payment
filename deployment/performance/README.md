@@ -97,6 +97,37 @@ RESULT=deployment/performance/results/r3-load-result.json \
 | 入口幂等（ADR-0039/0040/012） | 相同 `Idempotency-Key` 50 并发 `POST /orders` | 恰好 **1×201** + **49×409**（全部带 `Retry-After: 1`）；窗口翻转后同 key 重放 → **200 与首次响应一致**（不重复下单）。产物：`r3-idempotency-result.json`（`order-idempotency-verify.js`） |
 | 限流（capacity=50/1s，ADR-0045） | 100 并发 448ms 内进入同一窗口 | 恰好 **50** 放行（打在下游库存 409）+ **50×429**；429 **全部不带 `Retry-After`**（`{"error":"rate_limit_exceeded","retryable":false}`），符合「拒绝不允许重试」 |
 
+### 4.4 全链路业务压测：下单 → 渠道回调 → 退款（2026-09-04，容器 MySQL + 宿主服务）
+
+场景脚本：`order-payment-refund-k6.js`（ramping-vus：30s 爬坡 → 稳态 → 15s 退出）。
+每个迭代走完整业务闭环，覆盖 order / catalog / payment / mock-channel-web / refund 五个服务写路径 + Feign 内部 RPC 链：
+
+1. `POST /orders`（幂等键）：order 内部串联 Redis 秒杀准入 → catalog 库存预占 → payment 意图创建（收银台路径：PROCESSING + payUrl）
+2. `POST /mock-channel/callback`：mock-channel-web 以渠道身份 HMAC 签名转发 payment，驱动 PROCESSING→SUCCEEDED
+3. `POST /internal/refunds`：refund 经 Feign 走 payment 渠道退款（同步 SUCCEEDED）
+4. `POST /internal/refunds/{id}/resolve`：权威确认（幂等）
+
+| 轮次 | VU | 迭代 | HTTP 请求 | 失败率 | 平均/p95 |
+|---|---|---|---|---|---|
+| 第一轮（修复前） | 20 | 3,827 | 11,387 | **11.5%** | 92ms / 151ms |
+| 第二轮（库存冲突重试后） | 20 | 3,674 | 14,459 | **0.55%** | 142ms / 363ms |
+
+**第一轮 11.5% 失败的定位与修复（重要发现）：**
+
+- 失败全部是 catalog `/internal/stock/reserve` 的 409 —— 库存聚合单行**乐观锁**版本冲突
+  （ADR-0053 快速失败设计），而 order-service 不重试 → 整单取消（`orders.CANCELLED` 与冲突数吻合）。
+- 修复：新增 `CONCURRENT_UPDATE` 错误码（区别于不可重试的 CONFLICT），catalog 侧对版本冲突做
+  **跨事务有界重试**（8 次、线性退避）。注意重试必须在**独立事务**里进行——同一 `@Transactional`
+  事务内重读拿到的仍是 REPEATABLE READ 本事务快照，永远看不见他人提交的新版本。
+- 连带修复：order-service 对 bypass（未播种秒杀配额）的 SKU 不再登记秒杀回滚——
+  失败回滚的 `INCREMENT` 会凭空造出 Redis 配额键，导致后续正常下单被误判"秒杀库存不足"。
+
+**终态一致性核对（两轮压测后，容器 MySQL）：** `stock_reservation.CONFIRMED`（5,384）与
+`orders.PAID`（5,384）**精确相等**；预占 PENDING 全部对应 PENDING_PAYMENT 订单；
+退款 SUCCEEDED 与支付 SUCCEEDED 一一对应；秒杀配额 Redis 余量与 admitted+rollback 账目吻合。
+
+Grafana「HTTP 请求量/P99」面板同步改为按**服务名**（Prometheus `job`）分组，不再按端口号。
+
 ## 5. 结论与建议（草案）
 
 - cache-aside 命中后应使 `GET /skus/{id}` 延迟稳定落在内存/Redis 量级（亚毫秒~低十毫秒），
