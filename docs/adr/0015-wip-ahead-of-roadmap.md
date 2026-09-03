@@ -56,11 +56,12 @@
   （`SeckillStockServiceTest`、`SkuCacheTest`、`RateLimiterTest`、`OrderEntryIdempotencyServiceTest`、
   `OrderTimeoutSchedulerTest`）。
 - ❌ **仍缺失**：
-  1. **「不超卖」并发断言未验证** —— 本轮压测秒杀配额播种为 1,000,000，全程 200 准入、
-     **未触发 409**，故「配额耗尽快速拒绝、不击穿 DB」**未获证据**（roadmap §7 的
-     「库存 100 / 并发 5000 不超卖」断言仍未自动化）。
-  2. **无多线程并发测试** —— `013/acceptance.md` SC-008 明确标注「并发防覆盖 ⚠️ 未直接验证
-     （本项目无并发测试用例）」；乐观锁依赖 MyBatis-Plus 内建机制，未经本项目测试证明。
+  1. **「不超卖」并发断言 —— 单元测试级已验证，大规模未自动化** —— R3 新增 `SeckillStockConcurrencyTest`（配额 10 / 50 并发各扣 1 ⇒ 恰好 10 `allowed` + 40 `deny`、剩余恒 0，Lua 原子不超卖），**已获证据**；
+     但 roadmap §7 的
+     「库存 100 / 并发 5000 不超卖」**大规模断言仍未自动化**（需分布式压测，见 ADR-0058 / `R3-distributed-verification.md`）。
+  2. **多线程并发测试 —— 已有（R3）**，但 DB 乐观锁并发断言仍缺 —— R3 新增 `SeckillStockConcurrencyTest`、
+     `OrderEntryIdempotencyConcurrencyTest`、`RateLimiterConcurrencyTest` 均为真实多线程并发（embedded Redis）；
+     `013/acceptance.md` SC-008 标注「并发防覆盖 ⚠️ 未直接验证」现仅指 DB 层：MyBatis-Plus 乐观锁依赖仍**未经本项目测试证明**。
   3. **端到端未验证** —— 013/014 的 acceptance 均注明「端到端运行时未验证（环境受限）」。
 
 > 📌 **由本条派生的文档待办**：`docs/specs/014-seckill-and-cache/acceptance.md` §1 仍写

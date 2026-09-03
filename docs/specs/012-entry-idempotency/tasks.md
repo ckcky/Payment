@@ -20,4 +20,4 @@
 - T001~T005 为代码先行落地后反向登记；T006~T008 为 2026-09-02 文档收口动作。
 - **未做**：L4 业务弱提示（同用户 + 同 SKU + 短窗内有待支付单 → 提示），属体验优化，非正确性需求。
 - **未做**：客户端 key 的长度 / 字符集校验（spec L4）。
-- **未验证**：并发真实重复下单在运行时只产生一张单（需 MySQL + Redis 起服务，本环境不可用）。
+- **已验证（单元测试级并发）**：`OrderEntryIdempotencyConcurrencyTest` 用 embedded Redis 起 50 并发同 key，断言恰好 1 `PROCEED` + 49 `CONFLICT`，不重复下单（真实 Redis `SETNX` 原子，无需 MySQL/多服务）；**分布式端到端并发仍待 Docker 环境**（见 acceptance §3）。

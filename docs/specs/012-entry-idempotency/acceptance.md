@@ -2,7 +2,7 @@
 
 **Feature**：`012-entry-idempotency`
 **验收日期**：2026-09-02
-**验收结论**：**通过（单元层）｜ 并发运行时未验证（环境受限）**
+**验收结论**：**通过（单元层）｜ 并发幂等已验证（embedded Redis 单元测试级并发：50 并发同 key ⇒ 1 PROCEED + 49 CONFLICT）｜ 分布式端到端并发待 Docker 环境**
 **关联**：`spec.md` / `plan.md` / `tasks.md`
 
 ---
@@ -12,7 +12,7 @@
 | 层 | 方式 | 环境要求 |
 | --- | --- | --- |
 | 单元 / MockMvc | `mvn -o clean verify -fae`（Mockito + MockMvc） | 无外部依赖 |
-| 并发运行时（roadmap §10 口径："并发发两个同 key 请求 ⇒ 只产生一张单，两次响应完全相同"） | 需 MySQL + Redis + order/catalog/payment 起服务 | **本机不可用** |
+| 并发运行时（roadmap §10 口径："并发发两个同 key 请求 ⇒ 只产生一张单，两次响应完全相同"） | 需 MySQL + Redis + order/catalog/payment 起服务 | **本机 Docker 不可用**；单元测试级并发已由 `OrderEntryIdempotencyConcurrencyTest`（embedded Redis）覆盖，见 §2 SC-007 |
 
 ## 2. 已验证项（✅ 有证据）
 
@@ -24,13 +24,14 @@
 | SC-004 | 已完成重复 → `REPLAY` → 控制器 **200 且 body 与首次一致** | ✅ | `#completedDuplicateReplays` + `OrderControllerIdempotencyTest#replay_returns200WithStoredJson` |
 | SC-005 | Redis 不可用 → `UNAVAILABLE`（不抛异常）+ `order_idempotency_degraded_total` +1 | ✅ | `#redisUnavailableFailOpen` |
 | SC-006 | `mvn -o clean verify -fae` 全量 BUILD SUCCESS | ✅ | 见 §5 |
+| SC-007 | 并发幂等：50 并发同 key ⇒ 恰好 1 `PROCEED` + 49 `CONFLICT`（真实 Redis `SETNX` 原子，不重复下单）；并串联 IN_PROGRESS→DONE→REPLAY 全链路 | ✅ | `OrderEntryIdempotencyConcurrencyTest#concurrentDuplicateYieldsExactlyOneProceed` + `#lifecycleProceedThenCompleteThenReplay` |
 
 ## 3. 未验证项（❌ 无证据）
 
 | 项 | 阻塞原因 |
 | --- | --- |
-| 真实并发：两个同 key 请求在运行时只产生一张订单 | 需 MySQL + Redis + 多服务启动，**本机不可用**（见 011 acceptance §4） |
-| 30s TTL 过期后重试的最终一致性行为 | 同上 |
+| 多服务分布式端到端并发（跨进程、真实网络）：两个同 key 请求只产生一张单 | 需 MySQL + Redis + 多服务启动，**本机 Docker 不可用**（见 011 acceptance §4）；单元测试级并发已由 SC-007 用 embedded Redis 覆盖 |
+| 30s TTL 过期后重试的最终一致性行为 | 同上（多服务运行时） |
 
 ## 4. 本轮补文档消除的漂移
 
@@ -50,6 +51,6 @@
 
 ## 6. 遗留 TODO
 
-1. 在有 MySQL + Redis 的机器上验证并发同 key 只产生一张单（§3）。
+1. 在 Docker 环境起全栈验证**分布式**端到端并发同 key 只产生一张单（§3）；单元测试级并发已由 SC-007 覆盖。
 2. 考虑为客户端 key 增加长度 / 字符集校验（spec L4）。
 3. 可选：实现 L4 业务弱提示（同用户 + 同 SKU + 短窗内有待支付单 → 提示）。
