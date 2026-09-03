@@ -2,12 +2,12 @@
 //
 // 运行前置：
 //   1) 启动依赖：MySQL（或 H2 内存兜底）、Redis(6379)、catalog-service(8082)；并执行种子
-//      （demo/reset.sh 已为 DEMO-SKU-103 播种秒杀配额；本地压测用 BASE_URL/SKU_ID 指向已激活 SKU）。
+//      （deployment/demo/reset.sh 已为 DEMO-SKU-103 播种秒杀配额；本地压测用 BASE_URL/SKU_ID 指向已激活 SKU）。
 //   2) 安装 k6：https://k6.io/docs/get-started/installation/
 //
 // 运行示例（本地）：
 //   k6 run -e BASE_URL=http://localhost:8082 -e SKU_ID=1 -e SECKILL_SKU_ID=1 \
-//       -o json=k6-result.json performance/catalog-seckill-k6.js
+//       -o json=results/k6-result.json deployment/performance/catalog-seckill-k6.js
 //
 // 说明：
 //   - sku_cache_read 场景：持续 GET /skus/{id}（op=sku_read），验证 cache-aside（命中 Redis 后

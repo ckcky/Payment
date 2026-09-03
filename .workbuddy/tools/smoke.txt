@@ -1,3 +1,0 @@
-﻿PAYMENT PID=10960
-HEALTH UP=True
-POST /payments -> 201 : {"paymentId":6,"status":"SUCCEEDED"}

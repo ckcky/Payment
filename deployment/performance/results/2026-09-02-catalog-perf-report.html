@@ -121,8 +121,9 @@ p95=13.2ms ≪ 50ms SLO，读路径延迟目标轻松满足。</div>
 k6 run -e BASE_URL=http://localhost:8082 -e SKU_ID=1 -e SECKILL_SKU_ID=1 \
     -o json=load-result.json deployment/performance/catalog-seckill-k6.js
 
-# 本环境 k6 二进制下载被代理拦截，已用 Node 标准库等价复刻（落于 .workbuddy/perf/）：
-node .workbuddy/perf/loadgen.js            # 输出 .workbuddy/perf/load-result.json
-node .workbuddy/perf/generate-report.js    # 由 JSON 生成本报告</pre>
-<p class="meta">原始数据：.workbuddy/perf/load-result.json ｜ 本报告：.workbuddy/perf/perf-report.html</p>
+# 本环境 k6 二进制下载被代理拦截，已用 Node 标准库等价复刻（脚本已归位 deployment/performance/）：
+node deployment/performance/catalog-seckill-loadgen.js   # 输出 deployment/performance/results/&lt;date&gt;-load-result.json
+RESULT=results/&lt;date&gt;-load-result.json OUT=results/&lt;date&gt;-perf-report.html \
+    node deployment/performance/generate-report.js</pre>
+<p class="meta">原始数据：deployment/performance/results/2026-09-02-catalog-load-result.json ｜ 本报告：2026-09-02-catalog-perf-report.html</p>
 </body></html>

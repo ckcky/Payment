@@ -1,3 +1,0 @@
-﻿Admin: False
-Winget: v1.29.290
-VirtFirmware: True

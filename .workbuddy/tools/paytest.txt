@@ -1,1 +1,0 @@
-﻿PAYMENT OK -> 201 : {"paymentId":8,"status":"SUCCEEDED"}

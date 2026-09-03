@@ -103,7 +103,7 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 | ~~内部端点 `403` / `503`~~ | ~~鉴权失败~~ | ⛔ **不会发生**：鉴权为空实现（ADR-0024），`/internal/**` 恒定放行。接入真实鉴权后按 §4「接入真实鉴权/验签时」的 4 步复核（入站与出站**必须成对启用**） |
 | **疑似伪造渠道回调把支付翻转为 SUCCESS** | 验签为空实现（ADR-0025 已知风险） | 本期**无技术拦截手段**。处置：以 `FINANCIAL_AUDIT` 日志 + 对账差异定位，人工 `POST /payments/{id}/resolve` 收敛；**根本解法是网络层**：payment-service 不得暴露公网 |
 | **疑似越权调用 `/internal/**`** | 鉴权为空实现（ADR-0024 已知风险） | 同上：依赖安全组 / 服务网格隔离；以审计日志 + 对账差异兜底核对 |
-| 对账差异全为 `PLATFORM_ONLY` | 渠道账单是静态 fixture（`sample.csv`），真实渠道引用带 runId 前缀 | 设计内表现，非故障；如需复位用 `.workbuddy/tools/cleanup.py` |
+| 对账差异全为 `PLATFORM_ONLY` | 渠道账单是静态 fixture（`sample.csv`），真实渠道引用带 runId 前缀 | 设计内表现，非故障；如需复位用 `deployment/demo/truncate-transactional.py`（只清事务表、保留科目预设）；要彻底重来则用 `deployment/demo/reset.sh` |
 | `orders` 表缺 `payment_id` 导致 order 500 | 用户库是旧 schema 建的 | `ALTER TABLE orders ADD COLUMN payment_id BIGINT NULL` |
 | `GlobalExceptionHandler` 把异常吞成 `INTERNAL_ERROR` | 未捕获异常统一转 `{"code":"INTERNAL_ERROR"}` | 定位需看服务 err 日志或临时加堆栈输出（定位后还原） |
 

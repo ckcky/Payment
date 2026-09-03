@@ -1,13 +1,27 @@
 #!/usr/bin/env node
 /**
- * generate-report.js —— 读取 load-result.json，生成自包含 HTML 性能报告（内联 SVG，无外部依赖）
+ * generate-report.js —— 读取 results/ 下的 load-result JSON，生成自包含 HTML 性能报告（内联 SVG，无外部依赖）
+ *
+ * 用法：
+ *   node generate-report.js                       # 读 results/2026-09-02-catalog-load-result.json
+ *   RESULT=results/xxx.json OUT=results/xxx-perf-report.html node generate-report.js
  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
 
 const dir = __dirname;
-const data = JSON.parse(fs.readFileSync(path.join(dir, 'load-result.json'), 'utf8'));
+const DEFAULT_RESULT = '2026-09-02-catalog-load-result.json';
+const resultPath = process.env.RESULT
+  ? path.resolve(dir, process.env.RESULT)
+  : path.join(dir, 'results', DEFAULT_RESULT);
+const data = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+const baseName = (p) => path.basename(p);
+// 输出：默认与输入同名派生（xxx-load-result.json → xxx-perf-report.html），可用 OUT 覆盖
+const outName = process.env.OUT
+  ? path.resolve(dir, process.env.OUT)
+  : path.join(path.dirname(resultPath),
+      baseName(resultPath).replace(/-?load-result\.json$/i, '') + '-perf-report.html');
 const sku = data.scenarios.sku_cache_read;
 const sek = data.scenarios.seckill_flash;
 
@@ -167,12 +181,12 @@ p95=${sku.latency_ms.p95}ms ≪ 50ms SLO，读路径延迟目标轻松满足。<
 k6 run -e BASE_URL=http://localhost:8082 -e SKU_ID=1 -e SECKILL_SKU_ID=1 \\
     -o json=load-result.json deployment/performance/catalog-seckill-k6.js
 
-# 本环境 k6 二进制下载被代理拦截，已用 Node 标准库等价复刻（落于 .workbuddy/perf/）：
-node .workbuddy/perf/loadgen.js            # 输出 .workbuddy/perf/load-result.json
-node .workbuddy/perf/generate-report.js    # 由 JSON 生成本报告</pre>
-<p class="meta">原始数据：.workbuddy/perf/load-result.json ｜ 本报告：.workbuddy/perf/perf-report.html</p>
+# 本环境 k6 二进制下载被代理拦截，已用 Node 标准库等价复刻（脚本已归位 deployment/performance/）：
+node deployment/performance/catalog-seckill-loadgen.js   # 输出 deployment/performance/results/&lt;date&gt;-load-result.json
+RESULT=results/&lt;date&gt;-load-result.json OUT=results/&lt;date&gt;-perf-report.html \\
+    node deployment/performance/generate-report.js</pre>
+<p class="meta">原始数据：deployment/performance/results/${baseName(resultPath)} ｜ 本报告：${baseName(outName)}</p>
 </body></html>`;
 
-const out = path.join(dir, 'perf-report.html');
-fs.writeFileSync(out, html);
-console.log('报告已生成:', out, '(', html.length, 'bytes )');
+fs.writeFileSync(outName, html);
+console.log('报告已生成:', outName, '(', html.length, 'bytes )');

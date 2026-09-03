@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * loadgen.js —— catalog-service 性能压测驱动（Node 标准库实现，零外部依赖）
- * 完全复刻 performance/catalog-seckill-k6.js 的两套场景与 SLO。
+ * catalog-seckill-loadgen.js —— catalog-service 性能压测驱动（Node 标准库实现，零外部依赖）
+ * 完全复刻 deployment/performance/catalog-seckill-k6.js 的两套场景与 SLO。
  *
  * 环境说明（2026-09-02 实测修正）：
  *   - catalog-service 以 MySQL 8.0.46 (localhost:3306/catalog) + Redis 6379 运行，cache-aside 默认开启。
@@ -21,7 +21,7 @@ const path = require('path');
 const BASE = process.env.BASE_URL || 'http://localhost:8082';
 const SKU_ID = process.env.SKU_ID || '1';
 const SECKILL_SKU_ID = process.env.SECKILL_SKU_ID || '1';
-const OUT = process.env.OUT || path.join(__dirname, 'load-result.json');
+const OUT = process.env.OUT || path.join(__dirname, 'results', 'load-result.json');
 
 function parseBase(u) {
   const m = u.match(/^https?:\/\/([^:/]+)(?::(\d+))?/);

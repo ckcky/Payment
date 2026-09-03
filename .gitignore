@@ -29,3 +29,11 @@ Thumbs.db
 
 # Claude Code local settings (may contain secrets)
 .claude/settings.local.json
+
+# ===========================================
+# WorkBuddy 工作区（临时脚本 / 探针 / 构建日志 / 工作日志 / 压测中间产物）
+# 2026-09-03：整体退出版本库（磁盘文件保留，仅退出 git 索引）
+# 有价值的产物已归位：压测脚本与结果 → deployment/performance/
+#                    决策结论 → CHANGELOG.md / docs/adr/
+# ===========================================
+.workbuddy/

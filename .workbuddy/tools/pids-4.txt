@@ -1,4 +1,0 @@
-﻿refund-service=15204
-reconciliation-service=36680
-settlement-service=10472
-ledger-service=45276
