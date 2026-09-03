@@ -66,8 +66,10 @@ public class SeckillStockService {
             return SeckillResult.bypass();
         }
         if (remaining < 0) {
+            metrics.counter("catalog_seckill_denied_total", 1.0, "reason", "quota_exhausted");
             return SeckillResult.deny();
         }
+        metrics.counter("catalog_seckill_admitted_total", 1.0);
         return SeckillResult.allowed(remaining);
     }
 

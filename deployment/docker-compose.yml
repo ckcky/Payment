@@ -70,23 +70,57 @@ services:
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+      - loki
+
+  # 日志聚合（ADR-0059 后可观测性补全）：Promtail 采集宿主 deployment/logs/*.log 推送 Loki，
+  # Grafana 以 Loki 数据源在 Explore 中按 service/level 过滤查询。
+  # 注意：服务以宿主进程运行，日志文件由 start-all.sh 重定向到 deployment/logs/。
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: payment-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: payment-promtail
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - ./logs:/var/log/payment-arch:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
 
   # ADR-0059：Nacos 服务发现（注册中心）。单机/Compose 学习环境用 standalone 模式，关闭鉴权以降低本地摩擦。
   # 各微服务启动后向 127.0.0.1:8848 注册，Feign 调用经服务发现解析服务名（不再硬编码 url）。
   nacos:
-    image: nacos/nacos-server:3.0.3
+    image: nacos/nacos-server:v3.0.3
     container_name: payment-nacos
     environment:
       MODE: standalone
       NACOS_AUTH_ENABLE: "false"
       NACOS_SERVER_PORT: "8848"
+      NACOS_AUTH_TOKEN: "UGF5bWVudEFyY2hOYWNvc1NlY3JldFRva2VuMjAyNkZpeGVkVmFsdWU5ODc2NTQzMjEw"
+      NACOS_AUTH_IDENTITY_KEY: "nacos"
+      NACOS_AUTH_IDENTITY_VALUE: "nacos"
     ports:
+      # 8848：HTTP API / 控制台（宿主与各服务的 nacos.discovery.server-addr 指向此端口）
+      # 9848/9849：Nacos 2.x+ 客户端 gRPC 端口（主端口 +1000 / +1001）。宿主进程运行的
+      #   微服务在 8848 完成注册协商后会改走 gRPC；缺这两个映射时客户端报
+      #   "ErrCode:-401, ErrMsg:Client not connected, current status:STARTING"，服务启动失败。
       - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/v1/ns/operator/metrics | grep -q UP || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20
 
 volumes:
   mysql-data:
+  loki-data:

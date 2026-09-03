@@ -15,6 +15,18 @@ PID_FILE="$LOG_DIR/.pids"
 mkdir -p "$LOG_DIR"
 : > "$PID_FILE"
 
+# JVM 内存上限（默认开启，可用环境变量覆盖/禁用）：
+#   spring-boot:run 让每个服务占 2 个 JVM（maven 启动器 + fork 出的应用进程），
+#   11 个进程共 22 个 JVM；不限 -Xmx 时在小内存机器上会把内存 commit 额度耗尽
+#   （2026-09-04 实测 12.7GB 物理内存机器 commit 打满 52GB/52.7GB，新进程 malloc 失败、
+#   秒杀 p95 由毫秒级劣化到 600ms+）。覆盖方式：
+#     JAVA_TOOL_OPTIONS="-Xmx512m" bash deployment/start-all.sh   # 调大
+#     JAVA_TOOL_OPTIONS="" bash deployment/start-all.sh           # 关闭上限
+if [ -z "${JAVA_TOOL_OPTIONS:-}" ]; then
+  export JAVA_TOOL_OPTIONS="-Xmx384m -Xms128m -XX:MaxMetaspaceSize=160m"
+  echo "    已设置默认 JVM 内存上限 JAVA_TOOL_OPTIONS='-Xmx384m -Xms128m -XX:MaxMetaspaceSize=160m'（可用环境变量覆盖）"
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "✗ 未找到 docker 命令。请先安装并启动 Docker Desktop（Windows/macOS）或 docker 引擎（Linux）。"
   echo "  验证：docker --version"
@@ -25,8 +37,10 @@ echo "==> [1/3] 启动 MySQL + Prometheus + Grafana + Nacos（容器）"
 docker compose -f deployment/docker-compose.yml up -d
 
 echo "==> [1b] 等待 Nacos (8848) 就绪（ADR-0059：注册中心）..."
+# 注意：Nacos 3.x 已移除 /nacos/actuator/health（返回 404），2.x 的就绪探针不再适用。
+# 改用 naming 模块的 operator/metrics，就绪时返回 {"status":"UP"}。
 for i in $(seq 1 45); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:8848/nacos/actuator/health"; then
+  if curl -fsS "http://127.0.0.1:8848/nacos/v1/ns/operator/metrics" 2>/dev/null | grep -q UP; then
     echo "    Nacos 已就绪"
     break
   fi
@@ -63,7 +77,9 @@ fi
 # mock-cashier 开启：支付创建走"收银台跳转"路径（payUrl），默认关闭不影响既有行为
 export PAYMENT_MOCK_CASHIER_ENABLED="${PAYMENT_MOCK_CASHIER_ENABLED:-true}"
 
-nohup ./mvnw -pl mock-channel-web spring-boot:run > "$LOG_DIR/mock-channel-web.log" 2>&1 &
+# 注意：mock-channel-web 位于 deployment/ 下（ADR-0048 修订版），-pl 必须写模块相对仓库根的路径，
+# 直接写 artifactId 会被 Maven 当作不存在的目录而报 "Could not find the selected project in the reactor"。
+nohup ./mvnw -pl deployment/mock-channel-web spring-boot:run > "$LOG_DIR/mock-channel-web.log" 2>&1 &
 echo "$! mock-channel-web" >> "$PID_FILE"
 echo "    mock-channel-web  (PID $!)"
 

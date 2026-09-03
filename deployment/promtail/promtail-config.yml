@@ -1,0 +1,43 @@
+# Promtail：抓取宿主上各微服务日志（deployment/logs/*.log，由 start-all.sh 重定向产出）
+# 标签：service（来自文件名）、level（来自日志行 level=XXX 字段），供 Grafana Loki 数据源过滤。
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: payment-arch-services
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: payment-arch
+          host: host-pc
+          __path__: /var/log/payment-arch/{*-service,mock-channel-web}.log
+    pipeline_stages:
+      # 从文件名提取服务名：catalog-service.log -> service=catalog-service
+      - match:
+          selector: '{job="payment-arch"}'
+          stages:
+            - regex:
+                source: filename
+                expression: '(?P<service>[A-Za-z0-9_-]+)\.log$'
+            - labels:
+                service:
+      # 从日志行提取级别与 logger：2026-09-04T03:38:38.775+08:00 level=INFO ... logger=... msg="..."
+      - match:
+          selector: '{service=~".+"}'
+          stages:
+            - regex:
+                expression: 'level=(?P<level>[A-Za-z]+)'
+            - labels:
+                level:
+            - regex:
+                expression: 'logger=(?P<logger>\S+)'
+            - output:
+                source: msg

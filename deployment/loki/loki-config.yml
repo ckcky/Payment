@@ -1,0 +1,38 @@
+# Loki 单机模式配置（docker-compose 单二进制、filesystem 存储）
+# 供 Promtail 推送各微服务日志（deployment/logs/*.log），Grafana 以 Loki 数据源查询。
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 演示环境：日志可能滞后于系统时钟（宿主进程多），放宽旧样本拒绝窗口
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  max_query_series: 500
+
+compactor:
+  working_directory: /loki/compactor

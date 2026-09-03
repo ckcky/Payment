@@ -13,7 +13,7 @@
       "type": "stat",
       "title": "支付成功 (累计)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "green" } } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } } },
       "targets": [
         { "expr": "sum(payment_succeeded_total{module=\"payment\"})", "legendFormat": "succeeded", "refId": "A" }
       ],
@@ -24,7 +24,7 @@
       "type": "stat",
       "title": "支付失败 (累计)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "red" } } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "red" } } },
       "targets": [
         { "expr": "sum(payment_failed_total{module=\"payment\"})", "legendFormat": "failed", "refId": "A" }
       ],
@@ -35,7 +35,7 @@
       "type": "stat",
       "title": "支付未知 (累计)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "orange" } } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "orange" } } },
       "targets": [
         { "expr": "sum(payment_unknown_total{module=\"payment\"})", "legendFormat": "unknown", "refId": "A" }
       ],
@@ -46,7 +46,7 @@
       "type": "stat",
       "title": "支付创建 (累计)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "color": { "mode": "fixed-color", "fixedColor": "blue" } } },
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" } } },
       "targets": [
         { "expr": "sum(payment_created_total{module=\"payment\"})", "legendFormat": "created", "refId": "A" }
       ],
@@ -123,6 +123,29 @@
         { "expr": "histogram_quantile(0.99, sum by (le, instance) (rate(http_server_requests_seconds_bucket[1m])))", "legendFormat": "{{instance}}", "refId": "A" }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "秒杀准入 / 拒绝 / 降级 (1m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(increase(catalog_seckill_admitted_total[1m]))", "legendFormat": "admitted", "refId": "A" },
+        { "expr": "sum(increase(catalog_seckill_denied_total[1m]))", "legendFormat": "denied(quota_exhausted)", "refId": "B" },
+        { "expr": "sum(increase(catalog_seckill_degraded_total[1m]))", "legendFormat": "degraded(redis_unavailable)", "refId": "C" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 }
+    },
+    {
+      "id": 30,
+      "type": "logs",
+      "title": "服务日志 (Loki, Promtail 采集)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "expr": "{job=\"payment-arch\"}", "refId": "A" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "options": { "showTime": true, "showLabels": true, "sortOrder": "Descending", "wrapLogMessage": false }
     }
   ]
 }

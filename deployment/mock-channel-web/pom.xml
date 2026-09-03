@@ -35,6 +35,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- 指标注册表：application.yml 暴露了 prometheus 端点、prometheus.yml 也配了抓取，
+             但缺此依赖时 /actuator/prometheus 一律 500，该抓取目标恒为 DOWN。 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
         <!-- 仅用 SignatureVerifier（HMAC-SHA256），与 payment-service 验签同一实现 -->
         <dependency>
             <groupId>com.payment</groupId>
