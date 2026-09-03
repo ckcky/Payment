@@ -267,7 +267,7 @@ sequenceDiagram
 
 - **写路径**：`MybatisPaymentRepository` / `MybatisPaymentAttemptRepository` 在 `@Transactional` 应用服务内写 `payments` / `payment_attempts`；状态机逻辑在领域层，持久层只存枚举名。
 - **读路径**：`findById` / `findByIdempotencyKey` / `findByStatus`（对账事实抽取按 `SUCCEEDED` 查询）。
-- **缓存**：`[待定]` 当前**无 Redis/本地缓存**，全部直连 MySQL；支付事实需强一致，不引入 Cache-Aside（避免读到过期状态）。若未来查询热点出现，评估只读缓存 + TTL，但不缓存资金状态。
+- **缓存**：`[已评估·本期不引入]` 当前**无 Redis/本地缓存**，全部直连 MySQL；支付事实需强一致，不引入 Cache-Aside（避免读到过期状态）。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 
 ### 5.2 幂等性方案
 
@@ -297,7 +297,7 @@ sequenceDiagram
 **超时/重试/降级阈值（`[目标]`，待确认）**：
 - 出站 Feign（履约）超时：当前未显式配置（用 OpenFeign 默认值）；`[目标]` connectTimeout=1s、readTimeout=3s。
 - 重试：仅对幂等调用允许重试；创建支付意图**不自动重试**（靠幂等键 + 调用方重试）；履约 RPC `[目标]` 有限退避重试（如 3 次、1s/2s/4s），耗尽后进入对账/人工。
-- 熔断/降级：`[Phase 按需延后]` Resilience4j/Sentinel 延迟引入；`[目标]` 履约 RPC 失败率阈值 50% 打开熔断（需 ADR 论证后再定）。
+- 熔断/降级：**撤回原「50% 打开熔断」表述**（与 ADR-0021「不引入 Resilience4j」冲突）。本期弹性口径 = **显式超时**（出站 RPC 1s / 对外 HTTP 1.5s，全服务统一）+ **仅幂等调用有限重试**（3 次退避 1s/2s/4s）。⚠️ 代码已引入 Resilience4j 但**缺 ADR**，登记 backlog #5；裁决前本文不描述任何熔断行为。对账侧按 ADR-0021 明确不引入。
 
 ---
 

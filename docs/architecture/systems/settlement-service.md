@@ -294,7 +294,7 @@ sequenceDiagram
 
 - **写路径**：`MybatisSettlementRepository` / `MybatisSettlementAdjustmentRepository` 在 `@Transactional` 应用服务内写 `settlement_batches` / `settlement_items` / `settlement_adjustments`；状态机逻辑在领域层，持久层只存枚举名。
 - **读路径**：`findById` / `findByIdempotencyKey` / `findByMerchantAndPeriod` / `listBatches`；`findActiveByMerchantAndPeriod`（调整项汇总）。
-- **缓存**：`[待定]` 当前**无 Redis/本地缓存**，全部直连 MySQL；批次需强一致，不引入 Cache-Aside。
+- **缓存**：`[已评估·本期不引入]` 当前**无 Redis/本地缓存**，全部直连 MySQL；批次需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 
 ### 5.2 幂等性方案
 

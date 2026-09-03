@@ -17,7 +17,7 @@
 | 维度 | 说明 |
 |---|---|
 | **负责** | 商品（Product）生命周期、SKU 生命周期、SKU 价格（`priceMinor` 最小货币单位）、SKU 可售性判定、交付定义（delivery definition）、按唯一编码/ID 查询 |
-| **不负责** | 订单金额确认/支付、库存扣减、促销/税费、价格快照的冻结与计算（属 order-service，下单时取 catalog 当前值后本地冻结）、跨服务写他 Schema 的任何表 |
+| **不负责** | 订单金额确认/支付、促销/税费、价格快照的冻结与计算（下单时取 catalog 当前值后本地冻结）、跨服务写他 Schema 的任何表。**注：库存扣减现归 catalog 自有（见 §1.2 与 ADR-0041：Stock/StockReservation 聚合在此服务内，三段式预占→确认→释放）** |
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -234,7 +234,7 @@ sequenceDiagram
 
 - **写路径**：`MybatisProductRepository` / `MybatisSkuRepository` 在应用服务内写 `products` / `skus`；状态机逻辑在领域层，持久层只存枚举名（[SkuEntity](../../catalog-service/src/main/java/com/payment/catalog/infra/persistence/sku/SkuEntity.java):70 `setStatus(status.name())`）。
 - **读路径**：`findById` / `findByCode`（按编码唯一查）；order-service 走 `findById`（`GET /skus/{id}`）。
-- **缓存**：`[待定]` 当前**无 Redis/本地缓存**，全部直连 MySQL；商品/SKU 读需强一致，不引入 Cache-Aside。
+- **缓存**：`SkuCache` 采用 **Cache-Aside**（Redis，`StringRedisTemplate`，TTL 300s，**fail-open**）——SKU 读优先命中缓存、未命中回源 MySQL 并回填；压测佐证：默认配置下 MySQL DB 卸载 **99.98%**（`deployment/performance/results/2026-09-02-catalog-perf-report.html`）。秒杀库存由 `SeckillStockService` 经 **Redis Lua 原子预扣**（**fail-closed**，库存不足直接拒）。非秒杀的商品/SKU 写路径仍直连 MySQL，保持强一致。
 
 ### 5.2 幂等性方案
 

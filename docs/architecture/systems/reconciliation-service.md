@@ -72,7 +72,7 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 - `close()`：CONSISTENT 或 PROCESSING → CLOSED；非法来源抛 `STATE_TRANSITION_VIOLATION`（ReconciliationBatch.java:72）。
 - 不变量：所有迁移经 `requireStatus` 校验（ReconciliationBatch.java:80），非法迁移抛 `STATE_TRANSITION_VIOLATION`。
 
-> 诚实标注：`start()` 与 `finish()` 已被应用层调用；**`beginProcessing()` 与 `close()` 已在领域层定义但应用层未接线**——当前差异被 `resolve()` 标记后批次仍停在 `HAS_DIFFERENCE`，不会推进到 `PROCESSING`/`CLOSED`（见 §4.2 与报告(c)）。
+> **状态机已全链路接线（ADR-0019）**：`start()`/`finish()`/`beginProcessing()`/`close()` 均已在应用层调用（`ReconciliationApplicationService`：差异标记后 `beginProcessing()` → `PROCESSING`，处理完毕 `close(operator, at)` → `CLOSED`）；关闭门禁 `unresolvedDifferenceCount>0` 时拒绝关闭（`UNRESOLVED_DIFFERENCES`），`CLOSED` 为只读终态。原「应用层未接线、批次停在 `HAS_DIFFERENCE`」已不准确，据此更新。
 
 **匹配逻辑**（纯函数，ReconciliationMatching.java:18）：按 `reference` 索引双侧，同 ref 且 `amountMinor` 与 `status` 一致 → `Match`；否则按 `AMOUNT_MISMATCH`/`STATUS_MISMATCH` 记差异；仅单侧存在 → `PLATFORM_ONLY`/`CHANNEL_ONLY`。无副作用、无外部依赖。
 
@@ -207,13 +207,13 @@ sequenceDiagram
 1. 加载批次（`NOT_FOUND`）。
 2. 按 `reference` 定位 `Difference`（不存在 `NOT_FOUND`）。
 3. `difference.resolve(note)` 标记 `RESOLVED`（Difference.java:56），`repository.save(batch)` 持久化。
-4. **仅写入 `reconciliation_batches.differences_json` 的 `resolutionStatus`；不调用 `beginProcessing()`/`close()`，批次停留在 `HAS_DIFFERENCE`**（状态机后半段未接线，见报告(c)）。
+4. **写入 `differences_json` 的 `resolutionStatus` 后调用 `beginProcessing()`（→`PROCESSING`），全部差异处理完毕调用 `close(operator, at)`（→`CLOSED`）**；`unresolvedDifferenceCount>0` 时 `close()` 抛 `UNRESOLVED_DIFFERENCES`，强制先清空差异再关闭（ADR-0019）。
 
 ### 4.3 渠道账单加载（当前 Mock）
 
 `CsvChannelStatementLoader.load`（[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/CsvChannelStatementLoader.java:27)）读取 `fixtures/channel-statements/sample.csv`（头 `reference,amountMinor,currencyCode,status`）。
 
-> 诚实标注：真实渠道账单接入为 `[目标]`（roadmap Phase 6 明确「不包含真实渠道账单接入」）。当前实现**忽略 `period` 参数**，任何周期都比对同一份固定 fixture（`channel-extra-1` 等），仅用于学习闭环；按周期切分账单为 `[待定]`。
+> **渠道账单来源（ADR-0020，已落地）**：`[目标]`（roadmap Phase 6 不含真实渠道接入）当前由本地 Mock/预置 CSV fixture 实现。**`period` 为批次标识（非时间窗口），已全程参与**：作为 `uk_reconciliation_batches_period` 幂等键、传入 `ChannelStatementLoader.load(period)` 按 `{dir}/{period}.csv` 定位，未命中显式回退 `sample.csv` 并打 `reconciliation.statement_fallback` 指标 + WARN（**绝不静默**）；`period` 经 `[A-Za-z0-9._-]` 校验防路径穿越。平台侧事实经 `fetchConfirmedFacts()` 拉全量后按周期比对。
 
 ---
 
@@ -224,7 +224,7 @@ sequenceDiagram
 - **写路径**：`MybatisReconciliationRepository`（[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/persistence/MybatisReconciliationRepository.java)）在 `@Transactional` 应用服务内写 `reconciliation_batches`；状态机逻辑在领域层，持久层只存枚举名 + JSON。
 - **读路径**：`findById` / `findByPeriod` / `findByPeriodBetween`（周期区间，供结算/查询）。
 - **JSON 内嵌**：`matches_json`/`differences_json` 由 `ObjectMapper` 序列化/反序列化（MybatisReconciliationRepository.java:102），避免拆表。
-- **缓存**：`[待定]` 当前无 Redis/本地缓存，全部直连 MySQL；对账批量为低频写、按需读，不强一致热点，暂不引入缓存。
+- **缓存**：`[已评估·本期不引入]` 当前无 Redis/本地缓存，全部直连 MySQL；对账批量为低频写、按需读，不强一致热点，暂不引入缓存。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（低频按需读）；未来若出现只读热点须另立 ADR。
 
 ### 5.2 幂等性方案
 

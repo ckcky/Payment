@@ -246,7 +246,7 @@ sequenceDiagram
 
 - **写路径**：`MybatisRefundRepository`（[MybatisRefundRepository.java](../../refund-service/src/main/java/com/payment/refund/infra/persistence/refund/MybatisRefundRepository.java)）在 `@Transactional` 应用服务内写 `refunds` + `refund_items`；状态机逻辑在领域层，持久层只存枚举名 + 乐观锁 `version`。
 - **读路径**：`findById` / `findByIdempotencyKey` / `findByPaymentId`（累计校验）/ `findByStatus`（对账事实）。
-- **缓存**：`[待定]` 当前**无 Redis/本地缓存**，全部直连 MySQL；退款事实需强一致。若未来查询热点出现，评估只读缓存 + TTL，但不缓存资金状态。
+- **缓存**：`[已评估·本期不引入]` 当前**无 Redis/本地缓存**，全部直连 MySQL；退款事实需强一致。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 
 ### 5.2 幂等性方案
 

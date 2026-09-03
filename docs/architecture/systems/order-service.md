@@ -249,11 +249,11 @@ sequenceDiagram
 
 - **写路径**：`MybatisOrderRepository` / `MybatisTransactionRepository` 在应用服务内写 `orders` / `order_items` / `transactions`；状态机与金额不变量在领域层。
 - **读路径**：`findById` 直连 MySQL。
-- **缓存**：`[待定]` 当前无缓存；订单状态需强一致，不引入 Cache-Aside。若未来有只读详情热点，评估 TTL 只读缓存，但不缓存订单状态与金额。
+- **缓存**：订单状态/金额**不引入 Cache-Aside**（需强一致，避免读到过期状态）。**但入口幂等键 `Idempotency-Key` 存于 Redis**（ADR-0039/0040：`OrderEntryIdempotencyService` 以 Redis 唯一存储，IN_PROGRESS TTL 30s / DONE TTL 24h），属幂等去重而非业务缓存。
 
 ### 5.2 幂等性方案
 
-- 下单本身**无强幂等键**（订单创建允许多次产生不同订单）；支付意图幂等由 payment-service 的 `uk_payments_idempotency_key` 保证（幂等键 `payment:{orderId}` 由 order-service 生成，同一订单重复下单不会产生第二笔资金动作）。
+- 下单入口**有强幂等键**：客户端生成 `Idempotency-Key` 请求头，由 `OrderEntryIdempotencyService` 基于 Redis 唯一存储接管——并发同 key 返回 **409 + `Retry-After: 1`**（不接管、轮询），已完成返回 **200 REPLAY**，**fail-open**（订单非资金入口，资金正确性由 payment-service 的 `uk_payments_idempotency_key` + DB 唯一约束兜底，ADR-0039/0040）。订单创建本身仍允许多次产生不同订单（无 key 时）；支付意图幂等键 `payment:{orderId}` 由 order-service 生成。
 - Transaction 1:1 由 `uk_transactions_order_id` 唯一约束兜底。
 
 ### 5.3 分布式事务方案

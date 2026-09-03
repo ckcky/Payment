@@ -196,7 +196,7 @@ sequenceDiagram
 - **写路径**：`MybatisFulfillmentRepository`（`MybatisFulfillmentRepository.java:42`）`save`：新对象 `insert` 并回填 id/version；已存在对象 `updateById`，0 行命中抛 `CONFLICT`（乐观锁）。
 - **读路径**：`findById`（PK）、`findBySourcePaymentId`（UK 查询）。
 - **映射**：领域 `Fulfillment` ↔ PO `FulfillmentEntity`（`@TableName("fulfillments")`）双向映射，状态机逻辑只在领域层，持久化只存枚举名（`MybatisFulfillmentRepository.java:58-75`）。
-- **缓存**：`[待定]` 当前无 Redis/本地缓存，直连 MySQL；履约状态需强一致，不引入 Cache-Aside。
+- **缓存**：`[已评估·本期不引入]` 当前无 Redis/本地缓存，直连 MySQL；履约状态需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 - **@Transactional**：应用服务方法未显式标注事务（`[待定]` 建议补 `@Transactional` 以明确写边界与可回滚语义）。
 
 ### 5.2 幂等性方案

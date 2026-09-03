@@ -188,7 +188,7 @@ refund-service  ──退款后处理 RPC──> entitlement-service (revokeForR
 
 - **写路径**：`MybatisEntitlementRepository.save`（[源码](../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/MybatisEntitlementRepository.java#L54)）：新增 `insert`，更新走 `updateById` 乐观锁（version），0 行命中抛 `CONFLICT`；状态机逻辑在领域层，持久层只存枚举名。
 - **读路径**：`findById` / `findBySourceFulfillmentId` / `findByOrderId`。
-- **缓存**：`[待定]` 当前**无 Redis/本地缓存**，全部直连 MySQL；权益状态需强一致，不引入 Cache-Aside。
+- **缓存**：`[已评估·本期不引入]` 当前**无 Redis/本地缓存**，全部直连 MySQL；权益状态需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 
 ### 5.2 幂等性方案
 

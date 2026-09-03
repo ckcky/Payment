@@ -48,7 +48,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 - 不接真实支付机构、不做真实出款/入账（当前仅 Mock Channel + 模拟业务事实）。
 - （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
-- 不引入 MQ / Kafka / Redis / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。
+- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；熔断组件（Resilience4j）在 payment-service 已引入但缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
 
 **本阶段范围裁剪（2026-08-30 负责人裁决）**：以下能力**明确不做**，只保留预留挂点，落地形态与启用条件见 §2.4：
@@ -221,7 +221,7 @@ Order (1) ───── (1) Transaction (1) ───── (1) Payment (1) �
 | Reconciliation | 待处理 → 对账中 → 一致/有差异 → 处理中/关闭 |
 | Settlement | 待结算 → 计算中 → 待执行 → 执行中 → 成功/失败/未知/关闭 |
 
-**金额铁律**：金额一律用最小货币单位（`long` 分）或 `BigDecimal`（明确 scale），封装 `Money` 值对象；全库禁止 `float`/`double`；任何真实资金变动须经 Ledger 复式记账。
+**金额铁律**：金额一律用最小货币单位（`long` 分）+ 独立 `currencyCode` 字段，或 `BigDecimal`（明确 scale）；`Money` 值对象**不启用**（ADR-0010，已由 Constitution v2.3.0 追认）；全库禁止 `float`/`double`；任何真实资金变动须经 Ledger 复式记账。
 
 ### 4.3 核心业务流程
 
@@ -262,7 +262,7 @@ sequenceDiagram
 
 > **决策记录（Feature 003 / ADR 集合 `docs/adr/0003-payment-reliability-decisions.md`）**：
 > - 超时进 UNKNOWN、主动查询收敛、有限重试、终态冲突策略（迟到成功不覆盖已失败）已 **Accept**（ADR-0003/0004/0005/0007）。
-> - **人工收敛端点（原 ADR-0006 / spec US4）本阶段不做**：高危资金操作须配套完整权限/审计，该体系在路线图 Phase 9（Risk / Security）统一建设。本阶段的自动收敛（主动查询 + 超时 + 重试）已覆盖绝大多数 UNKNOWN；剩余无法自动收敛者保持 UNKNOWN，依赖既有对账流程兜底，不阻塞本 Feature 交付。误判修正统一走对账，不自动覆盖终态（ADR-0007）。
+> - **人工收敛端点（原 ADR-0006 / spec US4）已实现**：`POST /payments/{id}/resolve` + `ResolveAuthorizationInterceptor`（未配置 `PAYMENT_ADMIN_TOKEN` 时返回 503 拒绝，不放行），详见 `runbook.md`。高危资金操作由 admin-token 守卫 + 审计日志兜底；完整权限体系仍待路线图 Phase 9 统一建设。自动收敛（主动查询 + 超时 + 重试）覆盖绝大多数 UNKNOWN，剩余保持 UNKNOWN 依赖对账流程兜底（ADR-0007）。
 
 #### 4.3.3 退款链路
 
@@ -370,7 +370,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 **本期强制（MUST）**：
 
 - 密钥、签名、金额等禁止硬编码，走环境变量 / 配置中心 / 密钥管理（ADR-0026）。
-- **渠道回调 MUST 验证签名与来源**，防止伪造回调 —— HMAC-SHA256 + 防重放，**默认开启、不可关闭**（ADR-0025；不在本次裁剪范围，理由见 §2.4 #7）。
+- **渠道回调 MUST 验证签名与来源**（HMAC-SHA256 + 防重放），**当前为预留空函数恒放行**（ADR-0025 / 0052）：`verifySignature()` 恒返回 `true`，伪造回调可翻转支付状态。**已知且负责人已接受的风险**；接入真实渠道前 MUST 实现，此前 payment-service 不得暴露公网（详见 §2.4 #7）。
 - 对外入参 MUST 做输入校验（Bean Validation）。
 - 资金动作 MUST 有审计日志（§5.3）。
 
@@ -386,7 +386,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 ### 5.3 可观测性（全局）
 
 - **Metrics（Micrometer）**：请求量、延迟、错误率 + 关键业务计数（支付成功率/失败率/超时率/渠道成功率/渠道耗时；退款成功率/失败率；履约/权益失败率；对账差异数量/金额；结算成功率/失败数）。
-- **Logs**：结构化日志（logback），关联字段含 `traceId` / `orderId` / `paymentId`；**资金动作 MUST 有审计日志**（`FINANCIAL_AUDIT` logger）；敏感信息脱敏。
+- **Logs**：结构化日志（logback），关联字段含 `traceId` / `orderId` / `paymentId`；**资金动作 MUST 有审计日志**（`FINANCIAL_AUDIT` logger）。**敏感数据脱敏本期不做**（ADR-0027，`StructuredAuditLogger.mask()` 保留但生产零调用）；当前无真实卡号/凭证，接入真实渠道前 MUST 重新引入。
 - **Traces**：Micrometer Tracing 跨服务传播 `traceId`/`spanId`，初期不上独立分布式追踪基础设施。
 - **告警/SLO**：对「支付状态未知堆积」「对账差异」「退款失败」「重试耗尽」等业务异常 MUST 告警，而非只告警基础设施；核心接口定义可用性、P99、对账达成率目标。
 
@@ -423,7 +423,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 | Phase 2 · Payment Core | Payment/Attempt/Channel Adapter + Mock Channel | 不含真实渠道、Ledger、路由/风控/多币种 |
 | Phase 3 · Payment Reliability | UNKNOWN 收敛、重复/乱序/延迟回调、有限重试、审计 | 不含生产级 SLA、多活、复杂风控、自动补偿 |
 | Phase 4 · Fulfillment & Entitlement | 支付成功后履约 → 权益授予 | 不含复杂仓储物流、权益商城、退款回收政策 |
-| Phase 5 · Refund | **单笔退款只回三态**（成功恒为全额；部分退款追踪本期不做，§2.4 #6 / ADR-0047）、支持同一支付多笔退款、幂等、退款后处理 | 不含单笔部分成功追踪、审批、权益回收政策、真实出款、Ledger 冲正 |
+| Phase 5 · Refund | **单笔退款只回三态**（成功恒为全额；部分退款追踪本期不做，§2.4 #6 / ADR-0047）、支持同一支付多笔退款、幂等、退款后处理 | 不含单笔部分成功追踪、审批、权益回收政策、真实出款；**退款侧 Ledger 冲正已接入**（退款成功经 `FeignLedgerPostingGateway` 留反向分录，ADR-0018） |
 | Phase 6 · Reconciliation | 平台事实与渠道账单比对、差异处理 | 不含真实账单、自动调账、真实资金修正 |
 | Phase 7 · Settlement | 商户周期结算批次、调整项、模拟结算结果 | 不真实出款、不接银行、不接多币种清分（结算侧记账经 ledger-service，见 §4.3.5） |
 | Phase 8 · Ledger | 复式记账、科目、分录、记账幂等 | 不含复杂会计准则、多币种清分、总账 |
