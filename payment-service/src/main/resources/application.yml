@@ -18,10 +18,6 @@ spring:
             # 出站 RPC 超时：connect/read 各 1s（ADR-0012 超时口径，全服务统一）
             connect-timeout: 1000
             read-timeout: 1000
-      # 熔断：为所有 Feign 客户端包裹 circuit breaker（依赖 spring-cloud-starter-circuitbreaker-resilience4j）
-      circuitbreaker:
-        enabled: true
-
 server:
   port: 8084
 
