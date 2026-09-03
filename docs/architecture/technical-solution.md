@@ -48,7 +48,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 - 不接真实支付机构、不做真实出款/入账（当前仅 Mock Channel + 模拟业务事实）。
 - （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
-- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；熔断组件（Resilience4j）在 payment-service 已引入但缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
+- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；熔断组件（Resilience4j）在 payment-service 已引入并保留（2026-09-04 裁决），缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
 
 **本阶段范围裁剪（2026-08-30 负责人裁决）**：以下能力**明确不做**，只保留预留挂点，落地形态与启用条件见 §2.4：
