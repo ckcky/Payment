@@ -56,23 +56,32 @@ RESULT=deployment/performance/results/r3-load-result.json \
 ## 4. 结果（2026-09-04 分布式实跑，Docker 基础设施 + 宿主进程全栈）
 
 > 环境：infra 以容器运行（Nacos/Redis/Prometheus/Grafana/Loki+Promtail），微服务为宿主进程；
-> JDBC 的 `localhost:3306` 实际解析到**宿主原生 MySQL 8.0.46**（WorkBuddy local-mysql，先于
-> Docker 占用 127.0.0.1:3306，容器 MySQL 被架空）——与 Phase 4 基线同源，数据可比。
-> JVM 统一内存上限 `-Xmx384m`（start-all.sh 默认）。
+> 2026-09-04 起宿主原生 MySQL 已停用，JDBC `localhost:3306` 直连**容器 MySQL**，
+> 本节全部数据为容器库实测。JVM 统一内存上限 `-Xmx384m`（start-all.sh 默认）。
 
-### 4.1 sku_cache_read（缓存开启）
+### 4.1 sku_cache_read（缓存对照实验，2026-09-04 容器 MySQL 实测）
 
-| 指标 | 缓存开启（r3 实跑） | 缓存关闭（基线） |
+同一基准（`catalog-seckill-k6.js` sku_read 场景，200 VU / 2 min，Lettuce 池化开启，
+DB 查询量以 MySQL `Com_select` 全局计数差值计量）：
+
+| 指标 | 缓存开启 | 缓存关闭（对照） |
 |---|---|---|
-| VU 峰值 | 200 | 200 |
-| 总请求数 | 34,183 | 未复测（Phase 4 参考：33,627 次读仅 5 次取 DB 连接，卸载率 99.98%） |
-| p95 延迟 | **14.34 ms** | _待补_ |
-| p99 延迟 | **18.18 ms** | _待补_ |
-| 错误率 | **0** | _待补_ |
-| catalog DB 查询（区间计数） | 未复测 | — |
+| sku 读请求数 | 103,811 | 103,965 |
+| p50 / p90 | 2.78 / 4.57 ms | 2.65 / 4.37 ms |
+| p95 延迟 | **6.77 ms** | **10.84 ms** |
+| p99 延迟 | 136.51 ms | 138.97 ms |
+| 错误率 | **0** | **0** |
+| **DB `Com_select` 区间增量** | **+23** | **+103,987** |
 
-（同日另一次配额 1,000,000 的对照跑：p95 8.99ms / p99 14.68ms，见
-`results/2026-09-04-catalog-load-result.json`。）
+结论：
+- **DB 卸载是主要收益**：关闭缓存后每次读直连 DB（+10.4 万次查询），开启后 2 分钟仅 23 次
+  （≈4,500× 差距），读路径 DB 压力趋近于零。
+- **延迟收益为次要**：本地容器 MySQL 单查很快，p95 仅 6.8 vs 10.8ms（约 1.6×）；
+  生产环境 DB 经网络访问 + 高基数 SKU 时，该差距会显著放大。
+- p99 两态相近（~137ms）为 JVM GC / 共享资源周期性停顿，与缓存无关。
+
+（历史参考：上一轮宿主 MySQL 环境下缓存开启 p95 14.34ms / p99 18.18ms / 错误率 0，
+见 `results/2026-09-04-catalog-load-result.json`；环境不同，不与本表直接对比。）
 
 ### 4.2 seckill_flash（破坏性场景：配额 10，500 VU 抢购）
 

@@ -45,6 +45,8 @@ mybatis-plus:
 # SKU 读缓存（014，cache-aside）：命中 Redis 则跳过 DB；写入/状态流转时失效。Redis 不可用时 fail-open 直连 DB。
 catalog:
   cache:
+    # 对照实验已完成（2026-09-04，实测见 performance README §4.6）：关闭时 DB 查询 +10.4 万次/2min
+    # vs 开启 +23 次；p95 10.8→6.8ms。生产必须保持开启。
     enabled: true
     ttl-seconds: 300
     key-prefix: "sku:"
