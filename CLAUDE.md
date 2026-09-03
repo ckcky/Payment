@@ -8,10 +8,10 @@
 
 | 文档 | 内容 | 何时读 |
 |---|---|---|
-| [.specify/memory/constitution.md](.specify/memory/constitution.md) | 最高宪法（v2.2.0）：领域边界、架构、一致性、工程、可观测、AI 原则、人类决策边界、提交与合并节奏 | 任何实现 / 设计前 |
+| [.specify/memory/constitution.md](.specify/memory/constitution.md) | 最高宪法（v2.3.0）：领域边界、架构、一致性、工程、可观测、AI 原则、人类决策边界、提交与合并节奏 | 任何实现 / 设计前 |
 | [docs/README.md](docs/README.md) | 文档体系导航（分类目录、权威层级、路径收口） | 找文档时 |
 | [docs/adr/](docs/adr/) | 架构决策（索引见 [docs/adr/README.md](docs/adr/README.md)，0001 微服务、0002 技术栈） | 涉及架构 / 技术选型 |
-| [docs/architecture/technical-solution.md](docs/architecture/technical-solution.md) | 总体技术方案（8 节：背景/目标/总体架构/详细流程/非功能/部署/计划/风险） | 涉及服务、端口、Schema、RPC 或部署 |
+| [docs/architecture/technical-solution.md](docs/architecture/technical-solution.md) | 总体技术方案（9 节，含 §9 ADR 追溯索引：背景/目标/总体架构/详细流程/非功能/部署/计划/风险/ADR 体现） | 涉及服务、端口、Schema、RPC 或部署 |
 | [docs/architecture/systems/](docs/architecture/systems/) | 每服务系统设计文档（DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑） | 深入某一服务实现细节 |
 | [docs/architecture/roadmap.md](docs/architecture/roadmap.md) | 项目阶段、当前状态和下一 Feature | 开始或完成一个 Feature 前 |
 | [docs/guides/engineering-standards.md](docs/guides/engineering-standards.md) | 编码 / 测试 / CI / 可观测具体规范 | 写代码 / 测试 / 配置前 |

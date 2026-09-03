@@ -10,18 +10,18 @@
 | [adr/](adr/) | 架构决策记录（ADR）及索引 | Reference + 生命周期 |
 | [guides/](guides/) | 工程规范、开发指南、AI 工作流 | Reference + How-to（怎么做） |
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
-| [audits/](audits/) | 一次性审计报告（带日期，已归档） | 历史留档 |
+| [archive/audits/](archive/audits/) | 历史审计报告（已归档，标注 Status，不再作为权威事实源） | 历史留档 |
 | [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录） | Feature 生命周期产物 |
 
 ## 文档清单与职责
 
 | 文档 | 位置 | 职责 | 维护时机 |
 |---|---|---|---|
-| **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.0.0） | 架构级变化时（走宪法修订流程） |
+| **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.3.0） | 架构级变化时（走宪法修订流程） |
 | **CLAUDE.md** | 根目录 | Claude Code 自动加载的项目地图与指针 | 架构 / 文档路径变化时 |
 | **ADR** | `docs/adr/NNNN-*.md`（索引见 [docs/adr/README.md](adr/README.md)） | 记录不可逆/重要架构决策 | 每次重要决策时 |
-| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（8 节）：总体架构、详细流程、非功能、部署、计划、风险 | 架构基线变化时 |
-| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（9 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
+| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（9 节，含 §9 ADR 追溯索引）：总体架构、详细流程、非功能、部署、计划、风险、已决策 ADR 体现 | 架构基线变化时 |
+| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（10 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
 | **Roadmap** | `docs/architecture/roadmap.md` | 项目阶段、当前状态、Feature 依赖和下一步 | 阶段或里程碑变化时 |
 | **目录结构** | `docs/architecture/project-structure.md` | 项目骨架约定 | 模块增删时 |
 | **工程规范** | `docs/guides/engineering-standards.md` | 编码/测试/CI 的具体约束 | 规范调整时 |
@@ -64,4 +64,4 @@ Constitution（.specify/memory/constitution.md，最高宪法）
 3. **Spec 布局**：Spec Kit 的 `docs/specs/<feature>/`（spec.md + plan.md + tasks.md），特性目录由 `/speckit-specify` 生成；路径统一为 `docs/specs/<feature>/`。
 4. **写文档的时机**：决策当场写 ADR，需求澄清当场写 Spec，不事后补记。
 5. **文档也走 Review**：ADR / Spec 变更同样需要人类确认（涉及宪法「人类决策边界」时 MUST）。
-6. **一次性报告**：审计/调研等临时报告放 `docs/audits/`，文件名带日期，并标注 `Status`（active / superseded）。
+6. **一次性报告**：审计/调研等临时报告放 `docs/archive/audits/`，文件名带日期，并标注 `Status`（archived / superseded），不再作为权威事实源。

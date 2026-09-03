@@ -26,7 +26,7 @@
 
 - [ ] ADR-0008~0011 经负责人确认并更新状态为 Accepted
 - [ ] 新增 `ledger-service` 模块与 `ledger` Schema 经确认（§8.2/§8.3）
-- [ ] Roadmap / Constitution / technical-solution 的 D1 矛盾已消除（见 ../../audits/ 修复记录）
+- [ ] Roadmap / Constitution / technical-solution 的 D1 矛盾已消除（见 ../../archive/audits/ 修复记录）
 
 ## 验收结论
 

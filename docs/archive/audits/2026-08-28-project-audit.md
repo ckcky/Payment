@@ -5,6 +5,7 @@
 > **审计基线**：工作树（含未提交改动），最后提交 `688381c`（2026-08-27）。  
 > **方法**：逐项读取根 POM、Constitution、技术方案、Roadmap，并对 9 个服务 + 3 个公共库的实际源码做安全/质量/测试/性能/依赖多维扫描（315 个 Java 文件），关键 HIGH 结论已二次人工核验。  
 > **权威事实源**：本报告结论若与 `docs/architecture/technical-solution.md`、`roadmap.md`、`.specify/memory/constitution.md` 冲突，以这三份为准；本报告仅记录代码现状。
+> **Status**：archived（已归档至 docs/archive/audits/，结论已被 2026-09-03 文档审计整改吸收）
 
 ---
 

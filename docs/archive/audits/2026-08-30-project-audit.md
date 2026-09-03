@@ -6,6 +6,7 @@
 **审计基线**：`constitution.md` v2.1.0、`roadmap.md`、`technical-solution.md`、spec 001~010
 
 > 📌 **历史快照说明**：本报告的结论对应 **2026-08-30 的工作区状态**。其后的 2026-08-31 文档同步（负责人 2026-08-30 裁决落地）已完成——ADR-0016 回退、ADR-0024/0025 降级为空实现、ADR-0027/0028/0034~0037 代码清理、新增 ADR-0047，全部 spec / 架构 / 运维文档已同步。**当前权威口径请以 `docs/adr/README.md`、`docs/architecture/technical-solution.md` §2.4 与各 spec 文档为准**，本报告保留为审计留痕。
+> **Status**：archived（已归档至 docs/archive/audits/，结论已被 2026-09-03 文档审计整改吸收）
 
 ---
 

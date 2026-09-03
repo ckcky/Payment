@@ -3,7 +3,7 @@
 - **审计对象**：`docs/`（architecture / adr / guides / specs）、`.specify/memory/constitution.md`、`CLAUDE.md` 等架构与规范文档
 - **审计日期**：2026-08-28
 - **审计方法**：通读 Constitution、技术方案、Roadmap、ADR、系统设计、工程规范与 Spec；对每一项「文档断言」用 `grep`/`ls`/实际源码二次核验（代码事实来自 2026-08-28 代码级审计与本次复核）。
-- **Status**：active（一次性文档审计报告，供后续文档整改参考）
+- **Status**：archived（已归档至 docs/archive/audits/，结论已被 2026-09-03 文档审计整改吸收）
 - **与代码级审计的关系**：本文聚焦「文档本身的准确性、一致性、完整性、时效性」，不重复代码缺陷；代码现实结论仅用于判定文档是否失真。
 
 ---
