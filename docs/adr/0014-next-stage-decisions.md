@@ -19,6 +19,7 @@
 
 ---
 
+<a id="adr-0038"></a>
 ## ADR-0038 — 演示形态：Mock 收银台 vs 纯脚本（011）
 
 - **状态**：**Superseded by ADR-0048**
@@ -30,6 +31,7 @@
 
 ---
 
+<a id="adr-0039"></a>
 ## ADR-0039 — 下单幂等键的签发与存储位置（012）
 
 - **状态**：Accepted（代码已实现；ADR 文档 2026-09-02 补写）
@@ -50,6 +52,7 @@
 
 ---
 
+<a id="adr-0040"></a>
 ## ADR-0040 — 并发幂等「超时接管」策略（012）
 
 - **状态**：Accepted（代码已实现；ADR 文档 2026-09-02 补写）
@@ -65,6 +68,7 @@
 
 ---
 
+<a id="adr-0041"></a>
 ## ADR-0041 — 库存域归属（013）
 
 - **状态**：Accepted
@@ -76,6 +80,7 @@
 
 ---
 
+<a id="adr-0042"></a>
 ## ADR-0042 — 库存扣减时机（013）
 
 - **状态**：Accepted
@@ -87,6 +92,7 @@
 
 ---
 
+<a id="adr-0043"></a>
 ## ADR-0043 — 订单超时释放库存的机制（013）
 
 - **状态**：Accepted（实现 = **Redis ZSet 时间轮**）
@@ -100,17 +106,50 @@
 
 ---
 
+<a id="adr-0044"></a>
 ## ADR-0044 — Redis 引入论证（014）
 
-- **状态**：Accepted（但 **⚠️ 偏离 roadmap §7 闸门**）
-- **日期**：2026-08-31（收口）
+- **状态**：Accepted（**✅ 偏离已消除**，2026-09-03 补齐压测证据）
+- **日期**：2026-08-31（收口）｜2026-09-03（补齐压测证据，偏离消除）
 - **决策**：引入 Redis（`StringRedisTemplate` + Lua）用于缓存 / 秒杀预扣 / 超时窗口 / 限流。
-- **⚠️ 偏离说明**：roadmap §7 明确要求「**压测基线 → Redis 论证引入**」的论证闸门（先有 k6 基线证据再引入）。本实现在**未做论证**的情况下直接引入 Redis，属 ADR-0053 记录的 SOP 偏离。
-- **待办（TODO，按 ADR-0053）**：补 k6 压测基线 + 引入论证证据（缓存命中率提升、DB 热点行压力下降、秒杀承载提升），必要时补充独立 ADR。
+- **~~⚠️ 偏离说明~~（2026-09-03 更新）**：roadmap §7 要求「**压测基线 → Redis 论证引入**」的论证闸门（先有基线证据再引入）。本实现在**未做论证**的情况下直接引入 Redis，属 ADR-0053 记录的 SOP 偏离。该待办已于 2026-09-02 实跑压测、2026-09-03 归档证据后**消除**。
 - **后果**：获得缓存/预扣/窗口加速；新增 Redis 运维依赖；秒杀路径 fail-closed 保护库存。
+
+### 压测基线证据（2026-09-02 实跑，补 roadmap §7 闸门）
+
+> **环境**：本机 MySQL 8.0.46（`localhost:3306/catalog`）+ Redis `6379`（Windows 版、单线程）+ 单 SKU（id=1）；
+> catalog-service 以项目**默认配置**运行（`catalog.cache.enabled` 开启）。
+> **工具说明**：k6 二进制下载被代理拦截，**未能使用 k6**；改用 Node 标准库自研负载生成器
+> `deployment/performance/catalog-seckill-loadgen.js`（零外部依赖，复刻 k6 脚本的两套场景与 SLO）。
+> 报告生成：`deployment/performance/generate-report.js`。
+
+| 场景 | 总请求 | 吞吐 | p95 | p99 | 错误率 | SLO 判定 |
+|---|---|---|---|---|---|---|
+| `sku_cache_read`（ramping 0→50→200→0，2min，`GET /skus/{id}`） | 33,627 | 549.62 RPS | **13.20 ms** | **16.83 ms** | 0.00% | ✅ 达标（p95<50ms、p99<120ms） |
+| `seckill_flash`（ramping 0→500→0，40s，`POST /internal/stock/seckill/deduct`） | 44,502 | 1,108.20 RPS | **415.70 ms** | **434.27 ms** | 0.00% | ❌ 延迟未达标 |
+
+**DB 卸载佐证（缓存有效性的决定性证据）**：
+`HikariCP connections_acquire_seconds_count = 5`，而本场景成功读请求 = 33,627
+⇒ **99.98% 的读命中 Redis 缓存**（`sku:id:1`），未回源 DB。cache-aside 按设计工作。
+
+**两点必读的结论纠正**（避免重复历史误判，详见 `deployment/performance/README.md`）：
+
+1. **「Redis 连不上」是误报** —— `/actuator/health` 报 `redis=DOWN` / `Cannot read Redis info`
+   是 Spring Boot Actuator 的已知误报（false-negative）。**判据应是业务指标**（缓存命中数、降级计数），
+   不是 health 端点。本次实测中 Redis 全程可达且 Lua 预扣可写。
+2. **「读缓存未生效」是误判** —— 早期结论来自跑在 `CATALOG_CACHE_ENABLED=false` 的 **H2 实例**上。
+   改用默认配置（MySQL + 缓存开启 + Redis 可达）重跑后，DB 卸载 99.98%。
+
+**已知未验证项**：秒杀配额（`seckill:sku:1`）播种为 1,000,000，压测全程 200 准入、
+**未触发 409 售罄**，故「配额耗尽快速拒绝、不击穿 DB」的能力**本轮未验证**（建议后续播种小配额重跑）。
+
+**产物**：`deployment/performance/results/2026-09-02-catalog-load-result.json`（原始数据）、
+`deployment/performance/results/2026-09-02-catalog-perf-report.html`（可视化报告）。
+
 
 ---
 
+<a id="adr-0045"></a>
 ## ADR-0045 — Redis 用途边界（014）
 
 - **状态**：Accepted
@@ -123,6 +162,7 @@
 
 ---
 
+<a id="adr-0046"></a>
 ## ADR-0046 — 秒杀限流策略与丢弃语义（014）
 
 - **状态**：Accepted

@@ -1,8 +1,10 @@
+<a id="adr-0053"></a>
 # ADR-0053：库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置
 
 - **状态**：Accepted（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码）
-- **日期**：2026-08-31
-- **关联**：`docs/architecture/next-stage-design.md` §1-7（011~014 规划）；ADR-0041~0046（预留，未写）；ADR-0025（验签空实现）；ADR-0031（不使用 MQ）；roadmap「Next Feature」
+  → **🟡 收口：主决策已执行，1 条待办未闭环**（2026-09-03 复核）
+- **日期**：2026-08-31（提出）｜2026-09-03（待办复核）
+- **关联**：`docs/architecture/next-stage-design.md` §1-7（011~014 规划）；ADR-0041~0046（**已写入**，见 `0005`…`0014`）；ADR-0025（验签空实现）；ADR-0031（不使用 MQ）；roadmap「Next Feature」
 
 ## 背景（Context）
 
@@ -35,16 +37,43 @@
   - 013/014 当前是「无 spec 的 WIP」，正确性仅靠已实现单测覆盖，尚未经过完整 acceptance 与压测断言（roadmap §7 的「库存 100 / 并发 5000 不超卖」断言未自动化验证）。
   - 014 的 Redis 引入未论证，违反 roadmap 闸门；若 Redis 不可用，相关能力降级（代码已有 try/catch 降级日志，但语义正确性需评估）。
   - 文档漂移风险：roadmap / runbook 的「已实现 Feature」「JVM 进程数」需同步，否则出现文档与代码不一致。
-- **待办（TODO，按优先级）**：
-  1. 负责人复盘本 ADR，确认「保留并补 spec」或「回退 013/014」。
-  2. 若保留：补 `docs/specs/013-inventory-reservation/`（spec→plan→tasks→acceptance）与 `docs/specs/014-seckill-and-cache/`，落 ADR-0041~0046。
-  3. 若保留：为 014 的 Redis 引入补「压测基线 → 论证」证据（roadmap §7 闸门），必要时单独立 ADR。
-  4. 补 013/014 的端到端 / 压测自动化断言（不超卖、不漏卖、无重复单、限流生效）。
+## 待办闭环情况（2026-09-03 复核）
+
+> 本 ADR 的 4 条待办逐条核对结果如下。**3 条已闭环，1 条仍开放**，
+> 故本 ADR 状态为「主决策已执行 / 待办未全闭环」，**不标为完全完成**。
+
+| # | 原待办 | 状态 | 证据 |
+|---|---|---|---|
+| 1 | 负责人复盘本 ADR，确认「保留并补 spec」或「回退 013/014」 | ✅ 已闭环 | 后续开发按「保留并补 spec」推进，013/014 至今在 master 且全量构建绿 |
+| 2 | 补 `docs/specs/013-*` / `014-*`（spec→plan→tasks→acceptance），落 ADR-0041~0046 | ✅ 已闭环 | `docs/specs/013-inventory-reservation/`、`docs/specs/014-seckill-and-cache/` 均含 spec / plan / tasks / acceptance 四件；ADR-0041~0046 已写入 `docs/adr/0014-next-stage-decisions.md` |
+| 3 | 为 014 的 Redis 引入补「压测基线 → 论证」证据（roadmap §7 闸门） | ✅ 已闭环 | 2026-09-02 实跑压测，证据已归档至 ADR-0044「压测基线证据」节；产物 `deployment/performance/results/2026-09-02-catalog-*`。注意：**k6 未能使用**（二进制下载被代理拦截），实际以 Node 标准库负载生成器等价复刻 |
+| 4 | 补 013/014 的端到端 / 压测自动化断言（不超卖、不漏卖、无重复单、限流生效） | 🟡 **部分闭环** | 见下 |
+
+**待办 #4 的明细**：
+
+- ✅ **已覆盖**：秒杀三态（bypass/deny/allow）、fail-closed 降级、缓存 miss/hit/异常回源、
+  限流窗口（RateLimiter 层）、超时回补配额、幂等键并发 —— 均有单元测试
+  （`SeckillStockServiceTest`、`SkuCacheTest`、`RateLimiterTest`、`OrderEntryIdempotencyServiceTest`、
+  `OrderTimeoutSchedulerTest`）。
+- ❌ **仍缺失**：
+  1. **「不超卖」并发断言未验证** —— 本轮压测秒杀配额播种为 1,000,000，全程 200 准入、
+     **未触发 409**，故「配额耗尽快速拒绝、不击穿 DB」**未获证据**（roadmap §7 的
+     「库存 100 / 并发 5000 不超卖」断言仍未自动化）。
+  2. **无多线程并发测试** —— `013/acceptance.md` SC-008 明确标注「并发防覆盖 ⚠️ 未直接验证
+     （本项目无并发测试用例）」；乐观锁依赖 MyBatis-Plus 内建机制，未经本项目测试证明。
+  3. **端到端未验证** —— 013/014 的 acceptance 均注明「端到端运行时未验证（环境受限）」。
+
+> 📌 **由本条派生的文档待办**：`docs/specs/014-seckill-and-cache/acceptance.md` §1 仍写
+> 「k6 压测 —— 本机不可用」，§3 仍列压测为未验证项；现已存在实测数据，需按新证据更新
+> 该文件的验收方式与未验证项清单。已登记为 `docs/operations/code-debt-backlog.md` #12，
+> 在 Phase 5 阶段 ⑤ 一并处理（避免在 ADR 收口这一 commit 里跨太多文件）。
 
 ## 与既有 ADR 的关系
 
 - 不 supersede 任何 ADR；是**一次 SOP 偏离的处置记录**。
-- ADR-0041~0046 号段仍保留给 013/014 的正式决策，本 ADR 不占用其编号。
+- ADR-0041~0046 号段已按预留用途写入 `docs/adr/0014-next-stage-decisions.md`，本 ADR 未占用其编号。
 - 与 ADR-0025（验签空实现）、ADR-0031（不使用 MQ）无冲突——013/014 未引入 MQ。
+- **本 ADR 记录的三处 SOP 偏离**（顺序超前 / 缺 spec 驱动产物 / Redis 越过闸门）**均已消解**；
+  剩余的是**测试覆盖缺口**（待办 #4），不再属 SOP 偏离范畴。
 
 > 本文件作为「偏离 / 处置日志」文档，后续若再有 SOP 偏离类决策可在此追加（ADR-0054+）。

@@ -22,6 +22,66 @@
 | [0014](0014-next-stage-decisions.md) | 下一阶段决策集合（ADR-0038~0046） | **Accepted**（0041~0046 于 2026-08-31 收口；**0038 Superseded by 0048**；**0039/0040 于 2026-09-02 补写**；0044 偏离 roadmap §7 论证闸门） | 012-entry-idempotency（0039 幂等键签发与存储 / 0040 并发幂等接管策略）+ 013-inventory-reservation（0041 库存域归属 / 0042 扣减时机 / 0043 超时释放机制）+ 014-seckill-and-cache（0044 Redis 引入论证·偏离 / 0045 用途边界 / 0046 限流策略）；代码先行，见 ADR-0053。**0039/0040 的补写消除了代码中已存在但文档缺失的悬空引用**（`OrderController` / `OrderEntryIdempotencyService` / `IdempotencyDecision` / `docker-compose.yml`） |
 | [0015](0015-wip-ahead-of-roadmap.md) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置（ADR-0053） | **Accepted**（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码） | 偏离 / 处置日志：working tree 含 013-inventory-reservation / 014-seckill-and-cache 实质性实现，**超前顺序、缺 spec/ADR-0041~0046、014 的 Redis 引入未经 roadmap §7 论证闸门**；决策=保留代码（编译+测试通过，且与 011 在 order-service 纠缠不可干净拆分），spec/ADR 补写列为 TODO，待复盘收口 |
 
+## ADR 编号速查（0001–0053）
+
+> 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
+
+| 编号 | 决策标题 | 承载文件 |
+|---|---|---|
+| [0001](docs/adr\0001-adopt-spring-cloud-microservices.md#adr-0001) | 采用 Spring Cloud 微服务架构 | [docs/adr\0001-adopt-spring-cloud-microservices.md](docs/adr\0001-adopt-spring-cloud-microservices.md) |
+| [0002](docs/adr\0002-technology-stack.md#adr-0002) | 技术栈选型 | [docs/adr\0002-technology-stack.md](docs/adr\0002-technology-stack.md) |
+| [0003](docs/adr\0003-payment-reliability-decisions.md#adr-0003) | UNKNOWN 收敛触发机制 | [docs/adr\0003-payment-reliability-decisions.md](docs/adr\0003-payment-reliability-decisions.md) |
+| [0004](docs/adr\0003-payment-reliability-decisions.md#adr-0004) | 超时进入 UNKNOWN 的策略 | [docs/adr\0003-payment-reliability-decisions.md](docs/adr\0003-payment-reliability-decisions.md) |
+| [0005](docs/adr\0003-payment-reliability-decisions.md#adr-0005) | 支付重试模型 | [docs/adr\0003-payment-reliability-decisions.md](docs/adr\0003-payment-reliability-decisions.md) |
+| [0006](docs/adr\0003-payment-reliability-decisions.md#adr-0006) | 人工收敛能力与权限/审计约束 —— **本阶段不做（Not Implemented）** | [docs/adr\0003-payment-reliability-decisions.md](docs/adr\0003-payment-reliability-decisions.md) |
+| [0007](docs/adr\0003-payment-reliability-decisions.md#adr-0007) | 终态冲突策略（迟到成功不覆盖已失败支付） | [docs/adr\0003-payment-reliability-decisions.md](docs/adr\0003-payment-reliability-decisions.md) |
+| [0008](docs/adr\0004-ledger-design-decisions.md#adr-0008) | Ledger 数据模型（复式记账 + 科目/分录结构） | [docs/adr\0004-ledger-design-decisions.md](docs/adr\0004-ledger-design-decisions.md) |
+| [0009](docs/adr\0004-ledger-design-decisions.md#adr-0009) | 记账触发与一致性（同步 RPC 幂等记账 + 失败兜底） | [docs/adr\0004-ledger-design-decisions.md](docs/adr\0004-ledger-design-decisions.md) |
+| [0010](docs/adr\0004-ledger-design-decisions.md#adr-0010) | 金额表示（Ledger 启用 Money 值对象 vs 仅 long 分） | [docs/adr\0004-ledger-design-decisions.md](docs/adr\0004-ledger-design-decisions.md) |
+| [0011](docs/adr\0004-ledger-design-decisions.md#adr-0011) | MVP 记账范围（支付 / 退款 / 结算哪些首批） | [docs/adr\0004-ledger-design-decisions.md](docs/adr\0004-ledger-design-decisions.md) |
+| [0012](docs/adr\0005-payment-reliability-impl-decisions.md#adr-0012) | 重试的错误分类来源（双响应码；通信失败一律重试） | [docs/adr\0005-payment-reliability-impl-decisions.md](docs/adr\0005-payment-reliability-impl-decisions.md) |
+| [0013](docs/adr\0005-payment-reliability-impl-decisions.md#adr-0013) | 重试调度的载体（不落库，请求内联重试） | [docs/adr\0005-payment-reliability-impl-decisions.md](docs/adr\0005-payment-reliability-impl-decisions.md) |
+| [0014](docs/adr\0005-payment-reliability-impl-decisions.md#adr-0014) | 重试的幂等与事务边界（同 attempt 重放） | [docs/adr\0005-payment-reliability-impl-decisions.md](docs/adr\0005-payment-reliability-impl-decisions.md) |
+| [0015](docs/adr\0005-payment-reliability-impl-decisions.md#adr-0015) | UNKNOWN 真实收敛时长的度量方式 | [docs/adr\0005-payment-reliability-impl-decisions.md](docs/adr\0005-payment-reliability-impl-decisions.md) |
+| [0016](docs/adr\0006-refund-decisions.md#adr-0016) | 部分退款支持模型（如何让 PARTIALLY_SUCCEEDED 可达、部分金额如何跟踪） | [docs/adr\0006-refund-decisions.md](docs/adr\0006-refund-decisions.md) |
+| [0017](docs/adr\0006-refund-decisions.md#adr-0017) | refund → fulfillment 编排（补齐缺失 RPC vs 修改文档声明） | [docs/adr\0006-refund-decisions.md](docs/adr\0006-refund-decisions.md) |
+| [0018](docs/adr\0006-refund-decisions.md#adr-0018) | refund → ledger 记账接入（与 spec 004-ledger 的归属与时机） | [docs/adr\0006-refund-decisions.md](docs/adr\0006-refund-decisions.md) |
+| [0019](docs/adr\0007-reconciliation-decisions.md#adr-0019) | 批次差异处理生命周期（接线 `beginProcessing`/`close` 与「处理中/关闭」语义） | [docs/adr\0007-reconciliation-decisions.md](docs/adr\0007-reconciliation-decisions.md) |
+| [0020](docs/adr\0007-reconciliation-decisions.md#adr-0020) | 渠道账单来源（按周期 fixture + 显式回退 vs 参数化加载器 vs 维持全局 fixture） | [docs/adr\0007-reconciliation-decisions.md](docs/adr\0007-reconciliation-decisions.md) |
+| [0021](docs/adr\0007-reconciliation-decisions.md#adr-0021) | 事实读取 RPC 的弹性（超时 / 有限重试 / 错误归一化 vs 引入熔断中间件） | [docs/adr\0007-reconciliation-decisions.md](docs/adr\0007-reconciliation-decisions.md) |
+| [0022](docs/adr\0008-settlement-decisions.md#adr-0022) | 调整项模型（方向语义 / 持久化形态 / 登记门禁 / 净额公式 / 死代码处置） | [docs/adr\0008-settlement-decisions.md](docs/adr\0008-settlement-decisions.md) |
+| [0023](docs/adr\0008-settlement-decisions.md#adr-0023) | 已确认事实闸门的纵深防御与 settlement → ledger 记账归属 | [docs/adr\0008-settlement-decisions.md](docs/adr\0008-settlement-decisions.md) |
+| [0024](docs/adr\0009-risk-security-decisions.md#adr-0024) | 内部服务间调用鉴权 | [docs/adr\0009-risk-security-decisions.md](docs/adr\0009-risk-security-decisions.md) |
+| [0025](docs/adr\0009-risk-security-decisions.md#adr-0025) | 渠道回调签名校验 | [docs/adr\0009-risk-security-decisions.md](docs/adr\0009-risk-security-decisions.md) |
+| [0026](docs/adr\0009-risk-security-decisions.md#adr-0026) | 密钥管理 | [docs/adr\0009-risk-security-decisions.md](docs/adr\0009-risk-security-decisions.md) |
+| [0027](docs/adr\0009-risk-security-decisions.md#adr-0027) | 敏感数据脱敏 | [docs/adr\0009-risk-security-decisions.md](docs/adr\0009-risk-security-decisions.md) |
+| [0028](docs/adr\0009-risk-security-decisions.md#adr-0028) | 最小风控规则 | [docs/adr\0009-risk-security-decisions.md](docs/adr\0009-risk-security-decisions.md) |
+| [0029](docs/adr\0010-distributed-evolution-decisions.md#adr-0029) | 本期不做任何服务拆分，先立「可拆分性」门禁 | [docs/adr\0010-distributed-evolution-decisions.md](docs/adr\0010-distributed-evolution-decisions.md) |
+| [0030](docs/adr\0010-distributed-evolution-decisions.md#adr-0030) | 独立数据库迁移：先定触发条件，不动手 | [docs/adr\0010-distributed-evolution-decisions.md](docs/adr\0010-distributed-evolution-decisions.md) |
+| [0031](docs/adr\0010-distributed-evolution-decisions.md#adr-0031) | 跨服务异步消息：只在有明确证据时才评估 | [docs/adr\0010-distributed-evolution-decisions.md](docs/adr\0010-distributed-evolution-decisions.md) |
+| [0032](docs/adr\0010-distributed-evolution-decisions.md#adr-0032) | 独立扩缩容与故障隔离：按关键等级分级，而非一刀切 | [docs/adr\0010-distributed-evolution-decisions.md](docs/adr\0010-distributed-evolution-decisions.md) |
+| [0033](docs/adr\0010-distributed-evolution-decisions.md#adr-0033) | 拆分提案模板与运行手册：每次拆分的准入门禁 | [docs/adr\0010-distributed-evolution-decisions.md](docs/adr\0010-distributed-evolution-decisions.md) |
+| [0034](docs/adr\0011-internal-token-decisions.md#adr-0034) | 出站内部服务令牌的传播 | [docs/adr\0011-internal-token-decisions.md](docs/adr\0011-internal-token-decisions.md) |
+| [0035](docs/adr\0011-internal-token-decisions.md#adr-0035) | 入站鉴权的推广范围 | [docs/adr\0011-internal-token-decisions.md](docs/adr\0011-internal-token-decisions.md) |
+| [0036](docs/adr\0011-internal-token-decisions.md#adr-0036) | 令牌轮换策略 | [docs/adr\0011-internal-token-decisions.md](docs/adr\0011-internal-token-decisions.md) |
+| [0037](docs/adr\0011-internal-token-decisions.md#adr-0037) | 鉴权失败的可观测性 | [docs/adr\0011-internal-token-decisions.md](docs/adr\0011-internal-token-decisions.md) |
+| [0038](docs/adr\0014-next-stage-decisions.md#adr-0038) | 演示形态：Mock 收银台 vs 纯脚本（011） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0039](docs/adr\0014-next-stage-decisions.md#adr-0039) | 下单幂等键的签发与存储位置（012） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0040](docs/adr\0014-next-stage-decisions.md#adr-0040) | 并发幂等「超时接管」策略（012） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0041](docs/adr\0014-next-stage-decisions.md#adr-0041) | 库存域归属（013） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0042](docs/adr\0014-next-stage-decisions.md#adr-0042) | 库存扣减时机（013） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0043](docs/adr\0014-next-stage-decisions.md#adr-0043) | 订单超时释放库存的机制（013） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0044](docs/adr\0014-next-stage-decisions.md#adr-0044) | Redis 引入论证（014） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0045](docs/adr\0014-next-stage-decisions.md#adr-0045) | Redis 用途边界（014） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0046](docs/adr\0014-next-stage-decisions.md#adr-0046) | 秒杀限流策略与丢弃语义（014） | [docs/adr\0014-next-stage-decisions.md](docs/adr\0014-next-stage-decisions.md) |
+| [0047](docs/adr\0006-refund-decisions.md#adr-0047) | 退款金额校验口径（ADR-0016 回退后，是否强制「申请额 = 可退全额」） | [docs/adr\0006-refund-decisions.md](docs/adr\0006-refund-decisions.md) |
+| [0048](docs/adr\0012-demo-showcase-decisions.md#adr-0048) | 演示形态：~~不新增 `mock-channel-web`~~ → **新增 `mock-channel-web` 组件（2026-08-31 负责人裁决修订）** | [docs/adr\0012-demo-showcase-decisions.md](docs/adr\0012-demo-showcase-decisions.md) |
+| [0049](docs/adr\0012-demo-showcase-decisions.md#adr-0049) | Mock 渠道场景配置化 | [docs/adr\0012-demo-showcase-decisions.md](docs/adr\0012-demo-showcase-decisions.md) |
+| [0050](docs/adr\0012-demo-showcase-decisions.md#adr-0050) | 对账演示账单：生成 CSV 写入 `target/classes`，不改生产代码 | [docs/adr\0012-demo-showcase-decisions.md](docs/adr\0012-demo-showcase-decisions.md) |
+| [0051](docs/adr\0012-demo-showcase-decisions.md#adr-0051) | 演示脚本纪律：只编排不伪造、断言失败即非零退出 | [docs/adr\0012-demo-showcase-decisions.md](docs/adr\0012-demo-showcase-decisions.md) |
+| [0052](docs/adr\0013-channel-callback-signature-decisions.md#adr-0052) | 渠道回调验签接入真实现 —— ⛔ 未实施（回退至 ADR-0025 占位） | [docs/adr\0013-channel-callback-signature-decisions.md](docs/adr\0013-channel-callback-signature-decisions.md) |
+| [0053](docs/adr\0015-wip-ahead-of-roadmap.md#adr-0053) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置 | [docs/adr\0015-wip-ahead-of-roadmap.md](docs/adr\0015-wip-ahead-of-roadmap.md) |
+
 ## 编号规则
 
 - 编号**只增不改、不复用**；一个 ADR 文档可容纳同一 Feature 的多条决策标签（如 0006 含 0016~0018 与 0047）。

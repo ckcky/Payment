@@ -18,6 +18,7 @@
 
 ---
 
+<a id="adr-0016"></a>
 ## ADR-0016: 部分退款支持模型（如何让 PARTIALLY_SUCCEEDED 可达、部分金额如何跟踪）
 
 - **状态**：❌ **Rejected / Not Implemented（延后）** —— 2026-08-30 负责人裁决「**部分退款不做**」；代码已按裁决**回退**（2026-08-31 完成）
@@ -98,6 +99,7 @@
 
 ---
 
+<a id="adr-0017"></a>
 ## ADR-0017: refund → fulfillment 编排（补齐缺失 RPC vs 修改文档声明）
 
 - **状态**：✅ **Accepted**（2026-08-30 负责人裁决 accept；实现已落地）
@@ -156,6 +158,7 @@
 
 ---
 
+<a id="adr-0018"></a>
 ## ADR-0018: refund → ledger 记账接入（与 spec 004-ledger 的归属与时机）
 
 - **状态**：✅ **Accepted**（2026-08-30 负责人裁决 accept；实现已落地）
@@ -219,11 +222,31 @@
 
 ---
 
+<a id="adr-0047"></a>
 ## ADR-0047: 退款金额校验口径（ADR-0016 回退后，是否强制「申请额 = 可退全额」）
 
-**状态**：🟡 **Proposed**（实现已按「只做累计不超付」落地并通过全量测试，待负责人确认）
-**日期**：2026-08-31
+**状态**：✅ **Accepted**
+**日期**：2026-08-31（提出）｜2026-09-03（收口为 Accepted）
 **触发**：ADR-0016（部分退款）被裁决 Rejected 并回退后，`docs/architecture/technical-solution.md` §8.3 遗留一条未闭环要求——「退款资格判断除『累计不超付』外，MUST 增加**全额校验**：申请金额 ≠ 可退全额 → 直接 `REJECTED`」。本次文档同步时必须对此给出确定口径。
+
+> **🧭 收口注记（2026-09-03，Phase 5 文档治理）**
+> 本 ADR 提出时即写明「实现已按强度 B 落地并通过全量测试」，但状态长期停留在 `Proposed`。
+> 现已逐条验证运行口径与决策一致，收口为 **Accepted**。**本注记只改状态与补充证据，未改动决策正文。**
+>
+> #### 落地验证（2026-09-03 核对）
+>
+> | 决策项 | 实现位置 | 结论 |
+> |---|---|---|
+> | `RefundPolicy.decide` 仅三条校验（币种 / 为正 / 累计不超付），**无**全额等值约束 | `refund-service/.../domain/RefundPolicy.java` | ✅ 完全一致（源码仅 3 个 `if`，无 `requestedMinor == refundableAmount` 判断） |
+> | 不记 `refundedAmountMinor` | `common-dto/.../rpc/RefundAttemptResponse.java` 字段已移除 | ✅ 已移除 |
+> | 不落 `PARTIALLY_SUCCEEDED` | `Refund.partiallySucceed()` **零调用**（死方法），运行时无退款可进入该状态 | ✅ 运行时符合（⚠️ 但枚举值与死方法仍在，见下） |
+> | 多笔退款由 `refund_intake_locks` 行锁串行化 | `deployment/schema/06-refund-schema.sql`、`RefundIntakeLockMapper.java`、`RefundApplicationService.java` | ✅ 已建 |
+>
+> ⚠️ **残留死代码（已登记待办，不属本 ADR 范围）**：ADR-0016 的回退**不彻底**——
+> `RefundStatus.PARTIALLY_SUCCEEDED` 枚举值、`Refund.partiallySucceed()` 死方法，
+> 以及 `RefundPostProcessOrchestrator` / `LedgerPostingGateway` / `Refund` 三处引用该状态的 Javadoc 仍在。
+> 它们不影响运行时口径（无调用方），但会造成「系统支持部分成功」的误读。
+> 见 `docs/operations/code-debt-backlog.md` #11。
 
 ### Context（背景）
 

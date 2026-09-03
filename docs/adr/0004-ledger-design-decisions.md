@@ -9,6 +9,7 @@
 
 ---
 
+<a id="adr-0008"></a>
 ## ADR-0008: Ledger 数据模型（复式记账 + 科目/分录结构）
 
 - **状态**：**Accepted**（2026-08-29 负责人确认）
@@ -49,6 +50,7 @@ Constitution §II.3 规定「任何资金变动 MUST 经 ledger-service 复式�
 
 ---
 
+<a id="adr-0009"></a>
 ## ADR-0009: 记账触发与一致性（同步 RPC 幂等记账 + 失败兜底）
 
 - **状态**：**Accepted**（2026-08-29 负责人确认）
@@ -88,6 +90,7 @@ Constitution §II.3 规定「任何资金变动 MUST 经 ledger-service 复式�
 
 ---
 
+<a id="adr-0010"></a>
 ## ADR-0010: 金额表示（Ledger 启用 Money 值对象 vs 仅 long 分）
 
 - **状态**：**Accepted（已修订，2026-08-29 负责人确认）**
@@ -131,6 +134,7 @@ Constitution §II.2 要求「封装 `Money` 值对象（金额+币种），禁�
 
 ---
 
+<a id="adr-0011"></a>
 ## ADR-0011: MVP 记账范围（支付 / 退款 / 结算哪些首批）
 
 - **状态**：**Accepted**（2026-08-29 负责人确认）

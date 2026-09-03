@@ -6,13 +6,31 @@
 
 ---
 
+<a id="adr-0022"></a>
 ## ADR-0022: 调整项模型（方向语义 / 持久化形态 / 登记门禁 / 净额公式 / 死代码处置）
 
-- **状态**：**Proposed**（待负责人确认）
-- **日期**：2026-08-29
-- **决策者**：待人类（项目 Owner）
+- **状态**：**Accepted**
+- **日期**：2026-08-29（提出）｜2026-09-03（收口为 Accepted）
+- **决策者**：项目 Owner
 - **关联 Feature**：`007-settlement`（spec US1 / FR-001~FR-006 / 缺口 G1、G3）
 - **关联 Constitution 条款**：§8.3（新增关键资金表）、§8.4（行为变更、新增端点）、§8.8（状态机与不变量变更）、§II.1（金额铁律）
+
+> **🧭 收口注记（2026-09-03，Phase 5 文档治理）**
+> 本 ADR 在本文件创建后已**完整落地**，但状态长期停留在 `Proposed`，与代码事实不符，
+> 违反 Constitution §提交与合并节奏 ④③「ADR 状态不得长期停留在 Proposed」。
+> 现按代码事实收口为 **Accepted**。下方「落地验证」逐条对照决策项与实现；
+> **本注记只改状态与补充证据，未改动任何决策正文。**
+
+#### 落地验证（2026-09-03 核对）
+
+| 决策项 | 实现位置 | 结论 |
+|---|---|---|
+| 独立建表 `settlement_adjustments` | `deployment/schema/08-settlement-schema.sql`、`settlement-service/src/test/resources/schema.sql` | ✅ 已建 |
+| `AdjustmentDirection` 方向枚举（金额恒 > 0） | `settlement-service/.../domain/AdjustmentDirection.java` | ✅ 已建 |
+| `SettlementAdjustment` 聚合 + 仓储 | `domain/SettlementAdjustment.java`、`domain/SettlementAdjustmentRepository.java`、`infra/persistence/SettlementAdjustment{Entity,Mapper}.java` | ✅ 已建 |
+| 登记端点 | `api/SettlementController.java:61` `@PostMapping("/adjustments")` | ✅ 已建 |
+| 批次新增 `adjustment_minor` / `fact_count` / `source_period` | `08-settlement-schema.sql`（`adjustment_minor`、`fact_count`、`source_period`） | ✅ 已建 |
+| 死代码 `domain/Adjustment.java` 保留并标注废弃 | 按决策 7 保留 | ✅ 符合 |
 
 ### Context（背景）
 
@@ -78,13 +96,32 @@ Roadmap Phase 7「包含的 Feature」写的是「收入、退款和**调整项*
 
 ---
 
+<a id="adr-0023"></a>
 ## ADR-0023: 已确认事实闸门的纵深防御与 settlement → ledger 记账归属
 
-- **状态**：**Proposed**（待负责人确认）
-- **日期**：2026-08-29
-- **决策者**：待人类（项目 Owner）
+- **状态**：**Accepted**
+- **日期**：2026-08-29（提出）｜2026-09-03（收口为 Accepted）
+- **决策者**：项目 Owner
 - **关联 Feature**：`007-settlement`（spec US2 / US3 / FR-007~FR-009、FR-012、FR-017~FR-018 / 缺口 G2、G4；新发现 N1、N2、N5）
 - **关联 Constitution 条款**：§II.3（一切资金变动 MUST 经 ledger-service）、§8.4（跨服务契约变更）、§III 边界 #4（Settlement 零回写）、§V.7（未确认结果不落账）
+
+> **🧭 收口注记（2026-09-03，Phase 5 文档治理）**
+> 本 ADR 已完整落地，状态长期停留在 `Proposed` 与代码事实不符，现按事实收口为 **Accepted**。
+> **本注记只改状态与补充证据，未改动任何决策正文。**
+>
+> #### 落地验证（2026-09-03 核对）
+>
+> | 决策项 | 实现位置 | 结论 |
+> |---|---|---|
+> | `ConfirmedFactGate` 本地逐条强制（纯函数、可单测） | `settlement-service/.../application/ConfirmedFactGate.java` | ✅ 已建 |
+> | settlement → ledger 记账出站端口 | `application/LedgerPostingGateway.java` | ✅ 已建 |
+> | Feign 适配 + 客户端 + 配置 | `infra/client/FeignLedgerPostingGateway.java`、`infra/client/LedgerFeignClient.java`、`infra/client/LedgerFeignConfig.java` | ✅ 已建（复用 payment-service 既有模式） |
+> | 批次记录 `fact_count` / `source_period` | `08-settlement-schema.sql:19-20`、`domain/SettlementBatch.java:33,35,118,127` | ✅ 已建 |
+> | 不引入 Resilience4j | 决策 G 已否决；settlement 侧无熔断依赖 | ✅ 符合 |
+>
+> ⚠️ **遗留风险未消解**：**N1（事实无 `merchantId`）按决策明确不在本 Feature 修复**，仅以 `fact_count` /
+> `source_period` 做到「不静默」。跨商户串账的可能性依然存在，是否单独立项仍待负责人决定
+> （见 Decision 1 末段与 Consequences）。
 
 ### Context（背景）
 

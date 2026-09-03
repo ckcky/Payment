@@ -27,6 +27,28 @@ Sync Impact Report:
 - TODO: 无
 -->
 
+<!--
+Sync Impact Report:
+- Version: 2.2.0 → 2.3.0（MINOR：为既有原则补充「已决例外条款」与「[目标] 未落地」标注）
+- 修订：§II.2 金额表示 —— 原「封装 Money 值对象、禁止裸 long」改为「long 分 + 独立币种字段成对传递，
+  Money VO 不启用」（追认 ADR-0010，2026-08-29 负责人裁决）
+- 修订：§Security.4 / §Observability.2 脱敏 —— 增加例外条款「本期不做（ADR-0027）」及重新引入的前置条件
+- 修订：§IV 禁止清单 —— 中间件条款补注「Redis 已按 ADR-0044/0045 论证引入，非违规」
+- 修订：§Engineering Standards.1 / .3、§Observability.3 —— Checkstyle+Spotless / Testcontainers /
+  Micrometer Tracing 标注「[目标] 未落地」，避免被误读为现行强制要求
+- 细化：Governance §提交与合并节奏 ④ —— 「文档无漂移」的判定依据指向 engineering-standards 漂移检查清单
+- 关联：docs/adr/0004-ledger-design-decisions.md（ADR-0010）、
+  docs/adr/0009-risk-security-decisions.md（ADR-0027）、
+  docs/adr/0014-next-stage-decisions.md（ADR-0044 / ADR-0045）、
+  docs/operations/code-debt-backlog.md
+- 决策来源：2026-09-03 负责人确认（Phase 5 文档治理；用户即负责人，已批准）
+- Rationale：ADR-0010 / ADR-0027 / ADR-0044 均为负责人已裁决且代码已落地的 Accepted 决策，
+  但宪法未同步，导致 technical-solution.md / CLAUDE.md / engineering-standards.md 三处持续与 ADR 冲突；
+  同时三项「目标级」标准被下游文档当成现行强制要求引用，形成虚假合规。
+  本修订只做「追认已决事实」与「标注未落地状态」，不新增任何义务、不推翻任何原则。
+- TODO: 无
+-->
+
 # PaymentArch Constitution
 
 > Commerce & Payment Platform — 长期有效的工程与架构约束（最高宪法）。
@@ -53,7 +75,9 @@ Sync Impact Report:
 ### II. 资金正确性铁律（Fundamental Money Invariants）
 
 1. 金额一律用**最小货币单位（整数 `long` 分）或 `BigDecimal`（明确 scale）**；全库 **MUST NOT** 用 `float`/`double` 表示或计算金额。
-2. 封装 `Money` 值对象（金额 + 币种），禁止裸 `long` 满天飞。
+2. 金额 MUST 用**最小货币单位整数 `long` 分**或 `BigDecimal`（明确 scale）；币种 MUST 以**独立字段**（`currencyCode`，ISO-4217）与金额**并列传递**，使「金额 + 币种」始终成对出现，杜绝「裸金额脱离币种」被单独消费。
+   - **`Money` 值对象不启用**（ADR-0010，2026-08-29 负责人裁决；v2.3.0 追认）。理由：引入 `Money` VO 需改动全量跨服务 DTO 与持久化映射，收益（编译期防错）低于成本与扩散风险；「金额 + 币种成对传递」由**代码评审 + 测试**保障，不由类型系统强制。
+   - 若将来跨币种计算成为常态（如多币种结算、汇率换算），MUST 重新评估并**另立 ADR**，不得直接引入。
 3. 任何资金变动 **MUST** 经 `ledger-service` 复式记账，借贷必须平衡；**MUST NOT** 直接改余额字段。
    - **过渡条款（v2.1.0）**：`ledger-service` 已前置到 Feature 004 实现（原 Roadmap 延后至 Phase 8，D1 矛盾已消解）。在 `ledger-service` 落地前的 MVP 阶段，允许以 Payment/Refund/Settlement 状态机事实**临时**模拟资金（不视为最终账务事实）；`ledger-service` 落地后，所有已确认资金变动 **MUST** 改走 `ledger-service`（见 ADR-0004 / `docs/specs/004-ledger/`）。
 4. 资金路径（支付、退款、结算）**MUST** 具备幂等性（见 Core Principle V）。
@@ -119,6 +143,7 @@ Sync Impact Report:
 - ❌ 无理由新增微服务或中间件（服务边界已由 ADR-0001 固定，新增须立 ADR）。
 - ❌ 引入 2PC/XA 分布式事务（用 Saga + RPC + 幂等替代）。
 - ❌ 为体现复杂度引入中间件（Kafka/Redis/MQ/ES 等，除非对应阶段有真实需要且经 ADR 论证）。
+  - **已按本条款引入的例外（v2.3.0 澄清）**：Redis 7 已由 ADR-0044 / ADR-0045 论证引入（Feature 014），**不属于违规**。其定位是**非数据源的旁路设施**——仅用于入口幂等、SKU 读缓存、秒杀原子预扣、订单超时时间轮，一律 **fail-open**（唯独秒杀预扣 **fail-closed**）；任何状态的所有权仍在各服务的数据库。**MUST NOT** 把 Redis 当作数据源或跨服务共享存储。
 
 **引入基础设施的决策门槛**：不为了分布式而分布式。引入任何基础设施/中间件前 MUST 回答：①解决什么问题？②为什么当前方案解决不了？③引入后有什么收益？④引入后有什么成本？⑤是否值得长期维护？答不出或答不全，视为「为了炫技」，禁止引入。
 
@@ -136,9 +161,10 @@ Sync Impact Report:
 
 ## Engineering Standards
 
-1. **Code Quality**：Checkstyle + Spotless（CI 强制）；命名遵循 Java 惯例，包名 `com.payment.<service>.<layer>`；错误显式传递，业务错误（`BizException`）与系统错误（`SystemException`）分离；全局异常处理器兜底。
+1. **Code Quality**：`[目标]` Checkstyle + Spotless（CI 强制）—— **当前未落地**：根 POM 与 CI 均未配置这两个插件，实际靠人工评审与 ArchUnit 门禁保障；引入前须评估对既有代码的批量改动量。命名遵循 Java 惯例，包名 `com.payment.<service>.<layer>`；错误显式传递，业务错误（`BizException`）与系统错误（`SystemException`）分离；全局异常处理器兜底。
 2. **分层**：`api → application → domain ← infra`，依赖单向；`domain` 不依赖任何框架层；DTO / Entity 分离，跨服务只传 DTO / 事件。
-3. **Testing**：JUnit 5 + Mockito + AssertJ；集成测试用 Testcontainers。资金逻辑 MUST 有测试；表驱动测试优先；关键路径（支付成功/失败/超时/重复回调/渠道失败/服务重启/最终一致）有集成测试。**MUST NOT** 删测试或改测试迎合错误实现。
+3. **Testing**：JUnit 5 + Mockito + AssertJ。资金逻辑 MUST 有测试；表驱动测试优先；关键路径（支付成功/失败/超时/重复回调/渠道失败/服务重启/最终一致）有集成测试。**MUST NOT** 删测试或改测试迎合错误实现。
+   - **集成测试载体**：`[目标]` Testcontainers —— **当前未落地**：仅声明 BOM、0 处使用，实际全部集成测试跑在 H2（test scope，MySQL 兼容模式）。切换前须先解决本机 Docker 可用性与 CI 环境的一致性，并逐个模块验证 H2 与 MySQL 的方言差异（尤其约束、时区、JSON 类型）。
 4. **Documentation & ADR**：不可逆/重要决策 MUST 立 ADR（`docs/adr/NNNN-*.md`）；领域需求以 Spec（`docs/specs/<feature>/spec.md`）为单一事实源。
 5. **CI/CD**：Maven Wrapper（mvnw）锁定版本；`mvnw verify`（compile+test）→ lint → 打包；配置与代码分离（Nacos / 环境变量）；Conventional Commits + 功能分支 + PR Review。
 6. **Dependency Management**：父 POM + `dependencyManagement` 统一版本（Spring Boot BOM + Spring Cloud BOM）；最小化依赖，每个新依赖 MUST 有理由（ADR 或 commit）。
@@ -149,8 +175,8 @@ Sync Impact Report:
 所有核心业务流程 MUST 具备：
 
 1. **Metrics**：Micrometer 暴露请求量、延迟、错误率、关键业务计数。核心业务指标至少覆盖：支付（成功率/失败率/超时率/耗时/渠道成功率/渠道耗时）、退款（成功率/失败率/耗时）、履约（成功率/失败率/权益发放失败率）、对账（差异数量/差异金额）、结算（成功率/失败数量）。
-2. **Logs**：结构化日志（logback，含 traceId、orderId、paymentId 关联字段）；**资金动作 MUST 有审计日志**；敏感信息（卡号、密钥）脱敏。
-3. **Traces**：Micrometer Tracing 跨服务调用传播 traceId/spanId；初期不强行上分布式追踪基础设施。
+2. **Logs**：结构化日志（logback，含 traceId、orderId、paymentId 关联字段）；**资金动作 MUST 有审计日志**；敏感信息（卡号、密钥）脱敏 ⛔ **本期不做**（ADR-0027，例外条款与重新引入的前置条件见 §Security.4，两处口径一致）。
+3. **Traces**：`[目标]` Micrometer Tracing 跨服务调用传播 traceId/spanId —— **当前未落地**（0 依赖）：当前实现为自研 `TraceIdFilter` + MDC，在**单服务内**透传 traceId，跨服务需各服务自行从 HTTP 头取出并写入 MDC，**尚无标准化 span 传播**。初期不强行上分布式追踪基础设施（与 §约束 一致）。
 4. **Business Alerts**：对「支付状态未知堆积」「对账差异」「退款失败」「重试耗尽」等业务异常 MUST 有告警，而非只告警基础设施。
 5. **SLO**：为核心接口定义目标（可用性、P99 延迟、对账达成率），有错误预算意识。
 
@@ -162,6 +188,10 @@ Sync Impact Report:
 2. 渠道回调 MUST 验证签名与来源，防止伪造回调。
 3. 对外 API 有鉴权（Spring Security / OAuth2）与输入校验（Bean Validation）。
 4. 敏感信息（卡号、密钥）进日志前脱敏。
+   - **本期例外（v2.3.0，ADR-0027 ⛔ Not Implemented）**：本项目当前**不做脱敏**。已删除 `SensitiveDataMasker`；`StructuredAuditLogger.mask()` 作为工具方法保留但**生产路径零调用**（仅自测覆盖），**不得据此认为系统具备脱敏能力**。
+   - **风险敞口**：当前无真实卡号与渠道凭证流经日志，敞口有限。
+   - **重新引入的前置条件（MUST）**：接入真实支付渠道、或开始处理真实卡号 / 密钥 / 证件号**之前**，MUST 重新引入脱敏并补齐审计日志路径的调用点；在此之前 payment-service **MUST NOT** 暴露公网。
+   - 现状与待办见 `docs/operations/code-debt-backlog.md` #9。
 
 ## AI Development
 
@@ -216,7 +246,8 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
    ① 全量 `mvn clean verify` 通过；
    ② Spec 验收清单逐项勾选；
    ③ 涉及 ADR 的状态已更新（Accepted / Not Implemented），不得长期停留在 Proposed；
-   ④ 文档（技术方案 / roadmap / 相关 spec）与实现同步，无漂移。
+   ④ 文档（技术方案 / roadmap / 相关 spec）与实现同步，无漂移 ——
+      判定依据见 `docs/guides/engineering-standards.md` §文档漂移检查清单（含可执行的 grep 门禁）。
 5. **未完成 Spec 不得滞留工作区**：跨 Spec 的 WIP 改动 MUST 以 `WIP(<spec-id>): <简述>` 显式提交并注明缺口，
    禁止以未跟踪（untracked）文件形式长期挂起。
 
@@ -231,4 +262,16 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
 3. 修订后按语义化版本递增版本号：MAJOR（原则删除/重定义）、MINOR（新增原则/扩展）、PATCH（措辞/澄清）。
 4. 更新版本行并记录修订历史。
 
-**Version**: 2.2.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-02
+**Version**: 2.3.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-03
+
+---
+
+## 修订历史（Amendment History）
+
+| 版本 | 日期 | 类型 | 摘要 |
+|---|---|---|---|
+| 1.0.0 | 2026-08-26 | — | 初版（模块化单体） |
+| 2.0.0 | 2026-08-26 | MAJOR | 架构原则重定义为 Spring Cloud 微服务；技术栈 Go → Java 21 + Spring Boot 3.x |
+| 2.1.0 | 2026-08-28 | MINOR | Ledger 从「延后 Phase 8」前置到 Feature 004；新增 MVP 过渡条款 |
+| 2.2.0 | 2026-09-02 | MINOR | 新增 Governance §提交与合并节奏（每 Spec 完成即提交并 merge master） |
+| 2.3.0 | 2026-09-03 | MINOR | 追认 ADR-0010（Money VO 不启用）/ ADR-0027（脱敏本期不做）；澄清 Redis 引入为 ADR-0044 已论证例外；Checkstyle+Spotless / Testcontainers / Micrometer Tracing 标注 `[目标] 未落地`；细化「文档无漂移」判定依据 |

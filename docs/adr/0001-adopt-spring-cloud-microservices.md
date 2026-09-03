@@ -1,3 +1,4 @@
+<a id="adr-0001"></a>
 # ADR-0001: 采用 Spring Cloud 微服务架构
 
 - **状态**：Accepted（已接受）
