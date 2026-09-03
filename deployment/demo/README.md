@@ -7,9 +7,40 @@
 > 收银台页面里的「伪造签名」按钮仅作签名演示（用错误密钥签名），payment 侧不会拒绝。
 > 若需演示签名拒绝，须先落地 ADR-0052（见 `docs/adr/0013`），届时两侧对齐 `PAYMENT_CHANNEL_SECRET`。
 
+## 一键入口（推荐）
+
+```bash
+# 统一入口：启动 Docker 基础设施 + 本机 Java 服务 + mock-channel-web
+bash deployment/demo/start-demo.sh
+
+# 等价旧入口
+bash deployment/demo/start-stack.sh
+bash deployment/start-all.sh
+```
+
+这几个入口都遵循当前决策：
+
+1. 先启动 Docker Compose 基础设施（MySQL / Redis / Prometheus / Grafana / Nacos 等）
+2. 再 `./mvnw -q install -DskipTests` 构建依赖
+3. 再在本机后台启动 10 个 Java 服务和 mock 收银台
+4. 最后打印演示入口 URL 与日志位置
+
+> 这是“基础设施容器化 + Java 微服务本机进程化”。
+> 不做全量容器化；本项目仍保留底层 `docker compose` 入口，便于排查与调试。
+
+### Windows / Git Bash 说明
+
+若在 Windows 上遇到 `localhost` 代理、WSL、PATH 解析异常，优先使用：
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" -lc "cd /c/Users/user/Desktop/GoProj/PaymentArch && bash deployment/demo/start-demo.sh"
+```
+
+这可以绕开 WSL 的 `localhost` 代理问题，并保持脚本行为一致。
+
 ## 前置条件
 
-1. **Docker Desktop**（MySQL / Prometheus / Grafana 容器）。本机无 Docker 时无法起栈。
+1. **Docker Desktop**（MySQL / Redis / Prometheus / Grafana / Nacos 容器）。本机无 Docker 时无法起栈。
 2. **Maven 可用**：`deployment/start-all.sh` 用 `./mvnw` 启动各服务。若 `./mvnw` 不可用，请改用本地 Maven
    （如 `export MAVEN_CMD="mvn"` 并相应改造启动命令，或直接 `java -jar` 各服务的 fat-jar）。
 3. **服务启动并开启 mock 收银台**：`bash deployment/demo/start-stack.sh`

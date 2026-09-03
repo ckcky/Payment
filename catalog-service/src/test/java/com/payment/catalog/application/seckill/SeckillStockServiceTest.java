@@ -64,7 +64,7 @@ class SeckillStockServiceTest {
         SeckillResult r = service.tryPreDeduct(103L, 2);
 
         assertThat(r.allowed()).isFalse();
-        verify(metrics, times(0)).counter(anyString(), anyDouble(), any(), any());
+        verify(metrics, times(1)).counter(anyString(), anyDouble(), any(), any());
     }
 
     @Test

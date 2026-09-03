@@ -39,6 +39,17 @@ mvnw.cmd verify
 
 **Docker Compose**（最小依赖 MySQL）：`docker compose -f deployment/docker-compose.yml up -d`
 
+**一键演示入口**：
+
+```sh
+bash deployment/demo/start-demo.sh
+bash deployment/demo/run-all.sh
+```
+
+说明：本轮新增决策明确采用“Docker 基础设施 + 本机 Java 服务”的启动方式。
+保留底层 `docker compose` 命令作为排查入口，但日常使用统一走 `start-demo.sh` / `start-stack.sh`。
+不是“全量服务容器化”；本机仍负责启动各 Java 微服务与 mock 收银台。
+
 ## 从哪里开始
 
 - 文档导航：[docs/README.md](docs/README.md)
