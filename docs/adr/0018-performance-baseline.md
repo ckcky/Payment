@@ -1,9 +1,9 @@
 <a id="adr-0058"></a>
 
 
-- **状态**：Accepted（**标注「未验证目标」**——以下目标多为建议值，仅 2 项有 Phase 4 实测）
-- **日期**：2026-09-03
-- **关联**：`deployment/performance/`（压测产物）、`ADR-0044`（Redis 引入论证）
+- **状态**：Accepted（**基线已建立**——3 项有 Phase 4 实测达标，3 项待专项并发/量化验证，见「后续验证（R3 实施项）」）
+- **日期**：2026-09-03（R3 实施态更新 2026-09-04）
+- **关联**：`deployment/performance/`（压测产物与 loadgen）、`ADR-0044`（Redis 引入论证）
 
 ## 基线表
 
@@ -18,6 +18,15 @@
 
 ## Consequences（后果）
 
-- 仅有读/命令两条 p99 与 DB 卸载率有数据，其余**如实标「未验证」**，禁止写成已达标。
-- 压测方法学：k6 二进制被代理拦截从未跑过；实际用 Node 负载生成器（`deployment/performance/catalog-seckill-loadgen*.js`）等价复刻。
-- 后续：补齐真并发压测与限流量化前，不得将「未验证」项升级为「已验证目标」。
+- 读/命令两条 p99 与 DB 卸载率**已有 Phase 4 实测数据并达标**，属已验证基线；其余 3 项（秒杀正确性、并发幂等、限流量化）**如实标 🟡 待专项验证**，禁止写成已达标。
+- 压测方法学：k6 二进制被代理拦截从未跑过；实际用 Node 负载生成器（`deployment/performance/catalog-seckill-loadgen*.js`）等价复刻，产物在 `deployment/performance/results/`。
+
+## 后续验证（R3 实施项）
+
+基线已建立，但以下项仍需专项测试从「🟡 未验证」升级为「✅ 已验证」，构成 ADR-0058 的完整落地：
+
+1. **秒杀库存预扣正确性**：破坏性并发压测（远超库存的并发扣减），断言不超卖/不漏卖；覆盖 Redis Lua 原子预扣 fail-closed 路径。
+2. **并发幂等接管（order 入口）**：并发重复提交同一 `payment:{orderId}`，断言仅 1 次成功、其余 409 + `Retry-After`；建议用嵌入式/Testcontainers Redis 做 JUnit 集成测试。
+3. **限流（秒杀固定窗口）量化**：在 `deployment/performance/` 增加固定窗口限流场景，断言 429 不含 `Retry-After`、且限流阈值与预期一致。
+
+> 运行方式：`bash deployment/start-all.sh`（现已含 Nacos）拉起全栈后，执行 `node deployment/performance/catalog-seckill-loadgen.js` 复刻 Phase 4 基线并产出新报告。
