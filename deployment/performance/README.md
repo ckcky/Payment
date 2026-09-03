@@ -28,15 +28,26 @@
 ## 3. 运行步骤
 
 ```bash
-# 1) 启动依赖（docker compose）：MySQL、Redis、catalog-service（含 8082）
+# 1) 启动依赖（docker compose）：Nacos、MySQL、Redis、catalog-service（含 8082）
 bash deployment/start-all.sh
 
 # 2) 灌种子（为 103 播种秒杀配额 10）
-bash demo/reset.sh
+bash deployment/demo/reset.sh
+#    备用（无需 httpie）：curl -X POST "http://localhost:8082/internal/stock/seckill/seed?skuId=103&total=10"
 
 # 3) 跑压测
+#    方式A（推荐，零外部依赖、免 k6 二进制）：Node 负载生成器，复刻 k6 两套场景
+BASE_URL=http://localhost:8082 SKU_ID=103 SECKILL_SKU_ID=103 \
+  OUT=deployment/performance/results/r3-load-result.json \
+  node deployment/performance/catalog-seckill-loadgen.js
+#    方式B（需 k6 二进制，本环境代理拦截不可用）：
 k6 run -e BASE_URL=http://localhost:8082 -e SKU_ID=103 -e SECKILL_SKU_ID=103 \
     deployment/performance/catalog-seckill-k6.js
+
+# 4) 生成报告
+RESULT=deployment/performance/results/r3-load-result.json \
+  OUT=deployment/performance/results/r3-perf-report.html \
+  node deployment/performance/generate-report.js
 ```
 
 可选对照：临时将 `catalog-service/src/main/resources/application.yml` 中 `catalog.cache.enabled`
