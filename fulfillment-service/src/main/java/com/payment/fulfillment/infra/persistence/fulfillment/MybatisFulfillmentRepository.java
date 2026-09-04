@@ -31,7 +31,7 @@ public class MybatisFulfillmentRepository implements FulfillmentRepository {
     }
 
     @Override
-    public Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentNo) {
+    public Optional<Fulfillment> findBySourcePaymentNo(String sourcePaymentNo) {
         FulfillmentEntity entity = fulfillmentMapper.selectOne(
                 Wrappers.<FulfillmentEntity>lambdaQuery()
                         .eq(FulfillmentEntity::getSourcePaymentNo, sourcePaymentNo));

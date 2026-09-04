@@ -23,7 +23,7 @@
 
 - **Fulfillment 不强耦合 Payment（Constitution #6）**：履约有**自己的状态机**，不被支付状态反向阻塞；入站 RPC 只接收 common-dto `PaymentSucceededRequest`（携带原始事实），不访问 payment 模块内部实体。支付成功只**触发**履约，不决定履约最终状态。
 - **状态机铁律**：状态只能通过 `domain.Fulfillment` 的领域方法（`start/deliver/fail/cancel`）推进，禁止外部直接 `setStatus`；非法迁移抛 `STATE_TRANSITION_VIOLATION`（`Fulfillment.java:73`）。
-- **幂等**：同一支付成功事件只创建一条履约，`source_payment_id` 唯一约束兜底（`04-fulfillment-schema.sql:21`）。
+- **幂等**：同一支付成功事件只创建一条履约，`source_payment_no` 唯一约束兜底（`04-fulfillment-schema.sql:21`，ADR-0063 业务单号）。
 - **终态不反写前序事实**：履约失败/权益失败**不回写支付为失败**，履约 DELIVERED 事实独立保留（technical-solution §4.3.4）。
 - **UNKNOWN 不臆断**：交付异常视为失败并记录，绝不臆断为成功（`FulfillmentApplicationService.java:49-55`）。
 - **Database-per-Service**：自有 `fulfillment` Schema，绝不直连他服务表（Constitution 数据所有权）。
@@ -53,7 +53,7 @@
 | 值对象 | `FulfillmentAcceptedResponse` | [common-dto](../../common/common-dto/src/main/java/com/payment/common/dto/rpc/FulfillmentAcceptedResponse.java) | 入站受理响应（fulfillmentId + 状态枚举名） |
 | 值对象 | `FulfillmentCompletedRequest` / `EntitlementGrantedResponse` | [common-dto](../../common/common-dto/src/main/java/com/payment/common/dto/rpc/) | 出站权益授予请求/响应 |
 
-**基数关系（MVP）**：`Payment (1) ── (1) Fulfillment`（按 `source_payment_id` 唯一约束，同一支付只对应一条履约）。当前无 `FulfillmentItem`/`Delivery` 子实体（technical-solution §4.1 提及但本服务未建模，`[待定]`）。
+**基数关系（MVP）**：`Payment (1) ── (1) Fulfillment`（按 `source_payment_no` 唯一约束，同一支付只对应一条履约）。当前无 `FulfillmentItem`/`Delivery` 子实体（technical-solution §4.1 提及但本服务未建模，`[待定]`）。
 
 ### 2.2 状态机
 
@@ -85,13 +85,13 @@ PENDING --cancel--> CANCELLED
 | order_id | VARCHAR(64) NOT NULL | 订单引用 |
 | order_item_id | VARCHAR(64) | 订单项引用（当前写入 null，`[待定]`） |
 | delivery_content | VARCHAR(255) NOT NULL | 交付内容（当前 "mock delivery"） |
-| source_payment_id | VARCHAR(64) NOT NULL | 支付幂等键（paymentId），唯一 `uk_fulfillments_source_payment_id` |
+| source_payment_no | VARCHAR(32) NOT NULL | 来源支付业务单号（paymentNo，PM+雪花，ADR-0063），唯一 `uk_fulfillments_source_payment_no` |
 | status | VARCHAR(32) NOT NULL | 状态机枚举名 |
 | failure_reason | VARCHAR(255) | 失败原因 |
 | created_at / updated_at / created_by / updated_by / version | — | 审计 + 乐观锁（BaseEntity，`@Version`） |
 
 **索引策略（已实现）**：
-- `uk_fulfillments_source_payment_id`（幂等兜底，保证同支付只一条履约）。
+- `uk_fulfillments_source_payment_no`（幂等兜底，保证同支付只一条履约）。
 - 普通索引：`findById` 走 PK；`findBySourcePaymentId` 走唯一约束（无独立二级索引，命中 UK 即可）。
 
 **分库分表键**：`[Phase 10 延后]` 当前单库单表；候选分片键 `order_id`，留待有真实负载证据后评估。
@@ -108,11 +108,11 @@ PENDING --cancel--> CANCELLED
 
 来源：[api/PaymentSuccessRpcController.java:23](../../fulfillment-service/src/main/java/com/payment/fulfillment/api/PaymentSuccessRpcController.java)
 
-**请求** `PaymentSucceededRequest`（common-dto）：`{ paymentId, orderId, transactionId, userId, amountMinor, currencyCode }`（只携带原始事实）。
+**请求** `PaymentSucceededRequest`（common-dto）：`{ paymentNo, orderNo, transactionId, userId, amountMinor, currencyCode }`（只携带原始事实，业务单号，ADR-0063）。
 
 **响应** `FulfillmentAcceptedResponse`：`{ fulfillmentId: Long, status: String }`（`FulfillmentStatus` 枚举名；payment 侧不回写履约结果）。
 
-**幂等**：同 `paymentId` 重复请求 → 返回已存在的履约（`FulfillmentApplicationService.java:39-42`），不新建。
+**幂等**：同 `paymentNo` 重复请求 → 返回已存在的履约（`FulfillmentApplicationService.java:39-42`），不新建。
 
 **错误**：`STATE_TRANSITION_VIOLATION`（异常状态推进，理论上不应发生）、出站权益 RPC 异常向上抛（payment 侧 catch 忽略，不回滚支付事实）。
 
@@ -122,7 +122,7 @@ PENDING --cancel--> CANCELLED
 
 来源：[api/FulfillmentController.java:25](../../fulfillment-service/src/main/java/com/payment/fulfillment/api/FulfillmentController.java)
 
-**响应** `FulfillmentResponse`：`{ id, orderId, sourcePaymentId, status, failureReason }`（`FulfillmentResponse.java`）。
+**响应** `FulfillmentResponse`：`{ id, orderNo, sourcePaymentNo, status, failureReason }`（`FulfillmentResponse.java`）。
 
 **错误**：`NOT_FOUND`。
 
@@ -132,7 +132,7 @@ PENDING --cancel--> CANCELLED
 
 `POST /internal/entitlements/on-fulfillment-completed`（Feign，默认 `http://localhost:8087`）
 
-**请求** `FulfillmentCompletedRequest`：`{ fulfillmentId, orderId, userId }`
+**请求** `FulfillmentCompletedRequest`：`{ fulfillmentId, orderNo, userId }`
 **响应** `EntitlementGrantedResponse`：`{ entitlementId, status }`
 
 **规则**：仅履约 DELIVERED 后触发一次；权益失败不反写履约为失败（履约事实已落库，保留可重试/人工补发），`[待定]` 自动重试/补偿机制。
@@ -155,9 +155,9 @@ PENDING --cancel--> CANCELLED
 
 `PaymentSuccessRpcController.onPaymentSucceeded` → `FulfillmentApplicationService.acceptPaymentSucceeded`（`FulfillmentApplicationService.java:35`）：
 
-1. `sourcePaymentId = String.valueOf(request.paymentId())`；`repository.findBySourcePaymentId` 回查（幂等）。
+1. `sourcePaymentNo = request.paymentNo()`；`repository.findBySourcePaymentNo` 回查（幂等）。
 2. 命中 → 直接返回已有履约（**不重复创建、不重复交付、不重复触发权益**）。
-3. 未命中 → `newFulfillment(orderId, sourcePaymentId)`（状态 PENDING）→ `fulfillment.start()`（PENDING → PROCESSING）。
+3. 未命中 → `newFulfillment(orderNo, sourcePaymentNo)`（状态 PENDING）→ `fulfillment.start()`（PENDING → PROCESSING）。
 4. 同步 Mock 交付：`try { fulfillment.deliver(); } catch (RuntimeException ex) { fulfillment.fail(ex.getMessage()); metrics.counter("fulfillment.failed"); save; return; }`（PROCESSING → DELIVERED 或 FAILED，异常绝不臆断成功）。
 5. `metrics.counter("fulfillment.completed")` → `repository.save(fulfillment)`（DELIVERED 落库）。
 6. `entitlementGateway.notifyFulfillmentCompleted(...)` 触发权益授予（同步 RPC）；权益失败抛异常，不反写履约 DELIVERED 事实。
@@ -203,7 +203,7 @@ sequenceDiagram
 
 | 作用域 | 机制 |
 |---|---|
-| 支付成功触发履约 | `uk_fulfillments_source_payment_id` 唯一约束 + `findBySourcePaymentId` 先回查（`FulfillmentApplicationService.java:39`） |
+| 支付成功触发履约 | `uk_fulfillments_source_payment_no` 唯一约束 + `findBySourcePaymentNo` 先回查（`FulfillmentApplicationService.java:39`） |
 | 并发重复插入 | 检查-插入存在 TOCTOU 窗口：并发重复会撞 UK 抛 `DuplicateKeyException`，**当前未捕获回查返回**，而是向上抛 500（`[待定]` 建议加 `DuplicateKeyException` 捕获兜底，对齐 payment-service 的 DB 级幂等） |
 | 权益授予「最多一次」 | 仅在新建且 DELIVERED 后触发一次（幂等命中路径不触发） |
 
@@ -218,7 +218,7 @@ sequenceDiagram
 | 场景 | 处理 | 阈值/规则 |
 |---|---|---|
 | 交付异常（Mock 抛 RuntimeException） | `fail(reason)` 记录 FAILED，不触发权益 | 不臆断成功 |
-| 幂等重复（同 paymentId） | 回查命中直接返回已有履约 | 不重复创建/交付 |
+| 幂等重复（同 paymentNo） | 回查命中直接返回已有履约 | 不重复创建/交付 |
 | 并发重复插入撞 UK | 抛 `DuplicateKeyException`（未捕获→500） | `[待定]` 应捕获回查返回 |
 | 乐观锁冲突更新 | `updateById` 0 行 → `CONFLICT` | 并发状态迁移保护 |
 | 权益 RPC 失败 | 异常透传，履约 DELIVERED 保留 | 不反写支付/履约失败 |

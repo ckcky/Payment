@@ -39,7 +39,7 @@ public class FulfillmentApplicationService {
         String sourcePaymentNo = String.valueOf(request.paymentNo());
 
         // 幂等：同一 sourcePaymentNo 只创建一条履约。
-        Optional<Fulfillment> existing = repository.findBySourcePaymentId(sourcePaymentNo);
+        Optional<Fulfillment> existing = repository.findBySourcePaymentNo(sourcePaymentNo);
         if (existing.isPresent()) {
             return existing.get();
         }

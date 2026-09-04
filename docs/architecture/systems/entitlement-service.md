@@ -107,7 +107,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 `POST /internal/entitlements/on-fulfillment-completed` → `200`
 
-**请求** `FulfillmentCompletedRequest`（common-dto）：`{ fulfillmentId: Long, orderId: String, userId: String }`
+**请求** `FulfillmentCompletedRequest`（common-dto）：`{ fulfillmentId: Long, orderNo: String, userId: String }`（ADR-0063 业务单号）
 
 **响应** `EntitlementGrantedResponse`：`{ entitlementId: Long, status: String }`（status 为 `EntitlementStatus` 枚举名）。
 
@@ -119,7 +119,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 `POST /internal/entitlements/on-refund` → `200`
 
-**请求** `RefundPostProcessRequest`：`{ refundId: Long, paymentId: Long, orderId: String, userId: String, reason: String }`
+**请求** `RefundPostProcessRequest`：`{ refundId: Long, paymentNo: String, orderNo: String, userId: String, reason: String }`（ADR-0063 业务单号）
 
 **响应** `RefundPostProcessResponse`：`{ refundId: Long, status: "REVOKED"|"NOOP" }`；按订单撤销全部 AVAILABLE 权益，撤销≥1 条返回 REVOKED，无权益返回 NOOP。
 
@@ -129,7 +129,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 `GET /entitlements/{id}` → `200`
 
-**响应** `EntitlementResponse`：`{ id, userId, orderId, status, availableQuantity }`（[EntitlementResponse.java](../../entitlement-service/src/main/java/com/payment/entitlement/api/EntitlementResponse.java)）。
+**响应** `EntitlementResponse`：`{ id, userId, orderNo, status, availableQuantity }`（[EntitlementResponse.java](../../entitlement-service/src/main/java/com/payment/entitlement/api/EntitlementResponse.java)）。
 
 **错误**：`NOT_FOUND`。
 
@@ -166,7 +166,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 `RefundPostProcessRpcController.onRefund` → `EntitlementApplicationService.revokeOnRefund`（[源码](../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L64)）：
 
-1. `repository.findByOrderId(orderId)` 取该订单全部权益。
+1. `repository.findByOrderNo(orderNo)` 取该订单全部权益。
 2. 空 → 返回 `NOOP`；否则逐条 `revokeForRefund()`，撤销成功计数。
 3. 撤销≥1 条返回 `REVOKED`，否则 `NOOP`；不抛异常、不反写退款成功事实。
 

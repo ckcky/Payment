@@ -23,7 +23,7 @@ public class InMemoryFulfillmentRepository implements FulfillmentRepository {
     }
 
     @Override
-    public Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentNo) {
+    public Optional<Fulfillment> findBySourcePaymentNo(String sourcePaymentNo) {
         Long id = bySourcePaymentId.get(sourcePaymentNo);
         if (id == null) {
             return Optional.empty();

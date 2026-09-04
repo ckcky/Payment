@@ -57,15 +57,15 @@
 
 ```text
 PENDING_CONFIRMATION --confirm--> PENDING_PAYMENT
-PENDING_PAYMENT --markPaid(paymentId)--> PAID
+PENDING_PAYMENT --markPaid(paymentNo)--> PAID
 PAID --markFulfilling--> FULFILLING --complete--> COMPLETED
 PENDING_CONFIRMATION/PENDING_PAYMENT --cancel--> CANCELLED
 COMPLETED/CANCELLED --close--> CLOSED
 ```
 
 - `confirm()`：PENDING_CONFIRMATION → PENDING_PAYMENT。
-- `recordPayment(paymentId)`：下单时同步 RPC 返回的支付单号，不改变订单状态。
-- `markPaid(paymentId)`：PENDING_PAYMENT → PAID（整单支付，不支持部分支付）；记录下游支付单号、`paidMinor = totalMinor`；对已 PAID 的重复回调返回 `false` 幂等吸收。
+- `recordPayment(paymentNo)`：下单时同步 RPC 返回的支付业务单号（PM+雪花），不改变订单状态。
+- `markPaid(paymentNo)`：PENDING_PAYMENT → PAID（整单支付，不支持部分支付）；记录下游支付业务单号、`paidMinor = totalMinor`；对已 PAID 的重复回调返回 `false` 幂等吸收。
 - `markFulfilling()` / `complete()`：PAID → FULFILLING → COMPLETED。
 - `cancel()`：仅 PENDING_CONFIRMATION/PENDING_PAYMENT；`close()`：仅 COMPLETED/CANCELLED。
 - `recordRefund(amount)`：`refunded+amount > paid` 抛 `AMOUNT_INVARIANT_VIOLATION`。
@@ -149,7 +149,7 @@ PENDING --cancel--> CANCELLED
 | items[].skuId | Long | 是 | SKU ID |
 | items[].quantity | int | 是 | 数量（> 0） |
 
-**响应** `CreateOrderResponse`：`{ orderId, transactionId, status, totalMinor, currencyCode, paymentId, paymentStatus }`。
+**响应** `CreateOrderResponse`：`{ orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl }`（业务单号，ADR-0063）。
 
 **流程副作用**：创建订单 + 明细快照 → 创建 1:1 Transaction → `confirm()` → 同步 RPC 创建支付意图。
 
@@ -199,11 +199,11 @@ PENDING --cancel--> CANCELLED
 1. 断言 `lines` 非空（`INVALID_ARGUMENT`）。
 2. 逐行 `catalogClient.getSku(skuId)`（Feign → catalog-service）：`!sellable` 抛 `CONFLICT`；首行确定币种，后续混币抛 `INVALID_ARGUMENT`；构造 `OrderItem`（价格快照）。
 3. `new Order(userId, merchantId, currencyCode, items)`：总额 = `Σ Math.addExact(subtotalMinor)`。
-4. `orderRepository.save(order)` → `new Transaction(orderId, totalMinor, currencyCode, "PURCHASE")` → `transactionRepository.save(transaction)`。
+4. `orderRepository.save(order)` → `new Transaction(orderNo, totalMinor, currencyCode, "PURCHASE")` → `transactionRepository.save(transaction)`。
 5. `order.confirm()`（PENDING_CONFIRMATION → PENDING_PAYMENT）→ `save`。
-6. `paymentGateway.createPayment(CreatePaymentRequest(...))`：同步 RPC 创建支付意图，幂等键 `payment:{orderId}`。
-7. `transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentId)`：交易进入处理中、订单记录下游支付单号。
-8. 返回 `CreateOrderResult(orderId, transactionId, status, totalMinor, currencyCode, paymentId, paymentStatus)`。
+6. `paymentGateway.createPayment(CreatePaymentRequest(...))`：同步 RPC 创建支付意图（CreatePaymentRequest 携 orderNo/transactionNo，ADR-0063）。
+7. `transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentNo)`：交易进入处理中、订单记录下游支付业务单号。
+8. 返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl)`。
 
 ```mermaid
 sequenceDiagram
@@ -217,8 +217,8 @@ sequenceDiagram
     Cat-->>O: SkuSnapshot (sellable, priceMinor, currencyCode)
     O->>O: 构造 OrderItem 快照 + 计算总额 (Math.addExact)
     O->>O: save Order + save Transaction (1:1) + confirm (本地事务)
-    O->>P: POST /payments (CreatePaymentRequest, 幂等键 payment:{orderId})
-    P-->>O: CreatePaymentResponse (paymentId, status)
+    O->>P: POST /payments (CreatePaymentRequest: orderNo/transactionNo)
+    P-->>O: CreatePaymentResponse (paymentNo, status, payUrl)
     O-->>U: CreateOrderResponse
 ```
 
@@ -227,7 +227,7 @@ sequenceDiagram
 `OrderPaymentRpcController.onPaymentSucceeded` → `OrderApplicationService.onPaymentSucceeded`（[源码](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
 
 1. `findById(orderId)`；不存在 `NOT_FOUND`。
-2. `order.markPaid(request.paymentId())`：`PENDING_PAYMENT → PAID`（记录 paymentId、`paidMinor = totalMinor`）；已 `PAID` 返回 `false`（幂等重复回调吸收）。
+2. `order.markPaid(request.paymentNo())`：`PENDING_PAYMENT → PAID`（记录 paymentNo、`paidMinor = totalMinor`）；已 `PAID` 返回 `false`（幂等重复回调吸收）。
 3. `changed` 时 `save`；`transactionRepository.findByOrderId` → `succeed()`（`PROCESSING → SUCCEEDED`，`PENDING` 时先 `start()`）。
 4. 事务边界：`onPaymentSucceeded` 标 `@Transactional`（订单 + 交易在同一本地事务原子提交）。
 
@@ -237,7 +237,7 @@ sequenceDiagram
     participant P as payment-service
     participant O as order-service
     P->>O: POST /internal/orders/on-payment-succeeded (PaymentSucceededRequest)
-    O->>O: findById + markPaid(paymentId) (PENDING_PAYMENT → PAID, 幂等)
+    O->>O: findByOrderNo + markPaid(paymentNo) (PENDING_PAYMENT → PAID, 幂等)
     O->>O: Transaction.succeed() (PROCESSING → SUCCEEDED, 本地事务)
 ```
 
@@ -253,7 +253,7 @@ sequenceDiagram
 
 ### 5.2 幂等性方案
 
-- 下单入口**有强幂等键**：客户端生成 `Idempotency-Key` 请求头，由 `OrderEntryIdempotencyService` 基于 Redis 唯一存储接管——并发同 key 返回 **409 + `Retry-After: 1`**（不接管、轮询），已完成返回 **200 REPLAY**，**fail-open**（订单非资金入口，资金正确性由 payment-service 的 `uk_payments_idempotency_key` + DB 唯一约束兜底，ADR-0039/0040）。订单创建本身仍允许多次产生不同订单（无 key 时）；支付意图幂等键 `payment:{orderId}` 由 order-service 生成。
+- 下单入口**有强幂等键**：客户端生成 `Idempotency-Key` 请求头，由 `OrderEntryIdempotencyService` 基于 Redis 唯一存储接管——并发同 key 返回 **409 + `Retry-After: 1`**（不接管、轮询），已完成返回 **200 REPLAY**，**fail-open**（订单非资金入口，资金正确性由 payment-service 的 `uk_payments_idempotency_key` + DB 唯一约束兜底，ADR-0039/0040）。订单创建本身仍允许多次产生不同订单（无 key 时）；支付意图幂等键由 payment-service 维护（混合幂等：调用方 key 优先，缺省 `payment:{orderNo}:{channelCode}:{attemptSeq}`，ADR-0064）。
 - Transaction 1:1 由 `uk_transactions_order_id` 唯一约束兜底。
 
 ### 5.3 分布式事务方案
