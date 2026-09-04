@@ -56,7 +56,7 @@ if [ "${PAYMENT_SKIP_BUILD:-0}" = "1" ]; then
 else
   # MAVEN_BIN：无 POSIX 路径转换的 bash（如沙箱）里 ./mvnw(sh) 会把 /c/... 传给 java
   # 导致 Launcher ClassNotFoundException；此时用 MAVEN_BIN=.../bin/mvn.cmd 覆盖。
-  "${MAVEN_BIN:-./mvnw}" -q clean install -DskipTests
+  "${MAVEN_BIN:-./mvnw}" ${MAVEN_ARGS:-} -q clean install -DskipTests
 fi
 
 echo "==> [3/3] 后台启动 10 个进程：9 服务 + mock-channel-web（演示组件，ADR-0048 修订版）"
@@ -85,14 +85,14 @@ SERVICES=(
   ledger-service
 )
 for svc in "${SERVICES[@]}"; do
-  nohup "${MAVEN_BIN:-./mvnw}" -pl "$svc" spring-boot:run > "$LOG_DIR/$svc.log" 2>&1 &
+  nohup "${MAVEN_BIN:-./mvnw}" ${MAVEN_ARGS:-} -pl "$svc" spring-boot:run > "$LOG_DIR/$svc.log" 2>&1 &
   echo "$! $svc" >> "$PID_FILE"
   echo "    $svc  (PID $!)"
 done
 
 # 注意：mock-channel-web 位于 deployment/ 下（ADR-0048 修订版），-pl 必须写模块相对仓库根的路径，
 # 直接写 artifactId 会被 Maven 当作不存在的目录而报 "Could not find the selected project in the reactor"。
-nohup "${MAVEN_BIN:-./mvnw}" -pl deployment/mock-channel-web spring-boot:run > "$LOG_DIR/mock-channel-web.log" 2>&1 &
+nohup "${MAVEN_BIN:-./mvnw}" ${MAVEN_ARGS:-} -pl deployment/mock-channel-web spring-boot:run > "$LOG_DIR/mock-channel-web.log" 2>&1 &
 echo "$! mock-channel-web" >> "$PID_FILE"
 echo "    mock-channel-web  (PID $!)"
 
