@@ -65,7 +65,7 @@ class SuccessfulPurchaseScenarioTest {
      * 内存 catalog 替身：维护每个 SKU 的库存视图（total/available/reserved/sold）与预占记录，
      * 模拟 catalog-service 的三段式语义，供订单侧编排测试。
      */
-    private static final class FakeCatalogClient implements CatalogClient {
+    static final class FakeCatalogClient implements CatalogClient {
         private final Map<Long, SkuSnapshot> skus = new HashMap<>();
         private final Map<Long, long[]> stock = new HashMap<>(); // [available, reserved, sold]
         private final Map<String, Long> reservations = new HashMap<>(); // reservationId -> skuId

@@ -45,6 +45,16 @@
       这正是「不猜成败落账」要演示的正确性能力。「伪造签名」以错误密钥签名，payment 侧验签
       失败返回 403（ADR-0052 fail-closed；需环境已配置 PAYMENT_CHANNEL_SECRET）。
     </div>
+    <div class="note" id="switch-note" style="margin-top:10px">
+      <b>换渠道支付（Feature 015 / INV-2）</b>：同一订单每次选渠道都会<b>新建一张支付单</b>；
+      旧支付单保留 FAILED/原状态，不参与后续处理。切换后自动跳转新支付单的收银台。
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <button class="b-dup" onclick="switchChannel('ALIPAY')">💳 换支付宝支付</button>
+      <button class="b-dup" onclick="switchChannel('WECHAT')">💬 换微信支付</button>
+      <button class="b-dup" onclick="switchChannel('DOUYIN')">🎵 换抖音支付</button>
+      <button class="b-dup" onclick="switchChannel('MOCK')">🧪 换 Mock 渠道</button>
+    </div>
   </div>
   <div class="card"><div id="log">// 操作日志</div></div>
 </div>
@@ -54,13 +64,16 @@ const paymentNo = qs.get('paymentNo');
 const orderNo = qs.get('orderNo');
 const amountMinor = qs.get('amountMinor');
 const currencyCode = qs.get('currencyCode') || 'CNY';
+const channelCode = qs.get('channelCode') || 'MOCK';
 const log = (m) => { const el = document.getElementById('log'); el.textContent += "\n" + m; el.scrollTop = el.scrollHeight; };
 
 function fmt(minor, cur) {
   return (minor / 100).toFixed(2) + ' ' + cur;
 }
+const CHANNEL_NAMES = { ALIPAY: '支付宝', WECHAT: '微信支付', DOUYIN: '抖音支付', MOCK: 'Mock 渠道' };
 document.getElementById('meta').innerHTML =
-  'paymentNo: <b>' + (paymentNo || '缺失') + '</b> &nbsp; orderNo: <b>' + (orderNo || '—') + '</b>';
+  'paymentNo: <b>' + (paymentNo || '缺失') + '</b> &nbsp; orderNo: <b>' + (orderNo || '—') + '</b>'
+  + '<br>当前渠道: <b>' + (CHANNEL_NAMES[channelCode] || channelCode) + '</b>（' + channelCode + '）';
 document.getElementById('amount').textContent =
   amountMinor ? fmt(Number(amountMinor), currencyCode) : '（金额未随链路携带）';
 
@@ -68,7 +81,8 @@ async function sendCallback(status, signMode, extra) {
   const payload = Object.assign({
     paymentNo: paymentNo,
     status: status,
-    channelReference: 'demo-ref-' + Date.now(),
+    // crypto.randomUUID()：避免快速连点时 Date.now() 撞键（同毫秒重复引用）
+    channelReference: 'demo-ref-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)),
     reason: null,
     amountMinor: amountMinor ? Number(amountMinor) : null,
     signMode: signMode || 'VALID'
@@ -106,6 +120,36 @@ async function payTwice() {
 async function payForged() {
   await sendCallback('SUCCESS', 'FORGED');
   log('   预期：HTTP 403 —— payment 验签失败拒绝，业务层零触达（ADR-0052）。');
+}
+
+// Feature 015 / INV-2：显式换渠道 → order-service 新建一张支付单（同订单号），跳转新收银台。
+// 经 mock-channel-web 的 /proxy/order 代理转发，避免跨域（零服务改动，ADR-0048 修订版）。
+async function switchChannel(target) {
+  if (!orderNo) { log('!! 缺少 orderNo，无法换渠道'); return; }
+  log('== 换渠道：' + (CHANNEL_NAMES[target] || target) + ' → POST /orders/' + orderNo + '/payments ==');
+  try {
+    const res = await fetch('/proxy/order/orders/' + encodeURIComponent(orderNo) + '/payments', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ channelCode: target })
+    });
+    const text = await res.text();
+    log('<< HTTP ' + res.status + '  ' + text);
+    if (res.ok) {
+      const data = JSON.parse(text);
+      log('   新支付单 paymentNo=' + data.paymentNo + ' attemptSeq=' + data.attemptSeq
+          + ' 渠道=' + (CHANNEL_NAMES[target] || target));
+      if (data.payUrl) {
+        log('   正在跳转新支付单收银台…');
+        setTimeout(() => { location.href = data.payUrl; }, 800);
+      } else {
+        log('   （新支付单无 payUrl —— mock-cashier 未开启时请经 API 继续支付）');
+      }
+    } else {
+      log('   换渠道失败：' + (text || res.status));
+    }
+  } catch (e) {
+    log('!! 换渠道请求异常：' + e);
+  }
 }
 if (!paymentNo) { log('!! 缺少 paymentNo 查询参数 —— 请从演示控制台下单后跳转。'); }
 </script>

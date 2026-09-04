@@ -15,7 +15,7 @@ Spring Cloud 微服务（见 [docs/adr/0001](docs/adr/0001-adopt-spring-cloud-mi
 | `catalog-service` | Product / SKU / 价格 |
 | `order-service` | Order 1:1 Transaction 状态机 |
 | `payment-service` | Payment / PaymentAttempt / Channel 适配 / 幂等 / 回调 |
-| `refund-service` | 退款编排 |
+| ~~`refund-service`~~ | Feature 015：退款编排已并入 `payment-service`（`com.payment.refund` 包，服务数 10→9，端口 8085 退役） |
 | `fulfillment-service` | 支付成功后的履约 |
 | `entitlement-service` | 权益授予 / 使用 |
 | `reconciliation-service` | 基础对账 |

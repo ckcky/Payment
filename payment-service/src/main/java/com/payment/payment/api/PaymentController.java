@@ -52,17 +52,19 @@ public class PaymentController {
         boolean defer = mockCashier.isEnabled();
         Payment payment = applicationService.createPaymentIntent(command, defer);
         String payUrl = defer ? buildPayUrl(payment, request.orderNo(), request.amountMinor(),
-                request.currencyCode()) : null;
+                request.currencyCode(), request.channelCode()) : null;
         return new CreatePaymentResponse(payment.getPaymentNo(), payment.getStatus().name(), payUrl,
                 payment.getAttemptSeq(), request.channelCode());
     }
 
-    /** 收银台页链接：mock-channel-web 的 /cashier，页面从查询串自渲染。 */
-    private String buildPayUrl(Payment payment, String orderNo, Long amountMinor, String currencyCode) {
+    /** 收银台页链接：mock-channel-web 的 /cashier，页面从查询串自渲染（channelCode 供收银台展示/换渠道）。 */
+    private String buildPayUrl(Payment payment, String orderNo, Long amountMinor, String currencyCode,
+                               String channelCode) {
         return mockCashier.getBaseUrl() + "/cashier?paymentNo=" + payment.getPaymentNo()
                 + "&orderNo=" + orderNo
                 + "&amountMinor=" + amountMinor
-                + "&currencyCode=" + currencyCode;
+                + "&currencyCode=" + currencyCode
+                + "&channelCode=" + (channelCode == null || channelCode.isBlank() ? "MOCK" : channelCode);
     }
 
     @GetMapping("/{ref}")

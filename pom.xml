@@ -37,7 +37,7 @@
         <module>catalog-service</module>
         <module>order-service</module>
         <module>payment-service</module>
-        <module>refund-service</module>
+        <!-- Feature 015 / P3：refund-service 已并入 payment-service（com.payment.refund 包），服务数 10→9 -->
         <module>fulfillment-service</module>
         <module>entitlement-service</module>
         <module>reconciliation-service</module>

@@ -40,8 +40,8 @@ echo "==> [1] 启动全栈（infra 容器 + 10 服务 + mock-channel-web）"
 bash deployment/start-all.sh
 
 # 2) 等待所有服务健康
-PORTS=(8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091)
-echo "==> [2] 等待 11 个进程健康（/actuator/health）..."
+PORTS=(8081 8082 8083 8084 8086 8087 8088 8089 8090 8091)
+echo "==> [2] 等待 10 个进程健康（/actuator/health）..."
 for port in "${PORTS[@]}"; do
   for i in $(seq 1 60); do
     if curl -fsS -o /dev/null "http://127.0.0.1:$port/actuator/health"; then

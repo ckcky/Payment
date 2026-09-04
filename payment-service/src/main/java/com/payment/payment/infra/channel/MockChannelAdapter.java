@@ -101,12 +101,26 @@ public class MockChannelAdapter implements PaymentChannel {
         this.queryResult = queryResult;
     }
 
+    /** 渠道引用前缀：按 channelCode 派生（未知渠道回落 mock-）。 */
+    private static String channelPrefix(String channelCode) {
+        if (channelCode == null || channelCode.isBlank()) {
+            return "mock";
+        }
+        return switch (channelCode.toUpperCase()) {
+            case "ALIPAY" -> "alipay";
+            case "WECHAT" -> "wechat";
+            case "DOUYIN" -> "douyin";
+            default -> channelCode.toLowerCase();
+        };
+    }
+
     @Override
     public ChannelResult charge(ChargeRequest request) {
+        // Feature 015 / P5：渠道引用带渠道前缀，便于对账/演示按渠道区分（alipay-/wechat-/douyin-/mock-）
+        String ref = channelPrefix(request.channelCode()) + "-ref-" + runId + "-" + refGen.incrementAndGet();
         return switch (scenario) {
-            case SUCCESS -> ChannelResult.success("mock-ref-" + runId + "-" + refGen.incrementAndGet());
-            case FAILURE -> ChannelResult.businessFailure("mock-ref-" + runId + "-" + refGen.incrementAndGet(),
-                    "mock declined");
+            case SUCCESS -> ChannelResult.success(ref);
+            case FAILURE -> ChannelResult.businessFailure(ref, "mock declined");
             case TIMEOUT -> ChannelResult.timeout(
                     "mock timeout: no response within " + httpTimeoutMs + "ms");
             case TRANSPORT_ERROR -> ChannelResult.transportFailure(

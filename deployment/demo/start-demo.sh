@@ -46,15 +46,15 @@ fi
 echo "==> 启动 Docker 基础设施与 Java 演示栈"
 bash deployment/start-all.sh || exit 1
 
-echo "==> 等待 11 个服务健康..."
+echo "==> 等待 10 个服务健康..."
 healthy=0
 for i in $(seq 1 60); do
   n=0
-  for p in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091; do
+  for p in 8081 8082 8083 8084 8086 8087 8088 8089 8090 8091; do
     c=$(curl -s --noproxy '*' -m 2 -o /dev/null -w '%{http_code}' "http://localhost:$p/actuator/health" 2>/dev/null)
     [ "$c" = "200" ] && n=$((n+1))
   done
-  [ "$n" = "11" ] && { healthy=1; break; }
+  [ "$n" = "10" ] && { healthy=1; break; }
   sleep 4
 done
 if [ "$healthy" != "1" ]; then

@@ -52,7 +52,7 @@ class PaymentControllerPayUrlTest {
         CreatePaymentResponse response = controller.createPayment(request());
 
         assertThat(response.payUrl()).isEqualTo(
-                "http://localhost:8091/cashier?paymentNo=PM-test&orderNo=order-9&amountMinor=9900&currencyCode=CNY");
+                "http://localhost:8091/cashier?paymentNo=PM-test&orderNo=order-9&amountMinor=9900&currencyCode=CNY&channelCode=mock");
         assertThat(response.status()).isEqualTo("PROCESSING");
         verify(appService).createPaymentIntent(any(), eq(true));
     }

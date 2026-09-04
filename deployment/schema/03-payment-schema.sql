@@ -52,3 +52,70 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     KEY idx_attempts_payment_no (payment_no),
     UNIQUE KEY uk_attempts_channel_reference (channel_reference)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- Feature 015 / P3（ADR-0064）：退款域并入 payment-service
+-- 原 refund 库 4 张表随域迁入 payment 库（com.payment.refund 代码已同迁）。
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS refunds (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    refund_no VARCHAR(32) NOT NULL COMMENT '业务单号 RF+雪花（ADR-0062）',
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
+    payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
+    user_id VARCHAR(64) NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    currency_code VARCHAR(8) NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    failure_reason VARCHAR(255),
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_refunds_idempotency_key (idempotency_key),
+    UNIQUE KEY uk_refunds_refund_no (refund_no),
+    KEY idx_refunds_payment_no (payment_no),
+    KEY idx_refunds_order_no (order_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS refund_items (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    refund_id BIGINT NOT NULL,
+    order_item_id VARCHAR(64) NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    KEY idx_refund_items_refund_id (refund_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 退款受理悲观锁：以 payment_no 为行锁，串行化同一支付的退款受理（H1 资金正确性）。
+CREATE TABLE IF NOT EXISTS refund_intake_locks (
+    payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
+    PRIMARY KEY (payment_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 退款后处理尝试记录（ADR-0017）：失败不回滚退款成功事实（Saga），留痕供重放。
+CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    refund_id BIGINT NOT NULL,
+    target VARCHAR(32) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    detail VARCHAR(512),
+    attempt_count INT NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_rppa_refund_target (refund_id, target),
+    KEY idx_rppa_refund_id (refund_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,75 +1,13 @@
--- 退款服务自有 Schema（Database-per-Service）：refunds / refund_items。
--- 单机开发由 docker-compose 的 MySQL 8 实例承载（多库共实例，服务间不共享表）。
+-- =============================================================================
+-- 06-refund-schema.sql — 已退役（Feature 015 / P3，ADR-0064）
 --
--- ADR-0016 已否决（负责人决议「部分退款不做」）：refunds 不再有 refunded_amount_minor 列。
--- 已部署环境需手工执行下迁移（MySQL 不支持 DROP COLUMN IF EXISTS，故不写成幂等语句）：
---   ALTER TABLE `refund`.`refunds` DROP COLUMN `refunded_amount_minor`;
--- 全额退款语义下该列无信息量（恒等于 amount_minor 或 0），丢弃不丢数据。
-
-CREATE DATABASE IF NOT EXISTS `refund` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `refund`;
-
-CREATE TABLE IF NOT EXISTS refunds (
-    id BIGINT NOT NULL AUTO_INCREMENT,
-    refund_no VARCHAR(32) NOT NULL COMMENT '业务单号 RF+雪花（ADR-0062）',
-    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
-    payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
-    user_id VARCHAR(64) NOT NULL,
-    amount_minor BIGINT NOT NULL,
-    currency_code VARCHAR(8) NOT NULL,
-    reason VARCHAR(255) NOT NULL,
-    idempotency_key VARCHAR(128) NOT NULL,
-    status VARCHAR(32) NOT NULL,
-    failure_reason VARCHAR(255),
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    created_by VARCHAR(64),
-    updated_by VARCHAR(64),
-    version INT NOT NULL DEFAULT 1,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_refunds_idempotency_key (idempotency_key),
-    UNIQUE KEY uk_refunds_refund_no (refund_no),
-    KEY idx_refunds_payment_no (payment_no),
-    KEY idx_refunds_order_no (order_no)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS refund_items (
-    id BIGINT NOT NULL AUTO_INCREMENT,
-    refund_id BIGINT NOT NULL,
-    order_item_id VARCHAR(64) NOT NULL,
-    amount_minor BIGINT NOT NULL,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    created_by VARCHAR(64),
-    updated_by VARCHAR(64),
-    version INT NOT NULL DEFAULT 1,
-    PRIMARY KEY (id),
-    KEY idx_refund_items_refund_id (refund_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 退款受理悲观锁：以 payment_no 为行锁，串行化同一支付的退款受理，
--- 防止并发读累计退款金额 + 写入之间的竞态导致超退款（H1 资金正确性）。
--- 行在事务内由 INSERT ... ON DUPLICATE KEY UPDATE 持有直至提交/回滚。
-CREATE TABLE IF NOT EXISTS refund_intake_locks (
-    payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
-    PRIMARY KEY (payment_no)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 退款后处理尝试记录（ADR-0017）：每次后处理目标（履约/权益/记账）一次调用的结果，
--- 失败不回滚退款成功事实（Saga），但 MUST 留下可追溯记录供运营按 refund_id 查询与重放。
-CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
-    id BIGINT NOT NULL AUTO_INCREMENT,
-    refund_id BIGINT NOT NULL,
-    target VARCHAR(32) NOT NULL,
-    status VARCHAR(16) NOT NULL,
-    detail VARCHAR(512),
-    attempt_count INT NOT NULL,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL,
-    created_by VARCHAR(64),
-    updated_by VARCHAR(64),
-    version INT NOT NULL DEFAULT 1,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_rppa_refund_target (refund_id, target),
-    KEY idx_rppa_refund_id (refund_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- 退款域已并入 payment-service：原 refund 库的 refunds / refund_items /
+-- refund_intake_locks / refund_post_process_attempts 4 张表现由
+-- 03-payment-schema.sql（payment 库）承载，本文件仅保留占位说明，
+-- 不再创建独立 `refund` 数据库，避免演示 reset 出现孤儿库。
+--
+-- 历史说明：
+--   ADR-0016 已否决（负责人决议「部分退款不做」）：refunds 不再有 refunded_amount_minor 列。
+--   已部署旧环境迁表完成后可手工 DROP DATABASE `refund`。
+-- =============================================================================
+SELECT '06-refund-schema.sql retired by Feature 015 (ADR-0064): refund tables now in payment schema (03)' AS notice;

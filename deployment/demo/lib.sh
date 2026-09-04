@@ -20,7 +20,8 @@ MERCHANT_URL="${MERCHANT_URL:-http://localhost:8081}"
 CATALOG_URL="${CATALOG_URL:-http://localhost:8082}"
 ORDER_URL="${ORDER_URL:-http://localhost:8083}"
 PAYMENT_URL="${PAYMENT_URL:-http://localhost:8084}"
-REFUND_URL="${REFUND_URL:-http://localhost:8085}"
+# Feature 015/P3: 退款 API 随 refund 并入 payment-service，端口 8085→8084
+REFUND_URL="${REFUND_URL:-http://localhost:8084}"
 ENTITLEMENT_URL="${ENTITLEMENT_URL:-http://localhost:8087}"
 LEDGER_URL="${LEDGER_URL:-http://localhost:8090}"
 RECON_URL="${RECON_URL:-http://localhost:8088}"
@@ -115,4 +116,43 @@ wait_until() { # wait_until <tries> <sleep_secs> <desc> <command...>   command �
     sleep "$interval"
   done
   fail "$desc 在 $((tries * interval))s 内未达成"
+}
+
+# =============================================================================
+# Feature 015 / P6：高频流量零 fork 助手
+# 2 TPS 起步的流量脚本里，每次 $(...) 子 shell / python 起进程都是开销，
+# 这里提供「临时文件 + grep/sed」路径的零 fork 版本。
+# =============================================================================
+
+# httpq <METHOD> <URL> [BODY] [HEADER...] —— curl 直出临时文件，不经命令替换
+# 结果：HTTPQ_CODE（http 状态码）/ HTTPQ_FILE（响应体临时文件，调用方负责清理或复用）
+HTTPQ_FILE=""
+HTTPQ_CODE=""
+httpq() {
+  local method="$1" url="$2" body="${3:-}"; shift 3
+  HTTPQ_FILE="${TMPDIR:-/tmp}/httpq.$$.response"
+  local code_file="${TMPDIR:-/tmp}/httpq.$$.code"
+  local args=(-s --noproxy '*' -m 5 -o "$HTTPQ_FILE" -w '%{http_code}')
+  local h
+  for h in "$@"; do args+=(-H "$h"); done
+  if [ -n "$body" ]; then
+    args+=(-X "$method" -H 'Content-Type: application/json' -d "$body")
+  else
+    [ "$method" != "GET" ] && args+=(-X "$method")
+  fi
+  curl "${args[@]}" "$url" > "$code_file" 2>/dev/null
+  HTTPQ_CODE=$(cat "$code_file" 2>/dev/null)
+  rm -f "$code_file"
+}
+
+# jstr <FILE> <field> —— 从 JSON 文件零 fork 提取字符串字段值（stdout 输出）
+jstr() { # jstr <file> <field>
+  grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$1" 2>/dev/null \
+    | head -1 | sed "s/\"$2\"[[:space:]]*:[[:space:]]*\"//;s/\"[[:space:]]*$//"
+}
+
+# jnum <FILE> <field> —— 从 JSON 文件零 fork 提取数值字段值（stdout 输出）
+jnum() { # jnum <file> <field>
+  grep -o "\"$2\"[[:space:]]*:[[:space:]]*[-0-9.]*" "$1" 2>/dev/null \
+    | head -1 | sed "s/\"$2\"[[:space:]]*:[[:space:]]*//"
 }

@@ -4,7 +4,7 @@
 # Redis 为非数据源（fail-open），不可用时降级为不防重、记 order_idempotency_degraded_total。
 # 各微服务镜像与编排在 Dockerfile 就绪后补齐；
 # 当前本地运行以 `./mvnw` 直接启动各服务，服务端口（8081–8089）：
-#   merchant 8081 / catalog 8082 / order 8083 / payment 8084 / refund 8085
+#   merchant 8081 / catalog 8082 / order 8083 / payment 8084（含退款 API，Feature 015 后 refund 不再独立部署）
 #   fulfillment 8086 / entitlement 8087 / reconciliation 8088 / settlement 8089
 #
 # Database-per-Service：生产/集成测试每个服务独立数据库；本地单机开发为降低门槛，

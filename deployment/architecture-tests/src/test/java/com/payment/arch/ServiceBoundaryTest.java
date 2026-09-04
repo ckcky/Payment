@@ -33,9 +33,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ServiceBoundaryTest {
 
     private static final String[] SERVICES = {
-            "merchant", "catalog", "order", "payment", "refund",
+            "merchant", "catalog", "order", "payment",
             "fulfillment", "entitlement", "reconciliation", "settlement", "ledger"
     };
+    // Feature 015 / P3：refund 已并入 payment-service（com.payment.refund 包，进程内调用替代 Feign），服务数 10→9。
 
     private static JavaClasses serviceClasses;
 

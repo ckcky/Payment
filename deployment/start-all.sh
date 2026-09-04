@@ -78,7 +78,7 @@ fi
 export PAYMENT_MOCK_CASHIER_ENABLED="${PAYMENT_MOCK_CASHIER_ENABLED:-true}"
 
 SERVICES=(
-  merchant-service catalog-service order-service payment-service refund-service
+  merchant-service catalog-service order-service payment-service
   fulfillment-service entitlement-service reconciliation-service settlement-service
   ledger-service
 )

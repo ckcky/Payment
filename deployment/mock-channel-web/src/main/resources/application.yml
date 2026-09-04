@@ -37,7 +37,8 @@ mock-channel:
     catalog: http://localhost:8082
     order: http://localhost:8083
     payment: http://localhost:8084
-    refund: http://localhost:8085
+    # Feature 015/P3: refund 并入 payment-service
+    refund: http://localhost:8084
     fulfillment: http://localhost:8086
     entitlement: http://localhost:8087
 
