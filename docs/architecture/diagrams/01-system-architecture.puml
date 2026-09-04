@@ -34,10 +34,8 @@ rectangle "gateway\n统一入口 · 路由 / 鉴权 / 限流\n（本 MVP 延后�
 
 package "编排层 · 承接业务意图，编排跨域流程" as ORCH {
   rectangle "order-service\n8083 · order" as O #EEEDFE
-  rectangle "payment-service\n8084 · payment" as P #EEEDFE
-  rectangle "refund-service\n8085 · refund" as R #EEEDFE
+  rectangle "payment-service\n8084 · payment（含 refund 退款域）" as P #EEEDFE
   O -[hidden]right- P
-  P -[hidden]right- R
 }
 
 package "执行层 · 商品、交付与消费权利" as EXEC {

@@ -37,8 +37,7 @@ PaymentArch/
 ├── merchant-service/            # 商户
 ├── catalog-service/             # 商品 / SKU（含 SkuCache + Redis）
 ├── order-service/               # 订单 / 交易（强幂等键 + 超时库存释放 ZSet 时间轮）
-├── payment-service/             # 支付编排 + 渠道适配（端口 8084）
-├── refund-service/              # 退款（冲正记账接入账本）
+├── payment-service/             # 支付编排 + 渠道适配 + 退款（com.payment.refund，端口 8084）
 ├── fulfillment-service/         # 履约
 ├── entitlement-service/         # 权益
 ├── ledger-service/              # 复式记账（资金核心，端口 8090，已实现、已投产）

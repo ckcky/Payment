@@ -76,7 +76,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | 3 | 对外 API 鉴权 / 身份体系 | ⭕ **预留空实现鉴权函数** | 不接入 Spring Security / OAuth2 | `payment-service/web/ResolveAuthorizationInterceptor.java`（admin 端点守卫，默认关闭）；鉴权扩展点见 §2.4.2 | 引入外部调用方 / 多租户时立项（Phase 9） |
 | 4 | 风控 | ⛔ **不做（代码已删除）** | 原「只预留空实现」裁决已被 2026-08-30 裁决**覆盖为不做**：`RiskCheckService` 类、`payment.risk.*` 配置、`PaymentApplicationService` 调用点全部移除 | 无（原 `payment-service/application/risk/RiskCheckService.java` 已删除） | 需风控时**重新立项**（ADR-0028） |
 | 5 | 敏感数据脱敏 | ⛔ **不做（代码已删除）** | 原「工具类保留」裁决已被 2026-08-30 裁决**覆盖为不管**：`SensitiveDataMasker` 类与测试移除；不新增脱敏点、不做响应层统一脱敏 | 无（原 `common-core/security/SensitiveDataMasker.java` 已删除） | 接入真实卡号 / 凭证 / 真实渠道时**重新引入**（ADR-0027） |
-| 6 | 部分退款（单笔退款的部分成功追踪） | ⛔ **不做（代码已回退）** | **单笔退款只回三态**（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功恒为全额；`PARTIALLY_SUCCEEDED` 枚举与 `partiallySucceed()` 保留为**不可达的预留实现**，不开放任何入口。实体 `refundedAmountMinor` 字段与 DDL 列**已回退删除**。**同一支付的多笔退款仍支持**（每笔独立幂等键、按申请额累计占用额度，ADR-0047） | `refund-service/domain/RefundStatus.java`（枚举保留）；`RefundApplicationService.java:99-103` 当前只处理 `SUCCEEDED/FAILED/UNKNOWN`；回退清单见 [ADR-0016](../adr/0006-refund-decisions.md#adr-0016-部分退款支持模型如何让-partially_succeeded-可达部分金额如何跟踪)、口径收口见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额) | 需支持「单笔退款部分成功」时立项，届时须同步改状态机与退款单模型（属 Constitution §8 边界） |
+| 6 | 部分退款（单笔退款的部分成功追踪） | ⛔ **不做（代码已回退）** | **单笔退款只回三态**（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功恒为全额；`PARTIALLY_SUCCEEDED` 枚举与 `partiallySucceed()` 保留为**不可达的预留实现**，不开放任何入口。实体 `refundedAmountMinor` 字段与 DDL 列**已回退删除**。**同一支付的多笔退款仍支持**（每笔独立幂等键、按申请额累计占用额度，ADR-0047） | `payment-service/src/main/java/com/payment/refund/domain/RefundStatus.java`（枚举保留，Feature 015 起退款域在 payment-service 内）；`RefundApplicationService.java:99-103` 当前只处理 `SUCCEEDED/FAILED/UNKNOWN`；回退清单见 [ADR-0016](../adr/0006-refund-decisions.md#adr-0016-部分退款支持模型如何让-partially_succeeded-可达部分金额如何跟踪)、口径收口见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额) | 需支持「单笔退款部分成功」时立项，届时须同步改状态机与退款单模型（属 Constitution §8 边界） |
 | 7 | 渠道回调验签（HMAC） | ⭕ **预留空函数** | **过滤器骨架保留**（路径 Ant 匹配、原始 body 读、`CachedBodyHttpServletRequest` 可重复读包装、403 拒绝分支），`verifySignature()` **恒通过**，回调一律放行 | `common-core/security/SignatureVerifier.java`（算法工具类保留，8 单测覆盖）；`payment-service/web/ChannelCallbackSignatureFilter.java`（空实现接入点） | 接入真实渠道时只实现 `verifySignature()`（ADR-0025） |
 
 > **关于 #7 的补充说明（2026-08-30 裁决已覆盖原边界说明）**：负责人裁决**明确包含渠道回调验签**——「ADR-0025 加验签预留函数空实现就行」。因此原「验签不在裁剪范围、默认开启不可关闭」的表述已失效。当前**伪造渠道回调可翻转支付状态**，这是**已知且已被负责人接受的风险**。
@@ -124,7 +124,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | catalog-service | Product / SKU | 商品、SKU、价格、可售性 | 已实现 |
 | order-service | Order / Transaction | 订单、明细、价格快照、交易状态机 | 已实现 |
 | payment-service | Payment + Channel | 支付编排、幂等、渠道适配、回调、UNKNOWN 收敛 | 已实现 |
-| refund-service | Refund | 退款编排（渠道退款 + 权益撤销 + 对账） | 已实现（ADR-0016/0017/0018） |
+| ~~refund-service~~ | Refund | **Feature 015 已并入 `payment-service`**（`com.payment.refund` 包，端口 8085 退役）；退款编排（渠道退款 + 权益撤销 + 对账）由 payment-service 提供 | 已并入（ADR-0016/0017/0018，[ADR-0064](../adr/0024-multi-payment-per-transaction.md)） |
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
 | ledger-service | Ledger | 复式记账（资金核心） | 已实现（`004-ledger` 前置，8090） |
@@ -318,9 +318,8 @@ order-service → payment-service               创建支付意图
 payment-service → Channel Adapter             发起支付 / 查询渠道结果
 payment-service → fulfillment-service         支付成功后请求履约
 fulfillment-service → entitlement-service     履约完成后请求权益授予
-refund-service → payment-service              发起支付退款（金额查询 + 退款尝试）
-refund-service → fulfillment/entitlement      退款后处理
-reconciliation-service → payment/refund       读已确认业务事实
+payment-service（refund 包）→ 渠道/ fulfillment/entitlement   退款编排 + 退款后处理（进程内，Feature 015 起不再跨服务）
+reconciliation-service → payment-service      读已确认支付/退款事实
 settlement-service → merchant/reconciliation  校验结算资格 + 生成结算批次
 ```
 

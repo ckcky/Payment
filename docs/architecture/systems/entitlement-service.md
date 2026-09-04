@@ -3,7 +3,7 @@
 **服务**：entitlement-service（权益授予 / 撤销 / 查询）
 **端口**：8087 | **Schema**：`entitlement` | **包根**：`com.payment.entitlement`
 
-**上游依赖**：fulfillment-service（履约完成后同步请求授予权益）、refund-service（退款成功后同步请求撤销权益）
+**上游依赖**：fulfillment-service（履约完成后同步请求授予权益）、payment-service 的 refund 包（退款成功后同步请求撤销权益，Feature 015 起原独立 refund-service 已并入）
 **下游依赖**：无跨服务 SQL；仅自身 `entitlement` Schema（Database-per-Service）
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。

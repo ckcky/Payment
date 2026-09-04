@@ -3,7 +3,7 @@
 **服务**：reconciliation-service（对账：平台事实 vs 渠道账单，逐笔比对找差异）
 **端口**：8088 | **Schema**：`reconciliation` | **包根**：`com.payment.reconciliation`
 
-**上游依赖**：payment-service（读已确认支付事实）、refund-service（读已确认退款事实）、预置/ Mock 渠道账单（CSV fixture）
+**上游依赖**：payment-service（读已确认支付事实）、payment-service（读已确认退款事实，`/internal/refunds/confirmed-facts` 已随退款域并入 8084，ADR-0064）、预置/ Mock 渠道账单（CSV fixture）
 **下游依赖**：settlement-service（消费 `settlement-summary` 结算事实，仅读）
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。

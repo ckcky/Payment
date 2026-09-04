@@ -1,7 +1,14 @@
 # refund-service 系统设计
 
-**服务**：refund-service（退款跨域编排）
-**端口**：8085 | **Schema**：`refund` | **包根**：`com.payment.refund`
+> **⛔ 已退役（Status: merged）**：Feature 015（[ADR-0064](../../adr/0024-multi-payment-per-transaction.md)）将退款域整体并入
+> **payment-service**（`payment-service/src/main/java/com/payment/refund/`，端口 8084）。
+> 独立服务 refund-service 与 `refund` Schema、端口 8085 均已删除/退役；
+> 退款事实端点 `/internal/refunds/confirmed-facts` 现由 payment-service 提供。
+> 本文保留为退款域设计参考，文中代码路径 `../../refund-service/...` 应对应替换为
+> `../../payment-service/src/main/java/com/payment/refund/...`，跨服务 RPC 描述现为进程内调用。
+
+**服务**：refund-service（退款跨域编排）→ 已并入 payment-service
+**端口**：~~8085~~（退役） | **Schema**：~~`refund`~~（表并入 payment 库） | **包根**：`com.payment.refund`（现位于 payment-service）
 
 **上游依赖**：order-service / 调用方（发起退款申请，内部 RPC）
 **下游依赖**：payment-service（金额查询 + 渠道退款尝试）、entitlement-service（退款后权益吊销）、reconciliation-service（拉取退款事实供对账）

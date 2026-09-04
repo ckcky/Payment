@@ -38,8 +38,9 @@ management:
 services:
   payment:
     url: http://localhost:8084
+  # Feature 015/P3：退款域并入 payment-service，REFUND 事实端点同端口（8085 已退役）
   refund:
-    url: http://localhost:8085
+    url: http://localhost:8084
 
 mybatis-plus:
   configuration:

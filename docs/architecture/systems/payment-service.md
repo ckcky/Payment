@@ -3,7 +3,7 @@
 **服务**：payment-service（支付编排 + 渠道适配）
 **端口**：8084 | **Schema**：`payment` | **包根**：`com.payment.payment`
 
-**上游依赖**：order-service（创建支付意图）、refund-service（金额查询 + 退款尝试）、reconciliation-service（读支付事实）
+**上游依赖**：order-service（创建支付意图）、payment-service 内 refund 包（进程内自洽，Feature 015 起金额查询 + 渠道退款不再跨服务）、reconciliation-service（读支付事实）
 **下游依赖**：order-service（支付成功回写订单/交易）、fulfillment-service（支付成功触发履约）、Channel Adapter（Mock Channel）
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。

@@ -3,7 +3,7 @@
 **服务**：ledger-service（复式记账 / 资金单一事实源）
 **端口**：8090 | **Schema**：`ledger`（`deployment/schema/09-ledger-schema.sql`）| **包根**：`com.payment.ledger`
 
-**上游依赖**：payment-service（`PAYMENT` 来源记账）、refund-service（`REFUND` 来源冲正记账）、settlement-service（`SETTLEMENT` 来源记账）、reconciliation-service（读账本事实做对账）
+**上游依赖**：payment-service（`PAYMENT` 来源记账）、payment-service（`REFUND` 来源冲正记账，Feature 015 起退款域并入 payment）、settlement-service（`SETTLEMENT` 来源记账）、reconciliation-service（读账本事实做对账）
 **下游依赖**：无（自身持有 `ledger` 库，不反向依赖任何业务领域）
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。

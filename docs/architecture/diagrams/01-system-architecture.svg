@@ -29,14 +29,9 @@ text { font-family: "Microsoft YaHei","PingFang SC","Helvetica Neue",Arial,sans-
 <text class="ts" x="149" y="164" text-anchor="middle" dominant-baseline="central">8083 · order</text>
 </g>
 <g>
-<rect x="251" y="126" width="177" height="56" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
-<text class="t" x="340" y="144" text-anchor="middle" dominant-baseline="central">payment-service</text>
-<text class="ts" x="340" y="164" text-anchor="middle" dominant-baseline="central">8084 · payment</text>
-</g>
-<g>
-<rect x="442" y="126" width="177" height="56" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
-<text class="t" x="531" y="144" text-anchor="middle" dominant-baseline="central">refund-service</text>
-<text class="ts" x="531" y="164" text-anchor="middle" dominant-baseline="central">8085 · refund</text>
+<rect x="305" y="126" width="177" height="56" rx="8" fill="#FFFFFF" stroke="#534AB7" stroke-width="1"/>
+<text class="t" x="394" y="144" text-anchor="middle" dominant-baseline="central">payment-service</text>
+<text class="ts" x="394" y="164" text-anchor="middle" dominant-baseline="central">8084 · payment（含 refund）</text>
 </g>
 <path d="M340 202 L340 210" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
 
