@@ -37,3 +37,8 @@ Thumbs.db
 #                    决策结论 → CHANGELOG.md / docs/adr/
 # ===========================================
 .workbuddy/
+
+# traffic-gen 运行时产物
+deployment/demo/traffic-gen.jsonl
+deployment/demo/traffic-gen.pid
+deployment/demo/traffic-gen.stats
