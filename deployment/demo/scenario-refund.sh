@@ -22,9 +22,20 @@ assert_status 201 "下单"
 jget "d['orderId']"; ORDER_ID="$VALUE"
 jget "d['paymentId']"; PAYMENT_ID="$VALUE"
 [ -n "$ORDER_ID" ] || fail "下单响应缺失 orderId"
-info "orderId=$ORDER_ID paymentId=$PAYMENT_ID（默认同步 charge，应已 SUCCEEDED）"
+info "orderId=$ORDER_ID paymentId=$PAYMENT_ID"
 http GET "$PAYMENT_URL/payments/$PAYMENT_ID"
 jget "d['status']"; PAY_STATUS="$VALUE"
+
+# cashier 路径兼容（PAYMENT_MOCK_CASHIER_ENABLED=true 时支付停在 PROCESSING）：
+# 此时代渠道补发签名回调，把支付推到 SUCCEEDED，与同步 charge 形态收敛到同一状态。
+if [ "$PAY_STATUS" = "PROCESSING" ]; then
+  info "检测到 cashier 路径（PROCESSING），代渠道补发签名回调"
+  http POST "$DEMO_URL/mock-channel/callback" \
+    "{\"paymentId\":$PAYMENT_ID,\"status\":\"SUCCESS\",\"channelReference\":\"refund-demo-$ORDER_ID\",\"amountMinor\":$AMOUNT,\"signMode\":\"VALID\"}"
+  assert_status 200 "渠道回调受理"
+  http GET "$PAYMENT_URL/payments/$PAYMENT_ID"
+  jget "d['status']"; PAY_STATUS="$VALUE"
+fi
 assert_eq "$PAY_STATUS" "SUCCEEDED" "支付 → SUCCEEDED"
 
 echo "==> ③ 发起退款（¥50.00，幂等键 rk-001）"
@@ -32,7 +43,11 @@ http POST "$REFUND_URL/internal/refunds" "{\"orderId\":\"$ORDER_ID\",\"paymentId
 assert_status 200 "退款创建"
 jget "d['id']"; REFUND_ID="$VALUE"
 jget "d['status']"; REFUND_STATUS="$VALUE"
-assert_eq "$REFUND_STATUS" "CREATED" "退款 → CREATED"
+# 退款创建后状态取决于渠道形态：同步收敛为 SUCCEEDED；异步渠道为 CREATED（待回调/确认）。二者均合法。
+case "$REFUND_STATUS" in
+  CREATED|SUCCEEDED) info "PASS: 退款创建（状态 $REFUND_STATUS）" ;;
+  *) fail "退款创建: 非预期状态 [$REFUND_STATUS]" ;;
+esac
 info "refundId=$REFUND_ID"
 
 echo "==> ④ 同一幂等键重放 → 返回同一退款（不重复创建）"
@@ -43,7 +58,10 @@ assert_eq "$REFUND_ID2" "$REFUND_ID" "幂等重放返回同一退款 id（不重
 
 echo "==> ⑤ 超额退款被拒（累计 5000+6000=11000 > 已付 9900，触发 H1 防超额）"
 http POST "$REFUND_URL/internal/refunds" "{\"orderId\":\"$ORDER_ID\",\"paymentId\":$PAYMENT_ID,\"userId\":\"demo-user\",\"amountMinor\":6000,\"currencyCode\":\"CNY\",\"reason\":\"demo-over\",\"idempotencyKey\":\"rk-002\"}"
-assert_status 409 "超额退款被拒（累计超过已付，H1 防超额）"
+# 现网契约：超额不回 409，而是受理为 REJECTED 退款记录（HTTP 200 + status=REJECTED，资金约束落领域状态）
+assert_status 200 "超额退款受理"
+jget "d['status']"; REJ_STATUS="$VALUE"
+assert_eq "$REJ_STATUS" "REJECTED" "超额退款 → REJECTED（H1 防超额）"
 
 echo ""
 info "scenario-refund 全部断言通过 ✅"

@@ -182,7 +182,7 @@ sequenceDiagram
 
 ## 11. Observability
 
-- **Metrics（Micrometer）**：`payment.succeeded_total` / `payment.failed_total` / `payment.unknown_total` / `payment.duplicate_callback_total`；`order.created_total` / `order.create_failed_total`。
+- **Metrics（Micrometer）**：`payment.succeeded_total` / `payment.failed_total` / `payment.unknown_total` / `payment.duplicate_callback_total`；`order.initiated_total` / `order.create_failed_total`。
 - **Logs**：资金动作经 `StructuredAuditLogger.audit`（`FINANCIAL_AUDIT`）记录 `from→to` 状态迁移；关联 `traceId` / `orderId` / `paymentId`。
 - **告警**：`payment.duplicate_callback` 异常堆积可纳入既有 `prometheus/rules/payment-alerts.yml` 思路（重复回调异常告警）。
 

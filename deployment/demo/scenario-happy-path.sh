@@ -66,11 +66,11 @@ assert_eq "$ENT_STATUS" "AVAILABLE" "权益状态 AVAILABLE"
 assert_eq "$ENT_COUNT" "1" "权益只发放一份（履约恰好一次）"
 
 echo "==> ⑤ 记账平衡且分录可追溯"
-http GET "$LEDGER_URL/balance"
+http GET "$LEDGER_URL/internal/ledger/balance"
 assert_status 200 "余额视图"
 jget "d['balanced']"; BALANCED="$VALUE"
 assert_eq "$BALANCED" "True" "ledger 复式记账 balanced"
-http GET "$LEDGER_URL/entries?sourceType=PAYMENT&sourceId=$PAYMENT_ID"
+http GET "$LEDGER_URL/internal/ledger/entries?sourceType=PAYMENT&sourceId=$PAYMENT_ID"
 assert_status 200 "按 PAYMENT/{paymentId} 追溯分录"
 jget "len(d)"; ENTRY_COUNT="$VALUE"
 if [ "$ENTRY_COUNT" -ge 1 ] 2>/dev/null; then

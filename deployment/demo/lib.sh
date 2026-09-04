@@ -3,6 +3,11 @@
 # 依赖：curl；JSON 解析优先 python3/python（jq 可选）。
 set -uo pipefail
 
+# 兼容 Git Bash 沙箱：外层若设置 MSYS_NO_PATHCONV=1 / MSYS2_ARG_CONV_EXCL=*，
+# Windows 原生 curl 会把 -o /dev/null 当字面路径写失败（exit 23），健康检查永远 FAIL。
+# 恢复路径转换即可（本库的 curl 参数均为 URL/头部，不含需要保护的正斜杠路径）。
+unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
+
 # ---- 颜色 ----
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; NC='\033[0m'
 
@@ -19,6 +24,7 @@ REFUND_URL="${REFUND_URL:-http://localhost:8085}"
 ENTITLEMENT_URL="${ENTITLEMENT_URL:-http://localhost:8087}"
 LEDGER_URL="${LEDGER_URL:-http://localhost:8090}"
 RECON_URL="${RECON_URL:-http://localhost:8088}"
+SETTLEMENT_URL="${SETTLEMENT_URL:-http://localhost:8089}"
 DEMO_URL="${DEMO_URL:-http://localhost:8091}"     # mock-channel-web
 ADMIN_TOKEN="${PAYMENT_ADMIN_TOKEN:-demo-admin-token}"
 

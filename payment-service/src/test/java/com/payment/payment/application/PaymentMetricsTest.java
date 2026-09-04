@@ -50,7 +50,7 @@ class PaymentMetricsTest {
         Payment payment = appService(new MockChannelAdapter()).createPaymentIntent(command("k1"));
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
-        assertThat(registry.get("payment.created").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("payment.initiated").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("payment.succeeded").counter().count()).isEqualTo(1.0);
     }
 

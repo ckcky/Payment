@@ -14,7 +14,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 结算业务指标（T072）：批次创建记 {@code settlement.created}，模拟执行进入 UNKNOWN 记
+ * 结算业务指标（T072）：批次创建记 {@code settlement.batch_initiated}，模拟执行进入 UNKNOWN 记
  * {@code settlement.unknown}；负净额记 {@code settlement.negative_net}。
  */
 class SettlementMetricsTest {
@@ -43,7 +43,7 @@ class SettlementMetricsTest {
         SettlementBatch batch = service.createBatch("1", "2026-08", "idem-1");
 
         assertThat(batch.getStatus()).isEqualTo(SettlementStatus.UNKNOWN);
-        assertThat(registry.get("settlement.created").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("settlement.batch_initiated").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("settlement.unknown").counter().count()).isEqualTo(1.0);
     }
 

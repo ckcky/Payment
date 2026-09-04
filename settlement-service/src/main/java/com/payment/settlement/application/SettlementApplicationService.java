@@ -128,8 +128,8 @@ public class SettlementApplicationService {
 
         batch = insertNew(batch);
 
-        metrics.counter("settlement.created", 1, "module", "settlement");
-        auditLogger.audit("settlement.created", batch.getIdempotencyKey(), batch.getNetMinor(),
+        metrics.counter("settlement.batch_initiated", 1, "module", "settlement");
+        auditLogger.audit("settlement.batch_initiated", batch.getIdempotencyKey(), batch.getNetMinor(),
                 batch.getCurrencyCode(), null, SettlementStatus.READY.name(), "settlement",
                 String.valueOf(batch.getId()));
 

@@ -48,7 +48,7 @@
 | 模拟执行强制进 `UNKNOWN`（无真实出款） | 已实现 | `SettlementApplicationService.java:93-96` |
 | 未知结果收敛 `resolveBatch` | 已实现（无操作人/理由，N6） | `SettlementApplicationService.java:110-127` |
 | 批次查询（按 id） | 已实现（无按商户+周期查询） | `SettlementController.java:32-35` |
-| 指标 `settlement.created/.unknown/.failed` + `FINANCIAL_AUDIT` | 已实现（闸门拒绝无指标，G2） | `SettlementApplicationService.java:88-101` |
+| 指标 `settlement.batch_initiated/.unknown/.failed` + `FINANCIAL_AUDIT` | 已实现（闸门拒绝无指标，G2） | `SettlementApplicationService.java:88-101` |
 | 单元 + 状态机 + 资格测试（5 个测试类） | 已实现 | `settlement-service/src/test/...` |
 | **调整项（Adjustment）参与净额** | **缺口 G1** | `Adjustment.java:6` 零引用；`calculate(..., 0, ...)` |
 | **「仅已确认事实」的本地强制校验** | **缺口 G2 / [目标]** | 逐条事实不校验 type/币种/周期 |
@@ -189,7 +189,7 @@
 
 ## Observability（本 Feature 指标与审计）
 
-> 既有 `settlement.created` / `settlement.unknown` / `settlement.failed` 与 `FINANCIAL_AUDIT` 保持不变（Constitution §VII）。
+> 既有 `settlement.batch_initiated` / `settlement.unknown` / `settlement.failed` 与 `FINANCIAL_AUDIT` 保持不变（Constitution §VII）。
 
 **新增指标（Micrometer `BusinessMetrics`，维度含 `module=settlement`）**
 
@@ -204,7 +204,7 @@
 
 **资金审计（`StructuredAuditLogger`，单行 JSON）**
 
-- `action`：`settlement.adjustment_registered` / `settlement.created` / `settlement.unknown` / `settlement.failed` / `settlement.closed` / `settlement.ledger_posted`。
+- `action`：`settlement.adjustment_registered` / `settlement.batch_initiated` / `settlement.unknown` / `settlement.failed` / `settlement.closed` / `settlement.ledger_posted`。
 - 字段键：`traceId`、`idempotencyKey`、`amountMinor`、`currencyCode`、`fromStatus`、`toStatus`、`entityType`、`entityId`；调整项与收敛动作额外带 `operator`、`reason`（FR-002 / FR-016）。
 - 敏感信息（密钥、账户）MUST 脱敏，审计不含原始事实明细全文。
 

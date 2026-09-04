@@ -16,6 +16,12 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/lib.sh"
 
+# 演示环境兜底：restart-payment.sh 会重启 payment-service，若本 shell 未导出这些变量，
+# 重启后的 payment 将丢失 cashier 路径/管理令牌（与 start-all.sh 的默认值保持一致）。
+export PAYMENT_MOCK_CASHIER_ENABLED="${PAYMENT_MOCK_CASHIER_ENABLED:-true}"
+export PAYMENT_ADMIN_TOKEN="${PAYMENT_ADMIN_TOKEN:-demo-admin-token}"
+export PAYMENT_CHANNEL_SECRET="${PAYMENT_CHANNEL_SECRET:-demo-channel-secret-2026}"
+
 echo "=================================================="
 echo "  PaymentArch 演示总入口"
 echo "=================================================="

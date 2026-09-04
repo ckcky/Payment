@@ -188,11 +188,11 @@ docker compose -f deployment/docker-compose.yml up -d prometheus grafana
 
 核心业务指标（Micrometer 计数器，点号→下划线、加 `_total` 后缀，维度 `module=<service>`）：
 
-- 支付：`payment_created_total` / `payment_succeeded_total` / `payment_failed_total` / `payment_unknown_total` / `payment_duplicate_total` / `payment_duplicate_callback_total`
-- 退款：`refund_created_total` / `refund_succeeded_total` / `refund_failed_total` / `refund_unknown_total` / `refund_rejected_total`
+- 支付：`payment_initiated_total` / `payment_succeeded_total` / `payment_failed_total` / `payment_unknown_total` / `payment_duplicate_total` / `payment_duplicate_callback_total`
+- 退款：`refund_initiated_total` / `refund_succeeded_total` / `refund_failed_total` / `refund_unknown_total` / `refund_rejected_total`
 - 履约/权益：`fulfillment_completed_total` / `fulfillment_failed_total` / `entitlement_granted_total` / `entitlement_grant_failed_total`
-- 对账/结算：`reconciliation_run_total` / `reconciliation_difference_total` / `settlement_created_total` / `settlement_failed_total` / `settlement_unknown_total`
-- 订单：`order_created_total` / `order_create_failed_total`
+- 对账/结算：`reconciliation_run_total` / `reconciliation_difference_total` / `settlement_batch_initiated_total` / `settlement_failed_total` / `settlement_unknown_total`
+- 订单：`order_initiated_total` / `order_create_failed_total`
 
 业务告警规则见 `prometheus/rules/payment-alerts.yml`（支付 UNKNOWN 堆积 / 退款失败 / 对账差异）。
 

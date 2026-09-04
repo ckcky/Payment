@@ -55,7 +55,7 @@ public class OrderApplicationService {
     public CreateOrderResult createOrder(String userId, String merchantId, List<OrderLine> lines, String reservationKey) {
         try {
             CreateOrderResult result = doCreateOrder(userId, merchantId, lines, reservationKey);
-            metrics.counter("order.created", 1.0, "module", MODULE);
+            metrics.counter("order.initiated", 1.0, "module", MODULE);
             return result;
         } catch (RuntimeException e) {
             metrics.counter("order.create_failed", 1.0, "module", MODULE);

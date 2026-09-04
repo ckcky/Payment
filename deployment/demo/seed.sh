@@ -10,14 +10,14 @@ wait_for_services
 
 echo "==> 灌种子数据（API，幂等）"
 # --- 商户（内存仓储）：注册 + 审批 ---
-http POST "$MERCHANT_URL/merchants" '{"code":"DEMO-M1","name":"演示商户一号","settlementAccountRef":"acct-demo-1"}'
+http POST "$MERCHANT_URL/merchants" '{"code":"DEMO-M1","name":"demo-merchant-1","settlementAccountRef":"acct-demo-1"}'
 assert_status 201 "商户注册"
 jget "d['id']"; MERCHANT_ID="$VALUE"
 http POST "$MERCHANT_URL/merchants/$MERCHANT_ID/approve"
 assert_status 200 "商户审批（id=$MERCHANT_ID）"
 
 # --- 商品：1 个已上架商品 ---
-http POST "$CATALOG_URL/products" '{"productCode":"DEMO-P1","name":"演示商品·数字会员","type":"DIGITAL"}'
+http POST "$CATALOG_URL/products" '{"productCode":"DEMO-P1","name":"demo-digital-member","type":"DIGITAL"}'
 assert_status 201 "商品创建"
 jget "d['id']"; PRODUCT_ID="$VALUE"
 http POST "$CATALOG_URL/products/$PRODUCT_ID/list"
@@ -33,8 +33,8 @@ create_sku() {
   http POST "$CATALOG_URL/internal/stock/seed" "{\"skuId\":$id,\"total\":$4}"
   assert_status 200 "库存预置 $1（skuId=$id, total=$4）"
 }
-create_sku "DEMO-SKU-101" "月度会员卡" 9900 100
-create_sku "DEMO-SKU-102" "年度会员卡" 129000 100
+create_sku "DEMO-SKU-101" "monthly-membership" 9900 100
+create_sku "DEMO-SKU-102" "annual-membership" 129000 100
 
 echo ""
 info "种子完成：商户=$MERCHANT_ID 商品=$PRODUCT_ID SKU=101/102"

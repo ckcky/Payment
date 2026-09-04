@@ -240,7 +240,7 @@ PENDING --calculate--> CALCULATING --markReady--> READY --execute--> EXECUTING
 9. `batch.calculate(income, refund, signedAdjustment, currency)` → CALCULATING；`batch.markReady()` → READY；`net = income - refund + signedAdjustment`，`income/refund < 0` 抛 `AMOUNT_INVARIANT_VIOLATION`；`net < 0` 仅递增 `settlement.negative_net`（不拒绝、不记账）。
 10. 为每条 ACTIVE 调整项生成一条 `ADJUSTMENT` 明细（`amountMinor` 带符号）。
 11. `batch.recordSource(factCount, period)` 记录事实条数与来源周期。
-12. `insertNew(batch)` 持久化（撞唯一约束回查，见 §5.2）；记 `settlement.created` 指标 + 审计。
+12. `insertNew(batch)` 持久化（撞唯一约束回查，见 §5.2）；记 `settlement.batch_initiated` 指标 + 审计。
 13. **模拟执行**：`batch.execute()` → EXECUTING；`batch.markUnknown(...)` → UNKNOWN。无真实打款，绝不进 SUCCEEDED。
 
 ### 4.2 未知批次收敛与记账
@@ -403,7 +403,7 @@ mybatis-plus:
 
 | 指标键 | 类型 | 维度 | 说明 |
 |---|---|---|---|
-| `settlement.created` | counter | module=settlement | 成功受理批次 |
+| `settlement.batch_initiated` | counter | module=settlement | 成功受理批次 |
 | `settlement.unknown` | counter | module=settlement | 模拟执行进 UNKNOWN |
 | `settlement.failed` | counter | module=settlement | 收敛为 FAILED |
 | `settlement.negative_net` | counter | module=settlement | 净额为负（人工关注，不拒绝/不记账） |
@@ -417,6 +417,6 @@ mybatis-plus:
 
 **资金审计日志（`StructuredAuditLogger`）**：
 
-单行 JSON，`action` 取值 `settlement.created` / `settlement.unknown` / `settlement.failed` / `settlement.adjustment_registered` / `settlement.batch_closed` / `settlement.resolved`，字段键：`traceId`、`idempotencyKey`、`amountMinor`、`currencyCode`、`fromStatus`、`toStatus`、`entityType`、`entityId`。
+单行 JSON，`action` 取值 `settlement.batch_initiated` / `settlement.unknown` / `settlement.failed` / `settlement.adjustment_registered` / `settlement.batch_closed` / `settlement.resolved`，字段键：`traceId`、`idempotencyKey`、`amountMinor`、`currencyCode`、`fromStatus`、`toStatus`、`entityType`、`entityId`。
 
 **关联字段**：`traceId` 经 `TraceContext` / `TraceIdFilter` 跨服务传播，Feign 透传。

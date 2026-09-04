@@ -14,6 +14,10 @@ import com.payment.reconciliation.domain.ReconciliationRepository;
 import com.payment.reconciliation.domain.ReconciliationStatus;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 
@@ -101,9 +105,27 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
         entity.setDifferencesJson(serializeDifferences(batch.getDifferences()));
         entity.setStatementSource(serializeSource(batch.getStatementSource()));
         entity.setClosedBy(batch.getClosedBy());
-        entity.setClosedAt(batch.getClosedAt());
+        entity.setClosedAt(toMysqlDatetime(batch.getClosedAt()));
         entity.setVersion(batch.getVersion());
         return entity;
+    }
+
+    /**
+     * ISO-8601（{@code Instant.toString()}，含 'T'/'Z'）→ MySQL DATETIME 兼容格式（UTC）。
+     * {@code closed_at} 列为 DATETIME，驱动不接受 ISO 字符串直写（MySQL 8 报
+     * "Incorrect datetime value"）。领域/API 层保持 ISO 展示，仅在持久化边界转换。
+     */
+    private static String toMysqlDatetime(String iso) {
+        if (iso == null || iso.isBlank()) {
+            return null;
+        }
+        try {
+            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZone(ZoneOffset.UTC)
+                    .format(Instant.parse(iso));
+        } catch (DateTimeParseException e) {
+            return iso; // 非 ISO 值原样透传，交由数据库校验
+        }
     }
 
     private String serializeMatches(List<Match> matches) {

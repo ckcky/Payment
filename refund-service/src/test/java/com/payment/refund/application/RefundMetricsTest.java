@@ -50,7 +50,7 @@ class RefundMetricsTest {
         Refund refund = appService().createRefund(cmd());
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
-        assertThat(registry.get("refund.created").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("refund.initiated").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("refund.succeeded").counter().count()).isEqualTo(1.0);
     }
 
@@ -61,7 +61,7 @@ class RefundMetricsTest {
         service.createRefund(cmd());
 
         assertThat(registry.get("refund.duplicate").counter().count()).isEqualTo(1.0);
-        assertThat(registry.get("refund.created").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("refund.initiated").counter().count()).isEqualTo(1.0);
     }
 
     @Test

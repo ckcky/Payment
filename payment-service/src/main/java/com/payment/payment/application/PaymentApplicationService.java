@@ -88,7 +88,7 @@ public class PaymentApplicationService {
             metrics.counter("payment.duplicate", 1.0, "module", MODULE);
             return pending.payment();
         }
-        metrics.counter("payment.created", 1.0, "module", MODULE);
+        metrics.counter("payment.initiated", 1.0, "module", MODULE);
 
         if (deferChannel) {
             // 收银台路径：不调渠道、不落渠道结果。超时（30s）后由 TimeoutScanner 转 UNKNOWN，

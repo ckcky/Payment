@@ -55,7 +55,7 @@
 
 ### US5 · 可观测与对账事实 —— ✅ 通过（口径已按裁决收窄）
 
-- [x] 退款指标：`refund.created/duplicate/rejected/succeeded/failed/unknown` + `refund.post_process_failed`（`RefundMetricsTest`）
+- [x] 退款指标：`refund.initiated/duplicate/rejected/succeeded/failed/unknown` + `refund.post_process_failed`（`RefundMetricsTest`）
 - [-] ~~`refund.partially_succeeded`~~ —— 随 ADR-0016 **不做**
 - [x] 每次资金状态迁移写入 `FINANCIAL_AUDIT`（含幂等键、金额、前后状态、traceId）（SC-006）
 - [x] `confirmed-facts` **仅返回 `SUCCEEDED`**，金额取 `amountMinor`（SC-006）

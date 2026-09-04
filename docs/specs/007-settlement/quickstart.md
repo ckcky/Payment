@@ -90,7 +90,7 @@
 ### 2.5 指标与审计
 
 - `/actuator/prometheus` 断言：
-  - `settlement.created` / `settlement.unknown` / `settlement.failed`（既有）
+  - `settlement.batch_initiated` / `settlement.unknown` / `settlement.failed`（既有）
   - `settlement.adjustment_registered{direction}` / `settlement.adjustment_rejected{reason}`
   - `settlement.gate_rejected{reason}` / `settlement.negative_net` / `settlement.closed`
   - `ledger.posting_succeeded` / `ledger.posting_failed`（`module=settlement`）

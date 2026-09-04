@@ -9,7 +9,8 @@ source "$HERE/lib.sh"
 
 wait_for_services
 
-PERIOD="demo-$(date +%Y%m%d)"
+# 周期带时分秒：同日重复跑 run-all 不会复用上一批（上批差异已处理完，门禁反例会失效）
+PERIOD="demo-$(date +%Y%m%d%H%M%S)"
 echo "==> ① 触发对账批（周期 $PERIOD）"
 http POST "$RECON_URL/internal/reconciliation/batches" "{\"period\":\"$PERIOD\"}"
 assert_status 200 "对账批创建"
@@ -50,6 +51,15 @@ assert_eq "$FINAL_STATUS" "CLOSED" "对账批 → CLOSED"
 echo "==> ⑥ 结算汇总（信息展示）"
 http GET "$RECON_URL/internal/reconciliation/settlement-summary?period=$PERIOD"
 assert_status 200 "结算汇总"
+
+echo "==> ⑦ 创建结算批（对账 CLOSED 后按同周期结算，ADR-0023 闸门放行 → settlement.created 指标）"
+http POST "$SETTLEMENT_URL/internal/settlements/batches" "{\"merchantId\":\"1\",\"period\":\"$PERIOD\",\"idempotencyKey\":\"settle-$PERIOD\"}"
+assert_status 200 "结算批创建"
+jget "d['status']"; SETTLE_STATUS="$VALUE"
+case "$SETTLE_STATUS" in
+  READY|PROCESSING|UNKNOWN|CLOSED) info "PASS: 结算批状态 $SETTLE_STATUS" ;;
+  *) fail "结算批创建: 非预期状态 [$SETTLE_STATUS]" ;;
+esac
 
 echo ""
 info "scenario-reconciliation 全部断言通过 ✅"

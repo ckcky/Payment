@@ -123,29 +123,43 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ## 3. 接口详细定义（API 契约）
 
-> 统一错误响应体 `ApiError`（common-core），错误码见 §3.4。响应成功体均为 JSON。
+### 3.1 通用约定
 
-### 3.1 创建支付意图（内部 RPC，供 order-service）
+- 成功与错误响应均为 `application/json`；金额字段统一为最小货币单位 `long`，币种字段为 ISO-4217 三字母大写码。
+- 请求链路使用 `X-Trace-Id`（缺失时由服务生成）；服务间 Feign 调用透传该值。错误响应中的 `traceId` 用于排障。
+- 统一错误体 `ApiError`：
+
+```json
+{"code":"INVALID_ARGUMENT","message":"channelCode: unsupported channel","traceId":"trace-123",
+ "timestamp":"2026-09-04T10:00:00Z","path":"/payments"}
+```
+
+- HTTP 映射：参数校验/业务参数错误为 `400`；资源不存在为 `404`；状态、金额、幂等冲突为 `409`；未预期系统错误为 `500`。
+- 所有 `/internal/**` 接口仅供服务间调用，不作为公网 API；当前内部鉴权为空实现，依赖网络隔离。
+
+### 3.2 创建支付意图（order-service → payment-service）
 
 `POST /payments` → `201 Created`
 
 **请求** `CreatePaymentRequest`（common-dto）：
 
-| 字段 | 类型 | 必填 | 说明 |
+| 字段 | 类型 | 必填 | 约束/说明 |
 |---|---|---|---|
 | orderId | String | 是 | 订单 ID |
 | transactionId | String | 是 | 交易 ID |
 | userId | String | 是 | 用户 ID |
 | amountMinor | long | 是 | 金额（分，> 0） |
-| currencyCode | String | 是 | 币种 |
-| idempotencyKey | String | 是 | 幂等键 |
-| channelCode | String | 是 | 渠道标识（当前 "mock"） |
+| currencyCode | String | 是 | `^[A-Z]{3}$`，如 `CNY` |
+| idempotencyKey | String | 是 | 非空；重复请求不得产生第二次资金动作 |
+| channelCode | String | 是 | 非空；必须已注册到渠道 Registry/Router |
 
-**响应** `CreatePaymentResponse`：`{ paymentId: Long, status: String }`（status 为 `PaymentStatus` 枚举名）。
+**响应** `CreatePaymentResponse`：`{ paymentId: Long, status: String, payUrl: String|null }`。
 
-**错误**：`AMOUNT_INVARIANT_VIOLATION`（amount ≤ 0）、`DUPLICATE`（幂等键冲突且回查失败）、`INVALID_ARGUMENT`（字段缺失）。
+`status` 为 `PaymentStatus` 枚举名；`payUrl` 仅在 `payment.mock-cashier.enabled=true` 时返回，否则为 `null`。
 
-### 3.2 查询支付
+**错误**：`400 INVALID_ARGUMENT`（字段缺失、金额 `<= 0`、币种格式非法、`channelCode` 未注册）；`409 AMOUNT_INVARIANT_VIOLATION`（领域层金额不变量失败）、`409 DUPLICATE`（唯一键冲突且无法回查原支付）。
+
+### 3.3 查询支付
 
 `GET /payments/{id}` → `200`
 
@@ -153,7 +167,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 **错误**：`NOT_FOUND`。
 
-### 3.3 收敛未知支付
+### 3.4 收敛未知支付
 
 `POST /payments/{id}/resolve` → `200`
 
@@ -163,9 +177,21 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 **规则**：仅 `UNKNOWN` 状态可被收敛；已终态视为幂等重复（返回当前状态，不重复触发履约）。`result` 非 SUCCESS/FAILURE → `INVALID_ARGUMENT`。
 
-**错误**：`NOT_FOUND`、`INVALID_ARGUMENT`。
+**错误**：`400 INVALID_ARGUMENT`（结果非法）；`404 NOT_FOUND`；`409 STATE_TRANSITION_VIOLATION`（当前状态不允许收敛）。
 
-### 3.4 退款相关内部 RPC（供 refund-service）
+### 3.5 渠道回调（Channel → payment-service）
+
+`POST /internal/payments/{id}/channel-callback` → `200 OK`
+
+**请求头**：`X-Channel-Timestamp`、`X-Channel-Signature`。当前验签过滤器为 ADR-0025 占位空实现，接入真实渠道前必须实现验签。
+
+**请求体** `ChannelCallbackRequest`：`{ status: "SUCCESS|FAILURE|UNKNOWN", channelReference: String|null, reason: String|null, amountMinor: Long|null }`。
+
+`amountMinor` 为渠道回传实付金额，仅落观测，当前不拦截。响应为当前支付的 `PaymentResponse`；重复、乱序及迟到冲突结果由状态机吸收。
+
+**错误**：`400 INVALID_ARGUMENT`（status 非法或校验失败）；`404 NOT_FOUND`。
+
+### 3.6 退款相关内部 RPC（供 refund-service）
 
 `POST /internal/payments/query-amount`
 
@@ -179,13 +205,13 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 **响应** `RefundAttemptResponse`：`{ refundId, status: "SUCCEEDED"|"FAILED"|"UNKNOWN", channelReference }`
 **规则**：仅 `SUCCEEDED` 支付可退款；否则 `STATE_TRANSITION_VIOLATION`。渠道 UNKNOWN 原样回传，不臆断。
 
-### 3.5 对账事实查询（供 reconciliation-service）
+### 3.7 对账事实查询（供 reconciliation-service）
 
 `GET /internal/payments/confirmed-facts` → `200`
 
 **响应**：`List<PaymentFactResponse>`，每项 `{ paymentId, channelReference, amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 支付。
 
-### 3.6 出站 RPC（payment → fulfillment / order）
+### 3.8 出站 RPC（payment → fulfillment / order / ledger）
 
 **fulfillment-service**：`POST /internal/fulfillments/on-payment-succeeded`（Feign，默认 `http://localhost:8086`）
 **请求** `PaymentSucceededRequest`：`{ paymentId, orderId, transactionId, userId, amountMinor, currencyCode }`
@@ -195,18 +221,20 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 **请求** `PaymentSucceededRequest`（同上）
 **响应** 无返回体（订单侧幂等吸收）。
 
-### 3.7 错误码枚举（全局，common-core `ErrorCodes`）
+**ledger-service**：`POST /internal/ledger/postings`，请求 `PostingRequest`，响应 `PostingResponse`；`GET /internal/ledger/postings?idempotencyKey=...` 用于记账幂等回查。记账请求的分录必须非空且借贷金额平衡，幂等键格式为 `PAYMENT:<payment-idempotency-key>`。
+
+### 3.9 错误码枚举（全局，common-core `ErrorCodes`）
 
 | 错误码 | 语义 | 本服务使用场景 |
 |---|---|---|
-| `INVALID_ARGUMENT` | 参数非法 | resolve 结果非法、字段缺失 |
-| `NOT_FOUND` | 资源不存在 | 支付/尝试不存在 |
-| `CONFLICT` | 状态冲突 | （预留） |
-| `DUPLICATE` | 幂等冲突 | 幂等键撞唯一约束且回查失败 |
-| `STATE_TRANSITION_VIOLATION` | 非法状态迁移 | 非 SUCCEEDED 支付退款、非法 close/start |
-| `AMOUNT_INVARIANT_VIOLATION` | 金额不变量 | amount ≤ 0 |
-| `UNKNOWN_STATUS` | 未知状态 | （预留） |
-| `INTERNAL_ERROR` | 内部错误 | 尝试缺失（数据不一致） |
+| `INVALID_ARGUMENT` | 400 | 参数非法 | resolve 结果非法、字段缺失、未注册渠道 |
+| `NOT_FOUND` | 404 | 资源不存在 | 支付/尝试不存在 |
+| `CONFLICT` | 409 | 状态冲突 | （预留） |
+| `DUPLICATE` | 409 | 幂等冲突 | 幂等键撞唯一约束且回查失败 |
+| `STATE_TRANSITION_VIOLATION` | 409 | 非法状态迁移 | 非 SUCCEEDED 支付退款、非法 close/start/resolve |
+| `AMOUNT_INVARIANT_VIOLATION` | 409 | 金额不变量 | amount ≤ 0 |
+| `UNKNOWN_STATUS` | 400 | 未知状态 | （预留） |
+| `INTERNAL_ERROR` | 500 | 内部错误 | 尝试缺失（数据不一致） |
 
 ---
 
@@ -346,7 +374,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 | 指标键 | 类型 | 维度 | 说明 |
 |---|---|---|---|
-| `payment.created` | counter | module=payment | 创建支付意图 |
+| `payment.initiated` | counter | module=payment | 创建支付意图 |
 | `payment.duplicate` | counter | module=payment | 幂等命中（重复请求） |
 | `payment.succeeded` | counter | module=payment | 支付成功 |
 | `payment.failed` | counter | module=payment | 支付失败 |

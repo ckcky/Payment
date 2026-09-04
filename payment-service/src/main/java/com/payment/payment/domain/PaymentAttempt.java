@@ -73,16 +73,20 @@ public class PaymentAttempt {
         return true;
     }
 
-    /** ACCEPTED/UNKNOWN → SUCCEEDED；终态冲突吸收（返回 false）。 */
+    /**
+     * ACCEPTED/UNKNOWN/PENDING → SUCCEEDED；终态冲突吸收（返回 false）。
+     * PENDING 可收敛：收银台路径（ADR-0048 修订版）的尝试在取得渠道引用前即可能收到
+     * 权威结果（人工裁定 / 迟到回调），此时尝试语义上仍"在途"，允许直接落终态。
+     */
     public boolean succeed() {
         return transitionTo(PaymentAttemptStatus.SUCCEEDED, "succeed",
-                PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
+                PaymentAttemptStatus.PENDING, PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
     }
 
-    /** ACCEPTED/UNKNOWN → FAILED；终态冲突吸收（返回 false）。 */
+    /** ACCEPTED/UNKNOWN/PENDING → FAILED（权威收敛语义同 {@link #succeed()}）；终态冲突吸收（返回 false）。 */
     public boolean fail(String reason) {
         boolean changed = transitionTo(PaymentAttemptStatus.FAILED, "fail",
-                PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
+                PaymentAttemptStatus.PENDING, PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
         if (changed) {
             this.failureReason = reason;
         }
@@ -116,7 +120,8 @@ public class PaymentAttempt {
                 return true;
             }
         }
-        // 终态吸收迟到冲突结果（SUCCEEDED/FAILED 均不可被覆盖）；PENDING 必须先 accept。
+        // 终态吸收迟到冲突结果（SUCCEEDED/FAILED 均不可被覆盖）；
+        // PENDING 只能经权威结果收敛终态（见 succeed/fail 的 PENDING 来源态）。
         if (status == PaymentAttemptStatus.SUCCEEDED || status == PaymentAttemptStatus.FAILED) {
             return false;
         }

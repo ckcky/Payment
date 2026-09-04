@@ -52,7 +52,7 @@
 | UNKNOWN 收敛（`resolve`） | 已实现（缺防御断言 G3） | `RefundRpcCallbackService.java:24` |
 | 对账事实暴露（仅 `SUCCEEDED`） | 已实现 | `RefundFactsService.java:26` |
 | 退款后权益吊销 RPC | 已实现（失败被静默吞掉） | `RefundApplicationService.java:113` |
-| 指标 + 资金审计（5 个计数 + `FINANCIAL_AUDIT`） | 已实现 | `refund.created/duplicate/rejected/succeeded/failed/unknown` |
+| 指标 + 资金审计（5 个计数 + `FINANCIAL_AUDIT`） | 已实现 | `refund.initiated/duplicate/rejected/succeeded/failed/unknown` |
 | 单元 + Testcontainers 集成测试 | 已实现 | `refund-service/src/test/...`（6 个测试类） |
 | ~~部分退款（部分金额追踪、`PARTIALLY_SUCCEEDED` 可达）~~ | ⛔ **裁决不做（ADR-0016 Rejected）**，曾实现后回退 | `PARTIALLY_SUCCEEDED` 枚举保留但无调用方 |
 | **refund → fulfillment 撤销 RPC** | ✅ **已补齐（ADR-0017）** | `FulfillmentGateway` + `FulfillmentRefundController` |
@@ -149,7 +149,7 @@
 
 作为平台 SRE/资金运营，我希望退款的全部分支（成功/部分成功/失败/未知/拒绝）都有业务指标与资金审计，且对账事实接口覆盖「部分成功」并以实际退款金额暴露，从而让「部分/全部退款可追踪」在对账侧也成立。
 
-**Why this priority**: G1 引入 `PARTIALLY_SUCCEEDED` 后，`RefundFactsService.confirmedFacts()` 当前只返回 `SUCCEEDED`（`RefundFactsService.java:27`），部分退款会成为对账孤儿。指标侧 `refund.created/duplicate/rejected/succeeded/failed/unknown` 已实现，缺 `refund.partially_succeeded` 与 `refund.post_process_failed`。
+**Why this priority**: G1 引入 `PARTIALLY_SUCCEEDED` 后，`RefundFactsService.confirmedFacts()` 当前只返回 `SUCCEEDED`（`RefundFactsService.java:27`），部分退款会成为对账孤儿。指标侧 `refund.initiated/duplicate/rejected/succeeded/failed/unknown` 已实现，缺 `refund.partially_succeeded` 与 `refund.post_process_failed`。
 
 **Independent Test**: 触发一次部分成功退款，断言 `refund.partially_succeeded` 递增、`FINANCIAL_AUDIT` 含前后状态，且 `confirmed-facts` 能以实际退款金额（300）返回该笔事实。
 
@@ -208,7 +208,7 @@
 - **FR-012**: 所有退款状态迁移 MUST 经 `Refund` 状态机唯一入口（`transitionTo`，`Refund.java:119`），MUST NOT 散落 `setStatus`；乐观锁 + 悲观锁并发保护保持不变。
 - **FR-013**: 跨服务交互（payment / fulfillment / entitlement / ledger）MUST 沿用同步 RPC（OpenFeign）+ 幂等，**MUST NOT** 引入 MQ、跨服务异步事件或 2PC/XA（Constitution §IV、ADR-0001）。
 - **FR-014**: Database-per-service：refund-service 只读写自有 `refund` Schema，MUST NOT 直接 SQL 他服务表（Constitution §IV.4）。
-- **FR-015**: 系统 MUST 产出退款业务指标 `refund.created` / `refund.duplicate` / `refund.rejected` / `refund.succeeded` / `refund.failed` / `refund.unknown` / `refund.post_process_failed`（⛔ ~~`refund.partially_succeeded`~~ 随 ADR-0016 不做），并为每次资金状态迁移写入 `FINANCIAL_AUDIT`（含幂等键、金额、前后状态、traceId）。
+- **FR-015**: 系统 MUST 产出退款业务指标 `refund.initiated` / `refund.duplicate` / `refund.rejected` / `refund.succeeded` / `refund.failed` / `refund.unknown` / `refund.post_process_failed`（⛔ ~~`refund.partially_succeeded`~~ 随 ADR-0016 不做），并为每次资金状态迁移写入 `FINANCIAL_AUDIT`（含幂等键、金额、前后状态、traceId）。
 - **FR-016**: 对账事实接口 `GET /internal/refunds/confirmed-facts` MUST 覆盖已确认退款（`SUCCEEDED`）并以 **`amountMinor`** 暴露（无「实际退款金额」概念）。
 - **FR-017**: 资金路径（累计额度、幂等吸收、记账、后处理失败追踪）MUST 有单元测试与集成测试；**MUST NOT** 删测试或改测试迎合错误实现（Constitution §VIII.3/4）。
 

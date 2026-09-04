@@ -38,5 +38,10 @@ if [ -n "${WSL_DISTRO_NAME:-}" ] || [ -n "${WSL_INTEROP:-}" ]; then
 fi
 
 echo "==> 依赖检查通过"
+echo "==> 清理历史残留 Java 进程（避免 stale classpath / in-memory state 干扰演示）"
+if command -v taskkill >/dev/null 2>&1; then
+  taskkill //F //IM java.exe 2>/dev/null || true
+fi
+
 echo "==> 启动 Docker 基础设施与 Java 演示栈"
 exec bash deployment/start-all.sh

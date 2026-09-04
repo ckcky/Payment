@@ -336,7 +336,7 @@ mybatis-plus:
 
 | 指标键 | 类型 | 维度 | 说明 |
 |---|---|---|---|
-| `refund.created` | counter | module=refund | 创建退款受理 |
+| `refund.initiated` | counter | module=refund | 创建退款受理 |
 | `refund.duplicate` | counter | module=refund | 幂等命中（重复请求） |
 | `refund.rejected` | counter | module=refund | 资格/超退拒绝 |
 | `refund.succeeded` | counter | module=refund | 退款成功 |

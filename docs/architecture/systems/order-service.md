@@ -325,7 +325,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 ### 6.4 埋点与日志键（本服务）
 
-- **业务指标**：`[待定]` 当前 order-service **未注入** `BusinessMetrics` / `StructuredAuditLogger`（资金审计由 payment-service 侧记录）；`[目标]` 建议补 `order.created` / `order.create_failed` 计数器。
+- **业务指标**：`[待定]` 当前 order-service **未注入** `BusinessMetrics` / `StructuredAuditLogger`（资金审计由 payment-service 侧记录）；`[目标]` 建议补 `order.initiated` / `order.create_failed` 计数器。
 - **链路关联**：`traceId` 由 common-core `TraceIdFilter` 生成、`TraceIdRequestInterceptor` 透传 Feign（跨 order→catalog/payment 传播），无服务侧自定义埋点。
 
 ---

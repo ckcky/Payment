@@ -126,7 +126,7 @@ public class RefundApplicationService {
     private Refund newRefund(CreateRefundCommand cmd) {
         Refund refund = new Refund(cmd.orderId(), cmd.paymentId(), cmd.userId(), cmd.amountMinor(),
                 cmd.currencyCode(), cmd.reason(), cmd.idempotencyKey(), cmd.items());
-        metrics.counter("refund.created", 1.0, "module", MODULE);
+        metrics.counter("refund.initiated", 1.0, "module", MODULE);
         return refund;
     }
 

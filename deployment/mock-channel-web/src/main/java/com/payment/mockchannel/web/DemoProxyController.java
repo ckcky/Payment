@@ -61,12 +61,14 @@ public class DemoProxyController {
             HttpMethod method = HttpMethod.valueOf(request.getMethod());
             log.info("[demo] proxy {} {} -> {}", method, request.getRequestURI(), target);
 
-            ResponseEntity<String> upstream = restClient.method(method)
+            // 仅在确有请求体时才调 body()：RestClient 对 null body 会抛 NPE（GET/DELETE 无体请求）
+            RestClient.RequestBodySpec spec = restClient.method(method)
                     .uri(target)
-                    .headers(h -> copyRequestHeaders(request, h))
-                    .body(body.length == 0 ? null : new String(body, StandardCharsets.UTF_8))
-                    .retrieve()
-                    .toEntity(String.class);
+                    .headers(h -> copyRequestHeaders(request, h));
+            if (body.length > 0) {
+                spec.body(new String(body, StandardCharsets.UTF_8));
+            }
+            ResponseEntity<String> upstream = spec.retrieve().toEntity(String.class);
             return ResponseEntity.status(upstream.getStatusCode())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(upstream.getBody());
