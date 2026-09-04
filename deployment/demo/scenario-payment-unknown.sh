@@ -19,22 +19,22 @@ SKU_ID="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);m=[x 
 echo "==> ② 下单（BUSINESS_UNKNOWN 场景 → 支付落 UNKNOWN；若走收银台超时路径则 ~30s 内）"
 http POST "$ORDER_URL/orders" "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "下单"
-jget "d['paymentId']"; PAYMENT_ID="$VALUE"
-info "paymentId=$PAYMENT_ID"
+jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
+info "paymentNo=$PAYMENT_NO"
 
 echo "==> ③ 等待支付进入 UNKNOWN（不猜成败落账）"
-wait_until 60 3 "payment 进入 UNKNOWN" bash -c "curl -s $PAYMENT_URL/payments/$PAYMENT_ID | python -c \"import json,sys;print('UNKNOWN' if json.load(sys.stdin).get('status')=='UNKNOWN' else 'WAIT')\" | grep -q UNKNOWN"
+wait_until 60 3 "payment 进入 UNKNOWN" bash -c "curl -s $PAYMENT_URL/payments/$PAYMENT_NO | python -c \"import json,sys;print('UNKNOWN' if json.load(sys.stdin).get('status')=='UNKNOWN' else 'WAIT')\" | grep -q UNKNOWN"
 # wait_until 的探测不更新 BODY，需重新拉取支付单
-http GET "$PAYMENT_URL/payments/$PAYMENT_ID"
+http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
 jget "d['status']"; STATUS1="$VALUE"
 assert_eq "$STATUS1" "UNKNOWN" "支付状态 → UNKNOWN（渠道无明确结论，不猜成败落账）"
 
 echo "==> ④ 无令牌 resolve 被 403 拒绝（resolve 端点鉴权开关 auth-enabled=true）"
-http POST "$PAYMENT_URL/payments/$PAYMENT_ID/resolve" "{\"result\":\"FAILURE\",\"reason\":\"demo-no-token\"}"
+http POST "$PAYMENT_URL/payments/$PAYMENT_NO/resolve" "{\"result\":\"FAILURE\",\"reason\":\"demo-no-token\"}"
 assert_status 403 "无 X-Admin-Token 的 resolve 被拒（403）"
 
 echo "==> ⑤ 带令牌 resolve 权威收敛 → FAILED（终态，只触发一次履约侧处理）"
-http POST "$PAYMENT_URL/payments/$PAYMENT_ID/resolve" "{\"result\":\"FAILURE\",\"reason\":\"demo-authoritative\"}" "X-Admin-Token: $ADMIN_TOKEN"
+http POST "$PAYMENT_URL/payments/$PAYMENT_NO/resolve" "{\"result\":\"FAILURE\",\"reason\":\"demo-authoritative\"}" "X-Admin-Token: $ADMIN_TOKEN"
 assert_status 200 "人工收敛受理"
 jget "d['status']"; STATUS2="$VALUE"
 assert_eq "$STATUS2" "FAILED" "人工裁定 → FAILED（权威收敛，终态）"

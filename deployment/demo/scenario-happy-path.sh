@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # demo/scenario-happy-path.sh —— 主链演示：建单 → 收银台回调（验签）→ 履约 → 权益 → 记账
 # 前置：bash demo/reset.sh 已执行；服务经 deployment/start-all.sh 启动（mock-cashier 已开启）。
-# 断言：payment SUCCEEDED；entitlement AVAILABLE；ledger balanced 且能按 PAYMENT/{id} 追溯分录。
+# 断言：payment SUCCEEDED；entitlement AVAILABLE；ledger balanced 且能按 PAYMENT/{paymentNo} 追溯分录。
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,17 +19,17 @@ info "SKU_ID=$SKU_ID"
 echo "==> ① 下单（SKU $SKU_ID × 1）"
 http POST "$ORDER_URL/orders" "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "下单"
-jget "d['orderId']";       ORDER_ID="$VALUE"
-jget "d['paymentId']";     PAYMENT_ID="$VALUE"
+jget "d['orderNo']";       ORDER_NO="$VALUE"
+jget "d['paymentNo']";     PAYMENT_NO="$VALUE"
 jget "d['payUrl']";        PAY_URL="$VALUE"
 jget "d['paymentStatus']"; PAY_STATUS="$VALUE"
 assert_eq "$PAY_STATUS" "PROCESSING" "mock-cashier 路径下支付单为 PROCESSING（等待收银台回调）"
-assert_contains "$PAY_URL" "/cashier?paymentId=" "CreateOrderResponse 携带收银台 payUrl"
-info "orderId=$ORDER_ID paymentId=$PAYMENT_ID"
+assert_contains "$PAY_URL" "/cashier?paymentNo=" "CreateOrderResponse 携带收银台 payUrl（业务单号，ADR-0063）"
+info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
 
 echo "==> ② 以渠道身份发签名回调（经 mock-channel-web 代理，HMAC-SHA256）"
 http POST "$DEMO_URL/mock-channel/callback" \
-  "{\"paymentId\":$PAYMENT_ID,\"status\":\"SUCCESS\",\"channelReference\":\"demo-ref-$ORDER_ID\",\"amountMinor\":9900,\"signMode\":\"VALID\"}"
+  "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"demo-ref-$ORDER_NO\",\"amountMinor\":9900,\"signMode\":\"VALID\"}"
 assert_status 200 "渠道回调受理"
 # 上游响应体在 body 字段内：{"upstreamStatus":200,"body":"{...payment json...}"}
 PAY_STATUS="$(echo "$BODY" | python -c "
@@ -42,7 +42,7 @@ assert_eq "$PAY_STATUS" "SUCCEEDED" "回调后支付状态 → SUCCEEDED"
 
 echo "==> ③ 重复回调被幂等吸收（ADR-0025 占位：验签不拦截；业务层幂等键吸收第二次回调）"
 http POST "$DEMO_URL/mock-channel/callback" \
-  "{\"paymentId\":$PAYMENT_ID,\"status\":\"SUCCESS\",\"channelReference\":\"dup-$ORDER_ID\",\"amountMinor\":9900,\"signMode\":\"VALID\"}"
+  "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"dup-$ORDER_NO\",\"amountMinor\":9900,\"signMode\":\"VALID\"}"
 assert_status 200 "重复成功回调仍受理"
 PAY_STATUS2="$(echo "$BODY" | python -c "
 import json,sys
@@ -54,11 +54,11 @@ assert_eq "$PAY_STATUS2" "SUCCEEDED" "重复回调后仍为 SUCCEEDED（幂等�
 
 echo "==> ③b 验证明文回调（ADR-0025 占位：验签尚未接入，伪造签名同样放行 —— 已知风险见 runbook §6）"
 http POST "$DEMO_URL/mock-channel/callback" \
-  "{\"paymentId\":$PAYMENT_ID,\"status\":\"SUCCESS\",\"channelReference\":\"forged-$ORDER_ID\",\"amountMinor\":9900,\"signMode\":\"FORGED\"}"
+  "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"forged-$ORDER_NO\",\"amountMinor\":9900,\"signMode\":\"FORGED\"}"
 assert_status 200 "占位形态下伪造签名回调同样被放行（验签未接入）"
 
 echo "==> ④ 权益已发放"
-http GET "$ENTITLEMENT_URL/entitlements/by-order/$ORDER_ID"
+http GET "$ENTITLEMENT_URL/entitlements/by-order/$ORDER_NO"
 assert_status 200 "权益按订单可查"
 jget "len(d)";         ENT_COUNT="$VALUE"
 jget "d[0]['status']"; ENT_STATUS="$VALUE"
@@ -70,8 +70,8 @@ http GET "$LEDGER_URL/internal/ledger/balance"
 assert_status 200 "余额视图"
 jget "d['balanced']"; BALANCED="$VALUE"
 assert_eq "$BALANCED" "True" "ledger 复式记账 balanced"
-http GET "$LEDGER_URL/internal/ledger/entries?sourceType=PAYMENT&sourceId=$PAYMENT_ID"
-assert_status 200 "按 PAYMENT/{paymentId} 追溯分录"
+http GET "$LEDGER_URL/internal/ledger/entries?sourceType=PAYMENT&sourceId=$PAYMENT_NO"
+assert_status 200 "按 PAYMENT/{paymentNo} 追溯分录"
 jget "len(d)"; ENTRY_COUNT="$VALUE"
 if [ "$ENTRY_COUNT" -ge 1 ] 2>/dev/null; then
   info "PASS: 支付分录共 $ENTRY_COUNT 条"

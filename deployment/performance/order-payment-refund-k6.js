@@ -77,7 +77,7 @@ export default function () {
 
   // ② 渠道回调：mock-channel-web 以渠道身份 HMAC 签名转发 payment，驱动 PROCESSING→SUCCEEDED
   const cbBody = JSON.stringify({
-    paymentId: order.paymentId, status: 'SUCCESS',
+    paymentNo: order.paymentNo, status: 'SUCCESS',
     channelReference: `ref-${uid}`, amountMinor: order.totalMinor, signMode: 'VALID',
   });
   const t2 = Date.now();
@@ -88,9 +88,9 @@ export default function () {
   stageCallback.add(Date.now() - t2);
   if (!check(rCb, { 'callback 200': (r) => r.status === 200 })) { sleep(1); return; }
 
-  // ③ 创建退款：refund-service 经 Feign 调 payment 渠道退款（同步 SUCCEEDED）
+  // ③ 创建退款：payment-service（refund 包）渠道退款（同步 SUCCEEDED）
   const refundBody = JSON.stringify({
-    orderId: String(order.orderId), paymentId: order.paymentId, userId,
+    orderNo: order.orderNo, paymentNo: order.paymentNo, userId,
     amountMinor: order.totalMinor, currencyCode: order.currencyCode,
     reason: 'customer', idempotencyKey: `refund-${uid}`, items: null,
   });

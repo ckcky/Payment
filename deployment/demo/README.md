@@ -73,7 +73,7 @@ bash deployment/demo/stop-stack.sh
 ## 控制台（浏览器）
 
 - 演示控制台：`http://localhost:8091/demo` —— 下单 → 打开收银台 → 轮询状态。
-- 收银台页：`http://localhost:8091/cashier?paymentId=...` —— 手动触发 SUCCESS / FAILURE / UNKNOWN 回调、
+- 收银台页：`http://localhost:8091/cashier?paymentNo=...&orderNo=...`（业务单号，ADR-0063） —— 手动触发 SUCCESS / FAILURE / UNKNOWN 回调、
   连点重复回调、改金额、伪造签名（**当前形态下均放行**，见上方说明）。
 - 各服务 Swagger：`http://localhost:8084/swagger-ui.html`（端口 8081~8090 同理）。
 - Grafana：`http://localhost:3000`（admin/admin，内置「PaymentArch 业务指标」看板）。

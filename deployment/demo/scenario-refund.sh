@@ -19,11 +19,11 @@ AMOUNT=9900
 echo "==> ② 下单并同步支付成功（默认 SUCCESS 场景）"
 http POST "$ORDER_URL/orders" "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "下单"
-jget "d['orderId']"; ORDER_ID="$VALUE"
-jget "d['paymentId']"; PAYMENT_ID="$VALUE"
-[ -n "$ORDER_ID" ] || fail "下单响应缺失 orderId"
-info "orderId=$ORDER_ID paymentId=$PAYMENT_ID"
-http GET "$PAYMENT_URL/payments/$PAYMENT_ID"
+jget "d['orderNo']"; ORDER_NO="$VALUE"
+jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
+[ -n "$ORDER_NO" ] || fail "下单响应缺失 orderNo"
+info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
+http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
 jget "d['status']"; PAY_STATUS="$VALUE"
 
 # cashier 路径兼容（PAYMENT_MOCK_CASHIER_ENABLED=true 时支付停在 PROCESSING）：
@@ -31,33 +31,33 @@ jget "d['status']"; PAY_STATUS="$VALUE"
 if [ "$PAY_STATUS" = "PROCESSING" ]; then
   info "检测到 cashier 路径（PROCESSING），代渠道补发签名回调"
   http POST "$DEMO_URL/mock-channel/callback" \
-    "{\"paymentId\":$PAYMENT_ID,\"status\":\"SUCCESS\",\"channelReference\":\"refund-demo-$ORDER_ID\",\"amountMinor\":$AMOUNT,\"signMode\":\"VALID\"}"
+    "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"refund-demo-$ORDER_NO\",\"amountMinor\":$AMOUNT,\"signMode\":\"VALID\"}"
   assert_status 200 "渠道回调受理"
-  http GET "$PAYMENT_URL/payments/$PAYMENT_ID"
+  http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
   jget "d['status']"; PAY_STATUS="$VALUE"
 fi
 assert_eq "$PAY_STATUS" "SUCCEEDED" "支付 → SUCCEEDED"
 
 echo "==> ③ 发起退款（¥50.00，幂等键 rk-001）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderId\":\"$ORDER_ID\",\"paymentId\":$PAYMENT_ID,\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"rk-001\"}"
+http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"rk-001\"}"
 assert_status 200 "退款创建"
-jget "d['id']"; REFUND_ID="$VALUE"
+jget "d['refundNo']"; REFUND_NO="$VALUE"
 jget "d['status']"; REFUND_STATUS="$VALUE"
 # 退款创建后状态取决于渠道形态：同步收敛为 SUCCEEDED；异步渠道为 CREATED（待回调/确认）。二者均合法。
 case "$REFUND_STATUS" in
   CREATED|SUCCEEDED) info "PASS: 退款创建（状态 $REFUND_STATUS）" ;;
   *) fail "退款创建: 非预期状态 [$REFUND_STATUS]" ;;
 esac
-info "refundId=$REFUND_ID"
+info "refundNo=$REFUND_NO"
 
 echo "==> ④ 同一幂等键重放 → 返回同一退款（不重复创建）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderId\":\"$ORDER_ID\",\"paymentId\":$PAYMENT_ID,\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"rk-001\"}"
+http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"rk-001\"}"
 assert_status 200 "幂等重放受理"
-jget "d['id']"; REFUND_ID2="$VALUE"
-assert_eq "$REFUND_ID2" "$REFUND_ID" "幂等重放返回同一退款 id（不重复）"
+jget "d['refundNo']"; REFUND_NO2="$VALUE"
+assert_eq "$REFUND_NO2" "$REFUND_NO" "幂等重放返回同一退款单号（不重复）"
 
 echo "==> ⑤ 超额退款被拒（累计 5000+6000=11000 > 已付 9900，触发 H1 防超额）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderId\":\"$ORDER_ID\",\"paymentId\":$PAYMENT_ID,\"userId\":\"demo-user\",\"amountMinor\":6000,\"currencyCode\":\"CNY\",\"reason\":\"demo-over\",\"idempotencyKey\":\"rk-002\"}"
+http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":6000,\"currencyCode\":\"CNY\",\"reason\":\"demo-over\",\"idempotencyKey\":\"rk-002\"}"
 # 现网契约：超额不回 409，而是受理为 REJECTED 退款记录（HTTP 200 + status=REJECTED，资金约束落领域状态）
 assert_status 200 "超额退款受理"
 jget "d['status']"; REJ_STATUS="$VALUE"
