@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class PaymentChannelContractTest {
 
-    private static final ChargeRequest REQUEST = new ChargeRequest(1L, 1L, 100, "CNY", "mock");
+    private static final ChargeRequest REQUEST = new ChargeRequest("PM1000000000000001", 1L, 100, "CNY", "mock");
 
     @Test
     void successScenarioReturnsSuccessWithReference() {

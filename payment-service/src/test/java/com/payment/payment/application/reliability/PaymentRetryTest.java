@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class PaymentRetryTest {
 
-    private static final ChargeRequest REQUEST = new ChargeRequest(1L, 10L, 100L, "CNY", "mock");
+    private static final ChargeRequest REQUEST = new ChargeRequest("PM1000000000000001", 10L, 100L, "CNY", "mock");
 
     /** 可控渠道桩：按队列依次返回预设结果，耗尽后默认返回成功。 */
     private static final class QueueChannel implements PaymentChannel {

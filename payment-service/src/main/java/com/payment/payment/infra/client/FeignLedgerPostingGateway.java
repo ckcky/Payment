@@ -37,22 +37,22 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
     }
 
     @Override
-    public void postPaymentCapture(String idempotencyKey, Long paymentId, long amountMinor,
+    public void postPaymentCapture(String idempotencyKey, String paymentNo, long amountMinor,
                                    long feeMinor, String currencyCode) {
         String postingKey = "PAYMENT:" + idempotencyKey;
         long netMinor = amountMinor - feeMinor;
-        PostingRequest request = new PostingRequest(postingKey, "PAYMENT", String.valueOf(paymentId),
+        PostingRequest request = new PostingRequest(postingKey, "PAYMENT", paymentNo,
                 currencyCode, buildEntries(amountMinor, feeMinor, netMinor));
         try {
             PostingResponse response = ledgerClient.post(request);
             metrics.counter("ledger.posting_succeeded", 1.0, "module", MODULE);
-            log.info("记账成功 paymentId={} postingId={} entries={}", paymentId,
+            log.info("记账成功 paymentNo={} postingId={} entries={}", paymentNo,
                     response.postingId(), response.entries().size());
         } catch (RuntimeException ex) {
             // 记账失败不回滚支付成功事实；记录待记账，交由重试/对账兜底（ADR-0009）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
-            log.error("记账失败，进入待记账兜底：paymentId={} postingKey={} reason={}",
-                    paymentId, postingKey, ex.getMessage());
+            log.error("记账失败，进入待记账兜底：paymentNo={} postingKey={} reason={}",
+                    paymentNo, postingKey, ex.getMessage());
         }
     }
 

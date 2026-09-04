@@ -21,7 +21,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class MockChannelAdapterScenarioTest {
 
     private static final ChargeRequest REQUEST =
-            new ChargeRequest(1L, 1L, 1000L, "CNY", "MOCK");
+            new ChargeRequest("PM1000000000000001", 1L, 1000L, "CNY", "MOCK");
 
     @ParameterizedTest(name = "{0} → {1}")
     @CsvSource({

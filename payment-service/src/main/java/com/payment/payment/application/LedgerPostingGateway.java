@@ -12,11 +12,11 @@ public interface LedgerPostingGateway {
      * 支付成功记账：幂等键 {@code PAYMENT:<idempotencyKey>}，借贷由账本服务校验平衡。
      *
      * @param idempotencyKey 支付幂等键（账本据此幂等吸收重复）
-     * @param paymentId      支付 ID（业务来源 ID）
+     * @param paymentNo      支付业务单号 PM+雪花（账本 sourceId，ADR-0063：禁数值 paymentId）
      * @param amountMinor    支付金额（最小货币单位）
      * @param feeMinor       平台手续费（最小货币单位，可为 0）
      * @param currencyCode   币种
      */
-    void postPaymentCapture(String idempotencyKey, Long paymentId, long amountMinor,
+    void postPaymentCapture(String idempotencyKey, String paymentNo, long amountMinor,
                             long feeMinor, String currencyCode);
 }

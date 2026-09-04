@@ -57,7 +57,7 @@ public class ChannelQueryService {
             payment.recordQueryAttempt();
             paymentRepository.save(payment);
             ChannelResult result = channel.queryStatus(
-                    new QueryStatusRequest(payment.getId(), payment.getTransactionId(), payment.getIdempotencyKey()));
+                    new QueryStatusRequest(payment.getPaymentNo(), payment.getTransactionId(), payment.getIdempotencyKey()));
             metrics.counter("payment.query", 1.0, "module", MODULE);
             if (result.status() != ChannelResult.Status.UNKNOWN) {
                 if (resolution.resolve(String.valueOf(payment.getId()), result)) {

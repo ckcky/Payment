@@ -25,7 +25,7 @@ class PaymentDeferredChannelTest {
     private static final PaymentChannel NEVER_CALLED = new PaymentChannel() {
         @Override
         public ChannelResult charge(ChargeRequest request) {
-            throw new AssertionError("deferred mode must not call the channel: " + request.paymentId());
+            throw new AssertionError("deferred mode must not call the channel: " + request.paymentNo());
         }
 
         @Override

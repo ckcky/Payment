@@ -91,7 +91,7 @@ public class OrderApplicationService {
                 order.getTotalMinor(), order.getCurrencyCode(), "PURCHASE");
         transaction = transactionRepository.save(transaction);
 
-        // 注：库存预占幂等键统一取 reservationId()（order:{orderId}:sku:{skuId}），
+        // 注：库存预占幂等键统一取 reservationId()（order:{orderNo}:sku:{skuId}，ADR-0063 业务单号），
         // 因为 OrderTimeoutScheduler / onPaymentSucceeded 各自按同一公式重算该键；
         // reservationKey（客户端 Idempotency-Key）仅用于下单入口去重（012），不参与库存键构造。
         List<ReservedLine> reserved = new ArrayList<>();
@@ -107,9 +107,9 @@ public class OrderApplicationService {
                 // 仅真实扣减（bypassed=true 表示未播种配额、未动 Redis）才登记回滚：
                 // 否则失败回滚的 INCREMENT 会凭空造出配额键，之后正常下单反被误判"秒杀库存不足"
                 if (!sr.bypassed()) {
-                    seckillDeducted.add(new ReservedLine(reservationId(order.getId(), item.getSkuId()), skuId, item.getQuantity()));
+                    seckillDeducted.add(new ReservedLine(reservationId(order.getOrderNo(), item.getSkuId()), skuId, item.getQuantity()));
                 }
-                ReservedLine rl = new ReservedLine(reservationId(order.getId(), item.getSkuId()),
+                ReservedLine rl = new ReservedLine(reservationId(order.getOrderNo(), item.getSkuId()),
                         skuId, item.getQuantity());
                 catalogClient.reserveStock(new ReserveStockCommand(rl.reservationId(), rl.skuId(), rl.quantity()));
                 reserved.add(rl);
@@ -227,10 +227,10 @@ public class OrderApplicationService {
         transaction.succeed();
         transactionRepository.save(transaction);
 
-        // 支付成功：确认扣减库存（幂等键 paymentId）
+        // 支付成功：确认扣减库存（幂等键 paymentNo，ADR-0063）
         for (OrderItem item : order.getItems()) {
             catalogClient.confirmStock(new ConfirmStockCommand(
-                    reservationId(order.getId(), item.getSkuId()),
+                    reservationId(order.getOrderNo(), item.getSkuId()),
                     Long.parseLong(item.getSkuId()), item.getQuantity(), request.paymentNo()));
         }
     }
@@ -246,7 +246,7 @@ public class OrderApplicationService {
         }
         for (OrderItem item : order.getItems()) {
             catalogClient.releaseStock(new ReleaseStockCommand(
-                    reservationId(order.getId(), item.getSkuId()),
+                    reservationId(order.getOrderNo(), item.getSkuId()),
                     Long.parseLong(item.getSkuId()), item.getQuantity()));
             catalogClient.rollbackSeckill(Long.parseLong(item.getSkuId()), item.getQuantity());
         }
@@ -257,9 +257,9 @@ public class OrderApplicationService {
         }
     }
 
-    /** 库存预占幂等键：订单维度 + SKU。 */
-    private static String reservationId(Long orderId, String skuId) {
-        return "order:" + orderId + ":sku:" + skuId;
+    /** 库存预占幂等键：订单业务单号维度 + SKU（ADR-0063：禁数值 orderId）。 */
+    private static String reservationId(String orderNo, String skuId) {
+        return "order:" + orderNo + ":sku:" + skuId;
     }
 
     /** 已成功预占的明细（用于失败回滚）。 */

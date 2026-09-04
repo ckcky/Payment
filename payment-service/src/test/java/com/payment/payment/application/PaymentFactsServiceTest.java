@@ -44,7 +44,7 @@ class PaymentFactsServiceTest {
 
         assertThat(facts).hasSize(1);
         PaymentFactResponse fact = facts.get(0);
-        assertThat(fact.paymentId()).isEqualTo(succeeded.getId());
+        assertThat(fact.paymentNo()).isEqualTo(succeeded.getPaymentNo());
         assertThat(fact.channelReference()).isEqualTo("channel-ref-1");
         assertThat(fact.amountMinor()).isEqualTo(100L);
         assertThat(fact.currencyCode()).isEqualTo("CNY");

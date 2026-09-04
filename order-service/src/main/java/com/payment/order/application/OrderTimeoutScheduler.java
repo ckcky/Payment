@@ -95,7 +95,7 @@ public class OrderTimeoutScheduler {
         for (OrderItem item : order.getItems()) {
             Long skuId = Long.parseLong(item.getSkuId());
             catalogClient.releaseStock(new ReleaseStockCommand(
-                    reservationId(orderId, item.getSkuId()),
+                    reservationId(order.getOrderNo(), item.getSkuId()),
                     skuId, item.getQuantity()));
             catalogClient.rollbackSeckill(skuId, item.getQuantity());
         }
@@ -103,7 +103,7 @@ public class OrderTimeoutScheduler {
         orderRepository.save(order);
     }
 
-    private static String reservationId(Long orderId, String skuId) {
-        return "order:" + orderId + ":sku:" + skuId;
+    private static String reservationId(String orderNo, String skuId) {
+        return "order:" + orderNo + ":sku:" + skuId;
     }
 }

@@ -27,6 +27,15 @@ API 请求仍传数值自增主键（orders.id / payments.id）。数值 ID 出�
      （数值仅为历史兼容灰度，新调用一律传单号）；履约/权益 by-order/{orderNo}。
 3. **数值主键保留**：各表自增 id（含 payments.id / refunds.id）仍是本服务聚合内部标识
    （乐观锁、attempt 引用、账本 postings.source_id 内部口径），不出服务边界。
+4. **2026-09-05 收口补充**（本轮裁决覆盖第 2 条的「双轨寻址」残留与出站请求遗留）：
+   - 渠道出站请求 `ChargeRequest(paymentNo…)` / `QueryStatusRequest(paymentNo…)` 去数值 paymentId；
+   - 对账事实 RPC `PaymentFactResponse/RefundFactResponse` 及 reconciliation 侧镜像 DTO
+     改为 `paymentNo` / `refundNo`，不再暴露数值 id；
+   - 记账 RPC `PostingRequest.sourceId` 传 paymentNo（原数值 paymentId），
+     `LedgerPostingGateway.postPaymentCapture` 参数同步改 `String paymentNo`；
+   - 库存预占/确认/释放幂等键 `order:{orderNo}:sku:{skuId}`（原 orderId 拼接）；
+   - 退款域并入 payment-service（ADR-0064）后，reconciliation 的
+     `RefundFactsFeignClient` 服务名由 refund-service 改指 payment-service（8085 退役）。
 
 ## 后果
 

@@ -100,7 +100,7 @@ public class PaymentApplicationService {
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
         // 重试期间不落库，最终结果与重试次数一次性写入。
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(
-                new ChargeRequest(pending.payment().getId(),
+                new ChargeRequest(pending.payment().getPaymentNo(),
                         pending.payment().getCurrentAttemptId(), cmd.amountMinor(), cmd.currencyCode(),
                         cmd.channelCode()));
         ChannelResult result = outcome.result();
@@ -123,7 +123,7 @@ public class PaymentApplicationService {
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009，手续费 MVP 计 0）。
             ledgerGateway.postPaymentCapture(applied.payment().getIdempotencyKey(),
-                    applied.payment().getId(), applied.payment().getAmountMinor(), 0L,
+                    applied.payment().getPaymentNo(), applied.payment().getAmountMinor(), 0L,
                     applied.payment().getCurrencyCode());
         }
         return applied.payment();

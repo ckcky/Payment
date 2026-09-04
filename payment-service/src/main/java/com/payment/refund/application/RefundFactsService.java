@@ -31,7 +31,7 @@ public class RefundFactsService {
 
     private RefundFactResponse toFact(Refund r) {
         String channelReference = "refund-" + r.getId();
-        return new RefundFactResponse(r.getId(), channelReference, r.getAmountMinor(),
+        return new RefundFactResponse(r.getRefundNo(), channelReference, r.getAmountMinor(),
                 r.getCurrencyCode(), r.getStatus().name());
     }
 }

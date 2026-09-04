@@ -37,7 +37,7 @@ public class PaymentFactsService {
                 : attemptRepository.findById(p.getCurrentAttemptId())
                         .map(attempt -> attempt.getChannelReference())
                         .orElse(null);
-        return new PaymentFactResponse(p.getId(), channelReference, p.getAmountMinor(),
+        return new PaymentFactResponse(p.getPaymentNo(), channelReference, p.getAmountMinor(),
                 p.getCurrencyCode(), p.getStatus().name());
     }
 }

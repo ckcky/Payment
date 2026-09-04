@@ -35,7 +35,7 @@ class RefundFactsServiceTest {
 
         assertThat(facts).hasSize(1);
         RefundFactResponse fact = facts.get(0);
-        assertThat(fact.refundId()).isEqualTo(succeeded.getId());
+        assertThat(fact.refundNo()).isEqualTo(succeeded.getRefundNo());
         assertThat(fact.channelReference()).isEqualTo("refund-" + succeeded.getId());
         assertThat(fact.amountMinor()).isEqualTo(1000L);
         assertThat(fact.currencyCode()).isEqualTo("CNY");

@@ -87,7 +87,7 @@ public class PaymentResultProcessor {
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009）。
             // Feature 015 / C2：幂等键改用 paymentNo 维度（PAYMENT:{paymentNo}），
             // 一交易多支付单时每张支付单独立记账，不再复用支付幂等键避免撞键静默少记账。
-            ledgerGateway.postPaymentCapture("PAYMENT:" + payment.getPaymentNo(), payment.getId(),
+            ledgerGateway.postPaymentCapture("PAYMENT:" + payment.getPaymentNo(), payment.getPaymentNo(),
                     payment.getAmountMinor(), 0L, payment.getCurrencyCode());
         }
         return changed;

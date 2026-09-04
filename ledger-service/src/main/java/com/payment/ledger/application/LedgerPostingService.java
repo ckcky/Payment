@@ -39,9 +39,9 @@ public class LedgerPostingService {
     /**
      * 记账：返回已存在的或新落库的 Posting；借贷不平衡直接抛错拒绝。
      *
-     * @param idempotencyKey 幂等键（业务提供，如 {@code PAYMENT:<paymentId>}）
+     * @param idempotencyKey 幂等键（业务提供，如 {@code PAYMENT:<paymentNo>}）
      * @param sourceType     来源类型
-     * @param sourceId       来源 ID
+     * @param sourceId       来源业务单号（ADR-0063：orderNo/paymentNo，禁数值 ID）
      * @param currency       币种（MVP 仅 CNY）
      * @param entries        分录（借贷必须平衡）
      */
