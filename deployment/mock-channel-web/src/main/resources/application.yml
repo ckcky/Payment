@@ -1,6 +1,19 @@
 spring:
   application:
     name: mock-channel-web
+  # 全链路 DB 诊断（/demo/trace）只读连接：各服务库共实例（见 deployment/schema/*.sql），
+  # 查询一律用「库名.表名」限定（`order` 是 MySQL 保留字，SQL 中需反引号）。
+  # 演示环境连接 docker-compose 的 payment-mysql（3306 已映射宿主机，root/root）。
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 0
+      # MySQL 容器未启动时不阻断应用启动：首查报错由 /demo/trace 各 section 兜底展示
+      initialization-fail-timeout: -1
 
 server:
   port: 8091

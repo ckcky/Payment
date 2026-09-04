@@ -23,6 +23,18 @@
   .st-FAILED, .st-CANCELLED, .st-REVOKED { color: #dc2626; } .st-UNKNOWN, .st-PROCESSING { color: #d97706; }
   #log { font-family: Consolas, monospace; font-size: 12px; background: #0f172a; color: #cbd5e1; border-radius: 8px; padding: 14px; max-height: 260px; overflow-y: auto; white-space: pre-wrap; line-height: 1.7; }
   .note { font-size: 12px; color: #475569; line-height: 1.8; margin-top: 8px; }
+  .sect { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .sect h3 { font-size: 13px; padding: 7px 12px; background: #f8fafc; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; }
+  .sect h3 .cnt { color: #64748b; font-weight: 400; font-size: 12px; }
+  .sect .sql { font-family: Consolas, monospace; font-size: 11px; color: #94a3b8; padding: 5px 12px; background: #fcfcfd; border-bottom: 1px solid #f8fafc; word-break: break-all; }
+  .sect .err { color: #dc2626; font-size: 12px; padding: 6px 12px; }
+  .sect .empty { color: #9ca3af; font-size: 12px; padding: 6px 12px; }
+  .rowgrid { padding: 6px 12px; border-bottom: 1px dashed #f1f5f9; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 16px; }
+  .rowgrid:last-child { border-bottom: none; }
+  .fld { font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fld .k { color: #94a3b8; }
+  .fld .no { color: #2563eb; font-weight: 700; }
+  input[type=text] { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -44,8 +56,8 @@
   <div class="card">
     <h2>② 当前订单状态（每 2s 轮询）</h2>
     <table id="orderTable"><tbody>
-      <tr><th>orderId</th><td id="t-orderId">—</td><th>order.status</th><td id="t-orderStatus">—</td></tr>
-      <tr><th>paymentId</th><td id="t-paymentId">—</td><th>payment.status</th><td id="t-paymentStatus">—</td></tr>
+      <tr><th>orderId</th><td id="t-orderId">—</td><th>orderNo</th><td id="t-orderNo">—</td><th>order.status</th><td id="t-orderStatus">—</td></tr>
+      <tr><th>paymentId</th><td id="t-paymentId">—</td><th>paymentNo</th><td id="t-paymentNo">—</td><th>payment.status</th><td id="t-paymentStatus">—</td></tr>
       <tr><th>fulfillment</th><td id="t-fulfillment">—</td><th>entitlement</th><td id="t-entitlement">—</td></tr>
     </tbody></table>
     <div class="note">
@@ -53,6 +65,17 @@
       <button class="ghost" onclick="stopPoll()">停止轮询</button>
       <span id="pollHint" style="margin-left:8px;color:#9ca3af"></span>
     </div>
+    <div class="note">orderId 是 orders 表自增主键（各系统 order_id 关联列存的值）；orderNo = OR+雪花（ADR-0062），对外业务单号。</div>
+  </div>
+
+  <div class="card">
+    <h2>③ 全链路 DB 数据（按订单实查各系统落库）</h2>
+    <div class="note">
+      orderId / orderNo=<input type="text" id="traceKey" value="" style="width:220px" placeholder="下单后自动填入，或输入单号">
+      <button onclick="traceOrder()">查询</button>
+      <span style="margin-left:8px">覆盖：订单 · 交易 · 支付/尝试 · 退款 · 履约 · 权益 · 结算 · 对账 · 账本（只读 SELECT）</span>
+    </div>
+    <div id="traceBox" class="note">（下单后自动查询，或输入 orderId / orderNo 手动查询）</div>
   </div>
 
   <div class="card"><h2>操作日志</h2><div id="log">// 日志</div></div>
@@ -119,6 +142,7 @@ async function placeOrder(skuId) {
   currentOrderId = r.data.orderId;
   currentPaymentId = r.data.paymentId;
   renderOrder(r.data);
+  traceOrder(String(r.data.orderId));
   if (r.data.payUrl) {
     log('   payUrl: ' + r.data.payUrl);
     log('   → 打开收银台（新窗口），并开始轮询订单状态');
@@ -131,6 +155,7 @@ async function placeOrder(skuId) {
 
 function renderOrder(o) {
   document.getElementById('t-orderId').textContent = o.orderId;
+  document.getElementById('t-orderNo').textContent = o.orderNo || '—';
   document.getElementById('t-orderStatus').textContent = o.status;
   document.getElementById('t-orderStatus').className = 'st st-' + o.status;
   document.getElementById('t-paymentId').textContent = o.paymentId;
@@ -138,18 +163,55 @@ function renderOrder(o) {
   document.getElementById('t-paymentStatus').className = 'st st-' + o.paymentStatus;
 }
 
+async function traceOrder(key) {
+  const input = document.getElementById('traceKey');
+  const q = (key || input.value || '').trim();
+  if (!q) { document.getElementById('traceBox').textContent = '（请先下单或输入 orderId / orderNo）'; return; }
+  input.value = q;
+  const box = document.getElementById('traceBox');
+  box.textContent = '查询中… GET /demo/trace?orderId=' + q;
+  const r = await fetch('/demo/trace?orderId=' + encodeURIComponent(q), { cache: 'no-store' });
+  const data = await r.json();
+  if (r.status !== 200) { box.textContent = 'HTTP ' + r.status + ' ' + JSON.stringify(data); return; }
+  box.innerHTML = '';
+  if (data.found === false) { box.innerHTML = '<div class="empty">orders 表无此记录：' + (data.note || q) + '</div>'; return; }
+  for (const s of (data.sections || [])) {
+    const rows = s.rows || [];
+    let html = '<div class="sect"><h3><span>' + esc(s.system) + ' · ' + esc(s.table) + '</span>'
+      + '<span class="cnt">' + (rows.length) + ' 行</span></h3>';
+    if (s.sql) html += '<div class="sql">' + esc(s.sql) + '</div>';
+    if (s.error) html += '<div class="err">✗ ' + esc(s.error) + '</div>';
+    if (s.note) html += '<div class="empty">' + esc(s.note) + '</div>';
+    if (!s.error && !s.note && rows.length === 0) html += '<div class="empty">（无记录）</div>';
+    for (const row of rows) {
+      html += '<div class="rowgrid">';
+      for (const [k, v] of Object.entries(row)) {
+        const cls = /(_no$|^reference$|^channel_reference$)/.test(k) ? 'no' : 'k';
+        html += '<div class="fld"><span class="' + cls + '">' + esc(k) + '</span> = ' + esc(v === null ? 'NULL' : String(v)) + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    box.innerHTML += html;
+  }
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 async function pollOnce() {
   if (!currentOrderId) return;
   const o = await api('GET', '/order/orders/' + currentOrderId);
   if (o.status === 200 && o.data) {
     document.getElementById('t-orderStatus').textContent = o.data.status;
     document.getElementById('t-orderStatus').className = 'st st-' + o.data.status;
+    if (o.data.orderNo) document.getElementById('t-orderNo').textContent = o.data.orderNo;
     const pid = o.data.paymentId || currentPaymentId;
     if (pid) {
       const p = await api('GET', '/payment/payments/' + pid);
       if (p.status === 200 && p.data) {
         document.getElementById('t-paymentStatus').textContent = p.data.status;
         document.getElementById('t-paymentStatus').className = 'st st-' + p.data.status;
+        if (p.data.paymentNo) document.getElementById('t-paymentNo').textContent = p.data.paymentNo;
       }
     }
     // fulfillment：单对象（未创建 404）；entitlement：数组（空数组 = 未发放）
