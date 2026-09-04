@@ -87,11 +87,10 @@
 
 ## 6. 遗留与备注
 
-1. **refund-service 目录物理删除未完成**：环境安全钩子强制「删除必须走回收站」且回收站
-   操作持续失败（genie-trash fail-closed），目录又被 IDE 进程锁定无法改名/移动。已做的
-   隔离：根 pom 不再引用该模块（Maven 全量门禁不含它），ServiceBoundaryTest 已移除
-   refund，代码已 100% 迁入 payment-service 并通过门禁。**待编辑器释放文件句柄后手动删除**
-   `refund-service/` 目录即可（不影响本次提交内容）。
+1. **~~refund-service 目录物理删除未完成~~ → 已解决**：目录原件归档至
+   `.workbuddy/p3-removed-refund-service/`（受环境 safe-delete 钩子限制无法走系统回收站），
+   50 个 tracked 文件的删除已作为提交 `8e56604` 入库——git 与 Maven 视角该模块已完全移除。
+   磁盘上仅剩一个被 IDE 句柄占用的**空壳目录**，关闭占用它的编辑器后手动删除即可，无任何影响。
 2. traffic-gen 的 UNKNOWN 延迟 resolve 依赖 payment 侧 `/internal/payments/{no}/resolve`
    端点鉴权口径；联机冒烟建议 `start-demo.sh` 后执行
    `TPS=2 DURATION=60 bash deployment/demo/traffic-gen.sh && bash deployment/demo/stop-traffic.sh`。
