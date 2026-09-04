@@ -70,7 +70,8 @@
 | payment-service `clean test`（含 refund 域 28 个） | **125 tests, 0 fail** |
 | 新增场景测试 | `PaymentCallbackConflictScenarioTest`（3）+ `PaymentAutoRefundServiceTest`（3）= 6 全绿 |
 | 脚本语法 | `bash -n` traffic-gen.sh / stop-traffic.sh / lib.sh 通过 |
-| 全量 `mvn -o clean verify -fae`（11 模块，含 architecture-tests 9 服务边界） | **BUILD SUCCESS**（Reactor 全绿） |
+| 全量 `mvn -o clean verify -fae` | **BUILD SUCCESS（15/15 模块全绿，含 architecture-tests 9 服务边界）** |
+| 提交 | `d4f40f9` @ 分支 `feature015`（72 文件，+3125/−135；精确 pathspec 提交，未触碰其他任务内容） |
 
 ## 5. spec 验收标准 SC-001~007 对照
 
