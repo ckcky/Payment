@@ -20,7 +20,11 @@ for db in "${DATABASES[@]}"; do
     -e "DROP DATABASE IF EXISTS \`$db\`;" 2>/dev/null \
     && echo "    dropped $db" || fail "无法连接 MySQL 容器 payment-mysql（先跑 deployment/start-all.sh）"
 done
-for f in "$SCHEMA_DIR"/*.sql; do
+# 只重放「全量 schema」（NN-*.sql，各文件自带 CREATE DATABASE + USE）。
+# 015-*.sql 是存量环境增量迁移脚本（前置 USE payment，靠 DATABASE() 定位库），
+# 不属于全新初始化流程——reset 环境由 03-payment-schema.sql 直接建出最终表结构，
+# 误放进来会因 mysql 客户端未选库报 ERROR 1046 No database selected。
+for f in "$SCHEMA_DIR"/[0-9][0-9]-*.sql; do
   docker exec -i payment-mysql mysql -uroot -proot < "$f"
   echo "    applied $(basename "$f")"
 done

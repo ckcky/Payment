@@ -3,7 +3,9 @@
 --       并新增 `attempt_seq` 列与组合索引，以支持同一交易下多张支付单。
 -- 幂等可重放：全新库（deployment/schema/03-payment-schema.sql 已是新版）执行本脚本时
 --       各分支走 SELECT 1 空操作，不会报错；已初始化的旧库则执行真实 DDL。
--- 前置：USE payment;（部署脚本在对应库执行）。
+-- 本脚本自带 USE payment（依赖 DATABASE() 定位目标库；直接管道进 mysql 客户端
+-- 若不选库，ALTER TABLE 会报 ERROR 1046 No database selected）。
+USE `payment`;
 
 SET @db = DATABASE();
 
