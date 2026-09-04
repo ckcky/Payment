@@ -29,11 +29,11 @@
   .sect .sql { font-family: Consolas, monospace; font-size: 11px; color: #94a3b8; padding: 5px 12px; background: #fcfcfd; border-bottom: 1px solid #f8fafc; word-break: break-all; }
   .sect .err { color: #dc2626; font-size: 12px; padding: 6px 12px; }
   .sect .empty { color: #9ca3af; font-size: 12px; padding: 6px 12px; }
-  .rowgrid { padding: 6px 12px; border-bottom: 1px dashed #f1f5f9; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 16px; }
-  .rowgrid:last-child { border-bottom: none; }
-  .fld { font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fld .k { color: #94a3b8; }
-  .fld .no { color: #2563eb; font-weight: 700; }
+  .tblwrap { overflow-x: auto; overflow-y: auto; max-height: 360px; }
+  .tbl { border-collapse: collapse; font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.7; min-width: 100%; }
+  .tbl th, .tbl td { border: none; border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f8fafc; padding: 3px 12px; white-space: nowrap; text-align: left; }
+  .tbl thead th { position: sticky; top: 0; background: #f8fafc; color: #475569; font-weight: 600; z-index: 1; }
+  .tbl td.no, .tbl th.no { color: #2563eb; font-weight: 700; }
   input[type=text] { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
 </style>
 </head>
@@ -183,13 +183,18 @@ async function traceOrder(key) {
     if (s.error) html += '<div class="err">✗ ' + esc(s.error) + '</div>';
     if (s.note) html += '<div class="empty">' + esc(s.note) + '</div>';
     if (!s.error && !s.note && rows.length === 0) html += '<div class="empty">（无记录）</div>';
-    for (const row of rows) {
-      html += '<div class="rowgrid">';
-      for (const [k, v] of Object.entries(row)) {
-        const cls = /(_no$|^reference$|^channel_reference$)/.test(k) ? 'no' : 'k';
-        html += '<div class="fld"><span class="' + cls + '">' + esc(k) + '</span> = ' + esc(v === null ? 'NULL' : String(v)) + '</div>';
-      }
-      html += '</div>';
+    if (rows.length > 0) {
+      // 列 = 首行全部字段 + 后续行可能多出的字段（保持出现顺序），横排 Excel 式
+      const cols = [];
+      for (const row of rows) { for (const k of Object.keys(row)) { if (!cols.includes(k)) cols.push(k); } }
+      const isNo = (c) => /(_no$|^reference$|^channel_reference$)/.test(c);
+      const cell = (v, c) => '<td' + (isNo(c) ? ' class="no"' : '') + '>'
+        + esc(v === null || v === undefined ? 'NULL' : String(v)) + '</td>';
+      html += '<div class="tblwrap"><table class="tbl"><thead><tr>'
+        + cols.map(c => '<th' + (isNo(c) ? ' class="no"' : '') + '>' + esc(c) + '</th>').join('')
+        + '</tr></thead><tbody>'
+        + rows.map(row => '<tr>' + cols.map(c => cell(row[c], c)).join('') + '</tr>').join('')
+        + '</tbody></table></div>';
     }
     html += '</div>';
     box.innerHTML += html;

@@ -1,6 +1,13 @@
 spring:
   application:
     name: mock-channel-web
+  # 静态页（/demo.html、/cashier.html）一律 no-store：演示页迭代频繁，
+  # 避免浏览器启发式缓存导致"改了看不到"（2026-09-04 用户复现：页面停留在旧版）。
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-store: true
   # 全链路 DB 诊断（/demo/trace）只读连接：各服务库共实例（见 deployment/schema/*.sql），
   # 查询一律用「库名.表名」限定（`order` 是 MySQL 保留字，SQL 中需反引号）。
   # 演示环境连接 docker-compose 的 payment-mysql（3306 已映射宿主机，root/root）。
