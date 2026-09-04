@@ -63,7 +63,7 @@ public class MybatisOrderRepository implements OrderRepository {
         List<OrderItem> items = itemEntities.stream()
                 .map(this::toItem)
                 .toList();
-        return Order.rehydrate(entity.getId(), entity.getUserId(), entity.getMerchantId(),
+        return Order.rehydrate(entity.getId(), entity.getOrderNo(), entity.getUserId(), entity.getMerchantId(),
                 entity.getPaymentId(), OrderStatus.valueOf(entity.getStatus()), entity.getCurrencyCode(),
                 items, entity.getPaidMinor(), entity.getRefundedMinor(), entity.getVersion());
     }
@@ -76,6 +76,7 @@ public class MybatisOrderRepository implements OrderRepository {
     private OrderEntity toEntity(Order order) {
         OrderEntity entity = new OrderEntity();
         entity.setId(order.getId());
+        entity.setOrderNo(order.getOrderNo());
         entity.setUserId(order.getUserId());
         entity.setMerchantId(order.getMerchantId());
         entity.setPaymentId(order.getPaymentId());

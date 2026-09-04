@@ -2,6 +2,8 @@ package com.payment.order.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,6 +19,8 @@ import java.util.Objects;
 public class Order {
 
     private Long id;
+    /** 业务单号（OR + 雪花，ADR-0062）：对外展示与客服检索用，内部引用仍用 Long id。 */
+    private String orderNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String userId;
@@ -45,17 +49,19 @@ public class Order {
             total = Math.addExact(total, item.subtotalMinor());
         }
         this.totalMinor = total;
+        this.orderNo = BusinessNos.of(BusinessNoType.ORDER);
         this.items = Collections.unmodifiableList(new ArrayList<>(items));
     }
 
     /**
      * 持久化重建：用既有快照明细与历史状态/金额还原聚合，绕过创建期状态机（不改变业务规则）。
      */
-    public static Order rehydrate(Long id, String userId, String merchantId, Long paymentId,
+    public static Order rehydrate(Long id, String orderNo, String userId, String merchantId, Long paymentId,
                                   OrderStatus status, String currencyCode, List<OrderItem> items,
                                   long paidMinor, long refundedMinor, Integer version) {
         Order order = new Order(userId, merchantId, currencyCode, items);
         order.id = id;
+        order.orderNo = orderNo;
         order.paymentId = paymentId;
         order.status = status;
         order.paidMinor = paidMinor;
@@ -143,6 +149,10 @@ public class Order {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getOrderNo() {
+        return orderNo;
     }
 
     public Long getId() {

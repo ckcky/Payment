@@ -9,6 +9,8 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("transactions")
 public class TransactionEntity extends BaseEntity {
 
+    /** 业务单号（TX + 雪花，ADR-0062）。 */
+    private String transactionNo;
     private String orderId;
     /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
@@ -16,6 +18,14 @@ public class TransactionEntity extends BaseEntity {
     private String purpose;
     /** 交易状态机枚举名。 */
     private String status;
+
+    public String getTransactionNo() {
+        return transactionNo;
+    }
+
+    public void setTransactionNo(String transactionNo) {
+        this.transactionNo = transactionNo;
+    }
 
     public String getOrderId() {
         return orderId;

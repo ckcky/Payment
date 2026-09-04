@@ -2,6 +2,8 @@ package com.payment.settlement.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +19,8 @@ import java.util.Objects;
 public class SettlementBatch {
 
     private Long id;
+    /** 业务单号（SB + 雪花，ADR-0062）。 */
+    private String batchNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String merchantId;
@@ -42,6 +46,7 @@ public class SettlementBatch {
         this.period = Objects.requireNonNull(period, "period");
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+        this.batchNo = BusinessNos.of(BusinessNoType.SETTLEMENT_BATCH);
         this.items = new ArrayList<>();
     }
 
@@ -111,13 +116,14 @@ public class SettlementBatch {
     /**
      * 持久化重建：还原批次聚合及其历史状态，绕过创建期校验（不改变业务规则）。
      */
-    public static SettlementBatch rehydrate(Long id, String merchantId, String period, String currencyCode,
+    public static SettlementBatch rehydrate(Long id, String batchNo, String merchantId, String period, String currencyCode,
                                             long incomeMinor, long refundMinor, long adjustmentMinor, long netMinor,
                                             SettlementStatus status, List<SettlementItem> items,
                                             String idempotencyKey, Integer version,
                                             int factCount, String sourcePeriod) {
         SettlementBatch batch = new SettlementBatch(merchantId, period, currencyCode, idempotencyKey);
         batch.id = id;
+        batch.batchNo = batchNo;
         batch.incomeMinor = incomeMinor;
         batch.refundMinor = refundMinor;
         batch.adjustmentMinor = adjustmentMinor;
@@ -169,6 +175,10 @@ public class SettlementBatch {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "illegal " + op + " from " + this.status + " (expected " + expected + ")");
         }
+    }
+
+    public String getBatchNo() {
+        return batchNo;
     }
 
     public Long getId() {

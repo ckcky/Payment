@@ -124,7 +124,7 @@ public class OrderApplicationService {
             // 创建支付意图（order → payment 同步 RPC）
             CreatePaymentResponse payment = paymentGateway.createPayment(new CreatePaymentRequest(
                     String.valueOf(order.getId()),
-                    String.valueOf(transaction.getId()),
+                    transaction.getTransactionNo(),
                     order.getUserId(),
                     order.getTotalMinor(),
                     order.getCurrencyCode(),
@@ -137,7 +137,8 @@ public class OrderApplicationService {
             order.recordPayment(payment.paymentId());
             orderRepository.save(order);
 
-            return new CreateOrderResult(order.getId(), transaction.getId(), order.getStatus(),
+            return new CreateOrderResult(order.getId(), order.getOrderNo(), transaction.getId(),
+                    transaction.getTransactionNo(), order.getStatus(),
                     order.getTotalMinor(), order.getCurrencyCode(), payment.paymentId(),
                     payment.status(), payment.payUrl());
         } catch (RuntimeException ex) {

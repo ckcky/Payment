@@ -103,7 +103,7 @@ public class MybatisSettlementRepository implements SettlementRepository {
     }
 
     private SettlementBatch toDomain(SettlementBatchEntity entity) {
-        return SettlementBatch.rehydrate(entity.getId(), entity.getMerchantId(), entity.getPeriod(),
+        return SettlementBatch.rehydrate(entity.getId(), entity.getBatchNo(), entity.getMerchantId(), entity.getPeriod(),
                 entity.getCurrencyCode(), entity.getIncomeMinor(), entity.getRefundMinor(),
                 entity.getAdjustmentMinor(), entity.getNetMinor(),
                 SettlementStatus.valueOf(entity.getStatus()), loadItems(entity.getId()),
@@ -115,6 +115,7 @@ public class MybatisSettlementRepository implements SettlementRepository {
     private SettlementBatchEntity toEntity(SettlementBatch batch) {
         SettlementBatchEntity entity = new SettlementBatchEntity();
         entity.setId(batch.getId());
+        entity.setBatchNo(batch.getBatchNo());
         entity.setMerchantId(batch.getMerchantId());
         entity.setPeriod(batch.getPeriod());
         entity.setCurrencyCode(batch.getCurrencyCode());

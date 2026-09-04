@@ -2,6 +2,8 @@ package com.payment.order.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.util.Objects;
 
@@ -13,6 +15,8 @@ import java.util.Objects;
 public class Transaction {
 
     private Long id;
+    /** 业务单号（TX + 雪花，ADR-0062）：跨服务支付意图引用此单号（payments.transaction_id）。 */
+    private String transactionNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String orderId;
@@ -29,13 +33,15 @@ public class Transaction {
         this.amountMinor = amountMinor;
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.purpose = purpose == null ? "PURCHASE" : purpose;
+        this.transactionNo = BusinessNos.of(BusinessNoType.TRANSACTION);
     }
 
     /** 持久化重建：还原交易聚合及其历史状态，绕过创建期状态机（不改变业务规则）。 */
-    public static Transaction rehydrate(Long id, String orderId, long amountMinor, String currencyCode,
+    public static Transaction rehydrate(Long id, String transactionNo, String orderId, long amountMinor, String currencyCode,
                                         String purpose, TransactionStatus status, Integer version) {
         Transaction t = new Transaction(orderId, amountMinor, currencyCode, purpose);
         t.id = id;
+        t.transactionNo = transactionNo;
         t.status = status;
         t.version = version;
         return t;
@@ -104,6 +110,10 @@ public class Transaction {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getTransactionNo() {
+        return transactionNo;
     }
 
     public Long getId() {

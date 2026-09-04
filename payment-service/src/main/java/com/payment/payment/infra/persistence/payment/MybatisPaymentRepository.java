@@ -72,7 +72,7 @@ public class MybatisPaymentRepository implements PaymentRepository {
     }
 
     private Payment toDomain(PaymentEntity entity) {
-        return Payment.rehydrate(entity.getId(), entity.getTransactionId(), entity.getOrderId(),
+        return Payment.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getTransactionId(), entity.getOrderId(),
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
                 entity.getIdempotencyKey(), PaymentStatus.valueOf(entity.getStatus()),
                 entity.getCurrentAttemptId(), entity.getFailureReason(),
@@ -83,6 +83,7 @@ public class MybatisPaymentRepository implements PaymentRepository {
     private PaymentEntity toEntity(Payment payment) {
         PaymentEntity entity = new PaymentEntity();
         entity.setId(payment.getId());
+        entity.setPaymentNo(payment.getPaymentNo());
         entity.setTransactionId(payment.getTransactionId());
         entity.setOrderId(payment.getOrderId());
         entity.setUserId(payment.getUserId());

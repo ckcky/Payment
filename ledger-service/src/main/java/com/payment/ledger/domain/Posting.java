@@ -2,6 +2,8 @@ package com.payment.ledger.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +17,8 @@ import java.util.Objects;
 public class Posting {
 
     private Long id;
+    /** 业务单号（LP + 雪花，ADR-0062）。 */
+    private String postingNo;
     private final String idempotencyKey;
     private final LedgerSourceType sourceType;
     private final String sourceId;
@@ -28,6 +32,7 @@ public class Posting {
         this.sourceType = Objects.requireNonNull(sourceType, "sourceType");
         this.sourceId = Objects.requireNonNull(sourceId, "sourceId");
         this.currency = Objects.requireNonNull(currency, "currency");
+        this.postingNo = BusinessNos.of(BusinessNoType.LEDGER_POSTING);
         this.entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
         if (this.entries.size() < 2) {
             throw BizException.of(ErrorCodes.LEDGER_UNBALANCED,
@@ -37,11 +42,12 @@ public class Posting {
     }
 
     /** 持久化重建：绕过创建期校验以外的业务规则不变（重建后仍校验平衡）。 */
-    public static Posting rehydrate(Long id, String idempotencyKey, LedgerSourceType sourceType,
+    public static Posting rehydrate(Long id, String postingNo, String idempotencyKey, LedgerSourceType sourceType,
                                     String sourceId, String currency, Status status,
                                     List<LedgerEntry> entries) {
         Posting posting = new Posting(idempotencyKey, sourceType, sourceId, currency, entries);
         posting.id = id;
+        posting.postingNo = postingNo;
         posting.status = status;
         return posting;
     }
@@ -73,6 +79,10 @@ public class Posting {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getPostingNo() {
+        return postingNo;
     }
 
     public Long getId() {

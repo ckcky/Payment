@@ -10,6 +10,8 @@ import java.time.Instant;
 @TableName("payments")
 public class PaymentEntity extends BaseEntity {
 
+    /** 业务单号（PM + 雪花，ADR-0062）。 */
+    private String paymentNo;
     private String transactionId;
     private String orderId;
     private String userId;
@@ -26,6 +28,14 @@ public class PaymentEntity extends BaseEntity {
     private Integer queryAttempts;
     /** 进入 UNKNOWN 的时刻（spec US5 / ADR-0015），用于计算真实收敛时长。 */
     private Instant enteredUnknownAt;
+
+    public String getPaymentNo() {
+        return paymentNo;
+    }
+
+    public void setPaymentNo(String paymentNo) {
+        this.paymentNo = paymentNo;
+    }
 
     public String getTransactionId() {
         return transactionId;

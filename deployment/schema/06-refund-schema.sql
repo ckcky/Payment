@@ -11,6 +11,7 @@ USE `refund`;
 
 CREATE TABLE IF NOT EXISTS refunds (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    refund_no VARCHAR(32) NOT NULL COMMENT '业务单号 RF+雪花（ADR-0062）',
     order_id VARCHAR(64) NOT NULL,
     payment_id BIGINT NOT NULL,
     user_id VARCHAR(64) NOT NULL,
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
     UNIQUE KEY uk_refunds_idempotency_key (idempotency_key),
+    UNIQUE KEY uk_refunds_refund_no (refund_no),
     KEY idx_refunds_payment_id (payment_id),
     KEY idx_refunds_order_id (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

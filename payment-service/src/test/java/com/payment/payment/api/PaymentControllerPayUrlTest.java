@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 class PaymentControllerPayUrlTest {
 
     private static Payment processingPayment(long id) {
-        return Payment.rehydrate(id, "txn-1", "order-9", "user-1", 9900, "CNY",
+        return Payment.rehydrate(id, "PM-test", "txn-1", "order-9", "user-1", 9900, "CNY",
                 "idem-pay-url-1", PaymentStatus.PROCESSING, 1L, null, 0, null, 0);
     }
 

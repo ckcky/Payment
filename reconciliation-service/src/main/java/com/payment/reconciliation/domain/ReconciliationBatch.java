@@ -2,6 +2,8 @@ package com.payment.reconciliation.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.util.List;
 import java.util.Objects;
@@ -19,6 +21,8 @@ import java.util.Objects;
 public class ReconciliationBatch {
 
     private Long id;
+    /** 业务单号（RB + 雪花，ADR-0062）。 */
+    private String batchNo;
     private Integer version;
     private final String period;
     private final String source;
@@ -37,15 +41,17 @@ public class ReconciliationBatch {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "period must not be blank");
         }
         this.source = Objects.requireNonNull(source, "source");
+        this.batchNo = BusinessNos.of(BusinessNoType.RECONCILIATION_BATCH);
     }
 
     /** 持久化重建：还原聚合与历史状态，绕过创建期校验（不改变业务规则）。 */
-    public static ReconciliationBatch rehydrate(Long id, Integer version, String period, String source,
+    public static ReconciliationBatch rehydrate(Long id, String batchNo, Integer version, String period, String source,
                                                 ReconciliationStatus status, List<Match> matches,
                                                 List<Difference> differences, ChannelStatementSource statementSource,
                                                 String closedBy, String closedAt) {
         ReconciliationBatch batch = new ReconciliationBatch(period, source);
         batch.id = id;
+        batch.batchNo = batchNo;
         batch.version = version;
         batch.status = status;
         batch.matches = List.copyOf(matches == null ? List.of() : matches);
@@ -128,6 +134,10 @@ public class ReconciliationBatch {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public String getBatchNo() {
+        return batchNo;
     }
 
     public Long getId() {

@@ -52,7 +52,7 @@ class OrderControllerIdempotencyTest {
             "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":1,\"quantity\":1}]}";
 
     private CreateOrderResult sampleResult() {
-        return new CreateOrderResult(10L, 20L, OrderStatus.PAID, 9900L, "CNY", 30L, "SUCCEEDED");
+        return new CreateOrderResult(10L, "OR1001", 20L, "TX1001", OrderStatus.PAID, 9900L, "CNY", 30L, "SUCCEEDED");
     }
 
     @Test

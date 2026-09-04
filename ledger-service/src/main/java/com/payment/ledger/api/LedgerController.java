@@ -90,7 +90,7 @@ public class LedgerController {
                         e.getDirection().name(), e.getAmountMinor(), e.getCurrency(),
                         e.getEntryType().name()))
                 .toList();
-        return new PostingResponse(posting.getId(), posting.getIdempotencyKey(),
+        return new PostingResponse(posting.getId(), posting.getPostingNo(), posting.getIdempotencyKey(),
                 posting.getSourceType().name(), posting.getSourceId(), posting.getCurrency(),
                 posting.getStatus().name(), views);
     }

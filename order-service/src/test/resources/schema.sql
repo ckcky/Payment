@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS transactions;
 
 CREATE TABLE orders (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_no VARCHAR(32) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64) NOT NULL,
     payment_id BIGINT NULL,
@@ -37,6 +38,7 @@ CREATE TABLE order_items (
 
 CREATE TABLE transactions (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    transaction_no VARCHAR(32) NOT NULL,
     order_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,

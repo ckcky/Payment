@@ -9,11 +9,21 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("postings")
 public class PostingEntity extends BaseEntity {
 
+    /** 业务单号（LP + 雪花，ADR-0062）。 */
+    private String postingNo;
     private String idempotencyKey;
     private String sourceType;
     private String sourceId;
     private String status;
     private String currency;
+
+    public String getPostingNo() {
+        return postingNo;
+    }
+
+    public void setPostingNo(String postingNo) {
+        this.postingNo = postingNo;
+    }
 
     public String getIdempotencyKey() {
         return idempotencyKey;

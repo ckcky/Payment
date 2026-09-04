@@ -9,6 +9,8 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("refunds")
 public class RefundEntity extends BaseEntity {
 
+    /** 业务单号（RF + 雪花，ADR-0062）。 */
+    private String refundNo;
     private String orderId;
     private Long paymentId;
     private String userId;
@@ -21,6 +23,14 @@ public class RefundEntity extends BaseEntity {
     /** 退款状态机枚举名（状态机逻辑在领域层，持久化只存枚举名）。 */
     private String status;
     private String failureReason;
+
+    public String getRefundNo() {
+        return refundNo;
+    }
+
+    public void setRefundNo(String refundNo) {
+        this.refundNo = refundNo;
+    }
 
     public String getOrderId() {
         return orderId;

@@ -10,6 +10,8 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("reconciliation_batches")
 public class ReconciliationBatchEntity extends BaseEntity {
 
+    /** 业务单号（RB + 雪花，ADR-0062）。 */
+    private String batchNo;
     private String period;
     private String source;
     /** 对账状态机枚举名（状态机逻辑在领域层，持久化只存枚举名）。 */
@@ -19,6 +21,14 @@ public class ReconciliationBatchEntity extends BaseEntity {
     private String closedAt;
     private String closedBy;
     private String statementSource;
+
+    public String getBatchNo() {
+        return batchNo;
+    }
+
+    public void setBatchNo(String batchNo) {
+        this.batchNo = batchNo;
+    }
 
     public String getPeriod() {
         return period;

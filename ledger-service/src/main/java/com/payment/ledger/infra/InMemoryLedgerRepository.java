@@ -58,17 +58,18 @@ public class InMemoryLedgerRepository implements LedgerRepository {
         Posting stored = posting;
         if (stored.getId() == null) {
             List<LedgerEntry> persisted = new ArrayList<>();
-            Posting withId = Posting.rehydrate(postingIdGen.incrementAndGet(), stored.getIdempotencyKey(),
-                    stored.getSourceType(), stored.getSourceId(), stored.getCurrency(), stored.getStatus(),
-                    stored.getEntries());
+            Posting withId = Posting.rehydrate(postingIdGen.incrementAndGet(), stored.getPostingNo(),
+                    stored.getIdempotencyKey(), stored.getSourceType(), stored.getSourceId(),
+                    stored.getCurrency(), stored.getStatus(), stored.getEntries());
             for (LedgerEntry entry : withId.getEntries()) {
                 LedgerEntry copy = LedgerEntry.rehydrate(entryIdGen.incrementAndGet(), withId.getId(),
                         entry.getAccountId(), entry.getDirection(), entry.getAmountMinor(), entry.getCurrency(),
                         entry.getEntryType(), entry.getSourceType(), entry.getSourceId());
                 persisted.add(copy);
             }
-            stored = Posting.rehydrate(withId.getId(), withId.getIdempotencyKey(), withId.getSourceType(),
-                    withId.getSourceId(), withId.getCurrency(), withId.getStatus(), persisted);
+            stored = Posting.rehydrate(withId.getId(), withId.getPostingNo(), withId.getIdempotencyKey(),
+                    withId.getSourceType(), withId.getSourceId(), withId.getCurrency(), withId.getStatus(),
+                    persisted);
         }
         byId.put(stored.getId(), stored);
         return stored;

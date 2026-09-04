@@ -71,7 +71,7 @@ public class MybatisLedgerRepository implements LedgerRepository {
             PostingEntity entity = toEntity(posting);
             postingMapper.insert(entity);
             List<LedgerEntry> persisted = insertEntries(entity.getId(), posting);
-            return Posting.rehydrate(entity.getId(), posting.getIdempotencyKey(), posting.getSourceType(),
+            return Posting.rehydrate(entity.getId(), posting.getPostingNo(), posting.getIdempotencyKey(), posting.getSourceType(),
                     posting.getSourceId(), posting.getCurrency(), posting.getStatus(), persisted);
         }
         PostingEntity entity = toEntity(posting);
@@ -107,7 +107,7 @@ public class MybatisLedgerRepository implements LedgerRepository {
                 .stream()
                 .map(this::toEntry)
                 .toList();
-        return Posting.rehydrate(entity.getId(), entity.getIdempotencyKey(),
+        return Posting.rehydrate(entity.getId(), entity.getPostingNo(), entity.getIdempotencyKey(),
                 LedgerSourceType.valueOf(entity.getSourceType()), entity.getSourceId(),
                 entity.getCurrency(), Posting.Status.valueOf(entity.getStatus()), entries);
     }
@@ -122,6 +122,7 @@ public class MybatisLedgerRepository implements LedgerRepository {
     private PostingEntity toEntity(Posting posting) {
         PostingEntity entity = new PostingEntity();
         entity.setId(posting.getId());
+        entity.setPostingNo(posting.getPostingNo());
         entity.setIdempotencyKey(posting.getIdempotencyKey());
         entity.setSourceType(posting.getSourceType().name());
         entity.setSourceId(posting.getSourceId());

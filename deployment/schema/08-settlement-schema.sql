@@ -7,6 +7,7 @@ USE `settlement`;
 
 CREATE TABLE IF NOT EXISTS settlement_batches (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    batch_no VARCHAR(32) NOT NULL COMMENT '业务单号 SB+雪花（ADR-0062）',
     merchant_id VARCHAR(32) NOT NULL,
     period VARCHAR(32) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS settlement_batches (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
+    UNIQUE KEY uk_settlement_batches_batch_no (batch_no),
     UNIQUE KEY uk_settlement_batches_merchant_period (merchant_id, period),
     UNIQUE KEY uk_settlement_batches_idempotency_key (idempotency_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

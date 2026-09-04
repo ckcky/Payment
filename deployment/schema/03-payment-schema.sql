@@ -6,6 +6,7 @@ USE `payment`;
 
 CREATE TABLE IF NOT EXISTS payments (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    payment_no VARCHAR(32) NOT NULL COMMENT '业务单号 PM+雪花（ADR-0062）',
     transaction_id VARCHAR(64) NOT NULL,
     order_id VARCHAR(64) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
@@ -24,7 +25,8 @@ CREATE TABLE IF NOT EXISTS payments (
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
     UNIQUE KEY uk_payments_idempotency_key (idempotency_key),
-    UNIQUE KEY uk_payments_transaction_id (transaction_id)
+    UNIQUE KEY uk_payments_transaction_id (transaction_id),
+    UNIQUE KEY uk_payments_payment_no (payment_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS payment_attempts (

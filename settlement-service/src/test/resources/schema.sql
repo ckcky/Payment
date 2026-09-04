@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS settlement_batches;
 CREATE TABLE settlement_batches (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     merchant_id VARCHAR(32) NOT NULL,
+    batch_no VARCHAR(32) NOT NULL,
     period VARCHAR(32) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     income_minor BIGINT NOT NULL,

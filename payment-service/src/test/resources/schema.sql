@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS payments;
 CREATE TABLE payments (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     transaction_id VARCHAR(64) NOT NULL,
+    payment_no VARCHAR(32) NOT NULL,
     order_id VARCHAR(64) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,

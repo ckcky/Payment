@@ -29,7 +29,7 @@ class TimeoutScanTest {
     }
 
     private Payment processingPayment(long pid, long aid) {
-        return Payment.rehydrate(pid, "txn-" + pid, "order-" + pid, "user-1",
+        return Payment.rehydrate(pid, "PM-" + pid, "txn-" + pid, "order-" + pid, "user-1",
                 100, "CNY", "idem-" + pid, PaymentStatus.PROCESSING, aid, null, 0, null, 0);
     }
 
@@ -75,7 +75,7 @@ class TimeoutScanTest {
         ReliabilityConfig cfg = new ReliabilityConfig();
         cfg.setTimeout(Duration.ofSeconds(30));
         TimeoutScannerHarness h = new TimeoutScannerHarness();
-        Payment p = Payment.rehydrate(2L, "txn-2", "order-2", "user-1",
+        Payment p = Payment.rehydrate(2L, "PM-2", "txn-2", "order-2", "user-1",
                 100, "CNY", "idem-2", PaymentStatus.SUCCEEDED, 20L, null, 0, null, 0);
         h.payments.save(p);
         h.attempts.save(attempt(20L, 2L, Instant.now().minusSeconds(120)));

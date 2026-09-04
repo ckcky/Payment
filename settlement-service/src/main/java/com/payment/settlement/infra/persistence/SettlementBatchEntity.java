@@ -9,6 +9,8 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("settlement_batches")
 public class SettlementBatchEntity extends BaseEntity {
 
+    /** 业务单号（SB + 雪花，ADR-0062）。 */
+    private String batchNo;
     private String merchantId;
     private String period;
     private String currencyCode;
@@ -25,6 +27,14 @@ public class SettlementBatchEntity extends BaseEntity {
     private Integer factCount;
     /** 来源对账周期（ADR-0023）。 */
     private String sourcePeriod;
+
+    public String getBatchNo() {
+        return batchNo;
+    }
+
+    public void setBatchNo(String batchNo) {
+        this.batchNo = batchNo;
+    }
 
     public String getMerchantId() {
         return merchantId;

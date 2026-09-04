@@ -6,6 +6,7 @@ import java.util.List;
  * 记账结果（Feature 004）：账本返回已存在或新落库的 Posting，供调用方回查与核对。
  */
 public record PostingResponse(Long postingId,
+                              String postingNo,
                               String idempotencyKey,
                               String sourceType,
                               String sourceId,

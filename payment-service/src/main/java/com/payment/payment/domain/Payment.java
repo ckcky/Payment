@@ -2,6 +2,8 @@ package com.payment.payment.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -19,6 +21,8 @@ import java.util.Objects;
 public class Payment {
 
     private Long id;
+    /** 业务单号（PM + 雪花，ADR-0062）：对外展示与客服检索用，内部引用仍用 Long id。 */
+    private String paymentNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String transactionId;
@@ -46,17 +50,19 @@ public class Payment {
         this.amountMinor = amountMinor;
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+        this.paymentNo = BusinessNos.of(BusinessNoType.PAYMENT);
     }
 
     /**
      * 持久化重建：用历史状态/渠道尝试信息还原聚合，绕过创建期状态机（不改变业务规则）。
      */
-    public static Payment rehydrate(Long id, String transactionId, String orderId, String userId,
+    public static Payment rehydrate(Long id, String paymentNo, String transactionId, String orderId, String userId,
                                     long amountMinor, String currencyCode, String idempotencyKey,
                                     PaymentStatus status, Long currentAttemptId, String failureReason,
                                     int queryAttempts, Instant enteredUnknownAt, Integer version) {
         Payment payment = new Payment(transactionId, orderId, userId, amountMinor, currencyCode, idempotencyKey);
         payment.id = id;
+        payment.paymentNo = paymentNo;
         payment.status = status;
         payment.currentAttemptId = currentAttemptId;
         payment.failureReason = failureReason;
@@ -142,6 +148,10 @@ public class Payment {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getPaymentNo() {
+        return paymentNo;
     }
 
     public Long getId() {

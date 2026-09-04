@@ -89,7 +89,7 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
     }
 
     private ReconciliationBatch toDomain(ReconciliationBatchEntity entity) {
-        return ReconciliationBatch.rehydrate(entity.getId(), entity.getVersion(), entity.getPeriod(),
+        return ReconciliationBatch.rehydrate(entity.getId(), entity.getBatchNo(), entity.getVersion(), entity.getPeriod(),
                 entity.getSource(), ReconciliationStatus.valueOf(entity.getStatus()),
                 parseMatches(entity.getMatchesJson()), parseDifferences(entity.getDifferencesJson()),
                 parseSource(entity.getStatementSource()), entity.getClosedBy(), entity.getClosedAt());
@@ -98,6 +98,7 @@ public class MybatisReconciliationRepository implements ReconciliationRepository
     private ReconciliationBatchEntity toEntity(ReconciliationBatch batch) {
         ReconciliationBatchEntity entity = new ReconciliationBatchEntity();
         entity.setId(batch.getId());
+        entity.setBatchNo(batch.getBatchNo());
         entity.setPeriod(batch.getPeriod());
         entity.setSource(batch.getSource());
         entity.setStatus(batch.getStatus().name());

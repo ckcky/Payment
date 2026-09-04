@@ -6,6 +6,7 @@ USE `order`;
 
 CREATE TABLE IF NOT EXISTS orders (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    order_no VARCHAR(32) NOT NULL COMMENT '业务单号 OR+雪花（ADR-0062）',
     user_id VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64) NOT NULL,
     payment_id BIGINT NULL,
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS orders (
     created_by VARCHAR(64),
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_orders_order_no (order_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -42,6 +44,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 CREATE TABLE IF NOT EXISTS transactions (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    transaction_no VARCHAR(32) NOT NULL COMMENT '业务单号 TX+雪花（ADR-0062）',
     order_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
@@ -53,5 +56,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_transactions_order_id (order_id)
+    UNIQUE KEY uk_transactions_order_id (order_id),
+    UNIQUE KEY uk_transactions_transaction_no (transaction_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

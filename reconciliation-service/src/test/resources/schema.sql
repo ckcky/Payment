@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS reconciliation_batches;
 CREATE TABLE reconciliation_batches (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     period VARCHAR(32) NOT NULL,
+    batch_no VARCHAR(32) NOT NULL,
     source VARCHAR(32) NOT NULL,
     status VARCHAR(32) NOT NULL,
     matches_json TEXT,

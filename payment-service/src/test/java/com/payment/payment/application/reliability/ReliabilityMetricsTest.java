@@ -75,7 +75,7 @@ class ReliabilityMetricsTest {
             new ChannelQueryService(payments, channel, resolution, config, metrics);
 
     private Payment savePayment(long paymentId, long attemptId, PaymentStatus status) {
-        Payment payment = Payment.rehydrate(paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
+        Payment payment = Payment.rehydrate(paymentId, "PM-" + paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
                 100, "CNY", "idem-" + paymentId, status, attemptId, null, 0, null, 0);
         payments.save(payment);
         attempts.save(PaymentAttempt.rehydrate(attemptId, paymentId, "mock", 0,

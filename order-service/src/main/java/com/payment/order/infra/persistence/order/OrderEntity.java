@@ -9,6 +9,8 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("orders")
 public class OrderEntity extends BaseEntity {
 
+    /** 业务单号（OR + 雪花，ADR-0062）。 */
+    private String orderNo;
     private String userId;
     private String merchantId;
     /** 下游支付单号（payment-service 的 payment.id）。 */
@@ -20,6 +22,14 @@ public class OrderEntity extends BaseEntity {
     private Long totalMinor;
     private Long paidMinor;
     private Long refundedMinor;
+
+    public String getOrderNo() {
+        return orderNo;
+    }
+
+    public void setOrderNo(String orderNo) {
+        this.orderNo = orderNo;
+    }
 
     public String getUserId() {
         return userId;

@@ -7,6 +7,7 @@ USE `reconciliation`;
 
 CREATE TABLE IF NOT EXISTS reconciliation_batches (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    batch_no VARCHAR(32) NOT NULL COMMENT '业务单号 RB+雪花（ADR-0062）',
     period VARCHAR(32) NOT NULL,
     source VARCHAR(32) NOT NULL,
     status VARCHAR(32) NOT NULL,
@@ -21,5 +22,6 @@ CREATE TABLE IF NOT EXISTS reconciliation_batches (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_reconciliation_batches_period (period)
+    UNIQUE KEY uk_reconciliation_batches_period (period),
+    UNIQUE KEY uk_reconciliation_batches_batch_no (batch_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

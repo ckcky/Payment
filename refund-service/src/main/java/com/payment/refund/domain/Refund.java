@@ -2,6 +2,8 @@ package com.payment.refund.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +20,8 @@ import java.util.Objects;
 public class Refund {
 
     private Long id;
+    /** 业务单号（RF + 雪花，ADR-0062）。 */
+    private String refundNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String orderId;
@@ -44,18 +48,20 @@ public class Refund {
         this.reason = Objects.requireNonNull(reason, "reason");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         this.items = List.copyOf(items == null ? List.of() : items);
+        this.refundNo = BusinessNos.of(BusinessNoType.REFUND);
     }
 
     /**
      * 持久化重建：还原退款聚合及其历史状态，绕过创建期校验（不改变业务规则）。
      */
-    public static Refund rehydrate(Long id, String orderId, Long paymentId, String userId,
+    public static Refund rehydrate(Long id, String refundNo, String orderId, Long paymentId, String userId,
                                    long amountMinor, String currencyCode, String reason,
                                    String idempotencyKey, List<RefundItem> items,
                                    RefundStatus status, String failureReason, Integer version) {
         Refund refund = new Refund(orderId, paymentId, userId, amountMinor, currencyCode,
                 reason, idempotencyKey, items);
         refund.id = id;
+        refund.refundNo = refundNo;
         refund.status = status;
         refund.failureReason = failureReason;
         refund.version = version;
@@ -156,6 +162,10 @@ public class Refund {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getRefundNo() {
+        return refundNo;
     }
 
     public Long getId() {

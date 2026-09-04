@@ -15,6 +15,7 @@ CREATE TABLE accounts (
 CREATE TABLE postings (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     idempotency_key VARCHAR(128) NOT NULL,
+    posting_no VARCHAR(32) NOT NULL,
     source_type VARCHAR(16) NOT NULL,
     source_id VARCHAR(64) NOT NULL,
     status VARCHAR(16) NOT NULL,

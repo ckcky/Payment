@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- 记账批次（聚合根）：一次业务事件对应一组平衡分录。
 CREATE TABLE IF NOT EXISTS postings (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    posting_no VARCHAR(32) NOT NULL COMMENT '业务单号 LP+雪花（ADR-0062）',
     idempotency_key VARCHAR(128) NOT NULL,
     source_type VARCHAR(16) NOT NULL,
     source_id VARCHAR(64) NOT NULL,
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS postings (
     PRIMARY KEY (id),
     -- 幂等兜底：重复记账撞唯一约束后回查返回首次结果（FR-004）
     UNIQUE KEY uk_postings_idempotency_key (idempotency_key),
+    UNIQUE KEY uk_postings_posting_no (posting_no),
     KEY idx_postings_source (source_type, source_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
