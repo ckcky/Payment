@@ -37,7 +37,8 @@
     <h2>① 商品与下单（种子 SKU，见 demo/reset.sh）</h2>
     <div id="skus">加载中…</div>
     <div class="note">userId=<input id="userId" value="demo-user" style="width:120px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
-      merchantId=<input id="merchantId" value="1" style="width:64px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px"></div>
+      merchantId=<input id="merchantId" value="1" style="width:64px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
+      <button class="ghost" onclick="loadSkus()" style="margin-left:8px">刷新 SKU</button></div>
   </div>
 
   <div class="card">
@@ -62,7 +63,7 @@ const log = (m) => { const el = document.getElementById('log'); el.textContent +
 let pollTimer = null, currentOrderId = null, currentPaymentId = null;
 
 async function api(method, path, body, headers) {
-  const opt = { method, headers: headers || {} };
+  const opt = { method, headers: headers || {}, cache: 'no-store' };
   if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
   const res = await fetch('/proxy' + path, opt);
   let data = null;
@@ -80,10 +81,21 @@ async function loadSkus() {
     return;
   }
   if (r.data.length === 0) {
-    box.innerHTML = '<div class="sku">暂无 SKU —— 请先执行 demo/reset.sh</div>';
+    // reset 播种可能有延迟：1.5s 后自动重试一次，仍为空才提示（另提供手动刷新按钮）
+    box.innerHTML = '<div class="sku">暂无 SKU，1.5s 后自动重试…</div>';
+    await new Promise(ok => setTimeout(ok, 1500));
+    const r2 = await api('GET', '/catalog/skus');
+    if (r2.status === 200 && Array.isArray(r2.data) && r2.data.length > 0) { renderSkus(r2.data); return; }
+    box.innerHTML = '<div class="sku">暂无 SKU —— 请先执行 demo/reset.sh，或点「刷新 SKU」重试</div>';
     return;
   }
-  for (const s of r.data) {
+  renderSkus(r.data);
+}
+
+function renderSkus(list) {
+  const box = document.getElementById('skus');
+  box.innerHTML = '';
+  for (const s of list) {
     box.innerHTML += '<div class="sku"><div><div class="name">' + s.name + '</div>'
       + '<div class="id">skuId=' + s.id + ' · ' + s.skuCode + ' · 状态 ' + s.status + '</div></div>'
       + '<div><span class="price">' + (s.priceMinor / 100).toFixed(2) + ' ' + s.currencyCode + '</span> × '

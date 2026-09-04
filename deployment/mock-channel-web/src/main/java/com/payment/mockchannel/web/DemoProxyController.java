@@ -71,9 +71,13 @@ public class DemoProxyController {
             ResponseEntity<String> upstream = spec.retrieve().toEntity(String.class);
             return ResponseEntity.status(upstream.getStatusCode())
                     .contentType(MediaType.APPLICATION_JSON)
+                    // 禁止浏览器缓存代理响应：reset 前后同一 URL 的数据会变（如空 SKU 列表），
+                    // 缓存旧响应会让 /demo 永远显示过期状态
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
                     .body(upstream.getBody());
         } catch (HttpStatusCodeException e) {
             return ResponseEntity.status(e.getStatusCode())
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(e.getResponseBodyAsString());
         } catch (Exception e) {
