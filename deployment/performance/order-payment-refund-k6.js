@@ -7,9 +7,9 @@
  *                                                              →支付意图创建，返回 PROCESSING + payUrl）
  *   ② POST /mock-channel/callback           mock-channel-web （以渠道身份 HMAC 签名转发 payment，
  *                                                              驱动 PROCESSING→SUCCEEDED）
- *   ③ POST /internal/refunds                refund-service   （创建退款，经 Feign 走 payment 渠道退款，
- *                                                              同步返回 SUCCEEDED）
- *   ④ POST /internal/refunds/{id}/resolve   refund-service   （权威确认端点，幂等收敛）
+ *   ③ POST /internal/refunds                payment-service（refund 包，ADR-0064）
+ *                                                              （创建退款，进程内渠道退款，同步 SUCCEEDED）
+ *   ④ POST /internal/refunds/{id}/resolve   payment-service  （权威确认端点，幂等收敛）
  *
  * 环境变量：
  *   VUS        并发虚拟用户数（默认 20）
@@ -29,7 +29,7 @@ const SKU_ID = parseInt(__ENV.SKU_ID || '4', 10);
 const MERCHANT_ID = __ENV.MERCHANT_ID || '1';
 const ORDER_URL = __ENV.ORDER_URL || 'http://localhost:8083';
 const MOCK_URL = __ENV.MOCK_URL || 'http://localhost:8091';
-const REFUND_URL = __ENV.REFUND_URL || 'http://localhost:8085';
+const REFUND_URL = __ENV.REFUND_URL || 'http://localhost:8084';  // refund 端点已并入 payment-service（ADR-0064）
 const OUT = __ENV.OUT || '';
 
 const stageOrder = new Trend('chain_order_create', true);
