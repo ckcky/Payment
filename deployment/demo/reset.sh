@@ -75,9 +75,16 @@ create_sku() {
     assert_status 200 "秒杀配额预置 $1（skuId=$id, total=$5）"
   fi
 }
+# --- 清理 Redis 陈旧秒杀配额键（必须在播种前）---
+# 秒杀准入按「键存在=秒杀品」判断：历史残留的 seckill:sku:1=0 会让普通 SKU 被误判
+# 秒杀配额耗尽（409 seckill stock insufficient）。复位时先清空再重播种 103。
+docker exec payment-redis redis-cli EVAL "for _,k in ipairs(redis.call('keys','seckill:sku:*')) do redis.call('del',k) end" 0 >/dev/null 2>&1 || true
+
 create_sku "DEMO-SKU-101" "monthly-membership"   9900     100
 create_sku "DEMO-SKU-102" "annual-membership" 129000     100
 create_sku "DEMO-SKU-103" "flash-sale-membership"    100      10   10
+
+info "Redis 陈旧秒杀键已清理；配额仅 sku=3（=10）"
 
 echo ""
 info "复位完成：商户=$MERCHANT_ID 商品=$PRODUCT_ID SKU=101/102/103（103 已播种秒杀配额）"

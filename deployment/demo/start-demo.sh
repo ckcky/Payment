@@ -44,4 +44,30 @@ if command -v taskkill >/dev/null 2>&1; then
 fi
 
 echo "==> 启动 Docker 基础设施与 Java 演示栈"
-exec bash deployment/start-all.sh
+bash deployment/start-all.sh || exit 1
+
+echo "==> 等待 11 个服务健康..."
+healthy=0
+for i in $(seq 1 60); do
+  n=0
+  for p in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091; do
+    c=$(curl -s --noproxy '*' -m 2 -o /dev/null -w '%{http_code}' "http://localhost:$p/actuator/health" 2>/dev/null)
+    [ "$c" = "200" ] && n=$((n+1))
+  done
+  [ "$n" = "11" ] && { healthy=1; break; }
+  sleep 4
+done
+if [ "$healthy" != "1" ]; then
+  echo "✗ 服务未全部就绪（$n/11）。查看日志：deployment/logs/<service>.log"
+  exit 1
+fi
+echo "    11/11 全部健康"
+
+echo "==> 播种演示数据（商户 + 种子 SKU，/demo 页面直接可用）"
+bash "$ROOT_DIR/deployment/demo/reset.sh"
+
+echo ""
+echo "=================================================="
+echo "  演示就绪：http://localhost:8091/demo"
+echo "  （若页面早于播种打开，点一下「刷新 SKU」按钮即可）"
+echo "=================================================="

@@ -47,8 +47,15 @@ for i in $(seq 1 45); do
   sleep 2
 done
 
-echo "==> [2/3] 构建并安装本地依赖（首次较慢，后续可跳过）"
-./mvnw -q install -DskipTests
+echo "==> [2/3] 全量 clean 构建（首次较慢；PAYMENT_SKIP_BUILD=1 可跳过）"
+# 必须 clean：target 里可能残留 VS Code JDT 写入的半成品 class（外层类在、内部类缺失），
+# spring-boot:run 直接复用会导致运行期 NoClassDefFoundError 且被 JVM 缓存、重启前永久 500
+# （2026-09-04 实跑踩坑：order-service RateLimiter$Window 缺失，所有 /orders 500）。
+if [ "${PAYMENT_SKIP_BUILD:-0}" = "1" ]; then
+  echo "    PAYMENT_SKIP_BUILD=1，跳过构建"
+else
+  ./mvnw -q clean install -DskipTests
+fi
 
 echo "==> [3/3] 后台启动 10 个进程：9 服务 + mock-channel-web（演示组件，ADR-0048 修订版）"
 
