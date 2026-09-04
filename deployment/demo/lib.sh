@@ -142,7 +142,8 @@ httpq() {
   fi
   curl "${args[@]}" "$url" > "$code_file" 2>/dev/null
   HTTPQ_CODE=$(cat "$code_file" 2>/dev/null)
-  rm -f "$code_file"
+  # 不删 code_file：同 PID 覆盖写、体积极小；safe-delete 钩子环境下 rm 单次可达 10s+，
+  # 会把压测/演示吞吐拖垮（2026-09-05 实测踩坑）。
 }
 
 # jstr <FILE> <field> —— 从 JSON 文件零 fork 提取字符串字段值（stdout 输出）
