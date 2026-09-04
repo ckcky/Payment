@@ -35,7 +35,7 @@ class PaymentPersistenceTest {
         Payment reloaded = paymentRepository.findById(payment.getId()).orElseThrow();
         assertThat(reloaded.getId()).isEqualTo(payment.getId());
         assertThat(reloaded.getTransactionId()).isEqualTo("txn-rt");
-        assertThat(reloaded.getOrderId()).isEqualTo("order-rt");
+        assertThat(reloaded.getOrderNo()).isEqualTo("order-rt");
         assertThat(reloaded.getUserId()).isEqualTo("user-rt");
         assertThat(reloaded.getAmountMinor()).isEqualTo(100L);
         assertThat(reloaded.getCurrencyCode()).isEqualTo("CNY");
@@ -51,20 +51,20 @@ class PaymentPersistenceTest {
         Payment payment = new Payment("txn-att", "order-att", "user-att", 100L, "CNY", "idem-att");
         paymentRepository.save(payment);
 
-        PaymentAttempt attempt = new PaymentAttempt(payment.getId(), "mock", 0);
+        PaymentAttempt attempt = new PaymentAttempt(payment.getPaymentNo(), "mock", 0);
         attempt.accept("ref-att");
         attemptRepository.save(attempt);
 
         PaymentAttempt reloaded = attemptRepository.findById(attempt.getId()).orElseThrow();
         assertThat(reloaded.getId()).isEqualTo(attempt.getId());
-        assertThat(reloaded.getPaymentId()).isEqualTo(payment.getId());
+        assertThat(reloaded.getPaymentNo()).isEqualTo(payment.getPaymentNo());
         assertThat(reloaded.getChannelCode()).isEqualTo("mock");
         assertThat(reloaded.getChannelReference()).isEqualTo("ref-att");
         assertThat(reloaded.getStatus()).isEqualTo(PaymentAttemptStatus.ACCEPTED);
         assertThat(reloaded.getRetryCount()).isEqualTo(0);
         assertThat(reloaded.getVersion()).isEqualTo(1);
 
-        assertThat(attemptRepository.findByPaymentId(payment.getId())).hasSize(1);
+        assertThat(attemptRepository.findByPaymentNo(payment.getPaymentNo())).hasSize(1);
     }
 
     @Test

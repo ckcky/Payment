@@ -9,7 +9,7 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("order_items")
 public class OrderItemEntity extends BaseEntity {
 
-    private Long orderId;
+    private String orderNo;
     private String skuId;
     private String skuCode;
     private String name;
@@ -18,12 +18,12 @@ public class OrderItemEntity extends BaseEntity {
     private Long priceMinor;
     private String currencyCode;
 
-    public Long getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
-    public void setOrderId(Long orderId) {
-        this.orderId = orderId;
+    public void setOrderNo(String orderNo) {
+        this.orderNo = orderNo;
     }
 
     public String getSkuId() {

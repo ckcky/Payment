@@ -3,9 +3,9 @@ DROP TABLE IF EXISTS refunds;
 
 CREATE TABLE refunds (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(64) NOT NULL,
     refund_no VARCHAR(32) NOT NULL,
-    payment_id BIGINT NOT NULL,
+    payment_no BIGINT NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,

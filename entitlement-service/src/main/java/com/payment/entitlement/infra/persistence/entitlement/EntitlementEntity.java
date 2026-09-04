@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 public class EntitlementEntity extends BaseEntity {
 
     private String userId;
-    private String orderId;
+    private String orderNo;
     /** 幂等键：同一履约完成请求只授予一次（表上唯一索引）。 */
     private String sourceFulfillmentId;
     private String grantRef;
@@ -30,12 +30,12 @@ public class EntitlementEntity extends BaseEntity {
         this.userId = userId;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
+    public void setOrderNo(String orderNo) {
+        this.orderNo = orderNo;
     }
 
     public String getSourceFulfillmentId() {

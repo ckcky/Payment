@@ -36,14 +36,24 @@ public class PaymentPersistence {
     /** 插入待处理支付；若幂等键已存在则返回既有支付（created=false，表示命中重复）。 */
     @Transactional
     public PendingPayment insertPending(CreatePaymentCommand cmd) {
-        Optional<Payment> existing = paymentRepository.findByIdempotencyKey(cmd.idempotencyKey());
+        // Feature 015（ADR-015）混合幂等策略，修复「第二笔成功撞同一幂等键静默少记账」(C2)：
+        // 1) 调用方显式传 idempotencyKey → 沿用既有 T018 契约（同 key 重试返回同一支付单）；
+        // 2) 未传（order-service 显式选渠道，每次新建支付单）→ 服务端生成
+        //    payment:{orderNo}:{channelCode}:{attemptSeq}，attemptSeq 取同交易已存在支付单数 + 1，
+        //    保证换渠道/重试新建支付单时幂等键唯一，账本按支付单维度记账不丢笔。
+        String idempotencyKey = cmd.idempotencyKey();
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            int attemptSeq = (int) paymentRepository.countByTransactionId(cmd.transactionId()) + 1;
+            idempotencyKey = "payment:" + cmd.orderNo() + ":" + cmd.channelCode() + ":" + attemptSeq;
+        }
+        Optional<Payment> existing = paymentRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             return new PendingPayment(existing.get(), false);
         }
-        Payment payment = new Payment(cmd.transactionId(), cmd.orderId(), cmd.userId(),
-                cmd.amountMinor(), cmd.currencyCode(), cmd.idempotencyKey());
+        Payment payment = new Payment(cmd.transactionId(), cmd.orderNo(), cmd.userId(),
+                cmd.amountMinor(), cmd.currencyCode(), idempotencyKey);
         payment = insertNew(payment);
-        PaymentAttempt attempt = new PaymentAttempt(payment.getId(), cmd.channelCode(), 0);
+        PaymentAttempt attempt = new PaymentAttempt(payment.getPaymentNo(), cmd.channelCode(), 0);
         attempt = attemptRepository.save(attempt);
         payment.start(attempt.getId());
         payment = paymentRepository.save(payment);

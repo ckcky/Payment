@@ -29,19 +29,19 @@ class OrderStateMachineTest {
     void fullPaymentMovesToPaid() {
         Order order = order(100, 2); // total 200
         order.confirm();
-        assertThat(order.markPaid(1L)).isTrue();
+        assertThat(order.markPaid("PM-1")).isTrue();
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(order.getPaidMinor()).isEqualTo(200L);
-        assertThat(order.getPaymentId()).isEqualTo(1L);
+        assertThat(order.getPaymentNo()).isEqualTo("PM-1");
     }
 
     @Test
     void repeatedPaidCallbackIsAbsorbed() {
         Order order = order(100, 2); // total 200
         order.confirm();
-        order.markPaid(1L);
-        assertThat(order.markPaid(2L)).isFalse(); // 幂等重复回调，吸收且不覆盖 paymentId
-        assertThat(order.getPaymentId()).isEqualTo(1L);
+        order.markPaid("PM-1");
+        assertThat(order.markPaid("PM-2")).isFalse(); // 幂等重复回调，吸收且不覆盖 paymentNo
+        assertThat(order.getPaymentNo()).isEqualTo("PM-1");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
     }
 
@@ -57,7 +57,7 @@ class OrderStateMachineTest {
     void cancelFromPaidThrows() {
         Order order = order(100, 1);
         order.confirm();
-        order.markPaid(1L);
+        order.markPaid("PM-1");
         assertThatThrownBy(order::cancel)
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.STATE_TRANSITION_VIOLATION));
@@ -67,7 +67,7 @@ class OrderStateMachineTest {
     void fullLifecycleToClosed() {
         Order order = order(100, 1);
         order.confirm();
-        order.markPaid(1L);
+        order.markPaid("PM-1");
         order.markFulfilling();
         order.complete();
         order.close();

@@ -30,7 +30,7 @@ public class OrderPaymentRpcController {
     }
 
     @PostMapping("/on-payment-failed")
-    public void onPaymentFailed(@RequestParam Long orderId) {
-        service.releaseStockForOrder(orderId);
+    public void onPaymentFailed(@RequestParam String orderNo) {
+        service.releaseStockForOrder(orderNo);
     }
 }

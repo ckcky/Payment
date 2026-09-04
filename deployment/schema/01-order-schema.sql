@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS orders (
     order_no VARCHAR(32) NOT NULL COMMENT '业务单号 OR+雪花（ADR-0062）',
     user_id VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64) NOT NULL,
-    payment_id BIGINT NULL,
+    payment_no VARCHAR(32) NULL COMMENT '关联支付单（业务单号 PM+雪花，ADR-0063）',
     status VARCHAR(32) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     total_minor BIGINT NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 CREATE TABLE IF NOT EXISTS order_items (
     id BIGINT NOT NULL AUTO_INCREMENT,
-    order_id BIGINT NOT NULL,
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     sku_id VARCHAR(64) NOT NULL,
     sku_code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
@@ -39,13 +39,13 @@ CREATE TABLE IF NOT EXISTS order_items (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    KEY idx_order_items_order_id (order_id)
+    KEY idx_order_items_order_no (order_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS transactions (
     id BIGINT NOT NULL AUTO_INCREMENT,
     transaction_no VARCHAR(32) NOT NULL COMMENT '业务单号 TX+雪花（ADR-0062）',
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     purpose VARCHAR(32) NOT NULL,
@@ -56,6 +56,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_transactions_order_id (order_id),
+    UNIQUE KEY uk_transactions_order_no (order_no),
     UNIQUE KEY uk_transactions_transaction_no (transaction_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -31,16 +31,16 @@ public class InMemoryRefundRepository implements RefundRepository {
     }
 
     @Override
-    public List<Refund> findByPaymentId(Long paymentId) {
+    public List<Refund> findByPaymentNo(String paymentNo) {
         return byId.values().stream()
-                .filter(r -> paymentId.equals(r.getPaymentId()))
+                .filter(r -> paymentNo.equals(r.getPaymentNo()))
                 .toList();
     }
 
     @Override
-    public List<Refund> findByOrderId(String orderId) {
+    public List<Refund> findByOrderNo(String orderNo) {
         return byId.values().stream()
-                .filter(r -> orderId.equals(r.getOrderId()))
+                .filter(r -> orderNo.equals(r.getOrderNo()))
                 .toList();
     }
 
@@ -52,7 +52,7 @@ public class InMemoryRefundRepository implements RefundRepository {
     }
 
     @Override
-    public void lockForIntake(Long paymentId) {
+    public void lockForIntake(String paymentNo) {
         // 内存实现无并发串行化需求（单测为单线程），生产由 MyBatis 排他锁承接。
     }
 

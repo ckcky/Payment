@@ -32,9 +32,9 @@ class TerminalConflictTest {
 
     private Payment savePayment(long paymentId, long attemptId, PaymentStatus status) {
         Payment payment = Payment.rehydrate(paymentId, "PM-" + paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
-                100, "CNY", "idem-" + paymentId, status, attemptId, null, 0, null, 0);
+                100, "CNY", "idem-" + paymentId, status, attemptId, null, 0, null, 0, 1);
         payments.save(payment);
-        attempts.save(PaymentAttempt.rehydrate(attemptId, paymentId, "mock", 0,
+        attempts.save(PaymentAttempt.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
                 Instant.now(), null, null, PaymentAttemptStatus.ACCEPTED, null, null, 0));
         return payment;
     }
@@ -43,7 +43,7 @@ class TerminalConflictTest {
     void lateSuccessDoesNotOverwriteFailedPayment() {
         savePayment(1L, 10L, PaymentStatus.FAILED);
 
-        boolean changed = processor.applyAndNotify(1L, ChannelResult.success("late-ref"));
+        boolean changed = processor.applyAndNotify("PM-1", ChannelResult.success("late-ref"));
 
         assertThat(changed).isFalse();
         assertThat(payments.findById(1L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.FAILED);
@@ -55,7 +55,7 @@ class TerminalConflictTest {
     void lateFailureDoesNotOverwriteSucceededPayment() {
         savePayment(2L, 20L, PaymentStatus.SUCCEEDED);
 
-        boolean changed = processor.applyAndNotify(2L, ChannelResult.businessFailure("late-ref", "late decline"));
+        boolean changed = processor.applyAndNotify("PM-2", ChannelResult.businessFailure("late-ref", "late decline"));
 
         assertThat(changed).isFalse();
         assertThat(payments.findById(2L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
@@ -65,7 +65,7 @@ class TerminalConflictTest {
     void unknownDoesNotOverwriteTerminalPayment() {
         savePayment(3L, 30L, PaymentStatus.SUCCEEDED);
 
-        boolean changed = processor.applyAndNotify(3L, ChannelResult.timeout("channel glitch"));
+        boolean changed = processor.applyAndNotify("PM-3", ChannelResult.timeout("channel glitch"));
 
         assertThat(changed).isFalse();
         assertThat(payments.findById(3L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);

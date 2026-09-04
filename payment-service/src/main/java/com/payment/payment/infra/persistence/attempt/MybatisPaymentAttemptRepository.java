@@ -31,10 +31,10 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
     }
 
     @Override
-    public List<PaymentAttempt> findByPaymentId(Long paymentId) {
+    public List<PaymentAttempt> findByPaymentNo(String paymentNo) {
         return attemptMapper.selectList(
                         Wrappers.<PaymentAttemptEntity>lambdaQuery()
-                                .eq(PaymentAttemptEntity::getPaymentId, paymentId))
+                                .eq(PaymentAttemptEntity::getPaymentNo, paymentNo))
                 .stream()
                 .map(this::toDomain)
                 .toList();
@@ -58,7 +58,7 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
     }
 
     private PaymentAttempt toDomain(PaymentAttemptEntity entity) {
-        return PaymentAttempt.rehydrate(entity.getId(), entity.getPaymentId(), entity.getChannelCode(),
+        return PaymentAttempt.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getChannelCode(),
                 entity.getRetryCount(), entity.getRequestedAt(), entity.getRespondedAt(),
                 entity.getChannelReference(), PaymentAttemptStatus.valueOf(entity.getStatus()),
                 entity.getFailureReason(),
@@ -69,7 +69,7 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
     private PaymentAttemptEntity toEntity(PaymentAttempt attempt) {
         PaymentAttemptEntity entity = new PaymentAttemptEntity();
         entity.setId(attempt.getId());
-        entity.setPaymentId(attempt.getPaymentId());
+        entity.setPaymentNo(attempt.getPaymentNo());
         entity.setChannelCode(attempt.getChannelCode());
         entity.setRequestedAt(attempt.getRequestedAt());
         entity.setRespondedAt(attempt.getRespondedAt());

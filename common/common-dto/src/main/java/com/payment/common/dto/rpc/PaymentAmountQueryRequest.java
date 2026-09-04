@@ -6,5 +6,5 @@ package com.payment.common.dto.rpc;
  * <p>退款受理前，refund-service 需要确认原始支付金额与币种以计算可退款金额；
  * 只查询事实，不修改 payment 内部状态。</p>
  */
-public record PaymentAmountQueryRequest(Long paymentId) {
+public record PaymentAmountQueryRequest(String paymentNo) {
 }

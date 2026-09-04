@@ -29,13 +29,25 @@ public class MybatisOrderRepository implements OrderRepository {
     }
 
     @Override
+    public Optional<Order> findByOrderNo(String orderNo) {
+        OrderEntity entity = orderMapper.selectOne(
+                Wrappers.<OrderEntity>lambdaQuery().eq(OrderEntity::getOrderNo, orderNo));
+        if (entity == null) {
+            return Optional.empty();
+        }
+        List<OrderItemEntity> itemEntities = orderItemMapper.selectList(
+                Wrappers.<OrderItemEntity>lambdaQuery().eq(OrderItemEntity::getOrderNo, orderNo));
+        return Optional.of(toDomain(entity, itemEntities));
+    }
+
+    @Override
     public Optional<Order> findById(Long id) {
         OrderEntity entity = orderMapper.selectById(id);
         if (entity == null) {
             return Optional.empty();
         }
         List<OrderItemEntity> itemEntities = orderItemMapper.selectList(
-                Wrappers.<OrderItemEntity>lambdaQuery().eq(OrderItemEntity::getOrderId, id));
+                Wrappers.<OrderItemEntity>lambdaQuery().eq(OrderItemEntity::getOrderNo, entity.getOrderNo()));
         return Optional.of(toDomain(entity, itemEntities));
     }
 
@@ -47,7 +59,7 @@ public class MybatisOrderRepository implements OrderRepository {
             order.setId(entity.getId());
             order.setVersion(entity.getVersion());
             for (OrderItem item : order.getItems()) {
-                orderItemMapper.insert(toItemEntity(entity.getId(), item));
+                orderItemMapper.insert(toItemEntity(entity.getOrderNo(), item));
             }
             return order;
         }
@@ -64,7 +76,7 @@ public class MybatisOrderRepository implements OrderRepository {
                 .map(this::toItem)
                 .toList();
         return Order.rehydrate(entity.getId(), entity.getOrderNo(), entity.getUserId(), entity.getMerchantId(),
-                entity.getPaymentId(), OrderStatus.valueOf(entity.getStatus()), entity.getCurrencyCode(),
+                entity.getPaymentNo(), OrderStatus.valueOf(entity.getStatus()), entity.getCurrencyCode(),
                 items, entity.getPaidMinor(), entity.getRefundedMinor(), entity.getVersion());
     }
 
@@ -79,7 +91,7 @@ public class MybatisOrderRepository implements OrderRepository {
         entity.setOrderNo(order.getOrderNo());
         entity.setUserId(order.getUserId());
         entity.setMerchantId(order.getMerchantId());
-        entity.setPaymentId(order.getPaymentId());
+        entity.setPaymentNo(order.getPaymentNo());
         entity.setStatus(order.getStatus().name());
         entity.setCurrencyCode(order.getCurrencyCode());
         entity.setTotalMinor(order.getTotalMinor());
@@ -89,9 +101,9 @@ public class MybatisOrderRepository implements OrderRepository {
         return entity;
     }
 
-    private OrderItemEntity toItemEntity(Long orderId, OrderItem item) {
+    private OrderItemEntity toItemEntity(String orderNo, OrderItem item) {
         OrderItemEntity entity = new OrderItemEntity();
-        entity.setOrderId(orderId);
+        entity.setOrderNo(orderNo);
         entity.setSkuId(item.getSkuId());
         entity.setSkuCode(item.getSkuCode());
         entity.setName(item.getName());

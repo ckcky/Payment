@@ -6,10 +6,10 @@ USE `fulfillment`;
 
 CREATE TABLE IF NOT EXISTS fulfillments (
     id BIGINT NOT NULL AUTO_INCREMENT,
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     order_item_id VARCHAR(64),
     delivery_content VARCHAR(255) NOT NULL,
-    source_payment_id VARCHAR(64) NOT NULL,
+    source_payment_no VARCHAR(32) NOT NULL COMMENT '来源支付单（业务单号 PM+雪花，ADR-0063）',
     status VARCHAR(32) NOT NULL,
     failure_reason VARCHAR(255),
     created_at DATETIME NOT NULL,
@@ -18,5 +18,5 @@ CREATE TABLE IF NOT EXISTS fulfillments (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_fulfillments_source_payment_id (source_payment_id)
+    UNIQUE KEY uk_fulfillments_source_payment_no (source_payment_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

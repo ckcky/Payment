@@ -42,7 +42,7 @@ final class PaymentResultApplier {
     }
 
     static PaymentSucceededRequest toSucceededRequest(Payment payment) {
-        return new PaymentSucceededRequest(payment.getId(), payment.getOrderId(),
+        return new PaymentSucceededRequest(payment.getPaymentNo(), payment.getOrderNo(),
                 payment.getTransactionId(), payment.getUserId(),
                 payment.getAmountMinor(), payment.getCurrencyCode());
     }

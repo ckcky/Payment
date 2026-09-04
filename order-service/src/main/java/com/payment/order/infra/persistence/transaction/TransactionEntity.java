@@ -11,7 +11,7 @@ public class TransactionEntity extends BaseEntity {
 
     /** 业务单号（TX + 雪花，ADR-0062）。 */
     private String transactionNo;
-    private String orderId;
+    private String orderNo;
     /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
     private String currencyCode;
@@ -27,12 +27,12 @@ public class TransactionEntity extends BaseEntity {
         this.transactionNo = transactionNo;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
+    public void setOrderNo(String orderNo) {
+        this.orderNo = orderNo;
     }
 
     public Long getAmountMinor() {

@@ -22,9 +22,9 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
     }
 
     @Override
-    public List<PaymentAttempt> findByPaymentId(Long paymentId) {
+    public List<PaymentAttempt> findByPaymentNo(String paymentNo) {
         return byId.values().stream()
-                .filter(a -> paymentId.equals(a.getPaymentId()))
+                .filter(a -> a.getPaymentNo().equals(paymentNo))
                 .toList();
     }
 

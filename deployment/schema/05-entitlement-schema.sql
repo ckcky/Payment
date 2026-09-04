@@ -7,7 +7,7 @@ USE `entitlement`;
 CREATE TABLE IF NOT EXISTS entitlements (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id VARCHAR(64) NOT NULL,
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     source_fulfillment_id VARCHAR(64) NOT NULL,
     grant_ref VARCHAR(64),
     available_quantity INT NOT NULL,

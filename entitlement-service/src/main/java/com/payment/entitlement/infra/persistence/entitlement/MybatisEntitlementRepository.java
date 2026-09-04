@@ -41,10 +41,10 @@ public class MybatisEntitlementRepository implements EntitlementRepository {
     }
 
     @Override
-    public List<Entitlement> findByOrderId(String orderId) {
+    public List<Entitlement> findByOrderNo(String orderNo) {
         return entitlementMapper.selectList(
                         Wrappers.<EntitlementEntity>lambdaQuery()
-                                .eq(EntitlementEntity::getOrderId, orderId))
+                                .eq(EntitlementEntity::getOrderNo, orderNo))
                 .stream()
                 .map(this::toDomain)
                 .toList();
@@ -68,7 +68,7 @@ public class MybatisEntitlementRepository implements EntitlementRepository {
     }
 
     private Entitlement toDomain(EntitlementEntity entity) {
-        return Entitlement.rehydrate(entity.getId(), entity.getUserId(), entity.getOrderId(),
+        return Entitlement.rehydrate(entity.getId(), entity.getUserId(), entity.getOrderNo(),
                 entity.getSourceFulfillmentId(), entity.getAvailableQuantity(), entity.getScope(),
                 entity.getExpiryAt(), EntitlementStatus.valueOf(entity.getStatus()), entity.getVersion(),
                 entity.getGrantRef());
@@ -78,7 +78,7 @@ public class MybatisEntitlementRepository implements EntitlementRepository {
         EntitlementEntity entity = new EntitlementEntity();
         entity.setId(entitlement.getId());
         entity.setUserId(entitlement.getUserId());
-        entity.setOrderId(entitlement.getOrderId());
+        entity.setOrderNo(entitlement.getOrderNo());
         entity.setSourceFulfillmentId(entitlement.getSourceFulfillmentId());
         entity.setGrantRef(entitlement.getGrantRef());
         entity.setAvailableQuantity(entitlement.getAvailableQuantity());

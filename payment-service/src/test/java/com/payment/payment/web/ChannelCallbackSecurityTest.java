@@ -73,10 +73,10 @@ class ChannelCallbackSecurityTest {
         Payment payment = newPayment();
         String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\",\"amountMinor\":100}";
 
-        mockMvc.perform(signed(payment.getId(), body)).andExpect(status().isOk());
+        mockMvc.perform(signed(payment.getPaymentNo(), body)).andExpect(status().isOk());
 
         ArgumentCaptor<ChannelResult> captor = ArgumentCaptor.forClass(ChannelResult.class);
-        verify(callbackService, times(1)).handleCallback(eq(payment.getId()), captor.capture());
+        verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), captor.capture());
         // 原始 body 必须被完整读取并正确反序列化（CachedBodyHttpServletRequest 生效）
         assertThat(captor.getValue().status()).isEqualTo(ChannelResult.Status.SUCCESS);
         assertThat(captor.getValue().channelReference()).isEqualTo("ch-ref-1");
@@ -89,10 +89,10 @@ class ChannelCallbackSecurityTest {
         String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = now();
 
-        mockMvc.perform(callback(payment.getId(), body, timestamp, "deadbeef"))
+        mockMvc.perform(callback(payment.getPaymentNo(), body, timestamp, "deadbeef"))
                 .andExpect(status().isOk());
 
-        verify(callbackService, times(1)).handleCallback(eq(payment.getId()), any());
+        verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), any());
     }
 
     /** 占位期：缺少签名头仍放行。实现验签后本用例须反转为 403。 */
@@ -101,12 +101,12 @@ class ChannelCallbackSecurityTest {
         Payment payment = newPayment();
         String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
 
-        mockMvc.perform(post(url(payment.getId()))
+        mockMvc.perform(post(url(payment.getPaymentNo()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
 
-        verify(callbackService, times(1)).handleCallback(eq(payment.getId()), any());
+        verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), any());
     }
 
     /** 占位期：时间戳超出防重放窗口仍放行。实现验签后本用例须反转为 403。 */
@@ -116,11 +116,11 @@ class ChannelCallbackSecurityTest {
         String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String staleTimestamp = String.valueOf(System.currentTimeMillis() - 600_000L);
 
-        mockMvc.perform(callback(payment.getId(), body, staleTimestamp,
+        mockMvc.perform(callback(payment.getPaymentNo(), body, staleTimestamp,
                         SignatureVerifier.sign(SECRET, staleTimestamp, body)))
                 .andExpect(status().isOk());
 
-        verify(callbackService, times(1)).handleCallback(eq(payment.getId()), any());
+        verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), any());
     }
 
     /** 占位期：body 被篡改仍放行。实现验签后本用例须反转为 403。 */
@@ -131,11 +131,11 @@ class ChannelCallbackSecurityTest {
         String tamperedBody = "{\"status\":\"FAILURE\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = now();
 
-        mockMvc.perform(callback(payment.getId(), tamperedBody, timestamp,
+        mockMvc.perform(callback(payment.getPaymentNo(), tamperedBody, timestamp,
                         SignatureVerifier.sign(SECRET, timestamp, signedBody)))
                 .andExpect(status().isOk());
 
-        verify(callbackService, times(1)).handleCallback(eq(payment.getId()), any());
+        verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), any());
     }
 
     /**
@@ -164,7 +164,7 @@ class ChannelCallbackSecurityTest {
             String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
             String timestamp = now();
 
-            mockMvc.perform(callback(payment.getId(), body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body)))
+            mockMvc.perform(callback(payment.getPaymentNo(), body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body)))
                     .andExpect(status().isOk());
         }
     }
@@ -175,22 +175,22 @@ class ChannelCallbackSecurityTest {
                         "idem-" + UUID.randomUUID(), "mock"));
     }
 
-    private static String url(Long paymentId) {
-        return "/internal/payments/" + paymentId + "/channel-callback";
+    private static String url(String paymentNo) {
+        return "/internal/payments/" + paymentNo + "/channel-callback";
     }
 
     private static String now() {
         return String.valueOf(System.currentTimeMillis());
     }
 
-    private static MockHttpServletRequestBuilder signed(Long paymentId, String body) {
+    private static MockHttpServletRequestBuilder signed(String paymentNo, String body) {
         String timestamp = now();
-        return callback(paymentId, body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body));
+        return callback(paymentNo, body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body));
     }
 
-    private static MockHttpServletRequestBuilder callback(Long paymentId, String body,
+    private static MockHttpServletRequestBuilder callback(String paymentNo, String body,
                                                           String timestamp, String signature) {
-        return post(url(paymentId))
+        return post(url(paymentNo))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .header("X-Channel-Timestamp", timestamp)

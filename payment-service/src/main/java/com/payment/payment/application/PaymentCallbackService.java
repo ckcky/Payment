@@ -37,11 +37,11 @@ public class PaymentCallbackService {
     }
 
     /** 处理一次渠道回调；返回支付是否因此发生状态迁移。 */
-    public boolean handleCallback(Long paymentId, ChannelResult result) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId));
+    public boolean handleCallback(String paymentNo, ChannelResult result) {
+        Payment payment = paymentRepository.findByPaymentNo(paymentNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentNo));
         PaymentStatus fromStatus = payment.getStatus();
-        boolean changed = processor.applyAndNotify(paymentId, result);
+        boolean changed = processor.applyAndNotify(paymentNo, result);
         if (changed) {
             recordTransition(payment, fromStatus, result);
         } else {

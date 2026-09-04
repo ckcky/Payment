@@ -17,7 +17,7 @@ class PaymentStateMachineTest {
     }
 
     private static PaymentAttempt attempt() {
-        return new PaymentAttempt(1L, "mock", 0);
+        return new PaymentAttempt("PM-1", "mock", 0);
     }
 
     // ---- Payment ----

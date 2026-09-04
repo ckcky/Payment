@@ -60,9 +60,9 @@ class InternalServiceAuthTest {
     void validServiceTokenPasses() throws Exception {
         Payment payment = newPayment();
 
-        mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", TOKEN))
+        mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paymentId").value(payment.getId()))
+                .andExpect(jsonPath("$.paymentNo").value(payment.getPaymentNo()))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"));
     }
 
@@ -71,7 +71,7 @@ class InternalServiceAuthTest {
     void missingServiceTokenIsAllowedWhileAuthIsStubbed() throws Exception {
         Payment payment = newPayment();
 
-        mockMvc.perform(queryAmount(payment.getId())).andExpect(status().isOk());
+        mockMvc.perform(queryAmount(payment.getPaymentNo())).andExpect(status().isOk());
     }
 
     /** 占位期：错误令牌仍放行。实现鉴权后本用例须反转为 403。 */
@@ -79,7 +79,7 @@ class InternalServiceAuthTest {
     void invalidServiceTokenIsAllowedWhileAuthIsStubbed() throws Exception {
         Payment payment = newPayment();
 
-        mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", "wrong-token"))
+        mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", "wrong-token"))
                 .andExpect(status().isOk());
     }
 
@@ -95,7 +95,7 @@ class InternalServiceAuthTest {
         String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = String.valueOf(System.currentTimeMillis());
 
-        mockMvc.perform(post("/internal/payments/" + payment.getId() + "/channel-callback")
+        mockMvc.perform(post("/internal/payments/" + payment.getPaymentNo() + "/channel-callback")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body)
                         .header("X-Channel-Timestamp", timestamp)
@@ -130,7 +130,7 @@ class InternalServiceAuthTest {
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
                             "idem-" + UUID.randomUUID(), "mock"));
 
-            mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", TOKEN))
+            mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", TOKEN))
                     .andExpect(status().isOk());
         }
     }
@@ -166,7 +166,7 @@ class InternalServiceAuthTest {
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
                             "idem-" + UUID.randomUUID(), "mock"));
 
-            mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", PLATFORM_TOKEN))
+            mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", PLATFORM_TOKEN))
                     .andExpect(status().isOk());
         }
 
@@ -177,7 +177,7 @@ class InternalServiceAuthTest {
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
                             "idem-" + UUID.randomUUID(), "mock"));
 
-            mockMvc.perform(queryAmount(payment.getId()).header("X-Service-Token", "some-other-token"))
+            mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", "some-other-token"))
                     .andExpect(status().isOk());
         }
     }
@@ -200,14 +200,14 @@ class InternalServiceAuthTest {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
                             "idem-" + UUID.randomUUID(), "mock"));
-            mockMvc.perform(queryAmount(payment.getId())).andExpect(status().isOk());
+            mockMvc.perform(queryAmount(payment.getPaymentNo())).andExpect(status().isOk());
         }
     }
 
-    private static MockHttpServletRequestBuilder queryAmount(Long paymentId) {
+    private static MockHttpServletRequestBuilder queryAmount(String paymentNo) {
         return post("/internal/payments/query-amount")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"paymentId\":" + paymentId + "}");
+                .content("{\"paymentNo\":\"" + paymentNo + "\"}");
     }
 
     private Payment newPayment() {

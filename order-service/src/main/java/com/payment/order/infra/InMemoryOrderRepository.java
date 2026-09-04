@@ -16,6 +16,11 @@ public class InMemoryOrderRepository implements OrderRepository {
     private final AtomicLong idGen = new AtomicLong();
 
     @Override
+    public Optional<Order> findByOrderNo(String orderNo) {
+        return byId.values().stream().filter(o -> o.getOrderNo().equals(orderNo)).findFirst();
+    }
+
+    @Override
     public Optional<Order> findById(Long id) {
         return Optional.ofNullable(byId.get(id));
     }

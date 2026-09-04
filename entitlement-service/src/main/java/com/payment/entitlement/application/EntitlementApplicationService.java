@@ -37,7 +37,7 @@ public class EntitlementApplicationService {
         if (existing.isPresent()) {
             return existing.get();
         }
-        Entitlement e = newEntitlement(request.userId(), request.orderId(),
+        Entitlement e = newEntitlement(request.userId(), request.orderNo(),
                 String.valueOf(request.fulfillmentId()));
         try {
             e.grant();
@@ -51,8 +51,8 @@ public class EntitlementApplicationService {
     }
 
     /** 测试缝隙：供单测注入可被拒绝的 mock 授予（不改动状态机）。 */
-    Entitlement newEntitlement(String userId, String orderId, String sourceFulfillmentId) {
-        return new Entitlement(userId, orderId, sourceFulfillmentId, 1, "default", null);
+    Entitlement newEntitlement(String userId, String orderNo, String sourceFulfillmentId) {
+        return new Entitlement(userId, orderNo, sourceFulfillmentId, 1, "default", null);
     }
 
     /**
@@ -62,7 +62,7 @@ public class EntitlementApplicationService {
      * 无权益可撤时返回 {@code NOOP}；只要撤销了至少一条即返回 {@code REVOKED}。</p>
      */
     public RefundPostProcessResponse revokeOnRefund(RefundPostProcessRequest request) {
-        List<Entitlement> list = repository.findByOrderId(request.orderId());
+        List<Entitlement> list = repository.findByOrderNo(request.orderNo());
         if (list.isEmpty()) {
             return new RefundPostProcessResponse(request.refundId(), "NOOP");
         }

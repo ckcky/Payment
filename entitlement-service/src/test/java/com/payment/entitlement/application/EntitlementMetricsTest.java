@@ -36,8 +36,8 @@ class EntitlementMetricsTest {
         EntitlementApplicationService service = new EntitlementApplicationService(
                 new InMemoryEntitlementRepository(), new MicrometerBusinessMetrics(registry)) {
             @Override
-            Entitlement newEntitlement(String userId, String orderId, String sourceFulfillmentId) {
-                return new Entitlement(userId, orderId, sourceFulfillmentId, 1, "default", null) {
+            Entitlement newEntitlement(String userId, String orderNo, String sourceFulfillmentId) {
+                return new Entitlement(userId, orderNo, sourceFulfillmentId, 1, "default", null) {
                     @Override
                     public void grant() {
                         throw new RuntimeException("grant rejected");

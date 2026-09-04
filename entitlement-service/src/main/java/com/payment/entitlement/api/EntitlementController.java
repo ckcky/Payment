@@ -37,12 +37,12 @@ public class EntitlementController {
      * 「还没授予」是合法中间态，不是错误。校验「权益已发放」应断言列表非空且状态为 AVAILABLE
      * （spec 011 / FR-008）。</p>
      *
-     * @param orderId 订单号（业务键，非主键）
+     * @param orderNo 订单号（业务键，非主键）
      * @return 该订单授予的全部权益，按仓储返回顺序；无则空列表
      */
-    @GetMapping("/by-order/{orderId}")
-    public List<EntitlementResponse> listEntitlementsByOrderId(@PathVariable String orderId) {
-        return repository.findByOrderId(orderId).stream()
+    @GetMapping("/by-order/{orderNo}")
+    public List<EntitlementResponse> listEntitlementsByOrderId(@PathVariable String orderNo) {
+        return repository.findByOrderNo(orderNo).stream()
                 .map(EntitlementResponse::from)
                 .toList();
     }

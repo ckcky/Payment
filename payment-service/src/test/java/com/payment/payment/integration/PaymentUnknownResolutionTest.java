@@ -25,12 +25,12 @@ class PaymentUnknownResolutionTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(stack.fulfillment.succeededRequests).isEmpty(); // UNKNOWN 不触发履约
 
-        boolean resolved = stack.resolution.resolve(payment.getId(), ChannelResult.success("authoritative"));
+        boolean resolved = stack.resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
         assertThat(resolved).isTrue();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(stack.fulfillment.succeededRequests).hasSize(1); // 收敛为成功，触发一次履约
 
-        boolean again = stack.resolution.resolve(payment.getId(), ChannelResult.success("authoritative"));
+        boolean again = stack.resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
         assertThat(again).isFalse();
         assertThat(stack.fulfillment.succeededRequests).hasSize(1); // 不再触发第二次履约
     }
@@ -41,7 +41,7 @@ class PaymentUnknownResolutionTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
 
-        boolean resolved = stack.resolution.resolve(payment.getId(), ChannelResult.success("x"));
+        boolean resolved = stack.resolution.resolve(payment.getPaymentNo(), ChannelResult.success("x"));
         assertThat(resolved).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
     }

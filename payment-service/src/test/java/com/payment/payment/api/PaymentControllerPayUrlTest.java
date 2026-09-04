@@ -28,7 +28,7 @@ class PaymentControllerPayUrlTest {
 
     private static Payment processingPayment(long id) {
         return Payment.rehydrate(id, "PM-test", "txn-1", "order-9", "user-1", 9900, "CNY",
-                "idem-pay-url-1", PaymentStatus.PROCESSING, 1L, null, 0, null, 0);
+                "idem-pay-url-1", PaymentStatus.PROCESSING, 1L, null, 0, null, 0, 1);
     }
 
     private static CreatePaymentRequest request() {
@@ -52,7 +52,7 @@ class PaymentControllerPayUrlTest {
         CreatePaymentResponse response = controller.createPayment(request());
 
         assertThat(response.payUrl()).isEqualTo(
-                "http://localhost:8091/cashier?paymentId=42&orderId=order-9&amountMinor=9900&currencyCode=CNY");
+                "http://localhost:8091/cashier?paymentNo=PM-test&orderNo=order-9&amountMinor=9900&currencyCode=CNY");
         assertThat(response.status()).isEqualTo("PROCESSING");
         verify(appService).createPaymentIntent(any(), eq(true));
     }
@@ -71,7 +71,7 @@ class PaymentControllerPayUrlTest {
         CreatePaymentResponse response = controller.createPayment(request());
 
         assertThat(response.payUrl()).isNull();
-        assertThat(response.paymentId()).isEqualTo(43L);
+        assertThat(response.paymentNo()).isEqualTo("PM-test");
         verify(appService).createPaymentIntent(any(), eq(false));
     }
 }

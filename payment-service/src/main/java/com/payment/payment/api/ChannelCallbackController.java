@@ -29,10 +29,10 @@ public class ChannelCallbackController {
         this.applicationService = applicationService;
     }
 
-    @PostMapping("/internal/payments/{id}/channel-callback")
-    public PaymentResponse onChannelCallback(@PathVariable Long id,
+    @PostMapping("/internal/payments/{paymentNo}/channel-callback")
+    public PaymentResponse onChannelCallback(@PathVariable String paymentNo,
                                              @Valid @RequestBody ChannelCallbackRequest request) {
-        callbackService.handleCallback(id, request.toResult());
-        return PaymentResponse.from(applicationService.getPayment(id));
+        callbackService.handleCallback(paymentNo, request.toResult());
+        return PaymentResponse.from(applicationService.getPaymentByNo(paymentNo));
     }
 }

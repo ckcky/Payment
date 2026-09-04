@@ -44,7 +44,7 @@ class EntitlementOrderQueryTest {
         mockMvc.perform(get("/entitlements/by-order/order-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
-                .andExpect(jsonPath("$[0].orderId").value("order-1"))
+                .andExpect(jsonPath("$[0].orderNo").value("order-1"))
                 .andExpect(jsonPath("$[0].status").value(EntitlementStatus.AVAILABLE.name()))
                 .andExpect(jsonPath("$[0].availableQuantity").value(1));
     }

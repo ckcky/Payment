@@ -60,7 +60,7 @@ public class ChannelQueryService {
                     new QueryStatusRequest(payment.getId(), payment.getTransactionId(), payment.getIdempotencyKey()));
             metrics.counter("payment.query", 1.0, "module", MODULE);
             if (result.status() != ChannelResult.Status.UNKNOWN) {
-                if (resolution.resolve(payment.getId(), result)) {
+                if (resolution.resolve(String.valueOf(payment.getId()), result)) {
                     converged++;
                 }
             } else if (payment.getQueryAttempts() >= config.getQueryMaxAttempts()) {

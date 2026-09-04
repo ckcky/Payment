@@ -8,16 +8,16 @@ import com.payment.fulfillment.domain.FulfillmentStatus;
  */
 public record FulfillmentResponse(
         Long id,
-        String orderId,
-        String sourcePaymentId,
+        String orderNo,
+        String sourcePaymentNo,
         FulfillmentStatus status,
         String failureReason) {
 
     public static FulfillmentResponse from(Fulfillment fulfillment) {
         return new FulfillmentResponse(
                 fulfillment.getId(),
-                fulfillment.getOrderId(),
-                fulfillment.getSourcePaymentId(),
+                fulfillment.getOrderNo(),
+                fulfillment.getSourcePaymentNo(),
                 fulfillment.getStatus(),
                 fulfillment.getFailureReason());
     }

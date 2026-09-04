@@ -50,9 +50,9 @@ public class PaymentResultProcessor {
     }
 
     /** 返回支付是否真正发生了状态迁移（据此决定是否已触发履约 RPC）。 */
-    public boolean applyAndNotify(Long paymentId, ChannelResult result) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId));
+    public boolean applyAndNotify(String paymentNo, ChannelResult result) {
+        Payment payment = paymentRepository.findByPaymentNo(paymentNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentNo));
         PaymentAttempt attempt = attemptRepository.findById(payment.getCurrentAttemptId())
                 .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR,
                         "payment attempt missing: " + payment.getCurrentAttemptId()));

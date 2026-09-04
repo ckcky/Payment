@@ -16,7 +16,7 @@ import java.util.Optional;
  * 履约应用服务：接收 payment-service 的同步 RPC，创建幂等履约任务；
  * 履约完成后通过同步 RPC（{@link EntitlementGateway}）触发权益授予。
  *
- * <p>「支付成功」只触发履约，不决定最终履约状态；重复请求（同 paymentId）不产生第二条履约。</p>
+ * <p>「支付成功」只触发履约，不决定最终履约状态；重复请求（同 paymentNo）不产生第二条履约。</p>
  */
 @Service
 public class FulfillmentApplicationService {
@@ -36,15 +36,15 @@ public class FulfillmentApplicationService {
     }
 
     public Fulfillment acceptPaymentSucceeded(PaymentSucceededRequest request) {
-        String sourcePaymentId = String.valueOf(request.paymentId());
+        String sourcePaymentNo = String.valueOf(request.paymentNo());
 
-        // 幂等：同一 sourcePaymentId 只创建一条履约。
-        Optional<Fulfillment> existing = repository.findBySourcePaymentId(sourcePaymentId);
+        // 幂等：同一 sourcePaymentNo 只创建一条履约。
+        Optional<Fulfillment> existing = repository.findBySourcePaymentId(sourcePaymentNo);
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        Fulfillment fulfillment = newFulfillment(request.orderId(), sourcePaymentId);
+        Fulfillment fulfillment = newFulfillment(request.orderNo(), sourcePaymentNo);
         fulfillment.start();
 
         // 同步 mock 处理（PROCESSING → DELIVERED）。真实实现会在此处调用交付渠道；
@@ -63,13 +63,13 @@ public class FulfillmentApplicationService {
 
         // 履约完成后触发权益授予（同步 RPC）；权益失败不反写履约成功事实（按 plan 语义，履约已 DELIVERED）。
         entitlementGateway.notifyFulfillmentCompleted(
-                new FulfillmentCompletedRequest(saved.getId(), saved.getOrderId(), request.userId()));
+                new FulfillmentCompletedRequest(saved.getId(), saved.getOrderNo(), request.userId()));
         return saved;
     }
 
     /** 测试缝隙：供单测注入可失败的 mock 交付（不改动状态机）。 */
-    Fulfillment newFulfillment(String orderId, String sourcePaymentId) {
-        return new Fulfillment(orderId, null, "mock delivery", sourcePaymentId);
+    Fulfillment newFulfillment(String orderNo, String sourcePaymentNo) {
+        return new Fulfillment(orderNo, null, "mock delivery", sourcePaymentNo);
     }
 
     /**
@@ -79,7 +79,7 @@ public class FulfillmentApplicationService {
      * 返回 SKIPPED（可解释、非错误）；找不到履约也返回 SKIPPED。已交付履约的回收不在本 Feature。</p>
      */
     public RefundFulfillmentResponse onRefund(RefundFulfillmentRequest request) {
-        Optional<Fulfillment> opt = repository.findByOrderId(request.orderId());
+        Optional<Fulfillment> opt = repository.findByOrderNo(request.orderNo());
         if (opt.isEmpty()) {
             return new RefundFulfillmentResponse(request.refundId(), "SKIPPED");
         }

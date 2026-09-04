@@ -54,10 +54,10 @@ class OrderPersistenceTest {
         Order first = orderRepository.findById(order.getId()).orElseThrow();
         Order second = orderRepository.findById(order.getId()).orElseThrow();
 
-        first.markPaid(1L);
+        first.markPaid("PM-1");
         orderRepository.save(first);
 
-        second.markPaid(1L);
+        second.markPaid("PM-1");
         assertThatThrownBy(() -> orderRepository.save(second))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.CONFLICT));
@@ -69,10 +69,10 @@ class OrderPersistenceTest {
         transactionRepository.save(tx);
 
         Transaction reloaded = transactionRepository.findById(tx.getId()).orElseThrow();
-        assertThat(reloaded.getOrderId()).isEqualTo("100");
+        assertThat(reloaded.getOrderNo()).isEqualTo("100");
         assertThat(reloaded.getAmountMinor()).isEqualTo(200L);
         assertThat(reloaded.getVersion()).isEqualTo(1);
 
-        assertThat(transactionRepository.findByOrderId("100")).isPresent();
+        assertThat(transactionRepository.findByOrderNo("100")).isPresent();
     }
 }

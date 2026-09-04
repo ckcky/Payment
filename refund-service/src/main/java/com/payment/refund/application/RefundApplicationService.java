@@ -61,10 +61,10 @@ public class RefundApplicationService {
         }
 
         // H1：先串行化同一支付的退款受理，再读累计退款金额，杜绝并发超退款。
-        refundRepository.lockForIntake(cmd.paymentId());
+        refundRepository.lockForIntake(cmd.paymentNo());
 
         PaymentAmountQueryResponse paid = paymentRefundGateway.queryAmount(
-                new PaymentAmountQueryRequest(cmd.paymentId()));
+                new PaymentAmountQueryRequest(cmd.paymentNo()));
 
         if (!paid.status().equals("SUCCEEDED")) {
             Refund refund = newRefund(cmd);
@@ -75,7 +75,7 @@ public class RefundApplicationService {
 
         // ADR-0016 已否决（部分退款不做）：累计一律按「申请额」占位，不再区分终态/在途。
         // 在途按申请额保守占用可退款额度，防并发超退（H1）。
-        long cumul = refundRepository.findByPaymentId(cmd.paymentId()).stream()
+        long cumul = refundRepository.findByPaymentNo(cmd.paymentNo()).stream()
                 .filter(r -> isCounted(r.getStatus()))
                 .mapToLong(Refund::getAmountMinor)
                 .sum();
@@ -95,7 +95,7 @@ public class RefundApplicationService {
         refund.process();
 
         RefundAttemptResponse attempt = paymentRefundGateway.attemptRefund(
-                new RefundAttemptRequest(refund.getId(), cmd.paymentId(), cmd.orderId(), cmd.userId(),
+                new RefundAttemptRequest(refund.getId(), cmd.paymentNo(), cmd.orderNo(), cmd.userId(),
                         cmd.amountMinor(), cmd.currencyCode(), cmd.reason(), cmd.idempotencyKey()));
 
         // 渠道结果只有三态：成功/失败/未知。ADR-0016 已否决（部分退款不做），
@@ -124,7 +124,7 @@ public class RefundApplicationService {
     }
 
     private Refund newRefund(CreateRefundCommand cmd) {
-        Refund refund = new Refund(cmd.orderId(), cmd.paymentId(), cmd.userId(), cmd.amountMinor(),
+        Refund refund = new Refund(cmd.orderNo(), cmd.paymentNo(), cmd.userId(), cmd.amountMinor(),
                 cmd.currencyCode(), cmd.reason(), cmd.idempotencyKey(), cmd.items());
         metrics.counter("refund.initiated", 1.0, "module", MODULE);
         return refund;

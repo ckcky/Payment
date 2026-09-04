@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 履约应用服务（同步 RPC）：PaymentSucceededRequest → 创建 DELIVERED 履约并触发权益授予；
- * 同一 paymentId 幂等——不重复创建、不重复触发权益。
+ * 同一 paymentNo 幂等——不重复创建、不重复触发权益。
  */
 class FulfillmentApplicationServiceTest {
 
@@ -34,7 +34,7 @@ class FulfillmentApplicationServiceTest {
     }
 
     private static PaymentSucceededRequest paymentSucceededRequest() {
-        return new PaymentSucceededRequest(1L, "order_1", "txn_1", "user_1", 1250L, "USD");
+        return new PaymentSucceededRequest("pay-1", "order_1", "txn_1", "user_1", 1250L, "USD");
     }
 
     @Test
@@ -43,13 +43,13 @@ class FulfillmentApplicationServiceTest {
 
         assertThat(fulfillment.getId()).isEqualTo(1L);
         assertThat(fulfillment.getStatus()).isEqualTo(FulfillmentStatus.DELIVERED);
-        assertThat(fulfillment.getOrderId()).isEqualTo("order_1");
-        assertThat(fulfillment.getSourcePaymentId()).isEqualTo("1");
+        assertThat(fulfillment.getOrderNo()).isEqualTo("order_1");
+        assertThat(fulfillment.getSourcePaymentNo()).isEqualTo("1");
 
         assertThat(gateway.requests).hasSize(1);
         FulfillmentCompletedRequest request = gateway.requests.get(0);
         assertThat(request.fulfillmentId()).isEqualTo(1L);
-        assertThat(request.orderId()).isEqualTo("order_1");
+        assertThat(request.orderNo()).isEqualTo("order_1");
         assertThat(request.userId()).isEqualTo("user_1");
     }
 

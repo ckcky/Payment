@@ -57,7 +57,7 @@ class SuccessfulPurchaseScenarioTest {
         @Override
         public CreatePaymentResponse createPayment(CreatePaymentRequest request) {
             requests.add(request);
-            return new CreatePaymentResponse(1L, "PROCESSING");
+            return new CreatePaymentResponse("PM-1", "PROCESSING");
         }
     }
 
@@ -160,7 +160,7 @@ class SuccessfulPurchaseScenarioTest {
     }
 
     @Test
-    void createOrderReservesStockAndCreatesOneToOneTransactionAndPaymentIntent() {
+    void createOrderReservesStockAndCreatesOneToOneTransactionNoPaymentIntent() {
         FakeCatalogClient client = new FakeCatalogClient();
         client.seedSku(new SkuSnapshot(1L, "SKU-A", "Item A", 100, "CNY", true), 50);
         OrderApplicationService service = service(client);
@@ -169,8 +169,9 @@ class SuccessfulPurchaseScenarioTest {
 
         assertThat(result.status()).isEqualTo(OrderStatus.PENDING_PAYMENT);
         assertThat(result.totalMinor()).isEqualTo(200L);
-        assertThat(result.orderId()).isNotNull();
-        assertThat(paymentGateway.requests).hasSize(1);
+        assertThat(result.orderNo()).isNotNull();
+        // Feature 015：下单不再同步创建支付单，用户显式选渠道时才建
+        assertThat(paymentGateway.requests).isEmpty();
 
         // 预占扣减：50 - 2 = 48
         assertThat(client.available(1L)).isEqualTo(48L);
@@ -185,8 +186,8 @@ class SuccessfulPurchaseScenarioTest {
         CreateOrderResult result = service.createOrder("u1", "m1", List.of(new OrderLine(1L, 2)), "idk-1");
         assertThat(client.available(1L)).isEqualTo(48L);
 
-        service.onPaymentSucceeded(new PaymentSucceededRequest(1L, String.valueOf(result.orderId()),
-                String.valueOf(result.transactionId()), "u1", 200L, "CNY"));
+        service.onPaymentSucceeded(new PaymentSucceededRequest("PM-1", result.orderNo(),
+                result.transactionNo(), "u1", 200L, "CNY"));
 
         // 确认扣减后 reserved 归零、sold 增加
         assertThat(client.available(1L)).isEqualTo(48L);

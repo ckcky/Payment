@@ -73,9 +73,9 @@ class ChannelQueryTest {
 
         Payment unknownPayment(long paymentId, long attemptId) {
             Payment payment = Payment.rehydrate(paymentId, "PM-" + paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
-                    100, "CNY", "idem-" + paymentId, PaymentStatus.UNKNOWN, attemptId, null, 0, null, 0);
+                    100, "CNY", "idem-" + paymentId, PaymentStatus.UNKNOWN, attemptId, null, 0, null, 0, 1);
             payments.save(payment);
-            attempts.save(PaymentAttempt.rehydrate(attemptId, paymentId, "mock", 0,
+            attempts.save(PaymentAttempt.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
                     Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
                     null, null, 0));
             return payment;

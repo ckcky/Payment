@@ -5,11 +5,12 @@ CREATE TABLE payments (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     transaction_id VARCHAR(64) NOT NULL,
     payment_no VARCHAR(32) NOT NULL,
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(32) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
+    attempt_seq INT NOT NULL DEFAULT 1,
     status VARCHAR(32) NOT NULL,
     current_attempt_id BIGINT,
     failure_reason VARCHAR(255),
@@ -20,13 +21,13 @@ CREATE TABLE payments (
     created_by VARCHAR(64),
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
-    CONSTRAINT uk_payments_idempotency_key UNIQUE (idempotency_key),
-    CONSTRAINT uk_payments_transaction_id UNIQUE (transaction_id)
+    CONSTRAINT uk_payments_idempotency_key UNIQUE (idempotency_key)
 );
+CREATE INDEX idx_payments_txn_seq ON payments (transaction_id, attempt_seq);
 
 CREATE TABLE payment_attempts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    payment_id BIGINT NOT NULL,
+    payment_no VARCHAR(32) NOT NULL,
     channel_code VARCHAR(32) NOT NULL,
     requested_at TIMESTAMP NOT NULL,
     responded_at TIMESTAMP,
@@ -40,5 +41,4 @@ CREATE TABLE payment_attempts (
     created_by VARCHAR(64),
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
-    CONSTRAINT uk_attempts_channel_reference UNIQUE (channel_reference)
-);
+    CONSTRAINT uk_attempts_channel_reference UNIQUE (channel_refe

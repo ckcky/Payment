@@ -21,7 +21,7 @@ class PaymentApplicationServiceTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(stack.fulfillment.succeededRequests).hasSize(1);
-        assertThat(stack.fulfillment.succeededRequests.get(0).orderId()).isEqualTo("order-1");
+        assertThat(stack.fulfillment.succeededRequests.get(0).orderNo()).isEqualTo("order-1");
         assertThat(stack.fulfillment.succeededRequests.get(0).transactionId()).isEqualTo("txn-1");
         assertThat(stack.fulfillment.succeededRequests.get(0).amountMinor()).isEqualTo(100);
     }
@@ -51,7 +51,7 @@ class PaymentApplicationServiceTest {
         Payment second = service.createPaymentIntent(stack.command("dup"));
 
         assertThat(second.getId()).isEqualTo(first.getId());
-        assertThat(stack.attempts.findByPaymentId(first.getId())).hasSize(1);
+        assertThat(stack.attempts.findByPaymentNo(first.getPaymentNo())).hasSize(1);
         assertThat(stack.fulfillment.succeededRequests).hasSize(1);
     }
 }

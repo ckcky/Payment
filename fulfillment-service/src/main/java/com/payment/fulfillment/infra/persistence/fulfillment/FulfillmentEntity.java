@@ -9,21 +9,21 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("fulfillments")
 public class FulfillmentEntity extends BaseEntity {
 
-    private String orderId;
+    private String orderNo;
     private String orderItemId;
     private String deliveryContent;
     /** 支付幂等键（同源支付事件只创建一条履约）。 */
-    private String sourcePaymentId;
+    private String sourcePaymentNo;
     /** 履约状态机枚举名（状态机逻辑在领域层，持久化只存枚举名）。 */
     private String status;
     private String failureReason;
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
+    public void setOrderNo(String orderNo) {
+        this.orderNo = orderNo;
     }
 
     public String getOrderItemId() {
@@ -42,12 +42,12 @@ public class FulfillmentEntity extends BaseEntity {
         this.deliveryContent = deliveryContent;
     }
 
-    public String getSourcePaymentId() {
-        return sourcePaymentId;
+    public String getSourcePaymentNo() {
+        return sourcePaymentNo;
     }
 
-    public void setSourcePaymentId(String sourcePaymentId) {
-        this.sourcePaymentId = sourcePaymentId;
+    public void setSourcePaymentNo(String sourcePaymentNo) {
+        this.sourcePaymentNo = sourcePaymentNo;
     }
 
     public String getStatus() {

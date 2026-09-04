@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 按订单查询履约的只读端点（spec 011 / FR-008）。
  *
- * <p>存在理由：支付成功触发履约后，调用方手上只有 {@code orderId}，履约 id 是 payment-service
+ * <p>存在理由：支付成功触发履约后，调用方手上只有 {@code orderNo}，履约 id 是 payment-service
  * 内部 RPC 的返回值。缺了这个端点，校验「这笔订单的履约走到哪一步」只能直连数据库，
  * 那会绕过服务边界（宪章 IV.4）。</p>
  *
@@ -47,8 +47,8 @@ class FulfillmentOrderQueryTest {
 
         mockMvc.perform(get("/fulfillments/by-order/order-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.orderId").value("order-1"))
-                .andExpect(jsonPath("$.sourcePaymentId").value("pay-1"))
+                .andExpect(jsonPath("$.orderNo").value("order-1"))
+                .andExpect(jsonPath("$.sourcePaymentNo").value("pay-1"))
                 .andExpect(jsonPath("$.status").value(FulfillmentStatus.DELIVERED.name()));
     }
 

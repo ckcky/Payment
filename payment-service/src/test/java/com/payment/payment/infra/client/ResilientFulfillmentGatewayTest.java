@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ResilientFulfillmentGatewayTest {
 
     private final PaymentSucceededRequest req =
-            new PaymentSucceededRequest(1L, "order-1", "txn-1", "user-1", 100, "CNY");
+            new PaymentSucceededRequest("pay-1", "order-1", "txn-1", "user-1", 100, "CNY");
 
     @Test
     void retriesThenSucceedsOnTransientFailure() {

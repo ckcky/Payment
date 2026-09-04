@@ -87,7 +87,7 @@ public class OrderApplicationService {
         Order order = new Order(userId, merchantId, currencyCode, items);
         order = orderRepository.save(order);
 
-        Transaction transaction = new Transaction(String.valueOf(order.getId()),
+        Transaction transaction = new Transaction(order.getOrderNo(),
                 order.getTotalMinor(), order.getCurrencyCode(), "PURCHASE");
         transaction = transactionRepository.save(transaction);
 
@@ -121,26 +121,11 @@ public class OrderApplicationService {
             // 登记订单超时（时间轮）：到点未支付则取消并释放预占库存
             timeoutScheduler.schedule(order.getId());
 
-            // 创建支付意图（order → payment 同步 RPC）
-            CreatePaymentResponse payment = paymentGateway.createPayment(new CreatePaymentRequest(
-                    String.valueOf(order.getId()),
-                    transaction.getTransactionNo(),
-                    order.getUserId(),
-                    order.getTotalMinor(),
-                    order.getCurrencyCode(),
-                    "payment:" + order.getId(),
-                    "mock"));
+            // Feature 015：下单不再同步创建支付单；用户显式选渠道时才建（见 createPaymentForOrder）。
+            // 交易保持 PENDING，待首次选渠道时 start() → PROCESSING。
 
-            transaction.start();
-            transactionRepository.save(transaction);
-
-            order.recordPayment(payment.paymentId());
-            orderRepository.save(order);
-
-            return new CreateOrderResult(order.getId(), order.getOrderNo(), transaction.getId(),
-                    transaction.getTransactionNo(), order.getStatus(),
-                    order.getTotalMinor(), order.getCurrencyCode(), payment.paymentId(),
-                    payment.status(), payment.payUrl());
+            return new CreateOrderResult(order.getOrderNo(), transaction.getTransactionNo(),
+                    order.getStatus(), order.getTotalMinor(), order.getCurrencyCode(), null, null, null);
         } catch (RuntimeException ex) {
             // 回滚：释放已预占库存并撤销订单，避免库存泄漏
             for (ReservedLine rl : reserved) {
@@ -158,9 +143,49 @@ public class OrderApplicationService {
         }
     }
 
-    public Order getOrder(Long id) {
-        return orderRepository.findById(id)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + id));
+    /**
+     * 显式选渠道创建支付单（Feature 015，INV-2 前提）：同一订单可多次调用，每次新建一张支付单。
+     * 用订单自身金额调用 payment-service，交易单首次选渠道时 start() → PROCESSING。
+     */
+    public CreatePaymentResponse createPaymentForOrder(String ref, String channelCode) {
+        Order order = findOrder(ref);
+        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
+                    "order not payable: " + order.getStatus());
+        }
+        Transaction transaction = transactionRepository.findByOrderNo(order.getOrderNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                        "transaction not found for order: " + order.getOrderNo()));
+        CreatePaymentRequest request = new CreatePaymentRequest(
+                order.getOrderNo(),
+                transaction.getTransactionNo(),
+                order.getUserId(),
+                order.getTotalMinor(),
+                order.getCurrencyCode(),
+                null, // 幂等键由 payment-service 服务端生成（Feature 015）
+                channelCode);
+        CreatePaymentResponse payment = paymentGateway.createPayment(request);
+        if (transaction.getStatus() == TransactionStatus.PENDING) {
+            transaction.start();
+            transactionRepository.save(transaction);
+        }
+        // 记录最新尝试的支付单号（主支付单语义在成功回调时由 markPaid 确认）
+        order.recordPayment(payment.paymentNo());
+        orderRepository.save(order);
+        return payment;
+    }
+
+    public Order getOrder(String ref) {
+        return findOrder(ref);
+    }
+
+    /** 兼容寻址：数值按 id、否则按业务单号（对外接口一律用 orderNo，ADR-0063）。 */
+    private Order findOrder(String ref) {
+        return ref.chars().allMatch(Character::isDigit)
+                ? orderRepository.findById(Long.parseLong(ref))
+                    .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + ref))
+                : orderRepository.findByOrderNo(ref)
+                    .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + ref));
     }
 
     /**
@@ -169,18 +194,17 @@ public class OrderApplicationService {
      */
     @Transactional
     public void onPaymentSucceeded(PaymentSucceededRequest request) {
-        Long orderId = Long.valueOf(request.orderId());
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + orderId));
-        boolean changed = order.markPaid(request.paymentId());
+        Order order = orderRepository.findByOrderNo(request.orderNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + request.orderNo()));
+        boolean changed = order.markPaid(request.paymentNo());
         if (!changed) {
             return; // 幂等重复回调：订单已 PAID，吸收（库存也已确认过）
         }
         orderRepository.save(order);
 
-        Transaction transaction = transactionRepository.findByOrderId(request.orderId())
+        Transaction transaction = transactionRepository.findByOrderNo(request.orderNo())
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
-                        "transaction not found for order: " + orderId));
+                        "transaction not found for order: " + request.orderNo()));
         if (transaction.getStatus() == TransactionStatus.PENDING) {
             transaction.start();
         }
@@ -191,7 +215,7 @@ public class OrderApplicationService {
         for (OrderItem item : order.getItems()) {
             catalogClient.confirmStock(new ConfirmStockCommand(
                     reservationId(order.getId(), item.getSkuId()),
-                    Long.parseLong(item.getSkuId()), item.getQuantity(), request.paymentId().toString()));
+                    Long.parseLong(item.getSkuId()), item.getQuantity(), request.paymentNo()));
         }
     }
 
@@ -199,8 +223,8 @@ public class OrderApplicationService {
      * 支付失败/超时释放库存（由支付失败 RPC 或订单超时调度器触发，013/014）。
      * 幂等：库存侧已释放或已确认的预占都直接吸收；订单置为 CANCELLED（如仍在待支付态）。
      */
-    public void releaseStockForOrder(Long orderId) {
-        Order order = orderRepository.findById(orderId).orElse(null);
+    public void releaseStockForOrder(String orderNo) {
+        Order order = orderRepository.findByOrderNo(orderNo).orElse(null);
         if (order == null) {
             return;
         }

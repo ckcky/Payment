@@ -10,10 +10,10 @@ public interface FulfillmentRepository {
     Optional<Fulfillment> findById(Long id);
 
     /** 按支付幂等键查询，用于保证同一支付成功事件只创建一条履约。 */
-    Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentId);
+    Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentNo);
 
     /** 按订单查询，用于退款时定位需撤销的履约。 */
-    Optional<Fulfillment> findByOrderId(String orderId);
+    Optional<Fulfillment> findByOrderNo(String orderNo);
 
     Fulfillment save(Fulfillment fulfillment);
 }

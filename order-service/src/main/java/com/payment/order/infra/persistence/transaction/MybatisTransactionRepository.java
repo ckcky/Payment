@@ -28,9 +28,9 @@ public class MybatisTransactionRepository implements TransactionRepository {
     }
 
     @Override
-    public Optional<Transaction> findByOrderId(String orderId) {
+    public Optional<Transaction> findByOrderNo(String orderNo) {
         TransactionEntity entity = transactionMapper.selectOne(
-                Wrappers.<TransactionEntity>lambdaQuery().eq(TransactionEntity::getOrderId, orderId));
+                Wrappers.<TransactionEntity>lambdaQuery().eq(TransactionEntity::getOrderNo, orderNo));
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
     }
 
@@ -52,7 +52,7 @@ public class MybatisTransactionRepository implements TransactionRepository {
     }
 
     private Transaction toDomain(TransactionEntity entity) {
-        return Transaction.rehydrate(entity.getId(), entity.getTransactionNo(), entity.getOrderId(), entity.getAmountMinor(),
+        return Transaction.rehydrate(entity.getId(), entity.getTransactionNo(), entity.getOrderNo(), entity.getAmountMinor(),
                 entity.getCurrencyCode(), entity.getPurpose(), TransactionStatus.valueOf(entity.getStatus()),
                 entity.getVersion());
     }
@@ -61,7 +61,7 @@ public class MybatisTransactionRepository implements TransactionRepository {
         TransactionEntity entity = new TransactionEntity();
         entity.setId(transaction.getId());
         entity.setTransactionNo(transaction.getTransactionNo());
-        entity.setOrderId(transaction.getOrderId());
+        entity.setOrderNo(transaction.getOrderNo());
         entity.setAmountMinor(transaction.getAmountMinor());
         entity.setCurrencyCode(transaction.getCurrencyCode());
         entity.setPurpose(transaction.getPurpose());

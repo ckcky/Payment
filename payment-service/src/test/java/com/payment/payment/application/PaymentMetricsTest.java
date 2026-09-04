@@ -79,7 +79,7 @@ class PaymentMetricsTest {
         PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment, order);
         PaymentCallbackService callback = new PaymentCallbackService(processor, payments, metrics, audit);
 
-        boolean changed = callback.handleCallback(payment.getId(), ChannelResult.success("late-ref"));
+        boolean changed = callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("late-ref"));
 
         assertThat(changed).isFalse();
         assertThat(registry.get("payment.duplicate_callback").counter().count()).isEqualTo(1.0);
@@ -95,7 +95,7 @@ class PaymentMetricsTest {
         PaymentUnknownResolutionService resolution =
                 new PaymentUnknownResolutionService(payments, processor, metrics, audit);
 
-        boolean resolved = resolution.resolve(payment.getId(), ChannelResult.success("authoritative"));
+        boolean resolved = resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
 
         assertThat(resolved).isTrue();
         assertThat(registry.get("payment.succeeded").counter().count()).isEqualTo(1.0);

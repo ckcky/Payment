@@ -133,6 +133,19 @@ public class PaymentApplicationService {
         return requirePayment(id);
     }
 
+    /** 按业务单号查询（对外 GET / 跨服务引用一律用 paymentNo，ADR-0063）。 */
+    public Payment getPaymentByNo(String paymentNo) {
+        return paymentRepository.findByPaymentNo(paymentNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentNo));
+    }
+
+    /** 兼容寻址：数值按 id、否则按 paymentNo（演示页灰度期双轨）。 */
+    public Payment getPaymentByRef(String ref) {
+        return ref.chars().allMatch(Character::isDigit)
+                ? getPayment(Long.parseLong(ref))
+                : getPaymentByNo(ref);
+    }
+
     private Payment requirePayment(Long id) {
         return paymentRepository.findById(id)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + id));

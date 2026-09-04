@@ -19,14 +19,14 @@ public class Transaction {
     private String transactionNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
-    private final String orderId;
+    private final String orderNo;
     private final long amountMinor;
     private final String currencyCode;
     private final String purpose;
     private TransactionStatus status = TransactionStatus.PENDING;
 
-    public Transaction(String orderId, long amountMinor, String currencyCode, String purpose) {
-        this.orderId = Objects.requireNonNull(orderId, "orderId");
+    public Transaction(String orderNo, long amountMinor, String currencyCode, String purpose) {
+        this.orderNo = Objects.requireNonNull(orderNo, "orderNo");
         if (amountMinor <= 0) {
             throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION, "transaction amount must be > 0");
         }
@@ -128,8 +128,8 @@ public class Transaction {
         this.version = version;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
     public long getAmountMinor() {

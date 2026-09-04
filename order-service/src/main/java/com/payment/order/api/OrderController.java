@@ -2,7 +2,10 @@ package com.payment.order.api;
 
 import com.payment.order.api.dto.CreateOrderRequest;
 import com.payment.order.api.dto.CreateOrderResponse;
+import com.payment.order.api.dto.CreateOrderPaymentRequest;
 import com.payment.order.api.dto.OrderResponse;
+import com.payment.common.dto.rpc.CreatePaymentResponse;
+import jakarta.validation.Valid;
 import com.payment.order.application.OrderApplicationService;
 import com.payment.order.application.OrderLine;
 import com.payment.order.application.idempotency.IdempotencyDecision;
@@ -66,8 +69,18 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping("/{id}")
-    public OrderResponse getOrder(@PathVariable Long id) {
-        return OrderResponse.from(service.getOrder(id));
+    /**
+     * 显式选渠道创建支付单（Feature 015，INV-2）：同一订单可多次调用，每次新建一张支付单。
+     */
+    @PostMapping("/{ref}/payments")
+    public ResponseEntity<CreatePaymentResponse> createOrderPayment(
+            @PathVariable String ref, @Valid @RequestBody CreateOrderPaymentRequest request) {
+        CreatePaymentResponse response = service.createPaymentForOrder(ref, request.channelCode());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{ref}")
+    public OrderResponse getOrder(@PathVariable String ref) {
+        return OrderResponse.from(service.getOrder(ref));
     }
 }

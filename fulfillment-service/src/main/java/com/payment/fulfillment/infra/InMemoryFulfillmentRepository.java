@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 内存版履约仓储：仅用于领域/编排单测（不走 Spring 注入），生产由 {@code MybatisFulfillmentRepository} 承接。
- * 线程安全，用 {@code sourcePaymentId} 维护幂等索引。
+ * 线程安全，用 {@code sourcePaymentNo} 维护幂等索引。
  */
 public class InMemoryFulfillmentRepository implements FulfillmentRepository {
 
@@ -23,8 +23,8 @@ public class InMemoryFulfillmentRepository implements FulfillmentRepository {
     }
 
     @Override
-    public Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentId) {
-        Long id = bySourcePaymentId.get(sourcePaymentId);
+    public Optional<Fulfillment> findBySourcePaymentId(String sourcePaymentNo) {
+        Long id = bySourcePaymentId.get(sourcePaymentNo);
         if (id == null) {
             return Optional.empty();
         }
@@ -32,9 +32,9 @@ public class InMemoryFulfillmentRepository implements FulfillmentRepository {
     }
 
     @Override
-    public Optional<Fulfillment> findByOrderId(String orderId) {
+    public Optional<Fulfillment> findByOrderNo(String orderNo) {
         return byId.values().stream()
-                .filter(f -> orderId.equals(f.getOrderId()))
+                .filter(f -> orderNo.equals(f.getOrderNo()))
                 .findFirst();
     }
 
@@ -44,7 +44,7 @@ public class InMemoryFulfillmentRepository implements FulfillmentRepository {
             fulfillment.setId(idGenerator.incrementAndGet());
         }
         byId.put(fulfillment.getId(), fulfillment);
-        bySourcePaymentId.put(fulfillment.getSourcePaymentId(), fulfillment.getId());
+        bySourcePaymentId.put(fulfillment.getSourcePaymentNo(), fulfillment.getId());
         return fulfillment;
     }
 }

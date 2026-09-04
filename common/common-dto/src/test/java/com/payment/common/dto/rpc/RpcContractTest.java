@@ -13,7 +13,7 @@ class RpcContractTest {
     @Test
     void paymentSucceededCarriesAmountAndCurrency() {
         PaymentSucceededRequest req = new PaymentSucceededRequest(
-                1L, "order-1", "txn-1", "user-1", 1250L, "CNY");
+                "pay-1", "order-1", "txn-1", "user-1", 1250L, "CNY");
         assertThat(req.amountMinor()).isEqualTo(1250L);
         assertThat(req.currencyCode()).isEqualTo("CNY");
     }

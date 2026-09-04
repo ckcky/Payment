@@ -52,7 +52,7 @@ class OrderControllerIdempotencyTest {
             "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":1,\"quantity\":1}]}";
 
     private CreateOrderResult sampleResult() {
-        return new CreateOrderResult(10L, "OR1001", 20L, "TX1001", OrderStatus.PAID, 9900L, "CNY", 30L, "SUCCEEDED");
+        return new CreateOrderResult("OR1001", "TX1001", OrderStatus.PAID, 9900L, "CNY", "PM30", "SUCCEEDED");
     }
 
     @Test
@@ -62,7 +62,7 @@ class OrderControllerIdempotencyTest {
 
         mockMvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.orderId").value(10));
+                .andExpect(jsonPath("$.orderNo").value("OR1001"));
     }
 
     @Test
@@ -77,12 +77,12 @@ class OrderControllerIdempotencyTest {
 
     @Test
     void replay_returns200WithStoredJson() throws Exception {
-        when(idempotency.check("k-2")).thenReturn(IdempotencyDecision.replay("{\"orderId\":10,\"status\":\"PAID\"}"));
+        when(idempotency.check("k-2")).thenReturn(IdempotencyDecision.replay("{\"orderNo\":\"OR1001\",\"status\":\"PAID\"}"));
 
         mockMvc.perform(post("/orders").header("Idempotency-Key", "k-2")
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isOk())
-                .andExpect(content().json("{\"orderId\":10,\"status\":\"PAID\"}"));
+                .andExpect(content().json("{\"orderNo\":\"OR1001\",\"status\":\"PAID\"}"));
     }
 
     @Test
@@ -93,6 +93,6 @@ class OrderControllerIdempotencyTest {
         mockMvc.perform(post("/orders").header("Idempotency-Key", "k-3")
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.orderId").value(10));
+                .andExpect(jsonPath("$.orderNo").value("OR1001"));
     }
 }

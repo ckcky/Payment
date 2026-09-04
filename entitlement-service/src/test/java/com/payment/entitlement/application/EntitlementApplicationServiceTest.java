@@ -28,7 +28,7 @@ class EntitlementApplicationServiceTest {
 
         assertThat(e.getStatus()).isEqualTo(EntitlementStatus.AVAILABLE);
         assertThat(e.getUserId()).isEqualTo("user_1");
-        assertThat(e.getOrderId()).isEqualTo("order_1");
+        assertThat(e.getOrderNo()).isEqualTo("order_1");
         assertThat(e.getAvailableQuantity()).isEqualTo(1);
         assertThat(e.getSourceFulfillmentId()).isEqualTo("1");
         assertThat(repository.findBySourceFulfillmentId("1")).containsSame(e);

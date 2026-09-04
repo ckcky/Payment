@@ -46,32 +46,33 @@ public class PaymentController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CreatePaymentResponse createPayment(@Valid @RequestBody CreatePaymentRequest request) {
-        CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderId(),
+        CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderNo(),
                 request.userId(), request.amountMinor(), request.currencyCode(),
                 request.idempotencyKey(), request.channelCode());
         boolean defer = mockCashier.isEnabled();
         Payment payment = applicationService.createPaymentIntent(command, defer);
-        String payUrl = defer ? buildPayUrl(payment, request.orderId(), request.amountMinor(),
+        String payUrl = defer ? buildPayUrl(payment, request.orderNo(), request.amountMinor(),
                 request.currencyCode()) : null;
-        return new CreatePaymentResponse(payment.getId(), payment.getStatus().name(), payUrl);
+        return new CreatePaymentResponse(payment.getPaymentNo(), payment.getStatus().name(), payUrl,
+                payment.getAttemptSeq(), request.channelCode());
     }
 
     /** 收银台页链接：mock-channel-web 的 /cashier，页面从查询串自渲染。 */
-    private String buildPayUrl(Payment payment, String orderId, Long amountMinor, String currencyCode) {
-        return mockCashier.getBaseUrl() + "/cashier?paymentId=" + payment.getId()
-                + "&orderId=" + orderId
+    private String buildPayUrl(Payment payment, String orderNo, Long amountMinor, String currencyCode) {
+        return mockCashier.getBaseUrl() + "/cashier?paymentNo=" + payment.getPaymentNo()
+                + "&orderNo=" + orderNo
                 + "&amountMinor=" + amountMinor
                 + "&currencyCode=" + currencyCode;
     }
 
-    @GetMapping("/{id}")
-    public PaymentResponse getPayment(@PathVariable Long id) {
-        return PaymentResponse.from(applicationService.getPayment(id));
+    @GetMapping("/{ref}")
+    public PaymentResponse getPayment(@PathVariable String ref) {
+        return PaymentResponse.from(applicationService.getPaymentByRef(ref));
     }
 
-    @PostMapping("/{id}/resolve")
-    public PaymentResponse resolveUnknown(@PathVariable Long id, @Valid @RequestBody ResolveRequest request) {
-        resolutionService.resolve(id, request.toResult());
-        return PaymentResponse.from(applicationService.getPayment(id));
+    @PostMapping("/{ref}/resolve")
+    public PaymentResponse resolveUnknown(@PathVariable String ref, @Valid @RequestBody ResolveRequest request) {
+        resolutionService.resolve(ref, request.toResult());
+        return PaymentResponse.from(applicationService.getPaymentByRef(ref));
     }
 }

@@ -29,9 +29,9 @@ public class InMemoryEntitlementRepository implements EntitlementRepository {
     }
 
     @Override
-    public List<Entitlement> findByOrderId(String orderId) {
+    public List<Entitlement> findByOrderNo(String orderNo) {
         return byId.values().stream()
-                .filter(e -> orderId.equals(e.getOrderId()))
+                .filter(e -> orderNo.equals(e.getOrderNo()))
                 .toList();
     }
 

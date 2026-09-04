@@ -32,6 +32,13 @@ public class MybatisPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public Optional<Payment> findByPaymentNo(String paymentNo) {
+        PaymentEntity entity = paymentMapper.selectOne(
+                Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getPaymentNo, paymentNo));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
     public Optional<Payment> findByTransactionId(String transactionId) {
         PaymentEntity entity = paymentMapper.selectOne(
                 Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getTransactionId, transactionId));
@@ -55,6 +62,12 @@ public class MybatisPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public long countByTransactionId(String transactionId) {
+        return paymentMapper.selectCount(
+                Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getTransactionId, transactionId));
+    }
+
+    @Override
     public Payment save(Payment payment) {
         if (payment.getId() == null) {
             PaymentEntity entity = toEntity(payment);
@@ -72,12 +85,13 @@ public class MybatisPaymentRepository implements PaymentRepository {
     }
 
     private Payment toDomain(PaymentEntity entity) {
-        return Payment.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getTransactionId(), entity.getOrderId(),
+        return Payment.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getTransactionId(), entity.getOrderNo(),
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
                 entity.getIdempotencyKey(), PaymentStatus.valueOf(entity.getStatus()),
                 entity.getCurrentAttemptId(), entity.getFailureReason(),
                 entity.getQueryAttempts() != null ? entity.getQueryAttempts() : 0,
-                entity.getEnteredUnknownAt(), entity.getVersion());
+                entity.getEnteredUnknownAt(), entity.getVersion(),
+                entity.getAttemptSeq());
     }
 
     private PaymentEntity toEntity(Payment payment) {
@@ -85,7 +99,7 @@ public class MybatisPaymentRepository implements PaymentRepository {
         entity.setId(payment.getId());
         entity.setPaymentNo(payment.getPaymentNo());
         entity.setTransactionId(payment.getTransactionId());
-        entity.setOrderId(payment.getOrderId());
+        entity.setOrderNo(payment.getOrderNo());
         entity.setUserId(payment.getUserId());
         entity.setAmountMinor(payment.getAmountMinor());
         entity.setCurrencyCode(payment.getCurrencyCode());
@@ -96,6 +110,7 @@ public class MybatisPaymentRepository implements PaymentRepository {
         entity.setQueryAttempts(payment.getQueryAttempts());
         entity.setEnteredUnknownAt(payment.getEnteredUnknownAt());
         entity.setVersion(payment.getVersion());
+        entity.setAttemptSeq(payment.getAttemptSeq());
         return entity;
     }
 }

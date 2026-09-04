@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class RefundPostProcessTest {
 
-    private static Entitlement granted(String orderId) {
-        Entitlement e = new Entitlement("user_1", orderId, "ful_" + orderId, 1, "default", null);
+    private static Entitlement granted(String orderNo) {
+        Entitlement e = new Entitlement("user_1", orderNo, "ful_" + orderNo, 1, "default", null);
         e.grant();
         return e;
     }

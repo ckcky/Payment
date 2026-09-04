@@ -9,7 +9,7 @@ public interface TransactionRepository {
 
     Optional<Transaction> findById(Long id);
 
-    Optional<Transaction> findByOrderId(String orderId);
+    Optional<Transaction> findByOrderNo(String orderNo);
 
     Transaction save(Transaction transaction);
 }

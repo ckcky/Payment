@@ -13,7 +13,7 @@ public interface PaymentAttemptRepository {
 
     Optional<PaymentAttempt> findById(Long id);
 
-    List<PaymentAttempt> findByPaymentId(Long paymentId);
+    List<PaymentAttempt> findByPaymentNo(String paymentNo);
 
     PaymentAttempt save(PaymentAttempt attempt);
 }

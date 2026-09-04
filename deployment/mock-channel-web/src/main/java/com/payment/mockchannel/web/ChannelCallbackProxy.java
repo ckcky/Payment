@@ -18,7 +18,7 @@ import org.springframework.web.client.RestClient;
 /**
  * 渠道回调代理：以"渠道"身份向 payment-service 发送签名回调（ADR-0048 修订 + ADR-0052）。
  *
- * <p>upstream：{@code POST {payment}/internal/payments/{paymentId}/channel-callback}，
+ * <p>upstream：{@code POST {payment}/internal/payments/{paymentNo}/channel-callback}（业务单号，ADR-0063），
  * 携带 {@code X-Channel-Timestamp} + {@code X-Channel-Signature}（HMAC-SHA256 over
  * {@code timestamp + "." + rawBody}，与 payment-service 的验签过滤器同一实现）。</p>
  *
@@ -46,10 +46,10 @@ public class ChannelCallbackProxy {
     }
 
     /**
-     * 回调请求体：{@code {paymentId, status, channelReference, reason, amountMinor, signMode}}。
-     * 仅 {@code paymentId/status} 必填，其余可空（与 ChannelCallbackRequest 对齐）。
+     * 回调请求体：{@code {paymentNo, status, channelReference, reason, amountMinor, signMode}}。
+     * 仅 {@code paymentNo/status} 必填，其余可空（与 ChannelCallbackRequest 对齐）。
      */
-    public record CallbackRequest(Long paymentId, String status, String channelReference,
+    public record CallbackRequest(String paymentNo, String status, String channelReference,
                                   String reason, Long amountMinor, String signMode) {
     }
 
@@ -79,7 +79,7 @@ public class ChannelCallbackProxy {
         }
         signatureHeaders.forEach(headers::set);
 
-        String url = paymentUrl + "/internal/payments/" + request.paymentId() + "/channel-callback";
+        String url = paymentUrl + "/internal/payments/" + request.paymentNo() + "/channel-callback";
         log.info("[demo] channel callback -> payment {} (signMode={}, status={})", url, mode, request.status());
         try {
             ResponseEntity<String> upstream = restClient.post()

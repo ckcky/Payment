@@ -26,7 +26,7 @@ public class Order {
     private final String userId;
     private final String merchantId;
     /** 下游支付单号（payment-service 的 payment.id），下单时同步 RPC 返回、支付成功回调确认。 */
-    private Long paymentId;
+    private String paymentNo;
     private OrderStatus status = OrderStatus.PENDING_CONFIRMATION;
     private final String currencyCode;
     private final long totalMinor;
@@ -56,13 +56,13 @@ public class Order {
     /**
      * 持久化重建：用既有快照明细与历史状态/金额还原聚合，绕过创建期状态机（不改变业务规则）。
      */
-    public static Order rehydrate(Long id, String orderNo, String userId, String merchantId, Long paymentId,
+    public static Order rehydrate(Long id, String orderNo, String userId, String merchantId, String paymentNo,
                                   OrderStatus status, String currencyCode, List<OrderItem> items,
                                   long paidMinor, long refundedMinor, Integer version) {
         Order order = new Order(userId, merchantId, currencyCode, items);
         order.id = id;
         order.orderNo = orderNo;
-        order.paymentId = paymentId;
+        order.paymentNo = paymentNo;
         order.status = status;
         order.paidMinor = paidMinor;
         order.refundedMinor = refundedMinor;
@@ -77,18 +77,18 @@ public class Order {
         this.status = OrderStatus.PENDING_PAYMENT;
     }
 
-    /** 关联下游支付意图（下单时同步 RPC 返回的 paymentId），不改变订单状态。 */
-    public void recordPayment(Long paymentId) {
-        this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
+    /** 关联下游支付单（跨系统引用一律用业务单号 paymentNo，ADR-0063），不改变订单状态。 */
+    public void recordPayment(String paymentNo) {
+        this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
     }
 
     /** 支付成功：PENDING_PAYMENT → PAID，记录下游支付单号并把已支付金额置为订单总额（不支持部分支付）。 */
-    public boolean markPaid(Long paymentId) {
+    public boolean markPaid(String paymentNo) {
         if (this.status == OrderStatus.PAID) {
             return false; // 幂等重复回调，吸收
         }
         requireStatus(OrderStatus.PENDING_PAYMENT, "markPaid");
-        this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
+        this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
         this.paidMinor = this.totalMinor;
         this.status = OrderStatus.PAID;
         return true;
@@ -175,8 +175,8 @@ public class Order {
         return merchantId;
     }
 
-    public Long getPaymentId() {
-        return paymentId;
+    public String getPaymentNo() {
+        return paymentNo;
     }
 
     public OrderStatus getStatus() {

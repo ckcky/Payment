@@ -18,7 +18,7 @@ public class PaymentAttempt {
     private Long id;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
-    private final Long paymentId;
+    private final String paymentNo;
     private final String channelCode;
     private Instant requestedAt;
     private Instant respondedAt;
@@ -32,8 +32,8 @@ public class PaymentAttempt {
      */
     private PaymentAttemptErrorType errorType;
 
-    public PaymentAttempt(Long paymentId, String channelCode, int retryCount) {
-        this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
+    public PaymentAttempt(String paymentNo, String channelCode, int retryCount) {
+        this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
         this.channelCode = Objects.requireNonNull(channelCode, "channelCode");
         this.requestedAt = Instant.now();
         this.retryCount = retryCount;
@@ -43,12 +43,12 @@ public class PaymentAttempt {
      * 持久化重建：还原一次渠道交互的完整历史（引用/时间/状态/未知信息），绕过创建期状态机
      * （不改变业务规则）。
      */
-    public static PaymentAttempt rehydrate(Long id, Long paymentId, String channelCode, int retryCount,
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
                                            Integer version) {
-        PaymentAttempt attempt = new PaymentAttempt(paymentId, channelCode, retryCount);
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, retryCount);
         attempt.id = id;
         attempt.requestedAt = requestedAt;
         attempt.respondedAt = respondedAt;
@@ -145,8 +145,8 @@ public class PaymentAttempt {
         this.version = version;
     }
 
-    public Long getPaymentId() {
-        return paymentId;
+    public String getPaymentNo() {
+        return paymentNo;
     }
 
     public String getChannelCode() {

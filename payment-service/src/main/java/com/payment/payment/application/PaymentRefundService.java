@@ -43,20 +43,20 @@ public class PaymentRefundService {
     }
 
     public PaymentAmountQueryResponse queryAmount(PaymentAmountQueryRequest request) {
-        Payment payment = paymentRepository.findById(request.paymentId())
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + request.paymentId()));
-        return new PaymentAmountQueryResponse(payment.getId(), payment.getOrderId(), payment.getUserId(),
+        Payment payment = paymentRepository.findByPaymentNo(request.paymentNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + request.paymentNo()));
+        return new PaymentAmountQueryResponse(payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(),
                 payment.getAmountMinor(), payment.getCurrencyCode(), payment.getStatus().name());
     }
 
     public RefundAttemptResponse refund(RefundAttemptRequest request) {
-        Payment payment = paymentRepository.findById(request.paymentId())
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + request.paymentId()));
+        Payment payment = paymentRepository.findByPaymentNo(request.paymentNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + request.paymentNo()));
         if (payment.getStatus() != PaymentStatus.SUCCEEDED) {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "payment not refundable in status " + payment.getStatus());
         }
-        ChannelResult result = channel.refund(new RefundRequest(request.paymentId(), request.refundId(),
+        ChannelResult result = channel.refund(new RefundRequest(request.paymentNo(), request.refundId(),
                 request.amountMinor(), request.currencyCode(), "mock"));
         String mappedStatus = switch (result.status()) {
             case SUCCESS -> "SUCCEEDED";

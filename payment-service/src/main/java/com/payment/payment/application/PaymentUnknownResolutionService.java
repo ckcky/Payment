@@ -38,13 +38,31 @@ public class PaymentUnknownResolutionService {
         this.auditLogger = auditLogger;
     }
 
-    public boolean resolve(Long paymentId, ChannelResult authoritativeResult) {
+    public boolean resolve(String ref, ChannelResult authoritativeResult) {
+        Long paymentId = resolveId(ref);
+        return resolveById(paymentId, authoritativeResult);
+    }
+
+    /** 供控制器按「数值 id 或 paymentNo」寻址；内部实现仍以数值 id 走原路径。 */
+    private Long resolveId(String ref) {
+        if (ref.chars().allMatch(Character::isDigit)) {
+            return Long.parseLong(ref);
+        }
+        return paymentRepository.findByPaymentNo(ref)
+                .map(Payment::getId)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + ref));
+    }
+
+    public boolean resolveById(Long paymentId, ChannelResult authoritativeResult) {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId));
         if (payment.getStatus() != PaymentStatus.UNKNOWN) {
             return false;
         }
-        boolean changed = processor.applyAndNotify(paymentId, authoritativeResult);
+        boolean changed = processor.applyAndNotify(paymentRepository.findById(paymentId)
+                .map(Payment::getPaymentNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId)),
+                authoritativeResult);
         if (changed) {
             recordTransition(payment, PaymentStatus.UNKNOWN, authoritativeResult);
             // UNKNOWN 真实收敛时长：进入 UNKNOWN 时由状态机记录 enteredUnknownAt（spec US5 / ADR-0015）。

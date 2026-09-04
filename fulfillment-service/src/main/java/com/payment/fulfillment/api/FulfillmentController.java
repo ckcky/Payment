@@ -32,18 +32,18 @@ public class FulfillmentController {
     /**
      * 按订单查询履约（只读）。
      *
-     * <p>支付成功触发履约后，调用方手上只有 {@code orderId}——履约 id 是 payment-service 内部
+     * <p>支付成功触发履约后，调用方手上只有 {@code orderNo}——履约 id 是 payment-service 内部
      * RPC 的返回值，不对外暴露。缺了本端点，要确认「这笔订单的履约走到哪一步」就只能直连数据库，
      * 那会绕过服务边界（宪章 IV.4 数据所有权）。故补上按订单的只读查询（spec 011 / FR-008）。</p>
      *
-     * @param orderId 订单号（业务键，非主键）
+     * @param orderNo 订单号（业务键，非主键）
      * @return 该订单的履约；不存在时抛 {@code NOT_FOUND}
      */
-    @GetMapping("/by-order/{orderId}")
-    public FulfillmentResponse getFulfillmentByOrderId(@PathVariable String orderId) {
-        Fulfillment fulfillment = repository.findByOrderId(orderId)
+    @GetMapping("/by-order/{orderNo}")
+    public FulfillmentResponse getFulfillmentByOrderId(@PathVariable String orderNo) {
+        Fulfillment fulfillment = repository.findByOrderNo(orderNo)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
-                        "Fulfillment not found for order: " + orderId));
+                        "Fulfillment not found for order: " + orderNo));
         return FulfillmentResponse.from(fulfillment);
     }
 }

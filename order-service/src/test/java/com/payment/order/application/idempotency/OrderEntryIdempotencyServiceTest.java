@@ -36,7 +36,7 @@ class OrderEntryIdempotencyServiceTest {
     }
 
     private CreateOrderResponse sampleResponse() {
-        return new CreateOrderResponse(10L, "OR1001", 20L, "TX1001", "PAID", 9900L, "CNY", 30L, "SUCCEEDED");
+        return new CreateOrderResponse("OR1001", "TX1001", "PAID", 9900L, "CNY", "PM30", "SUCCEEDED");
     }
 
     @Test

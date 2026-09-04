@@ -30,9 +30,9 @@ class FulfillmentPersistenceTest {
 
         Fulfillment reloaded = fulfillmentRepository.findById(fulfillment.getId()).orElseThrow();
         assertThat(reloaded.getId()).isEqualTo(fulfillment.getId());
-        assertThat(reloaded.getOrderId()).isEqualTo("order_1");
+        assertThat(reloaded.getOrderNo()).isEqualTo("order_1");
         assertThat(reloaded.getOrderItemId()).isEqualTo("item_1");
-        assertThat(reloaded.getSourcePaymentId()).isEqualTo("pay_1");
+        assertThat(reloaded.getSourcePaymentNo()).isEqualTo("pay_1");
         assertThat(reloaded.getStatus()).isEqualTo(FulfillmentStatus.DELIVERED);
         assertThat(reloaded.getVersion()).isEqualTo(1);
 

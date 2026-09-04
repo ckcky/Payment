@@ -9,21 +9,20 @@ import com.payment.order.application.CreateOrderResult;
  * mock-cashier.enabled=true 时非空；演示控制台以 {@code window.open(payUrl)} 打开收银台。
  * 默认同步 charge 主链下为 {@code null}，既有调用方零影响。</p>
  */
-public record CreateOrderResponse(Long orderId, String orderNo, Long transactionId, String transactionNo,
-                                  String status, long totalMinor, String currencyCode, Long paymentId,
+public record CreateOrderResponse(String orderNo, String transactionNo,
+                                  String status, long totalMinor, String currencyCode, String paymentNo,
                                   String paymentStatus, String payUrl) {
 
     /** 兼容构造（无收银台路径）：payUrl 为 null。 */
-    public CreateOrderResponse(Long orderId, String orderNo, Long transactionId, String transactionNo,
-                               String status, long totalMinor, String currencyCode, Long paymentId,
+    public CreateOrderResponse(String orderNo, String transactionNo,
+                               String status, long totalMinor, String currencyCode, String paymentNo,
                                String paymentStatus) {
-        this(orderId, orderNo, transactionId, transactionNo, status, totalMinor, currencyCode,
-                paymentId, paymentStatus, null);
+        this(orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, null);
     }
 
     public static CreateOrderResponse from(CreateOrderResult result) {
-        return new CreateOrderResponse(result.orderId(), result.orderNo(), result.transactionId(),
-                result.transactionNo(), result.status().name(), result.totalMinor(), result.currencyCode(),
-                result.paymentId(), result.paymentStatus(), result.payUrl());
+        return new CreateOrderResponse(result.orderNo(), result.transactionNo(),
+                result.status().name(), result.totalMinor(), result.currencyCode(),
+                result.paymentNo(), result.paymentStatus(), result.payUrl());
     }
 }

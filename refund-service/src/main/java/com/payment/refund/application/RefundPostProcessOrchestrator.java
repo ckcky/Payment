@@ -48,10 +48,10 @@ public class RefundPostProcessOrchestrator {
     /** 触发退款后处理（调用方须保证退款已确认）。 */
     public void process(Refund refund) {
         runStep("FULFILLMENT", refund, () -> fulfillment.notifyRefund(
-                new RefundFulfillmentRequest(refund.getId(), refund.getPaymentId(), refund.getOrderId(),
+                new RefundFulfillmentRequest(refund.getId(), refund.getPaymentNo(), refund.getOrderNo(),
                         refund.getUserId(), refund.getReason())));
         runStep("ENTITLEMENT", refund, () -> entitlement.notifyRefundPostProcess(
-                new RefundPostProcessRequest(refund.getId(), refund.getPaymentId(), refund.getOrderId(),
+                new RefundPostProcessRequest(refund.getId(), refund.getPaymentNo(), refund.getOrderNo(),
                         refund.getUserId(), refund.getReason())));
         // 记账金额 = 申请金额：ADR-0016（部分退款）已否决，成功退款恒为全额。
         runStep("LEDGER", refund, () -> ledger.postRefundCapture(

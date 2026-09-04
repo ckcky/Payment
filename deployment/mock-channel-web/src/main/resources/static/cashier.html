@@ -50,8 +50,8 @@
 </div>
 <script>
 const qs = new URLSearchParams(location.search);
-const paymentId = qs.get('paymentId');
-const orderId = qs.get('orderId');
+const paymentNo = qs.get('paymentNo');
+const orderNo = qs.get('orderNo');
 const amountMinor = qs.get('amountMinor');
 const currencyCode = qs.get('currencyCode') || 'CNY';
 const log = (m) => { const el = document.getElementById('log'); el.textContent += "\n" + m; el.scrollTop = el.scrollHeight; };
@@ -60,13 +60,13 @@ function fmt(minor, cur) {
   return (minor / 100).toFixed(2) + ' ' + cur;
 }
 document.getElementById('meta').innerHTML =
-  'paymentId: <b>' + (paymentId || '缺失') + '</b> &nbsp; orderId: <b>' + (orderId || '—') + '</b>';
+  'paymentNo: <b>' + (paymentNo || '缺失') + '</b> &nbsp; orderNo: <b>' + (orderNo || '—') + '</b>';
 document.getElementById('amount').textContent =
   amountMinor ? fmt(Number(amountMinor), currencyCode) : '（金额未随链路携带）';
 
 async function sendCallback(status, signMode, extra) {
   const payload = Object.assign({
-    paymentId: Number(paymentId),
+    paymentNo: paymentNo,
     status: status,
     channelReference: 'demo-ref-' + Date.now(),
     reason: null,
@@ -107,7 +107,7 @@ async function payForged() {
   await sendCallback('SUCCESS', 'FORGED');
   log('   预期：HTTP 403 —— payment 验签失败拒绝，业务层零触达（ADR-0052）。');
 }
-if (!paymentId) { log('!! 缺少 paymentId 查询参数 —— 请从演示控制台下单后跳转。'); }
+if (!paymentNo) { log('!! 缺少 paymentNo 查询参数 —— 请从演示控制台下单后跳转。'); }
 </script>
 </body>
 </html>

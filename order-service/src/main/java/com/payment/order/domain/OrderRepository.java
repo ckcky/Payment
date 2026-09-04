@@ -8,6 +8,8 @@ import java.util.Optional;
 public interface OrderRepository {
 
     Optional<Order> findById(Long id);
+    /** 按业务单号查询（跨系统引用一律用 orderNo，ADR-0063）。 */
+    Optional<Order> findByOrderNo(String orderNo);
 
     Order save(Order order);
 }

@@ -17,7 +17,7 @@ public class Entitlement {
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String userId;
-    private final String orderId;
+    private final String orderNo;
     private final String sourceFulfillmentId;
     private String grantRef;
     private int availableQuantity;
@@ -25,10 +25,10 @@ public class Entitlement {
     private final LocalDateTime expiryAt;
     private EntitlementStatus status;
 
-    public Entitlement(String userId, String orderId, String sourceFulfillmentId,
+    public Entitlement(String userId, String orderNo, String sourceFulfillmentId,
                        int availableQuantity, String scope, LocalDateTime expiryAt) {
         this.userId = userId;
-        this.orderId = orderId;
+        this.orderNo = orderNo;
         this.sourceFulfillmentId = sourceFulfillmentId;
         this.availableQuantity = availableQuantity;
         this.scope = scope;
@@ -40,10 +40,10 @@ public class Entitlement {
      * 持久化重建：还原权益聚合及其历史状态/剩余量，绕过创建期状态机（不改变业务规则）。
      * {@code grantRef} 为构造器之外的非派生字段，需显式回填。
      */
-    public static Entitlement rehydrate(Long id, String userId, String orderId, String sourceFulfillmentId,
+    public static Entitlement rehydrate(Long id, String userId, String orderNo, String sourceFulfillmentId,
                                         int availableQuantity, String scope, LocalDateTime expiryAt,
                                         EntitlementStatus status, Integer version, String grantRef) {
-        Entitlement e = new Entitlement(userId, orderId, sourceFulfillmentId, availableQuantity, scope, expiryAt);
+        Entitlement e = new Entitlement(userId, orderNo, sourceFulfillmentId, availableQuantity, scope, expiryAt);
         e.id = id;
         e.status = status;
         e.version = version;
@@ -152,8 +152,8 @@ public class Entitlement {
         return userId;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
     public String getSourceFulfillmentId() {

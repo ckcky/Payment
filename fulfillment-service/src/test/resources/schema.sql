@@ -2,7 +2,7 @@ DROP TABLE IF EXISTS fulfillments;
 
 CREATE TABLE fulfillments (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(64) NOT NULL,
     order_item_id VARCHAR(64),
     delivery_content VARCHAR(255) NOT NULL,
     source_payment_id VARCHAR(64) NOT NULL,

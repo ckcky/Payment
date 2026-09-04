@@ -21,7 +21,7 @@ class FulfillmentMetricsTest {
             request -> new EntitlementGrantedResponse(1L, "GRANTED");
 
     private static PaymentSucceededRequest request() {
-        return new PaymentSucceededRequest(1L, "order_1", "txn_1", "user_1", 1250L, "USD");
+        return new PaymentSucceededRequest("pay-1", "order_1", "txn_1", "user_1", 1250L, "USD");
     }
 
     @Test
@@ -43,8 +43,8 @@ class FulfillmentMetricsTest {
                 new InMemoryFulfillmentRepository(), NOOP_GATEWAY,
                 new MicrometerBusinessMetrics(registry)) {
             @Override
-            Fulfillment newFulfillment(String orderId, String sourcePaymentId) {
-                return new Fulfillment(orderId, null, "mock delivery", sourcePaymentId) {
+            Fulfillment newFulfillment(String orderNo, String sourcePaymentNo) {
+                return new Fulfillment(orderNo, null, "mock delivery", sourcePaymentNo) {
                     @Override
                     public void deliver() {
                         throw new RuntimeException("mock delivery failure");

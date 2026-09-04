@@ -12,8 +12,8 @@ USE `refund`;
 CREATE TABLE IF NOT EXISTS refunds (
     id BIGINT NOT NULL AUTO_INCREMENT,
     refund_no VARCHAR(32) NOT NULL COMMENT '业务单号 RF+雪花（ADR-0062）',
-    order_id VARCHAR(64) NOT NULL,
-    payment_id BIGINT NOT NULL,
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
+    payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
     user_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS refunds (
     PRIMARY KEY (id),
     UNIQUE KEY uk_refunds_idempotency_key (idempotency_key),
     UNIQUE KEY uk_refunds_refund_no (refund_no),
-    KEY idx_refunds_payment_id (payment_id),
-    KEY idx_refunds_order_id (order_id)
+    KEY idx_refunds_payment_no (payment_no),
+    KEY idx_refunds_order_no (order_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS refund_items (
@@ -47,12 +47,12 @@ CREATE TABLE IF NOT EXISTS refund_items (
     KEY idx_refund_items_refund_id (refund_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 退款受理悲观锁：以 payment_id 为行锁，串行化同一支付的退款受理，
+-- 退款受理悲观锁：以 payment_no 为行锁，串行化同一支付的退款受理，
 -- 防止并发读累计退款金额 + 写入之间的竞态导致超退款（H1 资金正确性）。
 -- 行在事务内由 INSERT ... ON DUPLICATE KEY UPDATE 持有直至提交/回滚。
 CREATE TABLE IF NOT EXISTS refund_intake_locks (
-    payment_id BIGINT NOT NULL,
-    PRIMARY KEY (payment_id)
+    payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
+    PRIMARY KEY (payment_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 退款后处理尝试记录（ADR-0017）：每次后处理目标（履约/权益/记账）一次调用的结果，

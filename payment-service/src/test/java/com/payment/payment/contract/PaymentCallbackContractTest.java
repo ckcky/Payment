@@ -24,7 +24,7 @@ class PaymentCallbackContractTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
 
-        boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.success("ref-cb"));
+        boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isTrue();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
     }
@@ -35,10 +35,10 @@ class PaymentCallbackContractTest {
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
 
-        stack.callback.handleCallback(payment.getId(), ChannelResult.success("ref-cb"));
+        stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
 
-        boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.success("ref-cb"));
+        boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isFalse();
         assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
     }
@@ -50,7 +50,7 @@ class PaymentCallbackContractTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
 
         boolean changed = stack.callback.handleCallback(
-                payment.getId(), ChannelResult.businessFailure("ref", "late decline"));
+                payment.getPaymentNo(), ChannelResult.businessFailure("ref", "late decline"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
     }
@@ -62,7 +62,7 @@ class PaymentCallbackContractTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
 
-        boolean changed = stack.callback.handleCallback(payment.getId(), ChannelResult.businessUnknown("still unknown"));
+        boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.businessUnknown("still unknown"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);

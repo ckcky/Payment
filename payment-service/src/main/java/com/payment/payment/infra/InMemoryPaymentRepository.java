@@ -23,10 +23,24 @@ public class InMemoryPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public Optional<Payment> findByPaymentNo(String paymentNo) {
+        return byId.values().stream()
+                .filter(p -> p.getPaymentNo().equals(paymentNo))
+                .findFirst();
+    }
+
+    @Override
     public Optional<Payment> findByTransactionId(String transactionId) {
         return byId.values().stream()
                 .filter(p -> transactionId.equals(p.getTransactionId()))
                 .findFirst();
+    }
+
+    @Override
+    public long countByTransactionId(String transactionId) {
+        return byId.values().stream()
+                .filter(p -> transactionId.equals(p.getTransactionId()))
+                .count();
     }
 
     @Override

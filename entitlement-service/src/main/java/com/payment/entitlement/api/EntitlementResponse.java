@@ -8,7 +8,7 @@ import com.payment.entitlement.domain.Entitlement;
 public record EntitlementResponse(
         Long id,
         String userId,
-        String orderId,
+        String orderNo,
         String status,
         int availableQuantity) {
 
@@ -16,7 +16,7 @@ public record EntitlementResponse(
         return new EntitlementResponse(
                 entitlement.getId(),
                 entitlement.getUserId(),
-                entitlement.getOrderId(),
+                entitlement.getOrderNo(),
                 entitlement.getStatus().name(),
                 entitlement.getAvailableQuantity());
     }

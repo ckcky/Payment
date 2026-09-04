@@ -7,7 +7,7 @@ CREATE TABLE orders (
     order_no VARCHAR(32) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     merchant_id VARCHAR(64) NOT NULL,
-    payment_id BIGINT NULL,
+    payment_no VARCHAR(32) NULL,
     status VARCHAR(32) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     total_minor BIGINT NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE orders (
 
 CREATE TABLE order_items (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id BIGINT NOT NULL,
+    order_no VARCHAR(32) NOT NULL,
     sku_id VARCHAR(64) NOT NULL,
     sku_code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE order_items (
 CREATE TABLE transactions (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     transaction_no VARCHAR(32) NOT NULL,
-    order_id VARCHAR(64) NOT NULL,
+    order_no VARCHAR(32) NOT NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     purpose VARCHAR(32) NOT NULL,

@@ -22,17 +22,16 @@ import java.util.regex.Pattern;
  * 各库共实例（database-per-service，见 deployment/schema/*.sql），查询用「库名.表名」限定。
  * 每个 section 独立 try/catch，局部失败不拖垮整份报告。</p>
  *
- * <p>关联口径（ADR-0062 落地后各关联列实际存什么，逐一核对过源码）：</p>
+ * <p>关联口径（ADR-0063：跨系统关联一律用业务单号，数值主键不跨服务）：</p>
  * <ul>
- *   <li>orders.id —— 自增主键（数值），是跨系统 order_id 关联列存的值（字符串形式）；
- *       orders.order_no（OR+雪花）才是对外业务单号。</li>
- *   <li>transactions / payments / refunds / fulfillments / entitlements 的 order_id
- *       均为 String.valueOf(orders.id)。</li>
- *   <li>payment_attempts.payment_id → payments.id；attempt.channel_reference 是渠道流水号。</li>
- *   <li>settlement_items.reference ← 对账匹配事实的渠道引用（即 channel_reference），
+ *   <li>orders.order_no（OR+雪花）是对外业务单号；orders.id 仅为本服务主键。</li>
+ *   <li>order_items / transactions / payments / refunds / fulfillments / entitlements
+ *       的 order_no 均存业务单号。</li>
+ *   <li>payment_attempts.payment_no 存业务单号（不再落数值 payment_id）。</li>
+ *   <li>settlement_items.reference ← 对账匹配事实的渠道引用（attempt.channel_reference），
  *       反查 settlement_batches 经 items.batch_id。</li>
  *   <li>ledger postings.source_id —— PAYMENT→payments.id / REFUND→refunds.id /
- *       SETTLEMENT→settlement_batches.id（各 FeignLedgerPostingGateway 写入口径）。</li>
+ *       SETTLEMENT→settlement_batches.id（账本内部口径，未跨服务暴露）。</li>
  *   <li>reconciliation_batches 的匹配/差异内嵌在 matches_json/differences_json，
  *       按渠道引用文本 LIKE 反查。</li>
  * </ul>
@@ -48,7 +47,7 @@ public class DemoDbTraceController {
         this.jdbc = jdbcProvider.getIfAvailable();
     }
 
-    /** 支持传数值 orderId（orders.id）或业务单号 orderNo（OR+雪花），二选一自动识别。 */
+    /** 兼容入参：传业务单号 orderNo（OR+雪花）或历史数值 orderId 均可识别。 */
     @GetMapping("/demo/trace")
     public Map<String, Object> trace(@RequestParam("orderId") String orderId,
                                      HttpServletResponse response) {
@@ -76,22 +75,23 @@ public class DemoDbTraceController {
             return resp;
         }
         resp.put("found", true);
-        Long id = ((Number) orders.get(0).get("id")).longValue();
-        String idStr = String.valueOf(id);
+        Map<String, Object> order = orders.get(0);
+        String orderNo = String.valueOf(order.get("order_no"));
+        Long orderIdNum = order.get("id") instanceof Number n ? n.longValue() : null;
 
-        // ② 订单明细 + 交易单（order-service 库）
+        // ② 订单明细 + 交易单（order-service 库，按 order_no 关联）
         query(sections, "order-service", "order_items",
-                "SELECT * FROM `order`.order_items WHERE order_id = ?", new Object[]{id});
+                "SELECT * FROM `order`.order_items WHERE order_no = ?", new Object[]{orderNo});
         query(sections, "order-service", "transactions",
-                "SELECT * FROM `order`.transactions WHERE order_id = ?", new Object[]{idStr});
+                "SELECT * FROM `order`.transactions WHERE order_no = ?", new Object[]{orderNo});
 
-        // ③ 支付单 + 尝试记录（payment 库），收集渠道引用供结算/对账反查
+        // ③ 支付单（order_no 关联）+ 尝试记录（payment_no 关联），收集渠道引用供结算/对账反查
         List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
-                "SELECT * FROM payment.payments WHERE order_id = ?", new Object[]{idStr});
-        List<Object> paymentIds = ids(payments, "id");
+                "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo});
+        List<Object> paymentNos = ids(payments, "payment_no");
         List<Map<String, Object>> attempts = query(sections, "payment-service", "payment_attempts",
-                "SELECT * FROM payment.payment_attempts WHERE payment_id IN (" + placeholders(paymentIds) + ")",
-                paymentIds.toArray());
+                "SELECT * FROM payment.payment_attempts WHERE payment_no IN (" + placeholders(paymentNos) + ")",
+                paymentNos.toArray());
         List<Object> channelRefs = new ArrayList<>();
         for (Map<String, Object> a : attempts) {
             Object ref = a.get("channel_reference");
@@ -100,14 +100,14 @@ public class DemoDbTraceController {
             }
         }
 
-        // ④ 退款 / 履约 / 权益（各自库，order_id 关联）
+        // ④ 退款 / 履约 / 权益（各自库，order_no 关联）
         List<Map<String, Object>> refunds = query(sections, "refund-service", "refunds",
-                "SELECT * FROM refund.refunds WHERE order_id = ?", new Object[]{idStr});
+                "SELECT * FROM refund.refunds WHERE order_no = ?", new Object[]{orderNo});
         List<Object> refundIds = ids(refunds, "id");
         query(sections, "fulfillment-service", "fulfillments",
-                "SELECT * FROM fulfillment.fulfillments WHERE order_id = ?", new Object[]{idStr});
+                "SELECT * FROM fulfillment.fulfillments WHERE order_no = ?", new Object[]{orderNo});
         query(sections, "entitlement-service", "entitlements",
-                "SELECT * FROM entitlement.entitlements WHERE order_id = ?", new Object[]{idStr});
+                "SELECT * FROM entitlement.entitlements WHERE order_no = ?", new Object[]{orderNo});
 
         // ⑤ 结算：items.reference 是渠道引用（对账匹配事实），反查所属批次
         List<Map<String, Object>> settleItems = query(sections, "settlement-service", "settlement_items",
@@ -137,7 +137,8 @@ public class DemoDbTraceController {
             query(sections, "reconciliation-service", "reconciliation_batches", sql.toString(), args.toArray());
         }
 
-        // ⑦ 账本：postings.source_id 按 (type, id) 组合反查，再取分录
+        // ⑦ 账本：postings.source_id 是账本内部口径（数值），由各单据主键反查，再取分录
+        List<Object> paymentIds = ids(payments, "id");
         List<Object> postingArgs = new ArrayList<>();
         StringBuilder postingSql = new StringBuilder("SELECT * FROM ledger.postings WHERE ");
         List<String> clauses = new ArrayList<>();
@@ -219,8 +220,8 @@ public class DemoDbTraceController {
         List<Object> out = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             Object v = row.get(column);
-            if (v instanceof Number n) {
-                out.add(n.longValue());
+            if (v != null) {
+                out.add(v);
             }
         }
         return out;

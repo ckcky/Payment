@@ -6,6 +6,6 @@ package com.payment.common.dto.rpc;
  * <p>退款成功后，refund-service 请求下游撤销对应权益；下游按自身规则处理，
  * refund-service 不直接修改 entitlement 内部状态。</p>
  */
-public record RefundPostProcessRequest(Long refundId, Long paymentId, String orderId,
+public record RefundPostProcessRequest(Long refundId, String paymentNo, String orderNo,
                                        String userId, String reason) {
 }

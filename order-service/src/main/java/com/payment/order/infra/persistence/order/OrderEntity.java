@@ -14,7 +14,7 @@ public class OrderEntity extends BaseEntity {
     private String userId;
     private String merchantId;
     /** 下游支付单号（payment-service 的 payment.id）。 */
-    private Long paymentId;
+    private String paymentNo;
     /** 订单状态机枚举名（状态机逻辑在领域层，持久化只存枚举名）。 */
     private String status;
     private String currencyCode;
@@ -47,12 +47,12 @@ public class OrderEntity extends BaseEntity {
         this.merchantId = merchantId;
     }
 
-    public Long getPaymentId() {
-        return paymentId;
+    public String getPaymentNo() {
+        return paymentNo;
     }
 
-    public void setPaymentId(Long paymentId) {
-        this.paymentId = paymentId;
+    public void setPaymentNo(String paymentNo) {
+        this.paymentNo = paymentNo;
     }
 
     public String getStatus() {

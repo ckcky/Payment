@@ -111,13 +111,13 @@ class OrderEntryIdempotencyConcurrencyTest {
         IdempotencyDecision first = service.check(SAME_KEY);
         assertThat(first.isProceed()).isTrue();
 
-        CreateOrderResponse response = new CreateOrderResponse(10L, "OR1001", 20L, "TX1001", "PAID", 9900L, "CNY", 30L, "SUCCEEDED");
+        CreateOrderResponse response = new CreateOrderResponse("OR1001", "TX1001", "PAID", 9900L, "CNY", "PM30", "SUCCEEDED");
         service.complete(SAME_KEY, response);
 
         // 完成后同 key 重放，直接拿到首次响应，不再创建
         IdempotencyDecision replay = service.check(SAME_KEY);
         assertThat(replay.isReplay()).isTrue();
-        assertThat(replay.storedJson().orElse("")).contains("\"orderId\":10");
+        assertThat(replay.storedJson().orElse("")).contains("\"orderNo\":\"OR1001\"");
     }
 
     private static int freePort() throws IOException {

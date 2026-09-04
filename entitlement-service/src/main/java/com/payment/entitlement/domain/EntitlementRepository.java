@@ -13,7 +13,7 @@ public interface EntitlementRepository {
     Optional<Entitlement> findBySourceFulfillmentId(String sourceFulfillmentId);
 
     /** 返回某订单授予的全部权益（退款后处理按订单撤销权益时使用）。 */
-    List<Entitlement> findByOrderId(String orderId);
+    List<Entitlement> findByOrderNo(String orderNo);
 
     Entitlement save(Entitlement entitlement);
 }

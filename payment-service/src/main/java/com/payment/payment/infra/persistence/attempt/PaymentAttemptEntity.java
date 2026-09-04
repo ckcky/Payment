@@ -12,7 +12,7 @@ import java.time.Instant;
 @TableName("payment_attempts")
 public class PaymentAttemptEntity extends BaseEntity {
 
-    private Long paymentId;
+    private String paymentNo;
     private String channelCode;
     private Instant requestedAt;
     private Instant respondedAt;
@@ -25,12 +25,12 @@ public class PaymentAttemptEntity extends BaseEntity {
     /** 错误分类枚举名（TRANSIENT/HARD/UNKNOWN）：由双响应码派生，仅用于观测（ADR-0012/0013）。 */
     private String errorType;
 
-    public Long getPaymentId() {
-        return paymentId;
+    public String getPaymentNo() {
+        return paymentNo;
     }
 
-    public void setPaymentId(Long paymentId) {
-        this.paymentId = paymentId;
+    public void setPaymentNo(String paymentNo) {
+        this.paymentNo = paymentNo;
     }
 
     public String getChannelCode() {

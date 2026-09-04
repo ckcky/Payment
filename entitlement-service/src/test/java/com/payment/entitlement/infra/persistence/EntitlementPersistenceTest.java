@@ -30,7 +30,7 @@ class EntitlementPersistenceTest {
         Entitlement reloaded = entitlementRepository.findById(e.getId()).orElseThrow();
         assertThat(reloaded.getId()).isEqualTo(e.getId());
         assertThat(reloaded.getUserId()).isEqualTo("user_1");
-        assertThat(reloaded.getOrderId()).isEqualTo("order_1");
+        assertThat(reloaded.getOrderNo()).isEqualTo("order_1");
         assertThat(reloaded.getSourceFulfillmentId()).isEqualTo("ful_1");
         assertThat(reloaded.getStatus()).isEqualTo(EntitlementStatus.AVAILABLE);
         assertThat(reloaded.getAvailableQuantity()).isEqualTo(3);

@@ -21,9 +21,9 @@ public class InMemoryTransactionRepository implements TransactionRepository {
     }
 
     @Override
-    public Optional<Transaction> findByOrderId(String orderId) {
+    public Optional<Transaction> findByOrderNo(String orderNo) {
         return byId.values().stream()
-                .filter(t -> orderId.equals(t.getOrderId()))
+                .filter(t -> t.getOrderNo().equals(orderNo))
                 .findFirst();
     }
 

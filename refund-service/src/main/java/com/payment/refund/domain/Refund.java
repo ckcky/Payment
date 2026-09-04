@@ -24,8 +24,8 @@ public class Refund {
     private String refundNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
-    private final String orderId;
-    private final Long paymentId;
+    private final String orderNo;
+    private final String paymentNo;
     private final String userId;
     private final long amountMinor;
     private final String currencyCode;
@@ -35,10 +35,10 @@ public class Refund {
     private RefundStatus status = RefundStatus.REQUESTED;
     private String failureReason;
 
-    public Refund(String orderId, Long paymentId, String userId, long amountMinor,
+    public Refund(String orderNo, String paymentNo, String userId, long amountMinor,
                   String currencyCode, String reason, String idempotencyKey, List<RefundItem> items) {
-        this.orderId = Objects.requireNonNull(orderId, "orderId");
-        this.paymentId = Objects.requireNonNull(paymentId, "paymentId");
+        this.orderNo = Objects.requireNonNull(orderNo, "orderNo");
+        this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
         this.userId = Objects.requireNonNull(userId, "userId");
         if (amountMinor <= 0) {
             throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION, "refund amount must be > 0");
@@ -54,11 +54,11 @@ public class Refund {
     /**
      * 持久化重建：还原退款聚合及其历史状态，绕过创建期校验（不改变业务规则）。
      */
-    public static Refund rehydrate(Long id, String refundNo, String orderId, Long paymentId, String userId,
+    public static Refund rehydrate(Long id, String refundNo, String orderNo, String paymentNo, String userId,
                                    long amountMinor, String currencyCode, String reason,
                                    String idempotencyKey, List<RefundItem> items,
                                    RefundStatus status, String failureReason, Integer version) {
-        Refund refund = new Refund(orderId, paymentId, userId, amountMinor, currencyCode,
+        Refund refund = new Refund(orderNo, paymentNo, userId, amountMinor, currencyCode,
                 reason, idempotencyKey, items);
         refund.id = id;
         refund.refundNo = refundNo;
@@ -180,12 +180,12 @@ public class Refund {
         this.version = version;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
-    public Long getPaymentId() {
-        return paymentId;
+    public Long getPaymentNo() {
+        return paymentNo;
     }
 
     public String getUserId() {

@@ -11,8 +11,8 @@ public class RefundEntity extends BaseEntity {
 
     /** 业务单号（RF + 雪花，ADR-0062）。 */
     private String refundNo;
-    private String orderId;
-    private Long paymentId;
+    private String orderNo;
+    private String paymentNo;
     private String userId;
     /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
@@ -32,20 +32,20 @@ public class RefundEntity extends BaseEntity {
         this.refundNo = refundNo;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getOrderNo() {
+        return orderNo;
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
+    public void setOrderNo(String orderNo) {
+        this.orderNo = orderNo;
     }
 
-    public Long getPaymentId() {
-        return paymentId;
+    public Long getPaymentNo() {
+        return paymentNo;
     }
 
-    public void setPaymentId(Long paymentId) {
-        this.paymentId = paymentId;
+    public void setPaymentNo(String paymentNo) {
+        this.paymentNo = paymentNo;
     }
 
     public String getUserId() {
