@@ -87,4 +87,23 @@ class SeckillStockServiceTest {
         assertThat(r.allowed()).isFalse();
         verify(metrics, times(1)).counter(anyString(), anyDouble(), any(), any());
     }
+
+    @Test
+    void rollbackIncrementsOnlyWhenQuotaKeyExists() {
+        when(redis.hasKey("seckill:sku:103")).thenReturn(true);
+
+        service.rollback(103L, 2);
+
+        verify(redis, times(1)).opsForValue();
+    }
+
+    @Test
+    void rollbackMustNotFabricateQuotaKeyForNormalSku() {
+        // 普通品从未播种（键不存在）：回补绝不能 INCR 凭空造键，否则后续下单被误判秒杀售罄
+        when(redis.hasKey("seckill:sku:101")).thenReturn(false);
+
+        service.rollback(101L, 1);
+
+        verify(redis, times(0)).opsForValue();
+    }
 }

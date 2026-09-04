@@ -130,11 +130,19 @@ while :; do
     sleep "$INTERVAL"; continue
   fi
 
-  # ③ 成败按概率分流回调
-  r=$(rand100)
+  # ③ 成败按概率分流回调；换渠道笔强制先 FAILURE（订单仍可付，供 ④ INV-2 演示）
+  force_switch=0
+  if [ "$SWITCH_EVERY" -gt 0 ] 2>/dev/null && [ $((n % SWITCH_EVERY)) -eq 0 ]; then
+    force_switch=1
+  fi
   status="SUCCESS"
-  if [ "$r" -lt "$UNKNOWN_RATE" ]; then status="UNKNOWN"
-  elif [ "$r" -lt $((UNKNOWN_RATE + FAIL_RATE)) ]; then status="FAILURE"
+  if [ "$force_switch" = "1" ]; then
+    status="FAILURE"
+  else
+    r=$(rand100)
+    if [ "$r" -lt "$UNKNOWN_RATE" ]; then status="UNKNOWN"
+    elif [ "$r" -lt $((UNKNOWN_RATE + FAIL_RATE)) ]; then status="FAILURE"
+    fi
   fi
 
   httpq POST "$DEMO_URL/mock-channel/callback" \
@@ -151,15 +159,20 @@ while :; do
     UNKNOWN)
       unknown=$((unknown + 1))
       echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"callback\",\"orderNo\":\"$orderNo\",\"paymentNo\":\"$paymentNo\",\"channel\":\"$channel\",\"result\":\"UNKNOWN\"}" >> "$JSONL_FILE"
+      # 收敛需要管理员令牌（X-Admin-Token，缺 403）且 body 字段是 result（非 status）
       ( sleep "$UNKNOWN_RESOLVE_DELAY"
         curl -s --noproxy '*' -m 5 -o /dev/null -X POST \
-          -H 'Content-Type: application/json' -d '{"status":"SUCCESS"}' \
-          "${PAYMENT_URL}/internal/payments/$paymentNo/resolve" ) &
+          -H 'Content-Type: application/json' \
+          -H "X-Admin-Token: ${PAYMENT_ADMIN_TOKEN:-demo-admin-token}" \
+          -d "{\"result\":\"SUCCESS\",\"channelReference\":\"resolve-$paymentNo\"}" \
+          "${PAYMENT_URL}/payments/$paymentNo/resolve" ) &
       ;;
   esac
 
-  # ④ 换渠道再付（INV-2 演示）：同订单新渠道再建一张支付单并回调成功
-  if [ "$SWITCH_EVERY" -gt 0 ] 2>/dev/null && [ $((n % SWITCH_EVERY)) -eq 0 ]; then
+  # ④ 换渠道再付（INV-2 演示）：仅当第一笔未完成订单（FAILURE）时换渠道，
+  #    同订单新渠道再建一张支付单并回调成功；旧单保留 FAILED。
+  #    （首笔 SUCCESS 后订单已 PAID，再建支付单会被 409 ORDER_NOT_PAYABLE 拒绝）
+  if [ "$force_switch" = "1" ]; then
     sw=${CHANNELS[$(( (n + 1) % ${#CHANNELS[@]} ))]}
     httpq POST "$ORDER_URL/orders/$orderNo/payments" "{\"channelCode\":\"$sw\"}" "${AUTH_HEADER[@]}"
     swPay=$(jstr "$HTTPQ_FILE" paymentNo)
@@ -169,6 +182,8 @@ while :; do
         "${AUTH_HEADER[@]}"
       switched=$((switched + 1))
       echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"switch-channel\",\"orderNo\":\"$orderNo\",\"oldPaymentNo\":\"$paymentNo\",\"newPaymentNo\":\"$swPay\",\"newChannel\":\"$sw\",\"result\":\"$([ "$HTTPQ_CODE" = "200" ] && echo SUCCESS || echo FAIL)\"}" >> "$JSONL_FILE"
+    else
+      echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"switch-channel\",\"orderNo\":\"$orderNo\",\"result\":\"FAIL\",\"http\":\"$HTTPQ_CODE\"}" >> "$JSONL_FILE"
     fi
   fi
 

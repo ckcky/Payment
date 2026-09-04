@@ -73,12 +73,22 @@ public class SeckillStockService {
         return SeckillResult.allowed(remaining);
     }
 
-    /** 秒杀订单失败/超时回补配额。 */
+    /**
+     * 秒杀订单失败/超时回补配额。
+     *
+     * <p>仅当配额键已存在时才回补：{@code INCR} 对不存在的键会凭空造出配额键，
+     * 使普通品（从未播种）被后续下单误判为"秒杀售罄"（409）。
+     * 2026-09-05 实测踩坑：订单超时取消对所有商品无条件回补，普通品流量被 409 拒单。</p>
+     */
     public void rollback(Long skuId, long quantity) {
         if (!props.isEnabled()) {
             return;
         }
         try {
+            Boolean exists = redis.hasKey(seckillKey(skuId));
+            if (!Boolean.TRUE.equals(exists)) {
+                return;
+            }
             redis.opsForValue().increment(seckillKey(skuId), quantity);
         } catch (RuntimeException ex) {
             log.warn("seckill rollback failed: {}", ex.getMessage());
