@@ -40,7 +40,7 @@ public class RefundEntity extends BaseEntity {
         this.orderNo = orderNo;
     }
 
-    public Long getPaymentNo() {
+    public String getPaymentNo() {
         return paymentNo;
     }
 

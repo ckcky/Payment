@@ -44,7 +44,7 @@ class FulfillmentApplicationServiceTest {
         assertThat(fulfillment.getId()).isEqualTo(1L);
         assertThat(fulfillment.getStatus()).isEqualTo(FulfillmentStatus.DELIVERED);
         assertThat(fulfillment.getOrderNo()).isEqualTo("order_1");
-        assertThat(fulfillment.getSourcePaymentNo()).isEqualTo("1");
+        assertThat(fulfillment.getSourcePaymentNo()).isEqualTo("pay-1");
 
         assertThat(gateway.requests).hasSize(1);
         FulfillmentCompletedRequest request = gateway.requests.get(0);

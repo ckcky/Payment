@@ -28,7 +28,7 @@ class RefundPostProcessTest {
                 new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         RefundPostProcessResponse response =
-                service.revokeOnRefund(new RefundPostProcessRequest(1L, 2L, "order-1", "user_1", "refund"));
+                service.revokeOnRefund(new RefundPostProcessRequest(1L, "PM-2", "order-1", "user_1", "refund"));
 
         assertThat(response.refundId()).isEqualTo(1L);
         assertThat(response.status()).isEqualTo("NOOP");
@@ -43,7 +43,7 @@ class RefundPostProcessTest {
         Entitlement e = repository.save(granted("order-1"));
 
         RefundPostProcessResponse response =
-                service.revokeOnRefund(new RefundPostProcessRequest(1L, 2L, "order-1", "user_1", "refund"));
+                service.revokeOnRefund(new RefundPostProcessRequest(1L, "PM-2", "order-1", "user_1", "refund"));
 
         assertThat(response.status()).isEqualTo("REVOKED");
         assertThat(repository.findById(e.getId())).get()
@@ -58,7 +58,7 @@ class RefundPostProcessTest {
                 new EntitlementApplicationService(repository, new NoopBusinessMetrics());
 
         repository.save(granted("order-1"));
-        RefundPostProcessRequest request = new RefundPostProcessRequest(1L, 2L, "order-1", "user_1", "refund");
+        RefundPostProcessRequest request = new RefundPostProcessRequest(1L, "PM-2", "order-1", "user_1", "refund");
 
         assertThat(service.revokeOnRefund(request).status()).isEqualTo("REVOKED");
         assertThat(service.revokeOnRefund(request).status()).isEqualTo("NOOP");

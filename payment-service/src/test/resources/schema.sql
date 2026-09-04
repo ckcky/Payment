@@ -41,4 +41,5 @@ CREATE TABLE payment_attempts (
     created_by VARCHAR(64),
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
-    CONSTRAINT uk_attempts_channel_reference UNIQUE (channel_refe
+    CONSTRAINT uk_attempts_channel_reference UNIQUE (channel_reference)
+);

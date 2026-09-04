@@ -196,9 +196,25 @@ public class OrderApplicationService {
     public void onPaymentSucceeded(PaymentSucceededRequest request) {
         Order order = orderRepository.findByOrderNo(request.orderNo())
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + request.orderNo()));
+        if (order.getStatus() == OrderStatus.PAID) {
+            if (request.paymentNo().equals(order.getPaymentNo())) {
+                return; // 幂等重复回调：同一支付单的重复通知，吸收（库存也已确认过）
+            }
+            // Feature 015 / INV-2：订单已被另一张支付单支付（如换渠道后旧单也回调成功），
+            // 本支付单多收了钱 → 明确 409，payment-service 捕获后触发自动退款。
+            throw BizException.of(ErrorCodes.ORDER_NOT_PAYABLE,
+                    "order already paid by other payment: " + request.orderNo()
+                            + " paidBy=" + order.getPaymentNo() + " callback=" + request.paymentNo());
+        }
+        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            // Feature 015 / C5：订单已取消/超时/关闭仍收到支付成功 → 明确 409，
+            // payment-service 捕获后触发自动退款（不再被 catch(RuntimeException ignored) 静默吞掉）。
+            throw BizException.of(ErrorCodes.ORDER_NOT_PAYABLE,
+                    "order not payable: " + request.orderNo() + " status=" + order.getStatus());
+        }
         boolean changed = order.markPaid(request.paymentNo());
         if (!changed) {
-            return; // 幂等重复回调：订单已 PAID，吸收（库存也已确认过）
+            return; // 理论不可达（PAID 已前置吸收），防御保留
         }
         orderRepository.save(order);
 

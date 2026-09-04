@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RefundStateMachineTest {
 
     private Refund newRefund() {
-        return new Refund("order-1", 1L, "user-1", 1000L, "CNY", "customer request",
+        return new Refund("order-1", "PM-1", "user-1", 1000L, "CNY", "customer request",
                 "idem-1", List.of(new RefundItem("item-1", 1000L)));
     }
 
@@ -84,7 +84,7 @@ class RefundStateMachineTest {
 
     @Test
     void partialRefundRejectsNonPositiveAmount() {
-        assertThatThrownBy(() -> new Refund("order-1", 1L, "user-1", 0L, "CNY",
+        assertThatThrownBy(() -> new Refund("order-1", "PM-1", "user-1", 0L, "CNY",
                 "reason", "idem-1", List.of()))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.AMOUNT_INVARIANT_VIOLATION));

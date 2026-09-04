@@ -18,13 +18,13 @@ class RefundFactsServiceTest {
 
     @Test
     void confirmedFactsReturnsOnlySucceededRefunds() {
-        Refund succeeded = new Refund("order-1", 1L, "user-1", 1000L, "CNY", "customer",
+        Refund succeeded = new Refund("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
                 "idem-1", List.of());
         succeeded.process();
         succeeded.succeed();
         refunds.save(succeeded);
 
-        Refund failed = new Refund("order-2", 2L, "user-1", 500L, "CNY", "customer",
+        Refund failed = new Refund("order-2", "PM-2", "user-1", 500L, "CNY", "customer",
                 "idem-2", List.of());
         failed.process();
         failed.fail("declined");

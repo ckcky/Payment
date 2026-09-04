@@ -24,6 +24,14 @@ public class PaymentResultProcessor {
     private final FulfillmentGateway fulfillmentGateway;
     private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
+    /** 自动退款网关（Feature 015 / P4）：缺省 no-op，生产由 Spring 注入 {@code PaymentAutoRefundService}。 */
+    private AutoRefundGateway autoRefundGateway = (paymentNo, cause) -> { };
+
+    /** 自动退款网关注入（可选依赖：单测手工构造时可缺省）。 */
+    @Autowired(required = false)
+    void setAutoRefundGateway(AutoRefundGateway autoRefundGateway) {
+        this.autoRefundGateway = autoRefundGateway;
+    }
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
@@ -68,12 +76,18 @@ public class PaymentResultProcessor {
             }
             try {
                 orderGateway.notifyPaymentSucceeded(request);
+            } catch (OrderNotPayableException ex) {
+                // Feature 015 / C5 / INV-1：订单已不可支付（取消/超时/关闭）却收到支付成功回写，
+                // 钱已收下必须原路退回 → 触发自动退款（P4），保留支付单 SUCCEEDED 事实不回滚。
+                autoRefundGateway.autoRefund(payment.getPaymentNo(), ex);
             } catch (RuntimeException ignored) {
                 // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）。
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009）。
-            ledgerGateway.postPaymentCapture(payment.getIdempotencyKey(), payment.getId(),
+            // Feature 015 / C2：幂等键改用 paymentNo 维度（PAYMENT:{paymentNo}），
+            // 一交易多支付单时每张支付单独立记账，不再复用支付幂等键避免撞键静默少记账。
+            ledgerGateway.postPaymentCapture("PAYMENT:" + payment.getPaymentNo(), payment.getId(),
                     payment.getAmountMinor(), 0L, payment.getCurrencyCode());
         }
         return changed;

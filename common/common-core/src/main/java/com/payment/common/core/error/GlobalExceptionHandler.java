@@ -59,7 +59,8 @@ public class GlobalExceptionHandler {
             case ErrorCodes.NOT_FOUND -> HttpStatus.NOT_FOUND;
             case ErrorCodes.CONFLICT, ErrorCodes.DUPLICATE,
                     ErrorCodes.CONCURRENT_UPDATE,
-                    ErrorCodes.STATE_TRANSITION_VIOLATION, ErrorCodes.AMOUNT_INVARIANT_VIOLATION -> HttpStatus.CONFLICT;
+                    ErrorCodes.STATE_TRANSITION_VIOLATION, ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
+                    ErrorCodes.ORDER_NOT_PAYABLE -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
     }

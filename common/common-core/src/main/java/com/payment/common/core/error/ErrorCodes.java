@@ -16,6 +16,9 @@ public final class ErrorCodes {
     public static final String CONCURRENT_UPDATE = "CONCURRENT_UPDATE";
     public static final String DUPLICATE = "DUPLICATE";
     public static final String STATE_TRANSITION_VIOLATION = "STATE_TRANSITION_VIOLATION";
+    /** 订单已不可支付（取消/超时/关闭）仍收到支付成功回写（Feature 015 / INV-1，HTTP 409）。
+     *  payment-service 捕获后触发自动退款（ADR-015），不得吞掉。 */
+    public static final String ORDER_NOT_PAYABLE = "ORDER_NOT_PAYABLE";
     /** 对账批次尚有未处理差异却尝试关闭（ADR-0019 关闭门禁）。 */
     public static final String UNRESOLVED_DIFFERENCES = "UNRESOLVED_DIFFERENCES";
     public static final String AMOUNT_INVARIANT_VIOLATION = "AMOUNT_INVARIANT_VIOLATION";

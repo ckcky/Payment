@@ -184,7 +184,7 @@ public class Refund {
         return orderNo;
     }
 
-    public Long getPaymentNo() {
+    public String getPaymentNo() {
         return paymentNo;
     }
 

@@ -41,7 +41,7 @@ class RefundMetricsTest {
     }
 
     private CreateRefundCommand cmd() {
-        return new CreateRefundCommand("order-1", 1L, "user-1", 1000L, "CNY", "customer",
+        return new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
                 "idem-1", List.of());
     }
 
@@ -67,10 +67,10 @@ class RefundMetricsTest {
     @Test
     void rejectedRefundIncrementsRejectedCounter() {
         payment.amount = new com.payment.common.dto.rpc.PaymentAmountQueryResponse(
-                1L, "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
+                "PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
 
         Refund refund = appService().createRefund(new CreateRefundCommand(
-                "order-1", 1L, "user-1", 1200L, "CNY", "customer", "idem-1", List.of()));
+                "order-1", "PM-1", "user-1", 1200L, "CNY", "customer", "idem-1", List.of()));
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.REJECTED);
         assertThat(registry.get("refund.rejected").counter().count()).isEqualTo(1.0);

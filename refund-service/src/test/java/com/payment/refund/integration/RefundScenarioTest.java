@@ -25,7 +25,7 @@ class RefundScenarioTest {
     private final RefundRpcCallbackService callback = new RefundRpcCallbackService(stack.refunds);
 
     private CreateRefundCommand cmd() {
-        return new CreateRefundCommand("order-1", 1L, "user-1", 1000L, "CNY", "customer",
+        return new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
                 "idem-1", List.of());
     }
 

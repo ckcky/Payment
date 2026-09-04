@@ -51,7 +51,7 @@ public final class RefundTestStack {
     public static final class RecordingPaymentRefundGateway implements PaymentRefundGateway {
 
         public PaymentAmountQueryResponse amount =
-                new PaymentAmountQueryResponse(1L, "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
+                new PaymentAmountQueryResponse("PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
         public String attemptStatus = "SUCCEEDED";
         public final List<RefundAttemptRequest> attemptRequests = new ArrayList<>();
 

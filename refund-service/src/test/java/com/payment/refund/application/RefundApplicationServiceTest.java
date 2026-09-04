@@ -18,7 +18,7 @@ class RefundApplicationServiceTest {
     private final RefundTestStack stack = new RefundTestStack();
 
     private CreateRefundCommand cmd() {
-        return new CreateRefundCommand("order-1", 1L, "user-1", 1000L, "CNY", "customer",
+        return new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
                 "idem-1", List.of());
     }
 
@@ -43,10 +43,10 @@ class RefundApplicationServiceTest {
 
     @Test
     void overRefundIsRejectedWithoutAttempt() {
-        stack.payment.amount = new PaymentAmountQueryResponse(1L, "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
+        stack.payment.amount = new PaymentAmountQueryResponse("PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
 
         Refund refund = stack.appService().createRefund(
-                new CreateRefundCommand("order-1", 1L, "user-1", 1200L, "CNY", "customer",
+                new CreateRefundCommand("order-1", "PM-1", "user-1", 1200L, "CNY", "customer",
                         "idem-1", List.of()));
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.REJECTED);
@@ -66,7 +66,7 @@ class RefundApplicationServiceTest {
     @Test
     void currencyMismatchIsRejected() {
         Refund refund = stack.appService().createRefund(
-                new CreateRefundCommand("order-1", 1L, "user-1", 1000L, "USD", "customer",
+                new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L, "USD", "customer",
                         "idem-1", List.of()));
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.REJECTED);
@@ -77,7 +77,7 @@ class RefundApplicationServiceTest {
     void cumulativeCountsRequestedAmountForBothTerminalAndInTransit() {
         // 第一笔 300 全额成功（终态，计申请额 300）。
         assertThat(stack.appService().createRefund(
-                new CreateRefundCommand("order-1", 1L, "user-1", 300L, "CNY", "customer",
+                new CreateRefundCommand("order-1", "PM-1", "user-1", 300L, "CNY", "customer",
                         "idem-1", List.of())).getStatus())
                 .isEqualTo(RefundStatus.SUCCEEDED);
 
@@ -85,7 +85,7 @@ class RefundApplicationServiceTest {
         // 累计 = 300 + 400 = 700 <= 1000，应被批准（不落 REJECTED）。
         stack.payment.attemptStatus = "UNKNOWN";
         Refund second = stack.appService().createRefund(
-                new CreateRefundCommand("order-1", 1L, "user-1", 400L, "CNY", "customer",
+                new CreateRefundCommand("order-1", "PM-1", "user-1", 400L, "CNY", "customer",
                         "idem-2", List.of()));
         assertThat(second.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
         assertThat(second.getStatus()).isNotEqualTo(RefundStatus.REJECTED);
@@ -94,7 +94,7 @@ class RefundApplicationServiceTest {
         stack.payment.attemptStatus = "SUCCEEDED";
         int attemptsBefore = stack.payment.attemptRequests.size();
         Refund third = stack.appService().createRefund(
-                new CreateRefundCommand("order-1", 1L, "user-1", 400L, "CNY", "customer",
+                new CreateRefundCommand("order-1", "PM-1", "user-1", 400L, "CNY", "customer",
                         "idem-3", List.of()));
         assertThat(third.getStatus()).isEqualTo(RefundStatus.REJECTED);
         assertThat(stack.payment.attemptRequests).hasSize(attemptsBefore);
