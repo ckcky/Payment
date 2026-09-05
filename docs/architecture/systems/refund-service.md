@@ -100,8 +100,8 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 | 列 | 类型 | 说明 |
 |---|---|---|
 | id | BIGINT PK AUTO_INCREMENT | 退款 ID |
-| order_id | VARCHAR(64) NOT NULL | 订单引用，`idx_refunds_order_id` |
-| payment_id | BIGINT NOT NULL | 支付引用，`idx_refunds_payment_id` |
+| order_no | VARCHAR(32) NOT NULL | 订单业务单号（OR+雪花，ADR-0063），`idx_refunds_order_no` |
+| payment_no | VARCHAR(32) NOT NULL | 支付业务单号（PM+雪花，ADR-0063），`idx_refunds_payment_no` |
 | user_id | VARCHAR(64) NOT NULL | 用户引用 |
 | amount_minor | BIGINT NOT NULL | 金额（最小货币单位） |
 | currency_code | VARCHAR(8) NOT NULL | 币种 |
@@ -116,7 +116,7 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 | 列 | 类型 | 说明 |
 |---|---|---|
 | id | BIGINT PK AUTO_INCREMENT | 明细 ID |
-| refund_id | BIGINT NOT NULL | 退款引用，`idx_refund_items_refund_id` |
+| refund_no | VARCHAR(32) NOT NULL | 退款业务单号（RF+雪花，ADR-0062/0063），`idx_refund_items_refund_no` |
 | order_item_id | VARCHAR(64) NOT NULL | 订单明细引用 |
 | amount_minor | BIGINT NOT NULL | 明细金额（最小货币单位） |
 
@@ -124,11 +124,11 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| payment_id | BIGINT NOT NULL | 受理悲观锁行键，PK；`INSERT ... ON DUPLICATE KEY UPDATE` 持有行锁直至事务提交/回滚（[RefundIntakeLockMapper.java:15](../../refund-service/src/main/java/com/payment/refund/infra/persistence/refund/RefundIntakeLockMapper.java)） |
+| payment_no | VARCHAR(32) NOT NULL | 受理悲观锁行键（业务单号，ADR-0063），PK；`INSERT ... ON DUPLICATE KEY UPDATE` 持有行锁直至事务提交/回滚（[RefundIntakeLockMapper.java:15](../../payment-service/src/main/java/com/payment/refund/infra/persistence/refund/RefundIntakeLockMapper.java)） |
 
 **索引策略（已实现）**：
-- `refunds`：`uk_refunds_idempotency_key`（幂等兜底）、`idx_refunds_payment_id`（按支付查累计退款）、`idx_refunds_order_id`（按订单查）。
-- `refund_items`：`idx_refund_items_refund_id`（按退款查明细）。
+- `refunds`：`uk_refunds_idempotency_key`（幂等兜底）、`idx_refunds_payment_no`（按支付查累计退款）、`idx_refunds_order_no`（按订单查）。
+- `refund_items`：`idx_refund_items_refund_no`（按退款业务单号查明细）。
 - 并发控制双保险：`refund_intake_locks` 悲观行锁（串行化受理）+ `version` 乐观锁（[MybatisRefundRepository.java:91](../../refund-service/src/main/java/com/payment/refund/infra/persistence/refund/MybatisRefundRepository.java) 更新 0 行抛 `CONFLICT`）。
 
 ---
@@ -176,13 +176,13 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 
 经 `EntitlementFeignClient`（[EntitlementFeignClient.java:16](../../refund-service/src/main/java/com/payment/refund/infra/client/EntitlementFeignClient.java)，Feign `entitlement-service`，默认 `http://localhost:8087`）：
 
-- `POST /internal/entitlements/on-refund`（`notifyRefundPostProcess`）→ 退款成功后请求权益吊销。请求 `RefundPostProcessRequest { refundId, paymentId, orderId, userId, reason }`；**失败 catch 忽略，不回滚退款成功**（[RefundApplicationService.java:109](../../refund-service/src/main/java/com/payment/refund/application/RefundApplicationService.java)）。
+- `POST /internal/entitlements/on-refund`（`notifyRefundPostProcess`）→ 退款成功后请求权益吊销。请求 `RefundPostProcessRequest { refundNo, paymentNo, orderNo, userId, reason }`（ADR-0063 业务单号；[RefundApplicationService.java:109](../../payment-service/src/main/java/com/payment/refund/application/RefundApplicationService.java)）。
 
 ### 3.6 对账事实接口（供 reconciliation-service 拉取）
 
 `GET /internal/refunds/confirmed-facts` → `200`（[RefundFactsController.java:21](../../refund-service/src/main/java/com/payment/refund/api/RefundFactsController.java)）
 
-**响应**：`List<RefundFactResponse>`，每项 `{ refundId, channelReference: "refund-{id}", amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 退款（[RefundFactsService.java:26](../../refund-service/src/main/java/com/payment/refund/application/RefundFactsService.java)）。**单向拉取**，refund-service 不主动推送；reconciliation 永不直接改写 `refunds`。
+**响应**：`List<RefundFactResponse>`，每项 `{ refundNo, channelReference: "refund-{refundNo}", amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 退款（[RefundFactsService.java:26](../../payment-service/src/main/java/com/payment/refund/application/RefundFactsService.java)）。**单向拉取**，refund-service（已并入 payment-service，ADR-0064）不主动推送；reconciliation 永不直接改写 `refunds`。
 
 > **矛盾项 A（已核实，需roadmap/文档修正）**：`technical-solution.md §4.3.3 退款链路` 标注 `C --> D["履约/权益处理 (refund→fulfillment/entitlement RPC)"]`，即退款后**既调 fulfillment 又调 entitlement**。但**实测代码中 refund-service 仅有 `EntitlementGateway` / `EntitlementFeignClient`，不存在 fulfillment 网关或任何 refund→fulfillment 调用**。退款后履约撤销当前为 `[待定]`/缺失。文档与代码不一致，建议要么补 fulfillment 网关，要么将 §4.3.3 改为「refund→entitlement（MVP）；fulfillment 撤销 [待定]」。
 

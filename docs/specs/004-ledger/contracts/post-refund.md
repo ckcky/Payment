@@ -9,7 +9,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | sourceType | String | 是 | 固定 `REFUND` |
-| sourceId | String | 是 | refundId |
+| sourceId | String | 是 | refundNo |
 | idempotencyKey | String | 是 | `REFUND:<refundIdempotencyKey>` |
 | currency | String | 是 | 币种 |
 | entries | List<EntrySpec> | 是 | 冲正分录，MUST 平衡 |

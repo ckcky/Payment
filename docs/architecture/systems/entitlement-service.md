@@ -119,9 +119,9 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 `POST /internal/entitlements/on-refund` → `200`
 
-**请求** `RefundPostProcessRequest`：`{ refundId: Long, paymentNo: String, orderNo: String, userId: String, reason: String }`（ADR-0063 业务单号）
+**请求** `RefundPostProcessRequest`：`{ refundNo: String, paymentNo: String, orderNo: String, userId: String, reason: String }`（ADR-0063 业务单号）
 
-**响应** `RefundPostProcessResponse`：`{ refundId: Long, status: "REVOKED"|"NOOP" }`；按订单撤销全部 AVAILABLE 权益，撤销≥1 条返回 REVOKED，无权益返回 NOOP。
+**响应** `RefundPostProcessResponse`：`{ refundNo: String, status: "REVOKED"|"NOOP" }`；按订单撤销全部 AVAILABLE 权益，撤销≥1 条返回 REVOKED，无权益返回 NOOP。
 
 **规则**：非 AVAILABLE 权益不自动撤销（留人工），不伪造成功（[EntitlementApplicationService.java:64](../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L64)）。
 

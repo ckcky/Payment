@@ -12,7 +12,7 @@
 >
 > | 位置 | 最终形态 |
 > |---|---|
-> | §1.2 `RefundAttemptResponse` | 3 分量 `(refundId, status, channelReference)`，**无** `refundedAmountMinor` |
+> | §1.2 `RefundAttemptResponse` | 3 分量 `(refundNo, status, channelReference)`，**无** `refundedAmountMinor` |
 > | §3 entitlement 请求体 | **不扩展** `refundedAmountMinor`（维持整单吊销语义） |
 > | §4 记账金额 | 一律 `refund.getAmountMinor()`（成功退款恒为全额） |
 > | §5 R1 | 触发条件 = **仅 `SUCCEEDED`** |
@@ -50,8 +50,8 @@ refund-service (8085, schema `refund`)
 
 `POST /internal/payments/refund-attempt` → `200`
 
-- **请求** `RefundAttemptRequest { refundId, paymentId, orderId, userId, amountMinor, currencyCode, reason, idempotencyKey }`
-- **响应** `RefundAttemptResponse { refundId, status, channelReference }` —— 3 分量（⭐ **最终形态**，ADR-0016 回退后）
+- **请求** `RefundAttemptRequest { refundNo, paymentNo, orderNo, userId, amountMinor, currencyCode, reason, idempotencyKey }`
+- **响应** `RefundAttemptResponse { refundNo, status, channelReference }` —— 3 分量（⭐ **最终形态**，ADR-0016 回退后）
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -79,7 +79,7 @@ refund-service (8085, schema `refund`)
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| refundId | Long | 是 | 退款 ID（下游幂等依据） |
+| refundNo | Long | 是 | 退款 ID（下游幂等依据） |
 | paymentId | Long | 是 | 原支付 ID（履约以 `sourcePaymentId` 定位） |
 | orderId | String | 是 | 订单 ID |
 | orderItemIds | List&lt;String&gt; | 否 | 退款明细对应的订单明细（取自 `RefundItem.orderItemId`）；空表示整单 |
@@ -89,7 +89,7 @@ refund-service (8085, schema `refund`)
 
 ```json
 {
-  "refundId": 42,
+  "refundNo": 42,
   "paymentId": 7,
   "orderId": "ord_1",
   "orderItemIds": ["oi_1"],
@@ -103,7 +103,7 @@ refund-service (8085, schema `refund`)
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| refundId | Long | 回显退款 ID |
+| refundNo | Long | 回显退款 ID |
 | status | String | `CANCELLED` / `SKIPPED` / `REJECTED` |
 
 - `CANCELLED`：履约被取消（当前仅 `PENDING → CANCELLED` 可行，`Fulfillment.cancel()`）。
@@ -112,7 +112,7 @@ refund-service (8085, schema `refund`)
 
 **规则**
 
-- 幂等：以 `refundId`（+ `orderItemIds`）为幂等依据；重复调用 MUST 返回首次结果，不重复取消。
+- 幂等：以 `refundNo`（+ `orderItemIds`）为幂等依据；重复调用 MUST 返回首次结果，不重复取消。
 - **失败语义**：RPC 抛异常/超时 → refund-service 记为一次 `FAILED` 的 `RefundPostProcessAttempt`，**不回滚退款成功**（Saga，禁 2PC）。
 - `SKIPPED` / `REJECTED` **不算失败**（不递增 `refund.post_process_failed`），仅记录事实。
 
@@ -126,8 +126,8 @@ refund-service (8085, schema `refund`)
 
 **端点**：`POST /internal/entitlements/on-refund` → `200`
 
-- **请求** `RefundPostProcessRequest { refundId, paymentId, orderId, userId, reason }`
-- **响应** `RefundPostProcessResponse { refundId, status }` —— `status` 取值 `REVOKED` / `NOOP` / `FAILED`
+- **请求** `RefundPostProcessRequest { refundNo, paymentId, orderId, userId, reason }`
+- **响应** `RefundPostProcessResponse { refundNo, status }` —— `status` 取值 `REVOKED` / `NOOP` / `FAILED`
 - **规则**：退款成功后请求权益吊销；下游按自身规则处理，refund-service 不直接改 entitlement 内部状态；失败不回滚退款成功。
 - ~~[改] 建议扩展（依赖 ADR-0016）：请求体增 `refundedAmountMinor` / `currencyCode`~~ ⛔ **不做**：ADR-0016 裁决后维持整单吊销语义，请求体不扩展。
 
@@ -146,7 +146,7 @@ refund-service (8085, schema `refund`)
 |---|---|---|---|
 | idempotencyKey | String | 是 | `REFUND:<refundIdempotencyKey>` |
 | sourceType | String | 是 | 固定 `REFUND`（`LedgerSourceType.REFUND`） |
-| sourceId | String | 是 | `<refundId>` |
+| sourceId | String | 是 | `<refundNo>` |
 | currency | String | 是 | 币种（MVP 仅 `CNY`） |
 | entries | List&lt;EntryRequest&gt; | 是 | 分录，借贷 MUST 平衡 |
 
@@ -185,7 +185,7 @@ refund-service (8085, schema `refund`)
 
 - `GET /internal/ledger/postings?idempotencyKey=...` —— 按幂等键回查
 - `GET /internal/ledger/balance` —— 全局借贷平衡性校验
-- `GET /internal/ledger/entries?sourceType=REFUND&sourceId=<refundId>` —— 按来源追溯分录
+- `GET /internal/ledger/entries?sourceType=REFUND&sourceId=<refundNo>` —— 按来源追溯分录
 
 ---
 
@@ -196,6 +196,6 @@ refund-service (8085, schema `refund`)
 | R1 | 后处理与记账的**触发条件唯一**：**仅 `SUCCEEDED`**（~~`PARTIALLY_SUCCEEDED`~~ ⛔ 不可达） | `UNKNOWN` 不触发（FR-007） |
 | R2 | 每个目标（FULFILLMENT / ENTITLEMENT / LEDGER）一次调用 = 一条 `RefundPostProcessAttempt` | 失败可独立追踪（FR-005） |
 | R3 | 任一目标失败**不回滚**退款成功，也不影响其他目标继续编排 | Saga + 幂等，禁 2PC（Constitution §IV） |
-| R4 | 幂等依据统一：`refundId`（后处理）/ `REFUND:<refundIdempotencyKey>`（记账） | 重复收敛只触发一次（FR-006） |
+| R4 | 幂等依据统一：`refundNo`（后处理）/ `REFUND:<refundIdempotencyKey>`（记账） | 重复收敛只触发一次（FR-006） |
 | R5 | 金额一律 `long` 最小货币单位；校验在 refund 受理、记账两处**分别**执行（~~渠道结果回传处~~ ⛔ 契约已不回传金额） | 不依赖上游校验（technical-solution §4.5） |
 | R6 | 出站 Feign 超时 `[目标]` connect 1s / read 3s；后处理有限退避重试（3 次 / 1s-2s-4s） | 当前沿用 OpenFeign 默认值 |

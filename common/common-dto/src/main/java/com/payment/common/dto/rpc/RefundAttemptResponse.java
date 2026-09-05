@@ -1,14 +1,14 @@
 package com.payment.common.dto.rpc;
 
 /**
- * 渠道退款尝试的跨服务 RPC 响应（payment-service → refund-service）。
+ * 渠道退款尝试的跨服务 RPC 响应（payment-service → payment-service（refund 包））。
  *
  * <p>{@code status} 为退款尝试结果枚举名（SUCCEEDED / FAILED / UNKNOWN）；UNKNOWN 表示
- * 渠道结果未确认，refund-service 不得当作成功或失败，需等待查询/回调收敛。</p>
+ * 渠道结果未确认，退款侧不得当作成功或失败，需等待查询/回调收敛。</p>
  *
  * <p><b>ADR-0016 已否决（部分退款不做）</b>：曾短暂引入 {@code refundedAmountMinor}
  * （渠道实际退款金额）用于推导 {@code PARTIALLY_SUCCEEDED}，现已移除。退款恒为全额，
  * {@code SUCCEEDED} 即代表按申请金额全部退回。</p>
  */
-public record RefundAttemptResponse(Long refundId, String status, String channelReference) {
+public record RefundAttemptResponse(String refundNo, String status, String channelReference) {
 }

@@ -63,7 +63,7 @@ public final class RefundTestStack {
         @Override
         public RefundAttemptResponse attemptRefund(RefundAttemptRequest request) {
             attemptRequests.add(request);
-            return new RefundAttemptResponse(request.refundId(), attemptStatus, "mock-refund-ref");
+            return new RefundAttemptResponse(request.refundNo(), attemptStatus, "mock-refund-ref");
         }
     }
 
@@ -80,7 +80,7 @@ public final class RefundTestStack {
             if (failPostProcess) {
                 throw new IllegalStateException("post-process RPC failed");
             }
-            return new RefundPostProcessResponse(request.refundId(), "REVOKED");
+            return new RefundPostProcessResponse(request.refundNo(), "REVOKED");
         }
     }
 
@@ -92,7 +92,7 @@ public final class RefundTestStack {
         @Override
         public RefundFulfillmentResponse notifyRefund(RefundFulfillmentRequest request) {
             refundRequests.add(request);
-            return new RefundFulfillmentResponse(request.refundId(), "CANCELLED");
+            return new RefundFulfillmentResponse(request.refundNo(), "CANCELLED");
         }
     }
 
@@ -102,8 +102,8 @@ public final class RefundTestStack {
         public final List<String> postingKeys = new ArrayList<>();
 
         @Override
-        public void postRefundCapture(String idempotencyKey, Long refundId, long amountMinor, String currencyCode) {
-            postingKeys.add(idempotencyKey + ":" + refundId + ":" + amountMinor);
+        public void postRefundCapture(String idempotencyKey, String refundNo, long amountMinor, String currencyCode) {
+            postingKeys.add(idempotencyKey + ":" + refundNo + ":" + amountMinor);
         }
     }
 
@@ -111,7 +111,7 @@ public final class RefundTestStack {
     public static final class InMemoryRefundPostProcessAttemptRepository
             implements RefundPostProcessAttemptRepository {
 
-        private final Map<Long, List<RefundPostProcessAttempt>> byRefund = new ConcurrentHashMap<>();
+        private final Map<String, List<RefundPostProcessAttempt>> byRefund = new ConcurrentHashMap<>();
         private final AtomicLong idGen = new AtomicLong();
 
         @Override
@@ -119,12 +119,12 @@ public final class RefundTestStack {
             if (attempt.getId() == null) {
                 attempt.setId(idGen.incrementAndGet());
             }
-            byRefund.computeIfAbsent(attempt.getRefundId(), k -> new ArrayList<>()).add(attempt);
+            byRefund.computeIfAbsent(attempt.getRefundNo(), k -> new ArrayList<>()).add(attempt);
         }
 
         @Override
-        public List<RefundPostProcessAttempt> findByRefundId(Long refundId) {
-            return byRefund.getOrDefault(refundId, List.of());
+        public List<RefundPostProcessAttempt> findByRefundNo(String refundNo) {
+            return byRefund.getOrDefault(refundNo, List.of());
         }
     }
 }

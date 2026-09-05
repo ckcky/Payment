@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS refunds (
 
 CREATE TABLE IF NOT EXISTS refund_items (
     id BIGINT NOT NULL AUTO_INCREMENT,
-    refund_id BIGINT NOT NULL,
+    refund_no VARCHAR(32) NOT NULL COMMENT '所属退款（业务单号 RF+雪花，ADR-0062/0063）',
     order_item_id VARCHAR(64) NOT NULL,
     amount_minor BIGINT NOT NULL,
     created_at DATETIME NOT NULL,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS refund_items (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    KEY idx_refund_items_refund_id (refund_id)
+    KEY idx_refund_items_refund_no (refund_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 退款受理悲观锁：以 payment_no 为行锁，串行化同一支付的退款受理（H1 资金正确性）。
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS refund_intake_locks (
 -- 退款后处理尝试记录（ADR-0017）：失败不回滚退款成功事实（Saga），留痕供重放。
 CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
     id BIGINT NOT NULL AUTO_INCREMENT,
-    refund_id BIGINT NOT NULL,
+    refund_no VARCHAR(32) NOT NULL COMMENT '所属退款（业务单号 RF+雪花，ADR-0062/0063）',
     target VARCHAR(32) NOT NULL,
     status VARCHAR(16) NOT NULL,
     detail VARCHAR(512),
@@ -116,6 +116,6 @@ CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_rppa_refund_target (refund_id, target),
-    KEY idx_rppa_refund_id (refund_id)
+    UNIQUE KEY uk_rppa_refund_target (refund_no, target),
+    KEY idx_rppa_refund_no (refund_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

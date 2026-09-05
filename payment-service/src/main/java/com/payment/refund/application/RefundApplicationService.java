@@ -94,8 +94,9 @@ public class RefundApplicationService {
         refund = insertNew(refund);
         refund.process();
 
+        // ADR-0063：出站 RPC 用业务单号 refundNo，数值主键不出服务边界。
         RefundAttemptResponse attempt = paymentRefundGateway.attemptRefund(
-                new RefundAttemptRequest(refund.getId(), cmd.paymentNo(), cmd.orderNo(), cmd.userId(),
+                new RefundAttemptRequest(refund.getRefundNo(), cmd.paymentNo(), cmd.orderNo(), cmd.userId(),
                         cmd.amountMinor(), cmd.currencyCode(), cmd.reason(), cmd.idempotencyKey()));
 
         // 渠道结果只有三态：成功/失败/未知。ADR-0016 已否决（部分退款不做），

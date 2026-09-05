@@ -60,7 +60,7 @@
 1. 令 fulfillment/entitlement 的 `on-refund` **均抛异常**（停服务或注入故障）。
 2. 触发一笔退款成功 → 期望退款仍为 `SUCCEEDED`（不回滚）。
 3. 查询后处理尝试记录 → 期望 FULFILLMENT / ENTITLEMENT 各一条 `FAILED`（含失败原因）。
-4. 恢复两个服务后按 `refundId` 重放 → 期望各自成功，且不重复撤销/吊销（下游幂等）。
+4. 恢复两个服务后按 `refundNo` 重放 → 期望各自成功，且不重复撤销/吊销（下游幂等）。
 5. 对已 `DELIVERED` 的履约触发退款 → 期望 fulfillment 返回 `SKIPPED`/`REJECTED`，**不算**后处理失败。
 
 ### 2.4 UNKNOWN 与收敛（缺口 G3）
@@ -78,7 +78,7 @@ GET /internal/ledger/postings?idempotencyKey=REFUND:rf-full-1
 # 期望：1 条 Posting，sourceType=REFUND，借贷平衡，金额 = 1000（= amountMinor，成功退款恒为全额）
 
 # 按来源追溯
-GET /internal/ledger/entries?sourceType=REFUND&sourceId=<refundId>
+GET /internal/ledger/entries?sourceType=REFUND&sourceId=<refundNo>
 
 # 全局平衡性校验
 GET /internal/ledger/balance

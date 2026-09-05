@@ -13,9 +13,9 @@ public interface LedgerPostingGateway {
      * 退款冲正记账：幂等键 {@code REFUND:<idempotencyKey>}，借贷由账本服务校验平衡。
      *
      * @param idempotencyKey 退款幂等键（账本据此幂等吸收重复）
-     * @param refundId       退款 ID（业务来源 ID）
+     * @param refundNo       退款业务单号（RF+雪花；账本 sourceId，ADR-0063：不用数值 ID）
      * @param amountMinor    实际退款金额（最小货币单位，须 > 0）
      * @param currencyCode   币种
      */
-    void postRefundCapture(String idempotencyKey, Long refundId, long amountMinor, String currencyCode);
+    void postRefundCapture(String idempotencyKey, String refundNo, long amountMinor, String currencyCode);
 }

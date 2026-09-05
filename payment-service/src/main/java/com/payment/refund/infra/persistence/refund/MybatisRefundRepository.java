@@ -91,7 +91,7 @@ public class MybatisRefundRepository implements RefundRepository {
             refundMapper.insert(entity);
             refund.setId(entity.getId());
             refund.setVersion(entity.getVersion());
-            insertItems(refund.getId(), refund.getItems());
+            insertItems(refund.getRefundNo(), refund.getItems());
             return refund;
         }
         RefundEntity entity = toEntity(refund);
@@ -102,19 +102,19 @@ public class MybatisRefundRepository implements RefundRepository {
         return refund;
     }
 
-    private void insertItems(Long refundId, List<RefundItem> items) {
+    private void insertItems(String refundNo, List<RefundItem> items) {
         for (RefundItem item : items) {
             RefundItemEntity entity = new RefundItemEntity();
-            entity.setRefundId(refundId);
+            entity.setRefundNo(refundNo);
             entity.setOrderItemId(item.orderItemId());
             entity.setAmountMinor(item.amountMinor());
             refundItemMapper.insert(entity);
         }
     }
 
-    private List<RefundItem> loadItems(Long refundId) {
+    private List<RefundItem> loadItems(String refundNo) {
         return refundItemMapper.selectList(
-                        Wrappers.<RefundItemEntity>lambdaQuery().eq(RefundItemEntity::getRefundId, refundId))
+                        Wrappers.<RefundItemEntity>lambdaQuery().eq(RefundItemEntity::getRefundNo, refundNo))
                 .stream()
                 .map(e -> new RefundItem(e.getOrderItemId(), e.getAmountMinor()))
                 .toList();
@@ -123,7 +123,7 @@ public class MybatisRefundRepository implements RefundRepository {
     private Refund toDomain(RefundEntity entity) {
         return Refund.rehydrate(entity.getId(), entity.getRefundNo(), entity.getOrderNo(), entity.getPaymentNo(),
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
-                entity.getReason(), entity.getIdempotencyKey(), loadItems(entity.getId()),
+                entity.getReason(), entity.getIdempotencyKey(), loadItems(entity.getRefundNo()),
                 RefundStatus.valueOf(entity.getStatus()), entity.getFailureReason(), entity.getVersion());
     }
 

@@ -101,7 +101,7 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** 一笔退款被确认为 `SUCCEEDED`，**When** 后处理编排执行，**Then** 依次（幂等地）调用 fulfillment 撤销与 entitlement 吊销，各自携带 `refundId` 作为幂等依据。
+1. **Given** 一笔退款被确认为 `SUCCEEDED`，**When** 后处理编排执行，**Then** 依次（幂等地）调用 fulfillment 撤销与 entitlement 吊销，各自携带 `refundNo` 作为幂等依据。
 2. **Given** 后处理 RPC 抛异常或超时，**When** 编排捕获，**Then** 退款成功事实**不被回滚**，失败被记录为一次独立的后处理尝试（含目标、原因、时间），并递增 `refund.post_process_failed`。
 3. **Given** 同一笔退款被重复收敛（重复 resolve / 重复回调），**When** 后处理编排再次执行，**Then** 下游按幂等键吸收，不重复撤销、不重复吊销。
 4. **Given** 一笔 `PARTIALLY_SUCCEEDED` 退款，**When** 后处理编排执行，**Then** 同样触发（部分退款也影响履约/权益），且请求体携带**实际退款金额**。
@@ -134,7 +134,7 @@
 
 **Why this priority**: Constitution §II.3 是硬性铁律，且 `ledger-service`（8090）与 payment 侧 `LedgerPostingGateway` **已实现并接入**——退款侧是当前唯一未接入的已确认资金变动。但记账依赖 ledger 服务可用性与科目表确认，故列 P2（依赖 ADR-0018）。
 
-**Independent Test**: 使一笔退款进入 `SUCCEEDED`，断言 `ledger-service` 中存在 `sourceType=REFUND`、`sourceId=<refundId>` 且借贷平衡的 `Posting`；重复触发同一退款记账，断言幂等返回首次 `Posting`；对 `PARTIALLY_SUCCEEDED`（已退 300）断言记账金额为 300 而非申请额。
+**Independent Test**: 使一笔退款进入 `SUCCEEDED`，断言 `ledger-service` 中存在 `sourceType=REFUND`、`sourceId=<refundNo>` 且借贷平衡的 `Posting`；重复触发同一退款记账，断言幂等返回首次 `Posting`；对 `PARTIALLY_SUCCEEDED`（已退 300）断言记账金额为 300 而非申请额。
 
 **Acceptance Scenarios**:
 
@@ -175,7 +175,7 @@
 - **契约未升级的下游（payment-service 未回传 `refundedAmountMinor`）**：按 ADR-0016 默认策略视为全额成功，保持既有行为，不静默改判为部分成功。
 - **部分成功后权益已部分消费**：entitlement 按自身规则处理（可部分吊销/拒绝），返回的 `NOOP`/`FAILED` 被如实记录；统一回收政策不在本 Feature（Out of Scope）。
 - **同一支付的多笔退款并发受理**：`refund_intake_locks` 行锁串行化；先到者落库后，后到者读到的累计额已含前者，超额者落 `REJECTED`。
-- **退款受理成功但后处理全失败**：退款保持成功事实，三条 `RefundPostProcessAttempt` 均为失败，进入可查询清单；由对账/人工按 `refundId` 重放，重放沿用原幂等依据。
+- **退款受理成功但后处理全失败**：退款保持成功事实，三条 `RefundPostProcessAttempt` 均为失败，进入可查询清单；由对账/人工按 `refundNo` 重放，重放沿用原幂等依据。
 - **跨服务 traceId 断裂**：后处理与记账调用 MUST 透传 `traceId`（`TraceIdRequestInterceptor`），保证资金审计可跨服务串联。
 - **重复记账与重复后处理的组合**：幂等键分别以 `REFUND:<refundIdempotencyKey>`（账本侧唯一约束）与 `uk_pp_idem`（后处理侧唯一约束）兜底，二者互不影响。
 
@@ -199,7 +199,7 @@
 - **FR-003**: 同一支付的可退款额度 MUST 按**申请金额 `amountMinor` 累计（终态与在途一视同仁）**，且累计 + 申请额 MUST NOT 超过已支付金额（超额落 `REJECTED`，不发起渠道尝试）。⭐ *（ADR-0016 回退后的最终口径）*
 - **FR-004**: 退款确认（`SUCCEEDED`）后，系统 MUST 编排**三侧**后处理：向 fulfillment-service 请求撤销（**ADR-0017 已补齐**）、向 entitlement-service 请求吊销（已实现）、向 ledger-service 记账（**ADR-0018 已补齐**）。
 - **FR-005**: 每次后处理调用 MUST 落一条可查询的尝试记录（目标服务、结果状态、失败原因、时间），失败 MUST NOT 回滚退款成功事实（Saga，禁 2PC/XA），且 MUST 产出 `refund.post_process_failed` 指标。
-- **FR-006**: 后处理 RPC MUST 携带幂等依据（以退款为粒度，如 `refundId` + 目标），下游 MUST 幂等吸收重复请求。
+- **FR-006**: 后处理 RPC MUST 携带幂等依据（以退款为粒度，如 `refundNo` + 目标），下游 MUST 幂等吸收重复请求。
 - **FR-007**: `UNKNOWN` 状态的退款 MUST NOT 被重复发起渠道退款尝试，且 MUST NOT 触发任何后处理或记账；收敛仅依据权威结果。
 - **FR-008**: `resolve` 入口 MUST 显式校验当前状态为 `UNKNOWN`（防御性前置断言，G3）；对 `REQUESTED` MUST 返回明确的 `STATE_TRANSITION_VIOLATION`；对已终态 MUST 幂等吸收（返回当前状态，不重复推进）。
 - **FR-009**: 已确认退款（`SUCCEEDED`）MUST 经 `LedgerPostingGateway` 以幂等键 `REFUND:<refundIdempotencyKey>` 向 `ledger-service` 提交**借贷平衡**的冲正分录，金额取 **`amountMinor`**（成功退款恒为全额，Constitution §II.3，ADR-0018）。

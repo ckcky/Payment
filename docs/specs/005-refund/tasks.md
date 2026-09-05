@@ -74,7 +74,7 @@
 
 ### Implementation for US1
 
-- [-] T011 [US1] ~~`RefundAttemptResponse` 新增 `refundedAmountMinor`~~ ⛔ **已回退**：回到 3 分量 `(refundId, status, channelReference)`
+- [-] T011 [US1] ~~`RefundAttemptResponse` 新增 `refundedAmountMinor`~~ ⛔ **已回退**：回到 3 分量 `(refundNo, status, channelReference)`
 - [-] T012 [US1] ~~payment 侧回传实际退款金额~~ ⛔ **已回退**：`ChannelResult` 回到 5 分量、`MockChannelAdapter` 删除 `setRefundMinor` 与部分退款分支
 - [-] T013 [US1] ⛔ **不做**（ADR-0016 裁决）
 - [-] T014 [US1] ⛔ **不做**：`switch` 仍为三态（`SUCCEEDED` → `succeed()` / `FAILED` → `fail()` / 其余 → `markUnknown()`），渠道金额不参与状态推导

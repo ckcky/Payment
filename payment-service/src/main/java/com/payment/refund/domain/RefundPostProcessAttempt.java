@@ -6,14 +6,14 @@ import java.util.Objects;
  * 退款后处理尝试记录（ADR-0017）：每次后处理目标（履约/权益/记账）的一次调用结果。
  *
  * <p>后处理失败不回滚退款成功事实（Saga），但 MUST 留下可追溯的尝试记录，便于运营按
- * {@code refundId} 查询并重放。终态不可变，仅追加。</p>
+ * {@code refundNo} 查询并重放。终态不可变，仅追加。</p>
  */
 public class RefundPostProcessAttempt {
 
     private Long id;
     /** 乐观锁并发令牌。 */
     private Integer version;
-    private final Long refundId;
+    private final String refundNo;
     /** 后处理目标：FULFILLMENT / ENTITLEMENT / LEDGER。 */
     private final String target;
     /** 结果：SUCCEEDED / FAILED。 */
@@ -23,8 +23,8 @@ public class RefundPostProcessAttempt {
     /** 实际尝试次数（含重试）。 */
     private final int attemptCount;
 
-    public RefundPostProcessAttempt(Long refundId, String target, String status, String detail, int attemptCount) {
-        this.refundId = Objects.requireNonNull(refundId, "refundId");
+    public RefundPostProcessAttempt(String refundNo, String target, String status, String detail, int attemptCount) {
+        this.refundNo = Objects.requireNonNull(refundNo, "refundNo");
         this.target = Objects.requireNonNull(target, "target");
         this.status = Objects.requireNonNull(status, "status");
         this.detail = detail;
@@ -47,8 +47,8 @@ public class RefundPostProcessAttempt {
         return version;
     }
 
-    public Long getRefundId() {
-        return refundId;
+    public String getRefundNo() {
+        return refundNo;
     }
 
     public String getTarget() {

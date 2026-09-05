@@ -9,7 +9,7 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("refund_post_process_attempts")
 public class RefundPostProcessAttemptEntity extends BaseEntity {
 
-    private Long refundId;
+    private String refundNo;
     /** 后处理目标：FULFILLMENT / ENTITLEMENT / LEDGER。 */
     private String target;
     /** 结果：SUCCEEDED / FAILED。 */
@@ -18,12 +18,12 @@ public class RefundPostProcessAttemptEntity extends BaseEntity {
     private String detail;
     private Integer attemptCount;
 
-    public Long getRefundId() {
-        return refundId;
+    public String getRefundNo() {
+        return refundNo;
     }
 
-    public void setRefundId(Long refundId) {
-        this.refundId = refundId;
+    public void setRefundNo(String refundNo) {
+        this.refundNo = refundNo;
     }
 
     public String getTarget() {

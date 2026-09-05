@@ -25,6 +25,24 @@ for f in "$SCHEMA_DIR"/[0-9][0-9]-*.sql; do
   echo "    applied $(basename "$f")"
 done
 
+# 收敛退款历史列：refund_items / refund_post_process_attempts 的 refund_id(BIGINT)
+# → refund_no(VARCHAR)，ADR-0063 收口（2026-09）。reset 用 CREATE TABLE IF NOT EXISTS，
+# 不会改造已存在表，故这里对存量表显式收敛一次；全新库已是 refund_no，检测到即跳过。
+for t in refund_items refund_post_process_attempts; do
+  old=$(docker exec -i payment-mysql mysql -uroot -proot -N -B -e \
+    "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='payment' AND table_name='$t' AND column_name='refund_id';" 2>/dev/null)
+  [ "${old:-0}" = "1" ] || continue
+  case "$t" in
+    refund_items)
+      docker exec -i payment-mysql mysql -uroot -proot -e \
+        "USE \`payment\`; ALTER TABLE \`refund_items\` DROP INDEX idx_refund_items_refund_id, CHANGE COLUMN refund_id refund_no VARCHAR(32) NOT NULL, ADD INDEX idx_refund_items_refund_no (refund_no);" ;;
+    refund_post_process_attempts)
+      docker exec -i payment-mysql mysql -uroot -proot -e \
+        "USE \`payment\`; ALTER TABLE \`refund_post_process_attempts\` DROP INDEX uk_rppa_refund_target, DROP INDEX idx_rppa_refund_id, CHANGE COLUMN refund_id refund_no VARCHAR(32) NOT NULL, ADD UNIQUE KEY uk_rppa_refund_target (refund_no, target), ADD INDEX idx_rppa_refund_no (refund_no);" ;;
+  esac
+  echo "    migrated $t: refund_id -> refund_no"
+done
+
 # 清空业务表：TRUNCATE 而非 DROP DATABASE。
 # 原因（2026-09-05 实跑踩坑）：DROP DATABASE 会让运行中服务的 Hikari 连接池持有失效连接，
 # MySQL 侧持续报 "Unknown database 'payment'"，且不会自愈——必须重启服务才恢复。

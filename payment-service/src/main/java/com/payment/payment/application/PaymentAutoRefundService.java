@@ -1,5 +1,7 @@
 package com.payment.payment.application;
 
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
@@ -49,10 +51,12 @@ public class PaymentAutoRefundService implements AutoRefundGateway {
             return;
         }
         RuntimeException last = null;
+        // ADR-0063：自动退款同样要有业务单号（RF+雪花），且三次重试复用同一个号，便于对账/追溯。
+        String refundNo = BusinessNos.of(BusinessNoType.REFUND);
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 RefundAttemptResponse response = refundService.refund(new RefundAttemptRequest(
-                        payment.getId(), paymentNo, payment.getOrderNo(), payment.getUserId(),
+                        refundNo, paymentNo, payment.getOrderNo(), payment.getUserId(),
                         payment.getAmountMinor(), payment.getCurrencyCode(),
                         "AUTO_REFUND:ORDER_NOT_PAYABLE",
                         "autorefund:" + paymentNo));

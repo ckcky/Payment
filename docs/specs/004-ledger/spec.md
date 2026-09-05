@@ -35,7 +35,7 @@
 
 **Why this priority**: 退款是资金逆向流动，若只改 Payment/Refund 状态而不动账本，账本会「虚高」（仍记着已退资金的负债）。退款记账与支付记账同一模型，是 Ledger 价值最直接的延伸。
 
-**Independent Test**: 对一笔已记账的支付发起退款（金额 R），断言账本新增一条来源为 `REFUND:<refundId>` 的平衡 Posting，且「商户应付」科目因该退款减少 R（与支付记账方向相反）。
+**Independent Test**: 对一笔已记账的支付发起退款（金额 R），断言账本新增一条来源为 `REFUND:<refundNo>` 的平衡 Posting，且「商户应付」科目因该退款减少 R（与支付记账方向相反）。
 
 **Acceptance Scenarios**:
 

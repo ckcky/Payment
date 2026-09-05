@@ -201,8 +201,8 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 `POST /internal/payments/refund-attempt`
 
-**请求** `RefundAttemptRequest`：`{ refundId, paymentId, orderId, userId, amountMinor, currencyCode, reason, idempotencyKey }`
-**响应** `RefundAttemptResponse`：`{ refundId, status: "SUCCEEDED"|"FAILED"|"UNKNOWN", channelReference }`
+**请求** `RefundAttemptRequest`：`{ refundNo, paymentNo, orderNo, userId, amountMinor, currencyCode, reason, idempotencyKey }`（ADR-0063 业务单号）
+**响应** `RefundAttemptResponse`：`{ refundNo, status: "SUCCEEDED"|"FAILED"|"UNKNOWN", channelReference }`
 **规则**：仅 `SUCCEEDED` 支付可退款；否则 `STATE_TRANSITION_VIOLATION`。渠道 UNKNOWN 原样回传，不臆断。
 
 ### 3.7 对账事实查询（供 reconciliation-service）

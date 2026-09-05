@@ -22,7 +22,7 @@ public class MybatisRefundPostProcessAttemptRepository implements RefundPostProc
     @Override
     public void save(RefundPostProcessAttempt attempt) {
         RefundPostProcessAttemptEntity entity = new RefundPostProcessAttemptEntity();
-        entity.setRefundId(attempt.getRefundId());
+        entity.setRefundNo(attempt.getRefundNo());
         entity.setTarget(attempt.getTarget());
         entity.setStatus(attempt.getStatus());
         entity.setDetail(attempt.getDetail());
@@ -33,12 +33,12 @@ public class MybatisRefundPostProcessAttemptRepository implements RefundPostProc
     }
 
     @Override
-    public List<RefundPostProcessAttempt> findByRefundId(Long refundId) {
+    public List<RefundPostProcessAttempt> findByRefundNo(String refundNo) {
         return mapper.selectList(
                         Wrappers.<RefundPostProcessAttemptEntity>lambdaQuery()
-                                .eq(RefundPostProcessAttemptEntity::getRefundId, refundId))
+                                .eq(RefundPostProcessAttemptEntity::getRefundNo, refundNo))
                 .stream()
-                .map(e -> new RefundPostProcessAttempt(e.getRefundId(), e.getTarget(), e.getStatus(),
+                .map(e -> new RefundPostProcessAttempt(e.getRefundNo(), e.getTarget(), e.getStatus(),
                         e.getDetail(), e.getAttemptCount() == null ? 0 : e.getAttemptCount()))
                 .toList();
     }

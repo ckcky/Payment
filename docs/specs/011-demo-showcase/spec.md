@@ -92,7 +92,7 @@ Roadmap Phase 0~10 主链已交付完整业务闭环，但**"能跑通"不等于
 - **SC-001** `bash demo/reset.sh` 后 `bash demo/run-all.sh` 全部场景断言通过，退出码 0。
 - **SC-002** happy-path 断言：`payment.status == SUCCEEDED`、`fulfillment.status` 为已完成态、`entitlement.status == AVAILABLE`、ledger `/internal/ledger/balance` 的 `balanced == true` 且按 `PAYMENT/{paymentId}` 能查到分录。
 - **SC-003** UNKNOWN 场景断言：渠道返回无结论后 `payment.status == UNKNOWN` 且**未产生** fulfillment 与 ledger 分录；等待 ≥2 个主动查询周期后仍为 `UNKNOWN`（不猜成败）；带 `X-Admin-Token` 权威裁定后才迁移到 `SUCCEEDED`，且履约**只触发一次**（重复裁定返回 `changed == false` 的语义体现为 fulfillment 数量仍为 1）。
-- **SC-004** 退款场景断言：累计退款不超过已付金额（第 3 笔超额被拒）；同一幂等键重复提交返回同一 `refundId`。
+- **SC-004** 退款场景断言：累计退款不超过已付金额（第 3 笔超额被拒）；同一幂等键重复提交返回同一 `refundNo`。
 - **SC-005** 对账场景断言：4 类差异全部出现；全部处理后 `close` 成功且 `status == CLOSED`；另起一批次保留未处理差异时 `close` **被拒**（`UNRESOLVED_DIFFERENCES`）。
 - **SC-006** `mvn -o clean verify -fae` 全量 BUILD SUCCESS（含 `architecture-tests` 边界门禁）。
 - **SC-007** `bash -n demo/*.sh` 语法检查全部通过。

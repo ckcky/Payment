@@ -43,7 +43,7 @@ Account (1) ──── (N) LedgerEntry (N) ──── (1) Posting (1) ──
 | id | BIGINT PK AUTO_INCREMENT | Posting ID |
 | idempotency_key | VARCHAR(128) NOT NULL UNIQUE | 幂等键（业务提供，如 `PAYMENT:<paymentIdempotencyKey>`） |
 | source_type | VARCHAR(16) NOT NULL | PAYMENT / REFUND / SETTLEMENT |
-| source_id | VARCHAR(64) NOT NULL | 业务来源 ID（paymentId / refundId / batchId） |
+| source_id | VARCHAR(64) NOT NULL | 业务来源单号（paymentNo / refundNo / batchNo） |
 | status | VARCHAR(16) NOT NULL | PENDING → POSTED（MVP 仅 POSTED） |
 | currency | VARCHAR(8) NOT NULL | 记账币种 |
 | created_at / created_by / version | — | 审计 + 乐观锁 |

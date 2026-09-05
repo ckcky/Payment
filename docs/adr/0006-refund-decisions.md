@@ -33,7 +33,7 @@
 >
 > | 位置 | 回退动作 |
 > |---|---|
-> | `common-dto/rpc/RefundAttemptResponse` | 回到 3 分量 `(refundId, status, channelReference)`，删除 `refundedMinor` |
+> | `common-dto/rpc/RefundAttemptResponse` | 回到 3 分量 `(refundNo, status, channelReference)`，删除 `refundedMinor` |
 > | `payment/application/channel/ChannelResult` | 回到 5 分量，删除 `refundedMinor` 与 2 参 `success(...)` 重载 |
 > | `payment/infra/channel/MockChannelAdapter` | 删除 `configuredRefundMinor` / `setRefundMinor` 与部分退款分支 |
 > | `payment/application/PaymentRefundService` | 组装回复不再传实退金额 |
@@ -127,7 +127,7 @@
 3. **refund 侧新增出站端口**：`application/FulfillmentGateway.java` + `infra/client/FulfillmentFeignClient.java`（`services.fulfillment.url`，默认 `http://localhost:8086`）。
 4. **后处理统一编排**：新增 `RefundPostProcessOrchestrator`，在确认退款后依次调用 **fulfillment → entitlement → ledger**（ledger 见 ADR-0018），每次调用落一条 `RefundPostProcessAttempt`（新增表 `refund_post_process_attempts`），记录目标、结果、失败原因、尝试次数。
 5. **失败语义不变且可追踪**：任一侧失败**不回滚**退款成功（Saga，禁 2PC）；移除 `RefundApplicationService.java:113` 的 `catch (RuntimeException ignored)` 静默吞异常，改为递增 `refund.post_process_failed` + 写审计，满足验收标准「后处理失败可独立追踪」。
-6. **重试**：同步有限退避重试（[目标] 3 次 / 1s-2s-4s），耗尽后保留失败记录，由对账/人工按 `refundId` 查询并重放；**不引入**重试调度器或 outbox（Constitution §IV，基础设施决策门槛）。
+6. **重试**：同步有限退避重试（[目标] 3 次 / 1s-2s-4s），耗尽后保留失败记录，由对账/人工按 `refundNo` 查询并重放；**不引入**重试调度器或 outbox（Constitution §IV，基础设施决策门槛）。
 7. **触发条件唯一**：仅 `SUCCEEDED` / `PARTIALLY_SUCCEEDED` 触发；`UNKNOWN` 不触发（未确认结果不得产生不可逆的权利变更）。
 
 ### 备选方案
@@ -189,7 +189,7 @@
 2. **新增出站端口**：`refund-service` 新增 `application/LedgerPostingGateway.java` + `infra/client/LedgerFeignClient.java`（`services.ledger.url`，默认 `http://localhost:8090`），**复用 payment-service 既有 `FeignLedgerPostingGateway` 的模式**（超时/幂等/兜底一致）。
 3. **记账金额 = `refundedAmountMinor`（实际退款金额）**，非申请金额；部分退款按已退部分冲正（与 ADR-0016 同源）。
 4. **触发条件**：仅 `SUCCEEDED` / `PARTIALLY_SUCCEEDED`；`UNKNOWN` / `PROCESSING` / `FAILED` / `REJECTED` **不记账**（Constitution §V.7：未确认结果不直接记账）。
-5. **幂等键**：`REFUND:<refundIdempotencyKey>`；`sourceType=REFUND`、`sourceId=<refundId>`；重复收敛返回首次 `Posting`。
+5. **幂等键**：`REFUND:<refundIdempotencyKey>`；`sourceType=REFUND`、`sourceId=<refundNo>`；重复收敛返回首次 `Posting`。
 6. **失败兜底**：RPC 失败/超时 → **不回滚**退款成功事实；记 `ledger.posting_failed` 指标 + `RefundPostProcessAttempt(target=LEDGER, status=FAILED)`，由有限重试/对账补齐（Saga，禁 2PC）。
 7. **编排位置**：记账作为后处理编排的一个「目标（LEDGER）」纳入 `RefundPostProcessOrchestrator`（ADR-0017），与 fulfillment/entitlement 共用「一次调用一条记录、失败不回滚」的语义，保证重复收敛只记一次账。
 8. **契约漂移**：以**代码**为准——`PostingRequest.EntryRequest` 用 `accountId`，本 Feature 的 contracts 按 `accountId` 撰写；建议后续由 004 负责人回修 `contracts/post-refund.md`（**本 Feature 不修改 004 的文件**）。

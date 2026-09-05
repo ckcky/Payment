@@ -62,9 +62,9 @@ class PaymentRefundServiceTest {
         PaymentRefundService service = service(new MockChannelAdapter(MockChannelAdapter.Scenario.SUCCESS));
 
         RefundAttemptResponse response = service.refund(new RefundAttemptRequest(
-                1L, payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1"));
+                "RF-1", payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1"));
 
-        assertThat(response.refundId()).isEqualTo(1L);
+        assertThat(response.refundNo()).isEqualTo("RF-1");
         assertThat(response.status()).isEqualTo("SUCCEEDED");
         assertThat(response.channelReference()).isNotNull();
     }
@@ -75,7 +75,7 @@ class PaymentRefundServiceTest {
         PaymentRefundService service = service(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
 
         RefundAttemptResponse response = service.refund(new RefundAttemptRequest(
-                1L, payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1"));
+                "RF-1", payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1"));
 
         assertThat(response.status()).isEqualTo("UNKNOWN");
     }
@@ -87,7 +87,7 @@ class PaymentRefundServiceTest {
         PaymentRefundService service = service(new MockChannelAdapter());
 
         assertThatThrownBy(() -> service.refund(new RefundAttemptRequest(
-                1L, payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1")))
+                "RF-1", payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1")))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getCode())
                 .isEqualTo(ErrorCodes.STATE_TRANSITION_VIOLATION);

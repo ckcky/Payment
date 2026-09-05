@@ -56,13 +56,13 @@ public class PaymentRefundService {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "payment not refundable in status " + payment.getStatus());
         }
-        ChannelResult result = channel.refund(new RefundRequest(request.paymentNo(), request.refundId(),
+        ChannelResult result = channel.refund(new RefundRequest(request.paymentNo(), request.refundNo(),
                 request.amountMinor(), request.currencyCode(), "mock"));
         String mappedStatus = switch (result.status()) {
             case SUCCESS -> "SUCCEEDED";
             case FAILURE -> "FAILED";
             case UNKNOWN -> "UNKNOWN";
         };
-        return new RefundAttemptResponse(request.refundId(), mappedStatus, result.channelReference());
+        return new RefundAttemptResponse(request.refundNo(), mappedStatus, result.channelReference());
     }
 }

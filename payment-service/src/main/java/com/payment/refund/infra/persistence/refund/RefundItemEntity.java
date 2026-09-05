@@ -9,17 +9,17 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("refund_items")
 public class RefundItemEntity extends BaseEntity {
 
-    private Long refundId;
+    private String refundNo;
     private String orderItemId;
     /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
 
-    public Long getRefundId() {
-        return refundId;
+    public String getRefundNo() {
+        return refundNo;
     }
 
-    public void setRefundId(Long refundId) {
-        this.refundId = refundId;
+    public void setRefundNo(String refundNo) {
+        this.refundNo = refundNo;
     }
 
     public String getOrderItemId() {

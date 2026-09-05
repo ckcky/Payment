@@ -39,24 +39,25 @@ public class RefundFeignLedgerPostingGateway implements LedgerPostingGateway {
     }
 
     @Override
-    public void postRefundCapture(String idempotencyKey, Long refundId, long amountMinor, String currencyCode) {
+    public void postRefundCapture(String idempotencyKey, String refundNo, long amountMinor, String currencyCode) {
         if (amountMinor <= 0) {
-            log.warn("跳过退款记账：金额为 0 或非正（账本要求分录金额 > 0），refundId={}", refundId);
+            log.warn("跳过退款记账：金额为 0 或非正（账本要求分录金额 > 0），refundNo={}", refundNo);
             return;
         }
         String postingKey = "REFUND:" + idempotencyKey;
-        PostingRequest request = new PostingRequest(postingKey, "REFUND", String.valueOf(refundId),
+        // ADR-0063：账本 sourceId 用业务单号 refundNo，可按 REFUND/{refundNo} 追溯分录
+        PostingRequest request = new PostingRequest(postingKey, "REFUND", refundNo,
                 currencyCode, buildEntries(amountMinor));
         try {
             PostingResponse response = ledgerClient.post(request);
             metrics.counter("ledger.posting_succeeded", 1.0, "module", MODULE);
-            log.info("退款记账成功 refundId={} postingId={} entries={}", refundId,
+            log.info("退款记账成功 refundNo={} postingId={} entries={}", refundNo,
                     response.postingId(), response.entries().size());
         } catch (RuntimeException ex) {
             // 记账失败不回滚退款成功事实；记录待记账，交由重试/对账兜底（ADR-0018）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
-            log.error("退款记账失败，进入待记账兜底：refundId={} postingKey={} reason={}",
-                    refundId, postingKey, ex.getMessage());
+            log.error("退款记账失败，进入待记账兜底：refundNo={} postingKey={} reason={}",
+                    refundNo, postingKey, ex.getMessage());
         }
     }
 

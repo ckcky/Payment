@@ -64,7 +64,7 @@ public class EntitlementApplicationService {
     public RefundPostProcessResponse revokeOnRefund(RefundPostProcessRequest request) {
         List<Entitlement> list = repository.findByOrderNo(request.orderNo());
         if (list.isEmpty()) {
-            return new RefundPostProcessResponse(request.refundId(), "NOOP");
+            return new RefundPostProcessResponse(request.refundNo(), "NOOP");
         }
         int revoked = 0;
         for (Entitlement e : list) {
@@ -73,6 +73,6 @@ public class EntitlementApplicationService {
                 revoked++;
             }
         }
-        return new RefundPostProcessResponse(request.refundId(), revoked > 0 ? "REVOKED" : "NOOP");
+        return new RefundPostProcessResponse(request.refundNo(), revoked > 0 ? "REVOKED" : "NOOP");
     }
 }

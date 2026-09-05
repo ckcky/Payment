@@ -47,15 +47,16 @@ public class RefundPostProcessOrchestrator {
 
     /** 触发退款后处理（调用方须保证退款已确认）。 */
     public void process(Refund refund) {
+        // ADR-0063：出站 RPC 与账本 sourceId 一律用业务单号 refundNo，数值 id 不出服务边界。
         runStep("FULFILLMENT", refund, () -> fulfillment.notifyRefund(
-                new RefundFulfillmentRequest(refund.getId(), refund.getPaymentNo(), refund.getOrderNo(),
+                new RefundFulfillmentRequest(refund.getRefundNo(), refund.getPaymentNo(), refund.getOrderNo(),
                         refund.getUserId(), refund.getReason())));
         runStep("ENTITLEMENT", refund, () -> entitlement.notifyRefundPostProcess(
-                new RefundPostProcessRequest(refund.getId(), refund.getPaymentNo(), refund.getOrderNo(),
+                new RefundPostProcessRequest(refund.getRefundNo(), refund.getPaymentNo(), refund.getOrderNo(),
                         refund.getUserId(), refund.getReason())));
         // 记账金额 = 申请金额：ADR-0016（部分退款）已否决，成功退款恒为全额。
         runStep("LEDGER", refund, () -> ledger.postRefundCapture(
-                "REFUND:" + refund.getIdempotencyKey(), refund.getId(),
+                "REFUND:" + refund.getIdempotencyKey(), refund.getRefundNo(),
                 refund.getAmountMinor(), refund.getCurrencyCode()));
     }
 
@@ -74,7 +75,7 @@ public class RefundPostProcessOrchestrator {
                 sleepBackoff();
             }
         }
-        attempts.save(new RefundPostProcessAttempt(refund.getId(), target, ok ? "SUCCEEDED" : "FAILED", detail, tries));
+        attempts.save(new RefundPostProcessAttempt(refund.getRefundNo(), target, ok ? "SUCCEEDED" : "FAILED", detail, tries));
         if (!ok) {
             metrics.counter("refund.post_process_failed", 1.0, "module", MODULE, "target", target);
             audit.audit("refund.post_process_failed", refund.getIdempotencyKey(), refund.getAmountMinor(),

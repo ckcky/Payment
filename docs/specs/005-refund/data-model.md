@@ -145,7 +145,7 @@ PROCESSING/UNKNOWN --partiallySucceed(r)--> PARTIALLY_SUCCEEDED
 
 | 契约 DTO | 变更 | 兼容性 |
 |---|---|---|
-| `RefundAttemptResponse` | ❌ 回退：回到 3 分量 `(refundId, status, channelReference)` | 与既有实现一致 |
+| `RefundAttemptResponse` | ❌ 回退：回到 3 分量 `(refundNo, status, channelReference)` | 与既有实现一致 |
 | `RefundFulfillmentRequest` / `Response` | ✅ 新增（refund → fulfillment，ADR-0017 Accepted） | 新端点 |
 | `RefundResponse` | ❌ 回退：回到 7 分量，不含 `refundedAmountMinor` | 与既有实现一致 |
 | `PostingRequest` | 复用既有（refund → ledger），`sourceType=REFUND` | 不变 |

@@ -81,15 +81,15 @@ public class FulfillmentApplicationService {
     public RefundFulfillmentResponse onRefund(RefundFulfillmentRequest request) {
         Optional<Fulfillment> opt = repository.findByOrderNo(request.orderNo());
         if (opt.isEmpty()) {
-            return new RefundFulfillmentResponse(request.refundId(), "SKIPPED");
+            return new RefundFulfillmentResponse(request.refundNo(), "SKIPPED");
         }
         Fulfillment fulfillment = opt.get();
         if (fulfillment.getStatus() == FulfillmentStatus.PENDING) {
             fulfillment.cancel();
             repository.save(fulfillment);
             metrics.counter("fulfillment.refund_cancelled", 1.0, "module", MODULE);
-            return new RefundFulfillmentResponse(request.refundId(), "CANCELLED");
+            return new RefundFulfillmentResponse(request.refundNo(), "CANCELLED");
         }
-        return new RefundFulfillmentResponse(request.refundId(), "SKIPPED");
+        return new RefundFulfillmentResponse(request.refundNo(), "SKIPPED");
     }
 }
