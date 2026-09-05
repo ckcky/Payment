@@ -30,8 +30,8 @@ import java.util.regex.Pattern;
  *   <li>payment_attempts.payment_no 存业务单号（不再落数值 payment_id）。</li>
  *   <li>settlement_items.reference ← 对账匹配事实的渠道引用（attempt.channel_reference），
  *       反查 settlement_batches 经 items.batch_id。</li>
- *   <li>ledger postings.source_id —— PAYMENT→payments.id / REFUND→refunds.id /
- *       SETTLEMENT→settlement_batches.id（账本内部口径，未跨服务暴露）。</li>
+ *   <li>ledger postings.source_id 为 varchar(64)，存业务单号（ADR-0063）：
+ *       PAYMENT→payment_no / REFUND→refund_no / SETTLEMENT→batch_no。</li>
  *   <li>reconciliation_batches 的匹配/差异内嵌在 matches_json/differences_json，
  *       按渠道引用文本 LIKE 反查。</li>
  * </ul>
@@ -100,10 +100,10 @@ public class DemoDbTraceController {
             }
         }
 
-        // ④ 退款 / 履约 / 权益（各自库，order_no 关联）
-        List<Map<String, Object>> refunds = query(sections, "refund-service", "refunds",
-                "SELECT * FROM refund.refunds WHERE order_no = ?", new Object[]{orderNo});
-        List<Object> refundIds = ids(refunds, "id");
+        // ④ 退款（Feature 015 后 refund 域并入 payment-service，refunds 表迁至 payment 库）／履约／权益
+        List<Map<String, Object>> refunds = query(sections, "payment-service", "refunds",
+                "SELECT * FROM payment.refunds WHERE order_no = ?", new Object[]{orderNo});
+        List<Object> refundNos = ids(refunds, "refund_no");
         query(sections, "fulfillment-service", "fulfillments",
                 "SELECT * FROM fulfillment.fulfillments WHERE order_no = ?", new Object[]{orderNo});
         query(sections, "entitlement-service", "entitlements",
@@ -114,9 +114,10 @@ public class DemoDbTraceController {
                 "SELECT * FROM settlement.settlement_items WHERE reference IN (" + placeholders(channelRefs) + ")",
                 channelRefs.toArray());
         List<Object> batchIds = ids(settleItems, "batch_id");
-        query(sections, "settlement-service", "settlement_batches",
+        List<Map<String, Object>> settleBatches = query(sections, "settlement-service", "settlement_batches",
                 "SELECT * FROM settlement.settlement_batches WHERE id IN (" + placeholders(batchIds) + ")",
                 batchIds.toArray());
+        List<Object> batchNos = ids(settleBatches, "batch_no");
 
         // ⑥ 对账批次：匹配/差异以 JSON 内嵌，按渠道引用文本反查
         if (channelRefs.isEmpty()) {
@@ -137,22 +138,21 @@ public class DemoDbTraceController {
             query(sections, "reconciliation-service", "reconciliation_batches", sql.toString(), args.toArray());
         }
 
-        // ⑦ 账本：postings.source_id 是账本内部口径（数值），由各单据主键反查，再取分录
-        List<Object> paymentIds = ids(payments, "id");
+        // ⑦ 账本：postings.source_id 是 varchar(64)，存业务单号（ADR-0063），按单号反查再取分录
         List<Object> postingArgs = new ArrayList<>();
         StringBuilder postingSql = new StringBuilder("SELECT * FROM ledger.postings WHERE ");
         List<String> clauses = new ArrayList<>();
-        if (!paymentIds.isEmpty()) {
-            clauses.add("(source_type = 'PAYMENT' AND source_id IN (" + placeholders(paymentIds) + "))");
-            postingArgs.addAll(paymentIds);
+        if (!paymentNos.isEmpty()) {
+            clauses.add("(source_type = 'PAYMENT' AND source_id IN (" + placeholders(paymentNos) + "))");
+            postingArgs.addAll(paymentNos);
         }
-        if (!refundIds.isEmpty()) {
-            clauses.add("(source_type = 'REFUND' AND source_id IN (" + placeholders(refundIds) + "))");
-            postingArgs.addAll(refundIds);
+        if (!refundNos.isEmpty()) {
+            clauses.add("(source_type = 'REFUND' AND source_id IN (" + placeholders(refundNos) + "))");
+            postingArgs.addAll(refundNos);
         }
-        if (!batchIds.isEmpty()) {
-            clauses.add("(source_type = 'SETTLEMENT' AND source_id IN (" + placeholders(batchIds) + "))");
-            postingArgs.addAll(batchIds);
+        if (!batchNos.isEmpty()) {
+            clauses.add("(source_type = 'SETTLEMENT' AND source_id IN (" + placeholders(batchNos) + "))");
+            postingArgs.addAll(batchNos);
         }
         if (clauses.isEmpty()) {
             sections.add(emptySection("ledger-service", "postings",
