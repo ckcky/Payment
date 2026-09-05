@@ -16,14 +16,19 @@ assert_status 200 "SKU 列表"
 SKU_ID="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);m=[x for x in d if x.get('skuCode')=='DEMO-SKU-101'];print(m[0]['id'] if m else '')")"
 [ -n "$SKU_ID" ] || fail "未找到种子 SKU DEMO-SKU-101（请先 bash demo/reset.sh）"
 
-echo "==> ② 下单（BUSINESS_UNKNOWN 场景 → 支付落 UNKNOWN；若走收银台超时路径则 ~30s 内）"
+echo "==> ② 下单 + 显式选渠道建支付单（Feature 015 两步式；BUSINESS_UNKNOWN 场景 → 支付落 UNKNOWN）"
 http POST "$ORDER_URL/orders" "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "下单"
+jget "d['orderNo']"; ORDER_NO="$VALUE"
+[ -n "$ORDER_NO" ] || fail "下单响应缺少 orderNo"
+http POST "$ORDER_URL/orders/$ORDER_NO/payments" '{"channelCode":"alipay"}'
+assert_status 201 "选渠道建支付单"
 jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
-info "paymentNo=$PAYMENT_NO"
+[ -n "$PAYMENT_NO" ] || fail "建支付单响应缺少 paymentNo"
+info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
 
 echo "==> ③ 等待支付进入 UNKNOWN（不猜成败落账）"
-wait_until 60 3 "payment 进入 UNKNOWN" bash -c "curl -s $PAYMENT_URL/payments/$PAYMENT_NO | python -c \"import json,sys;print('UNKNOWN' if json.load(sys.stdin).get('status')=='UNKNOWN' else 'WAIT')\" | grep -q UNKNOWN"
+wait_until 60 3 "payment 进入 UNKNOWN" bash -c "curl -s --noproxy '*' $PAYMENT_URL/payments/$PAYMENT_NO | python -c \"import json,sys;print('UNKNOWN' if json.load(sys.stdin).get('status')=='UNKNOWN' else 'WAIT')\" | grep -q UNKNOWN"
 # wait_until 的探测不更新 BODY，需重新拉取支付单
 http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
 jget "d['status']"; STATUS1="$VALUE"

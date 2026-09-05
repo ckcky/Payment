@@ -8,6 +8,11 @@ set -uo pipefail
 # 恢复路径转换即可（本库的 curl 参数均为 URL/头部，不含需要保护的正斜杠路径）。
 unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
 
+# 兼容注入 HTTP_PROXY 的环境（沙箱代理 / 企业内网代理）：回环地址被代理会挂起或返回 502，
+# 使 wait_service 永远等不到健康。这里显式放行 localhost，并在所有 curl 调用加 --noproxy。
+export NO_PROXY="localhost,127.0.0.1,::1${NO_PROXY:+,$NO_PROXY}"
+export no_proxy="$NO_PROXY"
+
 # ---- 颜色 ----
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; NC='\033[0m'
 
@@ -34,7 +39,7 @@ ADMIN_TOKEN="${PAYMENT_ADMIN_TOKEN:-demo-admin-token}"
 #   HEADERS 用 '|' 分隔多个头，如 "Idempotency-Key: abc|Authorization: x"
 http() { # http METHOD URL [BODY] [HEADERS]
   local method="$1" url="$2" body="${3:-}" headers="${4:-}"
-  local -a curl_args=(-s -w '\n%{http_code}' -X "$method")
+  local -a curl_args=(-s --noproxy '*' -w '\n%{http_code}' -X "$method")
   if [ -n "$headers" ]; then
     IFS='|' read -ra _HDRS <<< "$headers"
     for _h in "${_HDRS[@]}"; do
@@ -86,7 +91,7 @@ assert_status() { # assert_status <expected_http> <label>
 wait_service() { # wait_service <url> <name> [tries]
   local url="$1" name="$2" tries="${3:-60}"
   for i in $(seq 1 "$tries"); do
-    if curl -s -o /dev/null -w '%{http_code}' "$url/actuator/health" 2>/dev/null | grep -q 200; then
+    if curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "$url/actuator/health" 2>/dev/null | grep -q 200; then
       info "$name UP"
       return 0
     fi

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# demo/reset.sh —— 演示环境复位：重建 8 个业务 Schema 的表 + 灌确定性种子数据
+# demo/reset.sh —— 演示环境复位：清空 8 个业务 Schema 的表 + 灌确定性种子数据
 #
-# 做法：DROP 8 个业务库（不碰 mysql 系统库）→ 重放 deployment/schema/*.sql（建库建表）
-#       → 通过 HTTP API 灌种子（merchant 内存仓储 + catalog 商品/SKU）。
+# 做法：重放 deployment/schema/*.sql（CREATE DATABASE/TABLE IF NOT EXISTS，全新与存量环境均可）
+#       → TRUNCATE 各业务表（不断连接，服务无需重启）→ 通过 HTTP API 灌种子
+#       （merchant 内存仓储 + catalog 商品/SKU）。
 # 前提：docker compose 的 MySQL（容器名 payment-mysql）与服务已启动（bash deployment/start-all.sh）。
 set -euo pipefail
 
@@ -14,12 +15,7 @@ source "$HERE/lib.sh"
 SCHEMA_DIR="$ROOT_DIR/deployment/schema"
 DATABASES=(catalog "order" payment refund fulfillment entitlement reconciliation settlement ledger)
 
-echo "==> [1/3] 重建业务 Schema（DROP + 重放 deployment/schema/*.sql）"
-for db in "${DATABASES[@]}"; do
-  docker exec -i payment-mysql mysql -uroot -proot \
-    -e "DROP DATABASE IF EXISTS \`$db\`;" 2>/dev/null \
-    && echo "    dropped $db" || fail "无法连接 MySQL 容器 payment-mysql（先跑 deployment/start-all.sh）"
-done
+echo "==> [1/3] 重建业务 Schema（重放 deployment/schema/*.sql + 清空业务表）"
 # 只重放「全量 schema」（NN-*.sql，各文件自带 CREATE DATABASE + USE）。
 # 015-*.sql 是存量环境增量迁移脚本（前置 USE payment，靠 DATABASE() 定位库），
 # 不属于全新初始化流程——reset 环境由 03-payment-schema.sql 直接建出最终表结构，
@@ -27,6 +23,26 @@ done
 for f in "$SCHEMA_DIR"/[0-9][0-9]-*.sql; do
   docker exec -i payment-mysql mysql -uroot -proot < "$f"
   echo "    applied $(basename "$f")"
+done
+
+# 清空业务表：TRUNCATE 而非 DROP DATABASE。
+# 原因（2026-09-05 实跑踩坑）：DROP DATABASE 会让运行中服务的 Hikari 连接池持有失效连接，
+# MySQL 侧持续报 "Unknown database 'payment'"，且不会自愈——必须重启服务才恢复。
+# TRUNCATE 只清数据、库与连接都保持有效，reset 完即可继续跑演示/压测。
+TRUNC_DIR="${TMPDIR:-/tmp}/paymentarch-reset.$$"
+mkdir -p "$TRUNC_DIR"
+for db in "${DATABASES[@]}"; do
+  SQL="SELECT CONCAT('TRUNCATE TABLE \`', table_name, '\`;') FROM information_schema.tables WHERE table_schema='$db';"
+  if ! docker exec -i payment-mysql mysql -uroot -proot -N -B -e "$SQL" > "$TRUNC_DIR/$db.sql" 2>/dev/null; then
+    fail "无法连接 MySQL 容器 payment-mysql（先跑 deployment/start-all.sh）"
+  fi
+  if [ -s "$TRUNC_DIR/$db.sql" ]; then
+    { echo "SET FOREIGN_KEY_CHECKS=0;"; echo "USE \`$db\`;"; cat "$TRUNC_DIR/$db.sql"; } \
+      | docker exec -i payment-mysql mysql -uroot -proot
+    echo "    truncated $db"
+  else
+    echo "    truncated $db (无表，跳过)"
+  fi
 done
 
 echo "==> [2/3] 等待服务健康"

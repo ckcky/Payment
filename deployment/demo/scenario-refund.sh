@@ -16,12 +16,15 @@ SKU_ID="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);m=[x 
 [ -n "$SKU_ID" ] || fail "未找到种子 SKU DEMO-SKU-101（请先 bash demo/reset.sh）"
 AMOUNT=9900
 
-echo "==> ② 下单并同步支付成功（默认 SUCCESS 场景）"
+echo "==> ② 下单 + 显式选渠道建支付单（Feature 015 两步式；默认 SUCCESS 场景）"
 http POST "$ORDER_URL/orders" "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "下单"
 jget "d['orderNo']"; ORDER_NO="$VALUE"
-jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
 [ -n "$ORDER_NO" ] || fail "下单响应缺失 orderNo"
+http POST "$ORDER_URL/orders/$ORDER_NO/payments" '{"channelCode":"alipay"}'
+assert_status 201 "选渠道建支付单"
+jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
+[ -n "$PAYMENT_NO" ] || fail "建支付单响应缺少 paymentNo"
 info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
 http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
 jget "d['status']"; PAY_STATUS="$VALUE"

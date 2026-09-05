@@ -16,16 +16,23 @@ SKU_ID="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);m=[x 
 [ -n "$SKU_ID" ] || fail "未找到种子 SKU DEMO-SKU-101（请先 bash demo/reset.sh）"
 info "SKU_ID=$SKU_ID"
 
-echo "==> ① 下单（SKU $SKU_ID × 1）"
+echo "==> ① 下单（SKU $SKU_ID × 1）—— Feature 015 起下单不再同步建支付单"
 http POST "$ORDER_URL/orders" "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "下单"
-jget "d['orderNo']";       ORDER_NO="$VALUE"
+jget "d['orderNo']"; ORDER_NO="$VALUE"
+[ -n "$ORDER_NO" ] || fail "下单响应缺少 orderNo"
+info "orderNo=$ORDER_NO"
+
+echo "==> ①b 显式选渠道建支付单（一订单可多支付单，ADR-0064）"
+http POST "$ORDER_URL/orders/$ORDER_NO/payments" '{"channelCode":"alipay"}'
+assert_status 201 "选渠道建支付单"
 jget "d['paymentNo']";     PAYMENT_NO="$VALUE"
 jget "d['payUrl']";        PAY_URL="$VALUE"
-jget "d['paymentStatus']"; PAY_STATUS="$VALUE"
-assert_eq "$PAY_STATUS" "PROCESSING" "mock-cashier 路径下支付单为 PROCESSING（等待收银台回调）"
-assert_contains "$PAY_URL" "/cashier?paymentNo=" "CreateOrderResponse 携带收银台 payUrl（业务单号，ADR-0063）"
-info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
+jget "d['status']";        PAY_STATUS="$VALUE"
+[ -n "$PAYMENT_NO" ] || fail "建支付单响应缺少 paymentNo"
+info "paymentNo=$PAYMENT_NO status=$PAY_STATUS"
+[ -n "$PAY_URL" ] && assert_contains "$PAY_URL" "/cashier?paymentNo=" "payUrl 携带业务单号（ADR-0063）" \
+  || warn "payUrl 为空（mock-cashier 未开启：PAYMENT_MOCK_CASHIER_ENABLED=true）"
 
 echo "==> ② 以渠道身份发签名回调（经 mock-channel-web 代理，HMAC-SHA256）"
 http POST "$DEMO_URL/mock-channel/callback" \

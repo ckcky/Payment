@@ -3,13 +3,14 @@
  *
  * 每个 VU 迭代执行完整业务闭环（收银台路径，覆盖 order/catalog/payment/mock-channel/refund
  * 五个服务的写路径 + Feign 内部 RPC 链）：
- *   ① POST /orders                          order-service    （幂等创建；内部串联秒杀准入→库存预占
- *                                                              →支付意图创建，返回 PROCESSING + payUrl）
- *   ② POST /mock-channel/callback           mock-channel-web （以渠道身份 HMAC 签名转发 payment，
+ *   ① POST /orders                          order-service    （幂等创建；内部串联秒杀准入→库存预占，
+ *                                                              Feature 015 起不再同步建支付单）
+ *   ② POST /orders/{orderNo}/payments        order-service    （显式选渠道建支付单，一订单可多支付单）
+ *   ③ POST /mock-channel/callback           mock-channel-web （以渠道身份 HMAC 签名转发 payment，
  *                                                              驱动 PROCESSING→SUCCEEDED）
- *   ③ POST /internal/refunds                payment-service（refund 包，ADR-0064）
+ *   ④ POST /internal/refunds                payment-service（refund 包，ADR-0064）
  *                                                              （创建退款，进程内渠道退款，同步 SUCCEEDED）
- *   ④ POST /internal/refunds/{id}/resolve   payment-service  （权威确认端点，幂等收敛）
+ *   ⑤ POST /internal/refunds/{refundNo}/resolve  payment-service（权威确认端点，幂等收敛）
  *
  * 环境变量：
  *   VUS        并发虚拟用户数（默认 20）
@@ -33,6 +34,7 @@ const REFUND_URL = __ENV.REFUND_URL || 'http://localhost:8084';  // refund 端�
 const OUT = __ENV.OUT || '';
 
 const stageOrder = new Trend('chain_order_create', true);
+const stagePay = new Trend('chain_payment_create', true);
 const stageCallback = new Trend('chain_channel_callback', true);
 const stageRefund = new Trend('chain_refund_create', true);
 const stageResolve = new Trend('chain_refund_resolve', true);
@@ -75,9 +77,20 @@ export default function () {
   if (!check(rOrder, { 'order 201': (r) => r.status === 201 })) { sleep(1); return; }
   const order = rOrder.json();
 
-  // ② 渠道回调：mock-channel-web 以渠道身份 HMAC 签名转发 payment，驱动 PROCESSING→SUCCEEDED
+  // ② 显式选渠道建支付单（Feature 015：下单与建支付单解耦，一订单可多支付单）
+  const t1 = Date.now();
+  const rPay = http.post(`${ORDER_URL}/orders/${order.orderNo}/payments`,
+    JSON.stringify({ channelCode: 'alipay' }), {
+      headers: { 'Content-Type': 'application/json' },
+      tags: { name: 'payment_create' }, timeout: '15s',
+    });
+  stagePay.add(Date.now() - t1);
+  if (!check(rPay, { 'payment 201': (r) => r.status === 201 })) { sleep(1); return; }
+  const payment = rPay.json();
+
+  // ③ 渠道回调：mock-channel-web 以渠道身份 HMAC 签名转发 payment，驱动 PROCESSING→SUCCEEDED
   const cbBody = JSON.stringify({
-    paymentNo: order.paymentNo, status: 'SUCCESS',
+    paymentNo: payment.paymentNo, status: 'SUCCESS',
     channelReference: `ref-${uid}`, amountMinor: order.totalMinor, signMode: 'VALID',
   });
   const t2 = Date.now();
@@ -88,9 +101,9 @@ export default function () {
   stageCallback.add(Date.now() - t2);
   if (!check(rCb, { 'callback 200': (r) => r.status === 200 })) { sleep(1); return; }
 
-  // ③ 创建退款：payment-service（refund 包）渠道退款（同步 SUCCEEDED）
+  // ④ 创建退款：payment-service（refund 包）渠道退款（同步 SUCCEEDED）
   const refundBody = JSON.stringify({
-    orderNo: order.orderNo, paymentNo: order.paymentNo, userId,
+    orderNo: order.orderNo, paymentNo: payment.paymentNo, userId,
     amountMinor: order.totalMinor, currencyCode: order.currencyCode,
     reason: 'customer', idempotencyKey: `refund-${uid}`, items: null,
   });
@@ -103,9 +116,9 @@ export default function () {
   if (!check(rRefund, { 'refund ok': (r) => r.status === 200 || r.status === 201 })) { sleep(1); return; }
   const refund = rRefund.json();
 
-  // ④ 退款权威确认（幂等收敛端点）
+  // ⑤ 退款权威确认（幂等收敛端点；ADR-0063：路径用业务单号 refundNo，不用数值 id）
   const t4 = Date.now();
-  const rResolve = http.post(`${REFUND_URL}/internal/refunds/${refund.id}/resolve`,
+  const rResolve = http.post(`${REFUND_URL}/internal/refunds/${refund.refundNo}/resolve`,
     JSON.stringify({ status: 'SUCCEEDED' }), {
       headers: { 'Content-Type': 'application/json' },
       tags: { name: 'refund_resolve' }, timeout: '15s',

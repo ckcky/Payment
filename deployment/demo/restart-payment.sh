@@ -47,7 +47,7 @@ echo "$! payment-service" >> "$PID_FILE"
 echo "payment-service 以 mock-scenario=$SCENARIO 重启（PID $!）；等待健康…"
 sleep 5
 for i in $(seq 1 60); do
-  if curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/actuator/health" 2>/dev/null | grep -q 200; then
+  if curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "http://localhost:$PORT/actuator/health" 2>/dev/null | grep -q 200; then
     echo "payment-service UP（mock-scenario=$SCENARIO）"; exit 0
   fi
   sleep 2
