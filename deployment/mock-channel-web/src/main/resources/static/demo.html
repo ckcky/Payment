@@ -41,7 +41,7 @@
 <div class="wrap">
   <div class="card">
     <h1>PaymentArch 演示控制台 <span style="font-size:12px;color:#9ca3af">（mock-channel-web :8091 · 同源代理，无 CORS）</span></h1>
-    <div class="note">链路：下单(order) → 跳转收银台(payUrl) → 渠道回调(验签) → 履约(fulfillment) → 权益(entitlement) → 记账(ledger)。
+    <div class="note">链路：下单(order) → 选渠道建支付单(payment，Feature 015) → 跳转收银台(payUrl) → 渠道回调(验签) → 履约(fulfillment) → 权益(entitlement) → 记账(ledger)。
       状态轮询经 /proxy 透传各服务只读接口。</div>
   </div>
 
@@ -140,15 +140,26 @@ async function placeOrder(skuId) {
   log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
   if (r.status !== 201) { alert('下单失败: HTTP ' + r.status + ' ' + JSON.stringify(r.data)); return; }
   currentOrderNo = r.data.orderNo;
-  currentPaymentNo = r.data.paymentNo;
   renderOrder(r.data);
   traceOrder(String(r.data.orderNo));
-  if (r.data.payUrl) {
-    log('   payUrl: ' + r.data.payUrl);
+
+  // Feature 015：下单只建订单，不建支付单 —— 需显式选渠道创建支付单后才收银台跳转
+  log('>> POST /proxy/order/orders/' + currentOrderNo + '/payments  {"channelCode":"MOCK"}');
+  const pr = await api('POST', '/order/orders/' + encodeURIComponent(currentOrderNo) + '/payments', { channelCode: 'MOCK' });
+  log('<< HTTP ' + pr.status + '  ' + JSON.stringify(pr.data));
+  if (pr.status !== 201 || !pr.data || !pr.data.paymentNo) {
+    alert('创建支付单失败: HTTP ' + pr.status + ' ' + JSON.stringify(pr.data));
+    startPoll();
+    return;
+  }
+  currentPaymentNo = pr.data.paymentNo;
+  renderPayment(pr.data);
+  if (pr.data.payUrl) {
+    log('   payUrl: ' + pr.data.payUrl);
     log('   → 打开收银台（新窗口），并开始轮询订单状态');
-    window.open(r.data.payUrl, '_blank');
+    window.open(pr.data.payUrl, '_blank');
   } else {
-    log('   （无 payUrl：mock-cashier 未开启，支付为同步内联成功路径）');
+    log('   （支付单无 payUrl：mock-cashier 未开启，属同步 charge 路径）');
   }
   startPoll();
 }
@@ -157,9 +168,17 @@ function renderOrder(o) {
   document.getElementById('t-orderNo').textContent = o.orderNo || '—';
   document.getElementById('t-orderStatus').textContent = o.status;
   document.getElementById('t-orderStatus').className = 'st st-' + o.status;
-  document.getElementById('t-paymentNo').textContent = o.paymentNo || '—';
-  document.getElementById('t-paymentStatus').textContent = o.paymentStatus;
-  document.getElementById('t-paymentStatus').className = 'st st-' + o.paymentStatus;
+  if (o.paymentNo) document.getElementById('t-paymentNo').textContent = o.paymentNo;
+  if (o.paymentStatus) {
+    document.getElementById('t-paymentStatus').textContent = o.paymentStatus;
+    document.getElementById('t-paymentStatus').className = 'st st-' + o.paymentStatus;
+  }
+}
+
+function renderPayment(p) {
+  document.getElementById('t-paymentNo').textContent = p.paymentNo || '—';
+  document.getElementById('t-paymentStatus').textContent = p.status;
+  document.getElementById('t-paymentStatus').className = 'st st-' + p.status;
 }
 
 async function traceOrder(key) {
