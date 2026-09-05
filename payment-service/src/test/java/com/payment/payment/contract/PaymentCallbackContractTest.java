@@ -12,6 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 支付回调契约测试（T025）：成功、失败、重复、延迟回调与终态保护。
+ *
+ * <p>Feature 016（ADR-0054）：payment 业务侧扇出仅 order（{@code stack.order}）；
+ * 履约改由 order 层驱动，本测试以 order 通知次数对称断言「成功恰一次、失败/未知零次」。</p>
  */
 class PaymentCallbackContractTest {
 
@@ -27,7 +30,7 @@ class PaymentCallbackContractTest {
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isTrue();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
-        // T023：SUCCESS 恰好通知 order 一次（对称于 fulfillment 断言）
+        // T023：SUCCESS 通知 order 恰好 1 次
         assertThat(stack.order.succeededRequests).hasSize(1);
     }
 
@@ -38,13 +41,11 @@ class PaymentCallbackContractTest {
         Payment payment = service.createPaymentIntent(stack.command("k1"));
 
         stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
-        int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
+        int requestsAfterFirst = stack.order.succeededRequests.size();
 
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isFalse();
-        assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
-        // T023：重复成功回调不重复通知 order
-        assertThat(stack.order.succeededRequests).hasSize(1);
+        assertThat(stack.order.succeededRequests).hasSize(requestsAfterFirst);
     }
 
     @Test
@@ -57,6 +58,9 @@ class PaymentCallbackContractTest {
                 payment.getPaymentNo(), ChannelResult.businessFailure("ref", "late decline"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        // T023 + Feature 016（FR-001）：同步 charge 成功已通知 order 恰一次；
+        // 迟到失败不产生二次成功事实（changed=false 不再通知）
+        assertThat(stack.order.succeededRequests).hasSize(1);
     }
 
     @Test
@@ -64,12 +68,12 @@ class PaymentCallbackContractTest {
         PaymentApplicationService service =
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
-        int requestsAfterFirst = stack.fulfillment.succeededRequests.size();
+        int requestsAfterFirst = stack.order.succeededRequests.size();
 
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.businessUnknown("still unknown"));
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
-        assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
+        assertThat(stack.order.succeededRequests).hasSize(requestsAfterFirst);
         // T023：UNKNOWN 不通知 order
         assertThat(stack.order.succeededRequests).isEmpty();
     }

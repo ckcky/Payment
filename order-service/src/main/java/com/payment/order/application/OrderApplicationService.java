@@ -37,19 +37,22 @@ public class OrderApplicationService {
     private final PaymentGateway paymentGateway;
     private final BusinessMetrics metrics;
     private final OrderTimeoutScheduler timeoutScheduler;
+    private final FulfillmentGateway fulfillmentGateway;
 
     public OrderApplicationService(OrderRepository orderRepository,
                                    TransactionRepository transactionRepository,
                                    CatalogClient catalogClient,
                                    PaymentGateway paymentGateway,
                                    BusinessMetrics metrics,
-                                   OrderTimeoutScheduler timeoutScheduler) {
+                                   OrderTimeoutScheduler timeoutScheduler,
+                                   FulfillmentGateway fulfillmentGateway) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.catalogClient = catalogClient;
         this.paymentGateway = paymentGateway;
         this.metrics = metrics;
         this.timeoutScheduler = timeoutScheduler;
+        this.fulfillmentGateway = fulfillmentGateway;
     }
 
     public CreateOrderResult createOrder(String userId, String merchantId, List<OrderLine> lines, String reservationKey) {
@@ -232,6 +235,15 @@ public class OrderApplicationService {
             catalogClient.confirmStock(new ConfirmStockCommand(
                     reservationId(order.getOrderNo(), item.getSkuId()),
                     Long.parseLong(item.getSkuId()), item.getQuantity(), request.paymentNo()));
+        }
+
+        // Feature 016 / FR-003：order 层驱动履约（confirmStock 与履约驱动属 order 层，
+        // 由 transaction 层判定「正常到账」后委派至此）；权益经既有 fulfillment → entitlement 链授予。
+        // 履约 RPC 失败不回滚订单成功事实（catch 吞掉 + 重试/对账兜底，语义与迁移前一致）。
+        try {
+            fulfillmentGateway.notifyPaymentSucceeded(request);
+        } catch (RuntimeException ignored) {
+            // 履约失败不得回滚 PAID（跨服务一致性由幂等 + 后续对账收敛）
         }
     }
 

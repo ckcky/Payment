@@ -11,7 +11,7 @@
 | Order | Order | Order 包含 Order Items 和 Price Snapshots |
 | Transaction | Transaction | MVP 中与 Order 1:1，表达支付义务 |
 | Payment | Payment | MVP 中与 Transaction **1:N**（一交易多支付单，ADR-0064：用户每选一个支付方式即新建一张支付单）；包含 Payment Attempts |
-| Payment | PaymentAttempt | 一个 Payment 对应**一条**尝试记录（`payment_no : payment_attempts = 1:1`，ADR-0054 口径；代码证据 `PaymentPersistence.java:56` 每支付单仅建一条 attempt）；渠道重试在同一 attempt 行内以 `retry_count` 递增，**不新建行**；每条尝试最多对应一个渠道引用 |
+| Payment | PaymentAttempt | 一个 Payment 对应**至少一条**尝试记录（`payment_no : payment_attempts = 1:N`，Feature 016 / FR-017：以 `attempt_type` 区分——每笔支付恰一条 `PAYMENT` 尝试（渠道重试在同行内 `retry_count` 递增，不新建行），每笔渠道退款各一条 `REFUND` 尝试）；每条尝试最多对应一个渠道引用 |
 | Fulfillment | Fulfillment | 由 PaymentSucceeded 触发，引用 Order/Order Item |
 | Entitlement | Entitlement | 由履约或其他合法来源授予，关联用户和交付内容 |
 | Refund | Refund | 引用原 Order、Payment，可包含多个 Refund Items |

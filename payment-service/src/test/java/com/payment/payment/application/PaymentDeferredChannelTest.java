@@ -48,7 +48,7 @@ class PaymentDeferredChannelTest {
 
         assertThat(payment.getId()).isNotNull();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PROCESSING);
-        assertThat(stack.fulfillment.succeededRequests)
+        assertThat(stack.order.succeededRequests)
                 .as("未收到渠道结果，不得履约").isEmpty();
     }
 
@@ -88,6 +88,6 @@ class PaymentDeferredChannelTest {
         Payment payment = service.createPaymentIntent(stack.command("sync-idem-1"));
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
-        assertThat(stack.fulfillment.succeededRequests).hasSize(1);
+        assertThat(stack.order.succeededRequests).hasSize(1);
     }
 }

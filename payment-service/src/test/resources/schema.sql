@@ -29,6 +29,7 @@ CREATE TABLE payment_attempts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     payment_no VARCHAR(32) NOT NULL,
     channel_code VARCHAR(32) NOT NULL,
+    attempt_type VARCHAR(16) NOT NULL DEFAULT 'PAYMENT',
     requested_at TIMESTAMP NOT NULL,
     responded_at TIMESTAMP,
     channel_reference VARCHAR(128),

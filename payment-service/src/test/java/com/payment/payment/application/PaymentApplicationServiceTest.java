@@ -20,10 +20,10 @@ class PaymentApplicationServiceTest {
         PaymentApplicationService service = stack.appService(new MockChannelAdapter());
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
-        assertThat(stack.fulfillment.succeededRequests).hasSize(1);
-        assertThat(stack.fulfillment.succeededRequests.get(0).orderNo()).isEqualTo("order-1");
-        assertThat(stack.fulfillment.succeededRequests.get(0).transactionId()).isEqualTo("txn-1");
-        assertThat(stack.fulfillment.succeededRequests.get(0).amountMinor()).isEqualTo(100);
+        assertThat(stack.order.succeededRequests).hasSize(1);
+        assertThat(stack.order.succeededRequests.get(0).orderNo()).isEqualTo("order-1");
+        assertThat(stack.order.succeededRequests.get(0).transactionNo()).isEqualTo("txn-1");
+        assertThat(stack.order.succeededRequests.get(0).amountMinor()).isEqualTo(100);
     }
 
     @Test
@@ -32,7 +32,7 @@ class PaymentApplicationServiceTest {
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.FAILURE));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
-        assertThat(stack.fulfillment.succeededRequests).isEmpty();
+        assertThat(stack.order.succeededRequests).isEmpty();
     }
 
     @Test
@@ -41,7 +41,7 @@ class PaymentApplicationServiceTest {
                 stack.appService(new MockChannelAdapter(MockChannelAdapter.Scenario.TIMEOUT));
         Payment payment = service.createPaymentIntent(stack.command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
-        assertThat(stack.fulfillment.succeededRequests).isEmpty();
+        assertThat(stack.order.succeededRequests).isEmpty();
     }
 
     @Test
@@ -52,6 +52,6 @@ class PaymentApplicationServiceTest {
 
         assertThat(second.getId()).isEqualTo(first.getId());
         assertThat(stack.attempts.findByPaymentNo(first.getPaymentNo())).hasSize(1);
-        assertThat(stack.fulfillment.succeededRequests).hasSize(1);
+        assertThat(stack.order.succeededRequests).hasSize(1);
     }
 }

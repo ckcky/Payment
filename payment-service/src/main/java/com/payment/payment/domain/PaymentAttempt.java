@@ -15,11 +15,17 @@ import java.util.Objects;
  */
 public class PaymentAttempt {
 
+    /** 尝试类型（Feature 016 / FR-017）：支付尝试；退款尝试（复用本表，channel_reference=渠道退款流水号）。 */
+    public static final String TYPE_PAYMENT = "PAYMENT";
+    public static final String TYPE_REFUND = "REFUND";
+
     private Long id;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String paymentNo;
     private final String channelCode;
+    /** 尝试类型：PAYMENT（默认）/ REFUND（退款渠道尝试，Feature 016）。 */
+    private String attemptType = TYPE_PAYMENT;
     private Instant requestedAt;
     private Instant respondedAt;
     private String channelReference;
@@ -39,6 +45,13 @@ public class PaymentAttempt {
         this.retryCount = retryCount;
     }
 
+    /** 退款渠道尝试（Feature 016 / FR-017 第②步）：复用 payment_attempts，channel_reference=渠道退款流水号。 */
+    public static PaymentAttempt refundAttempt(String paymentNo, String channelCode) {
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0);
+        attempt.attemptType = TYPE_REFUND;
+        return attempt;
+    }
+
     /**
      * 持久化重建：还原一次渠道交互的完整历史（引用/时间/状态/未知信息），绕过创建期状态机
      * （不改变业务规则）。
@@ -48,8 +61,19 @@ public class PaymentAttempt {
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
                                            Integer version) {
+        return rehydrate(id, paymentNo, channelCode, retryCount, requestedAt, respondedAt, channelReference,
+                status, failureReason, errorType, version, TYPE_PAYMENT);
+    }
+
+    /** 全量重建（含尝试类型，Feature 016）。 */
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+                                           Instant requestedAt, Instant respondedAt, String channelReference,
+                                           PaymentAttemptStatus status, String failureReason,
+                                           PaymentAttemptErrorType errorType,
+                                           Integer version, String attemptType) {
         PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, retryCount);
         attempt.id = id;
+        attempt.attemptType = attemptType == null ? TYPE_PAYMENT : attemptType;
         attempt.requestedAt = requestedAt;
         attempt.respondedAt = respondedAt;
         attempt.channelReference = channelReference;
@@ -151,6 +175,11 @@ public class PaymentAttempt {
 
     public String getChannelCode() {
         return channelCode;
+    }
+
+    /** 尝试类型：PAYMENT / REFUND（Feature 016）。 */
+    public String getAttemptType() {
+        return attemptType;
     }
 
     public Instant getRequestedAt() {

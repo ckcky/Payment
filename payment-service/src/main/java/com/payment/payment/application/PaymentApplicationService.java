@@ -27,8 +27,8 @@ public class PaymentApplicationService {
     private final PaymentRepository paymentRepository;
     private final PaymentPersistence paymentPersistence;
     private final PaymentRetryService retryService;
+    private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
-    private final FulfillmentGateway fulfillmentGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
@@ -37,15 +37,15 @@ public class PaymentApplicationService {
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
                                      PaymentRetryService retryService,
+                                     OrderGateway orderGateway,
                                      LedgerPostingGateway ledgerGateway,
-                                     FulfillmentGateway fulfillmentGateway,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
         this.paymentPersistence = paymentPersistence;
         this.retryService = retryService;
+        this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
-        this.fulfillmentGateway = fulfillmentGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
@@ -54,12 +54,12 @@ public class PaymentApplicationService {
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
                                      PaymentRetryService retryService,
-                                     FulfillmentGateway fulfillmentGateway,
+                                     OrderGateway orderGateway,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger) {
-        this(paymentRepository, paymentPersistence, retryService,
+        this(paymentRepository, paymentPersistence, retryService, orderGateway,
                 (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
-                }, fulfillmentGateway, metrics, auditLogger);
+                }, metrics, auditLogger);
     }
 
     /**
@@ -112,13 +112,14 @@ public class PaymentApplicationService {
             recordTransition(applied.payment(), applied.fromStatus(), result);
         }
 
-        // 跨服务履约 RPC 同样在事务之外执行
+        // Feature 016（ADR-0054）：同步 charge 路径不再直调履约——支付成功通知统一由
+        // orderGateway 异步于本请求之外完成（见 PaymentResultProcessor）；此处仅编排自身支付指令。
         if (applied.changed() && result.status() == ChannelResult.Status.SUCCESS) {
             try {
-                fulfillmentGateway.notifyPaymentSucceeded(
+                orderGateway.notifyPaymentSucceeded(
                         PaymentResultApplier.toSucceededRequest(applied.payment()));
             } catch (RuntimeException ignored) {
-                // 履约 RPC 失败不得回滚支付成功事实（跨服务一致性由幂等 + 后续对账收敛）。
+                // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）。
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009，手续费 MVP 计 0）。

@@ -14,6 +14,8 @@ public class PaymentAttemptEntity extends BaseEntity {
 
     private String paymentNo;
     private String channelCode;
+    /** 尝试类型：PAYMENT / REFUND（Feature 016 / FR-017，退款渠道尝试复用本表）。 */
+    private String attemptType = "PAYMENT";
     private Instant requestedAt;
     private Instant respondedAt;
     /** 渠道引用：数据库唯一约束兜底，重复回调映射到同一渠道交互。 */
@@ -39,6 +41,14 @@ public class PaymentAttemptEntity extends BaseEntity {
 
     public void setChannelCode(String channelCode) {
         this.channelCode = channelCode;
+    }
+
+    public String getAttemptType() {
+        return attemptType;
+    }
+
+    public void setAttemptType(String attemptType) {
+        this.attemptType = attemptType;
     }
 
     public Instant getRequestedAt() {

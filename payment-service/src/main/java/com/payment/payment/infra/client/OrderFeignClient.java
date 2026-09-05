@@ -8,9 +8,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * order-service 的 Feign 客户端：支付成功回写订单/交易状态。
- * primary=false：注入一律走 {@link FeignOrderGateway}（翻译 409 ORDER_NOT_PAYABLE，Feature 015 / C5）。
+ * Feature 016（ADR-0054）：order 不再返回 409——surplus 判定与自动退款发起归 order transaction 层，
+ * 本客户端直接作为 {@code OrderGateway} 注入。
  */
-@FeignClient(name = "order-service", primary = false)
+@FeignClient(name = "order-service")
 public interface OrderFeignClient extends OrderGateway {
 
     @PostMapping("/internal/orders/on-payment-succeeded")

@@ -56,15 +56,13 @@ class ChannelQueryTest {
         final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
         final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
         final PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
-        final PaymentTestStack.RecordingFulfillmentGateway fulfillment =
-                new PaymentTestStack.RecordingFulfillmentGateway();
         final StubChannel channel = new StubChannel();
         final ReliabilityConfig config = new ReliabilityConfig();
         final ChannelQueryService queryService;
 
         Harness() {
             PaymentResultProcessor processor =
-                    new PaymentResultProcessor(payments, attempts, fulfillment, order);
+                    new PaymentResultProcessor(payments, attempts, order);
             PaymentUnknownResolutionService resolution = new PaymentUnknownResolutionService(
                     payments, processor, new NoopBusinessMetrics(), new StructuredAuditLogger());
             queryService = new ChannelQueryService(payments, channel, resolution, config,
@@ -93,7 +91,7 @@ class ChannelQueryTest {
         assertThat(converged).isEqualTo(1);
         assertThat(h.payments.findById(1L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(h.order.succeededRequests).hasSize(1);
-        assertThat(h.fulfillment.succeededRequests).hasSize(1);
+        assertThat(h.order.succeededRequests).hasSize(1);
     }
 
     @Test
@@ -107,7 +105,7 @@ class ChannelQueryTest {
         assertThat(converged).isEqualTo(1);
         assertThat(h.payments.findById(2L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(h.order.succeededRequests).isEmpty();
-        assertThat(h.fulfillment.succeededRequests).isEmpty();
+        assertThat(h.order.succeededRequests).isEmpty();
     }
 
     @Test
@@ -142,6 +140,6 @@ class ChannelQueryTest {
 
         assertThat(h.channel.queryCalls).isEqualTo(callsAfterConvergence);
         assertThat(h.order.succeededRequests).hasSize(1);
-        assertThat(h.fulfillment.succeededRequests).hasSize(1);
+        assertThat(h.order.succeededRequests).hasSize(1);
     }
 }

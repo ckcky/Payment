@@ -9,6 +9,7 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
+import com.payment.order.application.FulfillmentGateway;
 import com.payment.order.domain.Order;
 import com.payment.order.domain.OrderStatus;
 import com.payment.order.domain.TransactionStatus;
@@ -39,7 +40,8 @@ class OrderApplicationServiceTest {
             }
         };
         return new OrderApplicationService(orders, transactions, catalog,
-                new StubPaymentGateway(), new NoopBusinessMetrics(), noopScheduler);
+                new StubPaymentGateway(), new NoopBusinessMetrics(), noopScheduler,
+                new RecordingFulfillmentGateway());
     }
 
     private String newPendingPaymentOrder(OrderApplicationService service) {
@@ -178,6 +180,24 @@ class OrderApplicationServiceTest {
         @Override
         public CreatePaymentResponse createPayment(CreatePaymentRequest request) {
             return new CreatePaymentResponse("PM-STUB", "CREATED", null, 1, "mock");
+        }
+
+        @Override
+        public com.payment.common.dto.rpc.RefundCommandResponse refund(
+                com.payment.common.dto.rpc.RefundCommandRequest request) {
+            throw new UnsupportedOperationException("stub: refund not expected");
+        }
+    }
+
+    /** 记录型履约网关：order 层驱动履约（Feature 016 / FR-003）。 */
+    private static final class RecordingFulfillmentGateway implements FulfillmentGateway {
+        final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();
+
+        @Override
+        public com.payment.common.dto.rpc.FulfillmentAcceptedResponse notifyPaymentSucceeded(
+                PaymentSucceededRequest request) {
+            succeededRequests.add(request);
+            return new com.payment.common.dto.rpc.FulfillmentAcceptedResponse(1L, "PROCESSING");
         }
     }
 }

@@ -1,11 +1,9 @@
 package com.payment.payment.support;
 
-import com.payment.common.dto.rpc.FulfillmentAcceptedResponse;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.CreatePaymentCommand;
-import com.payment.payment.application.FulfillmentGateway;
 import com.payment.payment.application.OrderGateway;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentPersistence;
@@ -28,11 +26,10 @@ public final class PaymentTestStack {
 
     public final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     public final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-    public final RecordingFulfillmentGateway fulfillment = new RecordingFulfillmentGateway();
     public final RecordingOrderGateway order = new RecordingOrderGateway();
 
     public final PaymentResultProcessor processor =
-            new PaymentResultProcessor(payments, attempts, fulfillment, order);
+            new PaymentResultProcessor(payments, attempts, order);
     public final PaymentUnknownResolutionService resolution =
             new PaymentUnknownResolutionService(payments, processor, new NoopBusinessMetrics(),
                     new StructuredAuditLogger());
@@ -51,7 +48,8 @@ public final class PaymentTestStack {
         PaymentPersistence persistence = new PaymentPersistence(payments, attempts);
         PaymentRetryService retryService = new PaymentRetryService(channel, fastRetryConfig(),
                 new NoopBusinessMetrics());
-        return new PaymentApplicationService(payments, persistence, retryService, fulfillment,
+        // Feature 016（ADR-0054）：payment 不再持有履约网关；order 回写直接走记录式 fake
+        return new PaymentApplicationService(payments, persistence, retryService, order,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
@@ -59,19 +57,7 @@ public final class PaymentTestStack {
         return new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", idempotencyKey, "mock");
     }
 
-    /** 记录 notifyPaymentSucceeded 调用并返回固定受理响应，供测试断言。 */
-    public static final class RecordingFulfillmentGateway implements FulfillmentGateway {
-
-        public final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();
-
-        @Override
-        public FulfillmentAcceptedResponse notifyPaymentSucceeded(PaymentSucceededRequest request) {
-            succeededRequests.add(request);
-            return new FulfillmentAcceptedResponse(1L, "PROCESSING");
-        }
-    }
-
-    /** 记录订单回写 RPC 调用，供测试断言。 */
+    /** 记录订单回写 RPC 调用，供测试断言（Feature 016：payment 业务侧仅通知 order）。 */
     public static final class RecordingOrderGateway implements OrderGateway {
 
         public final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();

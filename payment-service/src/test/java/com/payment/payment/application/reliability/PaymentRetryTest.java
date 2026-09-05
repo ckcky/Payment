@@ -95,6 +95,7 @@ class PaymentRetryTest {
                 .then(ChannelResult.transportFailure(TransportCode.CONNECTION_ERROR, "network blip"));
         PaymentRetryService retryService =
                 new PaymentRetryService(channel, config(3), new NoopBusinessMetrics());
+        PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
 
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(REQUEST);
 
@@ -110,6 +111,7 @@ class PaymentRetryTest {
                 .always(ChannelResult.businessFailure("ch-ref-2", "insufficient funds"));
         PaymentRetryService retryService =
                 new PaymentRetryService(channel, config(3), new NoopBusinessMetrics());
+        PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
 
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(REQUEST);
 
@@ -125,6 +127,7 @@ class PaymentRetryTest {
         QueueChannel channel = new QueueChannel().always(ChannelResult.businessUnknown("still processing"));
         PaymentRetryService retryService =
                 new PaymentRetryService(channel, config(3), new NoopBusinessMetrics());
+        PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
 
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(REQUEST);
 
@@ -159,14 +162,13 @@ class PaymentRetryTest {
     void endToEndRetryThenSuccessNotifiesDownstreamExactlyOnce() {
         InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
         InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-        PaymentTestStack.RecordingFulfillmentGateway fulfillment =
-                new PaymentTestStack.RecordingFulfillmentGateway();
         QueueChannel channel = new QueueChannel()
                 .then(ChannelResult.transportFailure(TransportCode.IO_ERROR, "reset by peer"));
         PaymentRetryService retryService =
                 new PaymentRetryService(channel, config(3), new NoopBusinessMetrics());
+        PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
         PaymentApplicationService appService = new PaymentApplicationService(payments,
-                new PaymentPersistence(payments, attempts), retryService, fulfillment,
+                new PaymentPersistence(payments, attempts), retryService, order,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
 
         Payment payment = appService.createPaymentIntent(
@@ -178,6 +180,6 @@ class PaymentRetryTest {
         assertThat(attempts.findById(payment.getCurrentAttemptId()).orElseThrow().getRetryCount())
                 .isEqualTo(1);
         // 同一 attempt 重放：支付成功只推进一次下游，绝不重复履约（ADR-0014 / 最多一次）
-        assertThat(fulfillment.succeededRequests).hasSize(1);
+        assertThat(order.succeededRequests).hasSize(1);
     }
 }

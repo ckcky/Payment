@@ -24,8 +24,6 @@ class PaymentMetricsTest {
 
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-    private final PaymentTestStack.RecordingFulfillmentGateway fulfillment =
-            new PaymentTestStack.RecordingFulfillmentGateway();
     private final PaymentTestStack.RecordingOrderGateway order =
             new PaymentTestStack.RecordingOrderGateway();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -34,11 +32,11 @@ class PaymentMetricsTest {
 
     private PaymentApplicationService appService(MockChannelAdapter channel) {
         PaymentResultProcessor processor =
-                new PaymentResultProcessor(payments, attempts, fulfillment, order);
+                new PaymentResultProcessor(payments, attempts, order);
         PaymentRetryService retryService = new PaymentRetryService(channel,
                 PaymentTestStack.fastRetryConfig(), metrics);
         return new PaymentApplicationService(payments, new PaymentPersistence(payments, attempts),
-                retryService, fulfillment, metrics, audit);
+                retryService, order, metrics, audit);
     }
 
     private CreatePaymentCommand command(String idempotencyKey) {
@@ -76,7 +74,7 @@ class PaymentMetricsTest {
     void duplicateCallbackIncrementsDuplicateCounter() {
         Payment payment = appService(new MockChannelAdapter()).createPaymentIntent(command("k1"));
 
-        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment, order);
+        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, order);
         PaymentCallbackService callback = new PaymentCallbackService(processor, payments, metrics, audit);
 
         boolean changed = callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("late-ref"));
@@ -91,7 +89,7 @@ class PaymentMetricsTest {
                 .createPaymentIntent(command("k1"));
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
 
-        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, fulfillment, order);
+        PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, order);
         PaymentUnknownResolutionService resolution =
                 new PaymentUnknownResolutionService(payments, processor, metrics, audit);
 

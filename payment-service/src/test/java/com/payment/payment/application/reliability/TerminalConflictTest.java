@@ -25,10 +25,8 @@ class TerminalConflictTest {
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
     private final PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
-    private final PaymentTestStack.RecordingFulfillmentGateway fulfillment =
-            new PaymentTestStack.RecordingFulfillmentGateway();
     private final PaymentResultProcessor processor =
-            new PaymentResultProcessor(payments, attempts, fulfillment, order);
+            new PaymentResultProcessor(payments, attempts, order);
 
     private Payment savePayment(long paymentId, long attemptId, PaymentStatus status) {
         Payment payment = Payment.rehydrate(paymentId, "PM-" + paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
@@ -48,7 +46,7 @@ class TerminalConflictTest {
         assertThat(changed).isFalse();
         assertThat(payments.findById(1L).orElseThrow().getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(order.succeededRequests).isEmpty();
-        assertThat(fulfillment.succeededRequests).isEmpty();
+        assertThat(order.succeededRequests).isEmpty();
     }
 
     @Test

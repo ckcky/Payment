@@ -40,8 +40,7 @@ class PaymentCaptureLedgerPostingTest {
     }
 
     private PaymentResultProcessor ledgerWiredProcessor() {
-        return new PaymentResultProcessor(stack.payments, stack.attempts,
-                stack.fulfillment, stack.order, ledger);
+        return new PaymentResultProcessor(stack.payments, stack.attempts, stack.order, ledger);
     }
 
     @Test

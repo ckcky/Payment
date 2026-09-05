@@ -9,6 +9,7 @@ import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.order.application.CatalogClient;
 import com.payment.order.application.ConfirmStockCommand;
 import com.payment.order.application.CreateOrderResult;
+import com.payment.order.application.FulfillmentGateway;
 import com.payment.order.application.OrderApplicationService;
 import com.payment.order.application.OrderLine;
 import com.payment.order.application.PaymentGateway;
@@ -45,9 +46,12 @@ class SuccessfulPurchaseScenarioTest {
     private final InMemoryTransactionRepository transactionRepository = new InMemoryTransactionRepository();
     private final FakePaymentGateway paymentGateway = new FakePaymentGateway();
 
+    private final RecordingFulfillmentGateway fulfillmentGateway = new RecordingFulfillmentGateway();
+
     private OrderApplicationService service(CatalogClient client) {
         return new OrderApplicationService(orderRepository, transactionRepository, client, paymentGateway,
-                new NoopBusinessMetrics(), org.mockito.Mockito.mock(OrderTimeoutScheduler.class));
+                new NoopBusinessMetrics(), org.mockito.Mockito.mock(OrderTimeoutScheduler.class),
+                fulfillmentGateway);
     }
 
     /** 记录型 fake：捕获创建支付意图请求并返回固定响应。 */
@@ -58,6 +62,24 @@ class SuccessfulPurchaseScenarioTest {
         public CreatePaymentResponse createPayment(CreatePaymentRequest request) {
             requests.add(request);
             return new CreatePaymentResponse("PM-1", "PROCESSING");
+        }
+
+        @Override
+        public com.payment.common.dto.rpc.RefundCommandResponse refund(
+                com.payment.common.dto.rpc.RefundCommandRequest request) {
+            throw new UnsupportedOperationException("scenario fake: refund not expected");
+        }
+    }
+
+    /** 记录型 fake：order 层驱动履约的出站端口替身（Feature 016 / FR-003）。 */
+    private static final class RecordingFulfillmentGateway implements FulfillmentGateway {
+        final List<PaymentSucceededRequest> succeededRequests = new java.util.ArrayList<>();
+
+        @Override
+        public com.payment.common.dto.rpc.FulfillmentAcceptedResponse notifyPaymentSucceeded(
+                PaymentSucceededRequest request) {
+            succeededRequests.add(request);
+            return new com.payment.common.dto.rpc.FulfillmentAcceptedResponse(1L, "PROCESSING");
         }
     }
 

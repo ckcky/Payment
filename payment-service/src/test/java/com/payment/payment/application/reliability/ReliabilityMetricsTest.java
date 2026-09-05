@@ -58,15 +58,13 @@ class ReliabilityMetricsTest {
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
     private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
     private final PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
-    private final PaymentTestStack.RecordingFulfillmentGateway fulfillment =
-            new PaymentTestStack.RecordingFulfillmentGateway();
     private final FixedChannel channel = new FixedChannel();
     private final ReliabilityConfig config = new ReliabilityConfig();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final BusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
 
     private final PaymentResultProcessor processor =
-            new PaymentResultProcessor(payments, attempts, fulfillment, order);
+            new PaymentResultProcessor(payments, attempts, order);
     private final PaymentUnknownResolutionService resolution =
             new PaymentUnknownResolutionService(payments, processor, metrics, new StructuredAuditLogger());
     private final PaymentRetryService retryService =
