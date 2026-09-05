@@ -27,6 +27,8 @@ class PaymentCallbackContractTest {
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isTrue();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        // T023：SUCCESS 恰好通知 order 一次（对称于 fulfillment 断言）
+        assertThat(stack.order.succeededRequests).hasSize(1);
     }
 
     @Test
@@ -41,6 +43,8 @@ class PaymentCallbackContractTest {
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isFalse();
         assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
+        // T023：重复成功回调不重复通知 order
+        assertThat(stack.order.succeededRequests).hasSize(1);
     }
 
     @Test
@@ -66,5 +70,7 @@ class PaymentCallbackContractTest {
         assertThat(changed).isFalse();
         assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(stack.fulfillment.succeededRequests).hasSize(requestsAfterFirst);
+        // T023：UNKNOWN 不通知 order
+        assertThat(stack.order.succeededRequests).isEmpty();
     }
 }
