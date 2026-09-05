@@ -22,6 +22,11 @@
 #   TPS=5 DURATION=60 FAIL_RATE=0.05 UNKNOWN_RATE=0.1 SWITCH_EVERY=5 bash .../traffic-gen.sh
 #   bash deployment/demo/stop-traffic.sh                 # 停止
 # =============================================================================
+# 自举守卫：脚本依赖 bash 数组（AUTH_HEADER），被 sh/dash 调用会在第 118 行
+# ${AUTH_HEADER:+"$AUTH_HEADER"} 处报 "unbound variable" 退出。发现非 bash 时自动用 bash 重跑自身，
+# 保证 "./traffic-gen.sh"、"bash traffic-gen.sh"、"sh traffic-gen.sh" 三种方式都能跑。
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
+
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -115,7 +120,7 @@ while :; do
   ts=$(date '+%F %T')
 
   # ① 下单（不建支付单）
-  httpq POST "$ORDER_URL/orders" "{\"userId\":\"traffic-u$n\",\"merchantId\":\"m1\",\"items\":[{\"skuId\":$SEED_SKU,\"quantity\":1}]}" "${AUTH_HEADER[@]}"
+  httpq POST "$ORDER_URL/orders" "{\"userId\":\"traffic-u$n\",\"merchantId\":\"m1\",\"items\":[{\"skuId\":$SEED_SKU,\"quantity\":1}]}" ${AUTH_HEADER:+"$AUTH_HEADER"}
   if [ "$HTTPQ_CODE" != "201" ] && [ "$HTTPQ_CODE" != "200" ]; then
     fail=$((fail + 1)); echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"order\",\"result\":\"FAIL\",\"http\":\"$HTTPQ_CODE\"}" >> "$JSONL_FILE"
     sleep "$INTERVAL"; continue
@@ -123,7 +128,7 @@ while :; do
   orderNo=$(jstr "$HTTPQ_FILE" orderNo)
 
   # ② 选渠道建支付单（Feature 015：每次选渠道新建一张支付单）
-  httpq POST "$ORDER_URL/orders/$orderNo/payments" "{\"channelCode\":\"$channel\"}" "${AUTH_HEADER[@]}"
+  httpq POST "$ORDER_URL/orders/$orderNo/payments" "{\"channelCode\":\"$channel\"}" ${AUTH_HEADER:+"$AUTH_HEADER"}
   paymentNo=$(jstr "$HTTPQ_FILE" paymentNo)
   if [ "$HTTPQ_CODE" != "201" ] || [ -z "$paymentNo" ]; then
     fail=$((fail + 1)); echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"create-payment\",\"orderNo\":\"$orderNo\",\"result\":\"FAIL\",\"http\":\"$HTTPQ_CODE\"}" >> "$JSONL_FILE"
@@ -147,7 +152,7 @@ while :; do
 
   httpq POST "$DEMO_URL/mock-channel/callback" \
     "{\"paymentNo\":\"$paymentNo\",\"status\":\"$status\",\"channelReference\":\"traffic-$channel-$n-$RANDOM\",\"amountMinor\":null,\"signMode\":\"VALID\"}" \
-    "${AUTH_HEADER[@]}"
+    ${AUTH_HEADER:+"$AUTH_HEADER"}
 
   case "$status" in
     SUCCESS)
@@ -174,12 +179,12 @@ while :; do
   #    （首笔 SUCCESS 后订单已 PAID，再建支付单会被 409 ORDER_NOT_PAYABLE 拒绝）
   if [ "$force_switch" = "1" ]; then
     sw=${CHANNELS[$(( (n + 1) % ${#CHANNELS[@]} ))]}
-    httpq POST "$ORDER_URL/orders/$orderNo/payments" "{\"channelCode\":\"$sw\"}" "${AUTH_HEADER[@]}"
+    httpq POST "$ORDER_URL/orders/$orderNo/payments" "{\"channelCode\":\"$sw\"}" ${AUTH_HEADER:+"$AUTH_HEADER"}
     swPay=$(jstr "$HTTPQ_FILE" paymentNo)
     if [ -n "$swPay" ]; then
       httpq POST "$DEMO_URL/mock-channel/callback" \
         "{\"paymentNo\":\"$swPay\",\"status\":\"SUCCESS\",\"channelReference\":\"traffic-$sw-$n-$RANDOM-swap\",\"amountMinor\":null,\"signMode\":\"VALID\"}" \
-        "${AUTH_HEADER[@]}"
+        ${AUTH_HEADER:+"$AUTH_HEADER"}
       switched=$((switched + 1))
       echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"switch-channel\",\"orderNo\":\"$orderNo\",\"oldPaymentNo\":\"$paymentNo\",\"newPaymentNo\":\"$swPay\",\"newChannel\":\"$sw\",\"result\":\"$([ "$HTTPQ_CODE" = "200" ] && echo SUCCESS || echo FAIL)\"}" >> "$JSONL_FILE"
     else
