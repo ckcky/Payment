@@ -51,7 +51,7 @@ if [ -n "${PAYMENT_ADMIN_TOKEN:-}" ]; then
 fi
 
 echo $$ > "$PID_FILE"
-cleanup() { rm -f "$PID_FILE" "$TMP_ORD" "$TMP_PAY" "$TMP_CB" 2>/dev/null; }
+cleanup() { :; }  # 不删临时文件：safe-delete 钩子环境 rm 可达 10s+/次且 fail-closed；文件随 PID 覆盖写
 trap cleanup EXIT INT TERM
 
 TMP_ORD="${TMPDIR:-/tmp}/traffic.$$.ord"
@@ -62,13 +62,36 @@ info "traffic-gen 启动：TPS=$TPS DURATION=${DURATION}s(0=不限) 成功/失�
 info "order=$ORDER_URL payment=$PAYMENT_URL demo=$DEMO_URL"
 info "JSONL：$JSONL_FILE   统计：$STATS_FILE"
 
-# ---- 0) 自建大库存演示 SKU（skuId=9901，失败仅告警；目录已有库存则跳过） ----
-httpq POST "$ORDER_URL/orders" '{"userId":"traffic-seed","merchantId":"m1","items":[{"skuId":9901,"quantity":1}]}' "${AUTH_HEADER[@]}"
-if [ "$HTTPQ_CODE" = "409" ] || [ "$HTTPQ_CODE" = "400" ] || [ "$HTTPQ_CODE" = "404" ]; then
-  warn "演示 SKU 9901 不可用（HTTP ${HTTPQ_CODE}）——请先运行 deployment/demo/seed.sh 或使用可用 SKU"
-  SEED_SKU="${TRAFFIC_SKU:-1}"
-else
-  SEED_SKU="${TRAFFIC_SKU:-9901}"
+# ---- 0) 自建大库存演示 SKU（skuCode=TRAFFIC-9901，真正播种；按 code 幂等，reset 后 id 会变） ----
+CATALOG_URL="${CATALOG_URL:-http://localhost:8082}"
+SEED_SKU="${TRAFFIC_SKU:-}"
+if [ -z "$SEED_SKU" ]; then
+  httpq GET "$CATALOG_URL/skus"
+  SEED_SKU=$(python -c "
+import json,sys
+try:
+    skus=json.load(open(sys.argv[1],encoding='utf-8'))
+    m=[s['id'] for s in skus if str(s.get('skuCode','')).startswith('TRAFFIC-')]
+    print(m[0] if m else '')
+except Exception:
+    pass" "$HTTPQ_FILE" 2>/dev/null)
+  if [ -z "$SEED_SKU" ]; then
+    httpq POST "$CATALOG_URL/products" '{"productCode":"TRAFFIC-P1","name":"traffic-demo","type":"DIGITAL"}'
+    if [ "$HTTPQ_CODE" != "201" ] && [ "$HTTPQ_CODE" != "200" ]; then
+      # productCode 冲突（历史残留且无 list 端点可反查 id）→ 用时间戳 code 保证拿到新商品
+      httpq POST "$CATALOG_URL/products" "{\"productCode\":\"TRAFFIC-P1-$(date +%s)\",\"name\":\"traffic-demo\",\"type\":\"DIGITAL\"}"
+    fi
+    PRODUCT_ID=$(jnum "$HTTPQ_FILE" 'id')
+    if [ -n "$PRODUCT_ID" ]; then
+      httpq POST "$CATALOG_URL/skus" "{\"skuCode\":\"TRAFFIC-9901\",\"productId\":$PRODUCT_ID,\"name\":\"traffic-demo\",\"priceMinor\":100,\"currencyCode\":\"CNY\",\"deliveryDefinition\":\"AUTO_GRANT\"}"
+      SEED_SKU=$(jnum "$HTTPQ_FILE" 'id')
+      if [ -n "$SEED_SKU" ]; then
+        httpq POST "$CATALOG_URL/skus/$SEED_SKU/activate"
+        httpq POST "$CATALOG_URL/internal/stock/seed" "{\"skuId\":$SEED_SKU,\"total\":1000000}"
+      fi
+    fi
+  fi
+  [ -z "$SEED_SKU" ] && { warn "自建演示 SKU 失败——回退 SKU=1（库存有限，长跑会耗尽）"; SEED_SKU=1; }
 fi
 info "流量下单使用 SKU=$SEED_SKU"
 
@@ -77,8 +100,9 @@ INTERVAL=$(awk "BEGIN{print 1/$TPS}")
 ok=0; fail=0; unknown=0; switched=0; n=0
 start_ts=$(date +%s)
 
-rand100() { # 零 fork 伪随机：秒级时间戳+计数器混合，够演示用
-  echo $(( ($(date +%N 2>/dev/null || echo 0) + n * 7919) % 100 ))
+rand100() { # 零 fork 伪随机：纳秒+计数器混合，够演示用（10# 强制十进制，防前导零被当八进制）
+  local ns; ns=$(date +%N 2>/dev/null); ns=${ns:-0}
+  echo $(( (10#$ns + n * 7919) % 100 ))
 }
 
 while :; do
@@ -106,11 +130,19 @@ while :; do
     sleep "$INTERVAL"; continue
   fi
 
-  # ③ 成败按概率分流回调
-  r=$(rand100)
+  # ③ 成败按概率分流回调；换渠道笔强制先 FAILURE（订单仍可付，供 ④ INV-2 演示）
+  force_switch=0
+  if [ "$SWITCH_EVERY" -gt 0 ] 2>/dev/null && [ $((n % SWITCH_EVERY)) -eq 0 ]; then
+    force_switch=1
+  fi
   status="SUCCESS"
-  if [ "$r" -lt "$UNKNOWN_RATE" ]; then status="UNKNOWN"
-  elif [ "$r" -lt $((UNKNOWN_RATE + FAIL_RATE)) ]; then status="FAILURE"
+  if [ "$force_switch" = "1" ]; then
+    status="FAILURE"
+  else
+    r=$(rand100)
+    if [ "$r" -lt "$UNKNOWN_RATE" ]; then status="UNKNOWN"
+    elif [ "$r" -lt $((UNKNOWN_RATE + FAIL_RATE)) ]; then status="FAILURE"
+    fi
   fi
 
   httpq POST "$DEMO_URL/mock-channel/callback" \
@@ -127,15 +159,20 @@ while :; do
     UNKNOWN)
       unknown=$((unknown + 1))
       echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"callback\",\"orderNo\":\"$orderNo\",\"paymentNo\":\"$paymentNo\",\"channel\":\"$channel\",\"result\":\"UNKNOWN\"}" >> "$JSONL_FILE"
+      # 收敛需要管理员令牌（X-Admin-Token，缺 403）且 body 字段是 result（非 status）
       ( sleep "$UNKNOWN_RESOLVE_DELAY"
         curl -s --noproxy '*' -m 5 -o /dev/null -X POST \
-          -H 'Content-Type: application/json' -d '{"status":"SUCCESS"}' \
-          "${PAYMENT_URL}/internal/payments/$paymentNo/resolve" ) &
+          -H 'Content-Type: application/json' \
+          -H "X-Admin-Token: ${PAYMENT_ADMIN_TOKEN:-demo-admin-token}" \
+          -d "{\"result\":\"SUCCESS\",\"channelReference\":\"resolve-$paymentNo\"}" \
+          "${PAYMENT_URL}/payments/$paymentNo/resolve" ) &
       ;;
   esac
 
-  # ④ 换渠道再付（INV-2 演示）：同订单新渠道再建一张支付单并回调成功
-  if [ "$SWITCH_EVERY" -gt 0 ] 2>/dev/null && [ $((n % SWITCH_EVERY)) -eq 0 ]; then
+  # ④ 换渠道再付（INV-2 演示）：仅当第一笔未完成订单（FAILURE）时换渠道，
+  #    同订单新渠道再建一张支付单并回调成功；旧单保留 FAILED。
+  #    （首笔 SUCCESS 后订单已 PAID，再建支付单会被 409 ORDER_NOT_PAYABLE 拒绝）
+  if [ "$force_switch" = "1" ]; then
     sw=${CHANNELS[$(( (n + 1) % ${#CHANNELS[@]} ))]}
     httpq POST "$ORDER_URL/orders/$orderNo/payments" "{\"channelCode\":\"$sw\"}" "${AUTH_HEADER[@]}"
     swPay=$(jstr "$HTTPQ_FILE" paymentNo)
@@ -145,6 +182,8 @@ while :; do
         "${AUTH_HEADER[@]}"
       switched=$((switched + 1))
       echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"switch-channel\",\"orderNo\":\"$orderNo\",\"oldPaymentNo\":\"$paymentNo\",\"newPaymentNo\":\"$swPay\",\"newChannel\":\"$sw\",\"result\":\"$([ "$HTTPQ_CODE" = "200" ] && echo SUCCESS || echo FAIL)\"}" >> "$JSONL_FILE"
+    else
+      echo "{\"n\":$n,\"ts\":\"$ts\",\"step\":\"switch-channel\",\"orderNo\":\"$orderNo\",\"result\":\"FAIL\",\"http\":\"$HTTPQ_CODE\"}" >> "$JSONL_FILE"
     fi
   fi
 
