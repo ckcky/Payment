@@ -46,6 +46,13 @@ public class MybatisRefundRepository implements RefundRepository {
     }
 
     @Override
+    public Optional<Refund> findByRefundNo(String refundNo) {
+        RefundEntity entity = refundMapper.selectOne(
+                Wrappers.<RefundEntity>lambdaQuery().eq(RefundEntity::getRefundNo, refundNo));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
     public List<Refund> findByPaymentNo(String paymentNo) {
         return refundMapper.selectList(
                         Wrappers.<RefundEntity>lambdaQuery().eq(RefundEntity::getPaymentNo, paymentNo))

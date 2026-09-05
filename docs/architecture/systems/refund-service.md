@@ -141,27 +141,29 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 
 `POST /internal/refunds` → `200`
 
-**请求** `CreateRefundCommand`：`{ orderId, paymentId, userId, amountMinor(long), currencyCode, reason, idempotencyKey, items: List<RefundItem> }`（[CreateRefundCommand.java:10](../../refund-service/src/main/java/com/payment/refund/application/CreateRefundCommand.java)）。
+**请求** `CreateRefundCommand`：`{ orderNo, paymentNo, userId, amountMinor(long), currencyCode, reason, idempotencyKey, items: List<RefundItem> }`（ADR-0063：请求一律用业务单号；[CreateRefundCommand.java:10](../../payment-service/src/main/java/com/payment/refund/application/CreateRefundCommand.java)）。
 
-**响应** `RefundResponse`：`{ id, paymentId, orderId, amountMinor, currencyCode, status, failureReason }`（[RefundResponse.java](../../refund-service/src/main/java/com/payment/refund/api/RefundResponse.java)）。
+**响应** `RefundResponse`：`{ id, refundNo, paymentNo, orderNo, amountMinor, currencyCode, status, failureReason }`（[RefundResponse.java](../../payment-service/src/main/java/com/payment/refund/api/RefundResponse.java)）。
 
 **错误**：`AMOUNT_INVARIANT_VIOLATION`（amount ≤ 0）、`NOT_FOUND`（支付不存在由下游透传）、`DUPLICATE`（幂等键撞唯一约束且回查失败）、`STATE_TRANSITION_VIOLATION`（下游退款状态非法）。
 
 ### 3.2 查询退款
 
-`GET /internal/refunds/{id}` → `200`
+`GET /internal/refunds/{refundNo}` → `200`
 
 **响应** `RefundResponse`（同上）。**错误**：`NOT_FOUND`。
 
+> ADR-0063：路径寻址改用业务单号 `refundNo`（原 `{id}` 已下线），数值主键不出服务边界。
+
 ### 3.3 收敛未知退款
 
-`POST /internal/refunds/{id}/resolve` → `200`
+`POST /internal/refunds/{refundNo}/resolve` → `200`
 
 **请求** `ResolveRefundRequest`：`{ status: "SUCCEEDED"|"FAILED"|"UNKNOWN" }`（[ResolveRefundRequest.java](../../refund-service/src/main/java/com/payment/refund/api/ResolveRefundRequest.java)）。
 
 **响应**：收敛后的 `RefundResponse`。**规则**：仅 `UNKNOWN` 状态可被收敛为成功/失败；已终态视为幂等重复（返回当前状态，不重复触发后处理），由状态机吸收；非法的 `status` 字符串 → `INVALID_ARGUMENT`。
 
-> **已核实（边界）**：`resolveRefund` 直接驱动状态机（[RefundRpcCallbackService.java:24](../../refund-service/src/main/java/com/payment/refund/application/RefundRpcCallbackService.java)）。若退款仍处于 `REQUESTED`（尚未 `process()`）即被收敛，状态机抛 `STATE_TRANSITION_VIOLATION`——正常链路中 `UNKNOWN` 必由 `PROCESSING` 而来，故该路径仅防御性存在（`[待定]`：可加 `requireStatus(UNKNOWN)` 前置断言）。
+> **已核实（边界）**：`resolveRefund` 直接驱动状态机（[RefundRpcCallbackService.java:25](../../payment-service/src/main/java/com/payment/refund/application/RefundRpcCallbackService.java)）。若退款仍处于 `REQUESTED`（尚未 `process()`）即被收敛，状态机抛 `STATE_TRANSITION_VIOLATION`——正常链路中 `UNKNOWN` 必由 `PROCESSING` 而来，故该路径仅防御性存在（`[待定]`：可加 `requireStatus(UNKNOWN)` 前置断言）。
 
 ### 3.4 出站 RPC（refund → payment-service）
 

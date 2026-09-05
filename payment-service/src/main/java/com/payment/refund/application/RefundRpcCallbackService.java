@@ -21,9 +21,10 @@ public class RefundRpcCallbackService {
         this.refundRepository = refundRepository;
     }
 
-    public Refund resolveRefund(Long refundId, String authoritativeStatus) {
-        Refund refund = refundRepository.findById(refundId)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "refund not found: " + refundId));
+    /** 按业务单号收敛（ADR-0063）：权威结果端点不再接受数值主键。 */
+    public Refund resolveRefund(String refundNo, String authoritativeStatus) {
+        Refund refund = refundRepository.findByRefundNo(refundNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "refund not found: " + refundNo));
 
         switch (authoritativeStatus) {
             case "SUCCEEDED" -> refund.succeed();

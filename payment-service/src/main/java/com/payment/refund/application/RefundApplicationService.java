@@ -119,8 +119,9 @@ public class RefundApplicationService {
         return refund;
     }
 
-    public Refund getRefund(Long id) {
-        return requireRefund(id);
+    /** 按业务单号查退款（ADR-0063）：对外接口不再接受数值主键。 */
+    public Refund getRefund(String refundNo) {
+        return requireRefund(refundNo);
     }
 
     private Refund newRefund(CreateRefundCommand cmd) {
@@ -157,9 +158,9 @@ public class RefundApplicationService {
                 String.valueOf(refund.getId()));
     }
 
-    private Refund requireRefund(Long id) {
-        return refundRepository.findById(id)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "refund not found: " + id));
+    private Refund requireRefund(String refundNo) {
+        return refundRepository.findByRefundNo(refundNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "refund not found: " + refundNo));
     }
 
     private Refund insertNew(Refund refund) {

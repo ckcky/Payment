@@ -31,6 +31,13 @@ public class InMemoryRefundRepository implements RefundRepository {
     }
 
     @Override
+    public Optional<Refund> findByRefundNo(String refundNo) {
+        return byId.values().stream()
+                .filter(r -> refundNo.equals(r.getRefundNo()))
+                .findFirst();
+    }
+
+    @Override
     public List<Refund> findByPaymentNo(String paymentNo) {
         return byId.values().stream()
                 .filter(r -> paymentNo.equals(r.getPaymentNo()))

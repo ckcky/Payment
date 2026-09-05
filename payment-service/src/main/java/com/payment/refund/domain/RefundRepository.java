@@ -12,6 +12,12 @@ public interface RefundRepository {
 
     Optional<Refund> findByIdempotencyKey(String idempotencyKey);
 
+    /**
+     * 按业务单号定位退款（ADR-0063）：跨服务/接口一律用 refundNo，数值主键不出服务边界。
+     * 对外端点（GET /internal/refunds/{refundNo}、POST /internal/refunds/{refundNo}/resolve）走这个入口。
+     */
+    Optional<Refund> findByRefundNo(String refundNo);
+
     /** 同一支付下的全部退款（用于累计退款金额校验）。 */
     List<Refund> findByPaymentNo(String paymentNo);
 

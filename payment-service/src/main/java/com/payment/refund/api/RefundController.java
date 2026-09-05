@@ -33,13 +33,14 @@ public class RefundController {
         return RefundResponse.from(refund);
     }
 
-    @GetMapping("/{id}")
-    public RefundResponse getRefund(@PathVariable Long id) {
-        return RefundResponse.from(applicationService.getRefund(id));
+    // ADR-0063：查询与收敛端点一律用业务单号 refundNo 寻址，数值主键不出服务边界。
+    @GetMapping("/{refundNo}")
+    public RefundResponse getRefund(@PathVariable String refundNo) {
+        return RefundResponse.from(applicationService.getRefund(refundNo));
     }
 
-    @PostMapping("/{id}/resolve")
-    public RefundResponse resolveRefund(@PathVariable Long id, @RequestBody ResolveRefundRequest request) {
-        return RefundResponse.from(callbackService.resolveRefund(id, request.status()));
+    @PostMapping("/{refundNo}/resolve")
+    public RefundResponse resolveRefund(@PathVariable String refundNo, @RequestBody ResolveRefundRequest request) {
+        return RefundResponse.from(callbackService.resolveRefund(refundNo, request.status()));
     }
 }

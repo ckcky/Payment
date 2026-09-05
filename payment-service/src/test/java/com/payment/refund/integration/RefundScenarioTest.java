@@ -61,11 +61,11 @@ class RefundScenarioTest {
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
         assertThat(stack.entitlement.postProcessRequests).isEmpty(); // UNKNOWN 不触发后处理
 
-        Refund resolved = callback.resolveRefund(refund.getId(), "SUCCEEDED");
+        Refund resolved = callback.resolveRefund(refund.getRefundNo(), "SUCCEEDED");
         assertThat(resolved.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
 
         // 重复收敛为幂等，状态不再变化
-        Refund again = callback.resolveRefund(refund.getId(), "SUCCEEDED");
+        Refund again = callback.resolveRefund(refund.getRefundNo(), "SUCCEEDED");
         assertThat(again.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
     }
 
