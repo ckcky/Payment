@@ -48,7 +48,7 @@ jget "d['refundNo']"; REFUND_NO="$VALUE"
 jget "d['status']"; REFUND_STATUS="$VALUE"
 # 退款创建后状态取决于渠道形态：同步收敛为 SUCCEEDED；异步渠道为 CREATED（待回调/确认）。二者均合法。
 case "$REFUND_STATUS" in
-  CREATED|SUCCEEDED) info "PASS: 退款创建（状态 $REFUND_STATUS）" ;;
+  CREATED|SUCCEEDED) info "PASS: 退款创建（状态 ${REFUND_STATUS}）" ;;
   *) fail "退款创建: 非预期状态 [$REFUND_STATUS]" ;;
 esac
 info "refundNo=$REFUND_NO"

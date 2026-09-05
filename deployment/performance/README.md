@@ -172,3 +172,46 @@ PROCESSING 超 30s 由 `TimeoutScanner` 转 UNKNOWN「点了不回调」→ `Cha
   符合「拒绝不允许重试」决策。
 - 后续可补充：用 Redis `INFO stats` / `Slowlog` 观察 Lua 执行耗时；用 Prometheus
   `catalog_seckill_degraded_total` 监控 Redis 不可用时的 fail-closed 降级次数。
+
+---
+
+## 6. R6 · Feature 016 验证压测（2026-09-06）
+
+> 承载 spec 016 / ADR-0054 落地验证：主链压测新增 **surplus 双支付分支**，
+> 断言「订单 PAID 后第二张支付单回调成功 → order transaction 层判 surplus 发起自动退款，
+> **全程 0 次 409**」（FR-007 / SC-001）。k6 二进制在沙箱被代理拦截，主链改用零依赖
+> Node 版负载生成器（stdlib http，与 k6 场景等价）。
+
+### 6.1 工具与用法
+
+```bash
+# 主链（下单 → 建单×N → 回调 → 退款 → 收敛；ORDER_RATE 对齐 /orders 限流 50/s）
+VUS=20 DURATION=90s SKU_ID=1 ORDER_RATE=40 SURPLUS_RATIO=0.2 \
+  OUT=results/r6-verification-chain-load.json \
+  node deployment/performance/order-payment-refund-loadgen.js
+
+# catalog 缓存读 + 秒杀（沿用既有脚本）
+BASE_URL=http://localhost:8082 SKU_ID=1 SECKILL_SKU_ID=1 \
+  OUT=results/r6-verification-catalog-load.json \
+  node deployment/performance/catalog-seckill-loadgen.js
+```
+
+### 6.2 结果（r6-verification-*.json）
+
+| 场景 | 指标 | 结果 |
+|---|---|---|
+| SKU 缓存读（ramping 0→200 VU） | RPS / p95 / p99 | 604 / 8.3ms / 31.7ms，错误 0 |
+| 秒杀洪峰（500 VU×40s） | RPS / p95 / p99 | 3661 / 123ms / 232ms，准入 200 全部、0 超卖 |
+| 主链完整闭环（40 单/s） | 完成链路 / surplus 分支 | 910 / 175 次，**surplus 回调 0 次 409** |
+| 主链各段 p99（ms） | 下单 / 建单 / 回调 / 退款 / 收敛 | 1124 / 321 / 1250 / 433 / 131 |
+| 自动退款执行 | 成功 / 失败 | 132 / **0**（`payment_auto_refund_*_total`） |
+
+### 6.3 观察项（非 016 缺陷）
+
+1. **单 SKU 热点行**：`/orders` 409（乐观锁重试 8×10ms 耗尽）约 26%——热点单行写竞争
+   既有现象（代码注释 2026-09-04 实测 20VU 冲突 ~34%），分摊 SKU 或调大重试预算可缓解。
+2. **payment→order 回写 Feign 超时被吞**：surplus 回调 175 次 vs order 判定 132 次，
+   差额 43 次为 1s RPC 超时（ADR-0058 口径）设计性吞掉（`PaymentResultProcessor` catch 语义），
+   依赖对账收敛兜底——与「订单回写失败不回滚支付成功事实」决策一致。
+3. **压测前置**：直接 UPDATE stock.available 会破坏 `total = available + reserved + sold`
+   不变量导致预占 409，须 total/available 同步改（或走 seed API）。

@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     id BIGINT NOT NULL AUTO_INCREMENT,
     payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
     channel_code VARCHAR(32) NOT NULL,
+    attempt_type VARCHAR(16) NOT NULL DEFAULT 'PAYMENT' COMMENT '尝试类型 PAYMENT/REFUND（Feature 016 / FR-017）',
     requested_at DATETIME NOT NULL,
     responded_at DATETIME NULL,
     channel_reference VARCHAR(128) NULL,
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
     KEY idx_attempts_payment_no (payment_no),
+    KEY idx_attempts_payment_type (payment_no, attempt_type),
     UNIQUE KEY uk_attempts_channel_reference (channel_reference)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
