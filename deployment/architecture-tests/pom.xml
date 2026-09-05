@@ -69,12 +69,9 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.payment</groupId>
-            <artifactId>refund-service</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
+        <!-- Feature 015 / P3：refund-service 已并入 payment-service（com.payment.refund 包），
+             模块已从 reactor 移除，此处同步删除对其的 test 依赖，否则全新环境构建会
+             "Could not find artifact com.payment:refund-service" 失败。 -->
         <dependency>
             <groupId>com.payment</groupId>
             <artifactId>fulfillment-service</artifactId>
