@@ -117,7 +117,7 @@ wait_for_services() {
 wait_until() { # wait_until <tries> <sleep_secs> <desc> <command...>   command 成功返回 0 即止
   local tries="$1" interval="$2" desc="$3"; shift 3
   for i in $(seq 1 "$tries"); do
-    if "$@" >/dev/null 2>&1; then info "PASS: $desc（第 $i 次探测）"; return 0; fi
+    if "$@" >/dev/null 2>&1; then info "PASS: ${desc}（第 $i 次探测）"; return 0; fi
     sleep "$interval"
   done
   fail "$desc 在 $((tries * interval))s 内未达成"

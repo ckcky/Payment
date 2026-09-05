@@ -25,7 +25,7 @@ if kill -0 "$PID" 2>/dev/null; then
   kill "$PID" 2>/dev/null || true
   sleep 1
   kill -0 "$PID" 2>/dev/null && { kill -9 "$PID" 2>/dev/null || true; }
-  echo "[INFO] 已停止 traffic-gen（PID $PID）"
+  echo "[INFO] 已停止 traffic-gen（PID ${PID}）"
 else
   echo "[INFO] PID $PID 已不在运行"
 fi

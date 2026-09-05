@@ -14,14 +14,14 @@ http POST "$MERCHANT_URL/merchants" '{"code":"DEMO-M1","name":"demo-merchant-1",
 assert_status 201 "商户注册"
 jget "d['id']"; MERCHANT_ID="$VALUE"
 http POST "$MERCHANT_URL/merchants/$MERCHANT_ID/approve"
-assert_status 200 "商户审批（id=$MERCHANT_ID）"
+assert_status 200 "商户审批（id=${MERCHANT_ID}）"
 
 # --- 商品：1 个已上架商品 ---
 http POST "$CATALOG_URL/products" '{"productCode":"DEMO-P1","name":"demo-digital-member","type":"DIGITAL"}'
 assert_status 201 "商品创建"
 jget "d['id']"; PRODUCT_ID="$VALUE"
 http POST "$CATALOG_URL/products/$PRODUCT_ID/list"
-assert_status 200 "商品上架（id=$PRODUCT_ID）"
+assert_status 200 "商品上架（id=${PRODUCT_ID}）"
 
 # --- SKU：101 正价（¥99.00）、102 退款用（¥129.00）---
 create_sku() {
@@ -29,7 +29,7 @@ create_sku() {
   assert_status 201 "SKU 创建 $1"
   jget "d['id']"; local id="$VALUE"
   http POST "$CATALOG_URL/skus/$id/activate"
-  assert_status 200 "SKU 激活 $1（id=$id）"
+  assert_status 200 "SKU 激活 $1（id=${id}）"
   http POST "$CATALOG_URL/internal/stock/seed" "{\"skuId\":$id,\"total\":$4}"
   assert_status 200 "库存预置 $1（skuId=$id, total=$4）"
 }

@@ -73,7 +73,7 @@ http POST "$MERCHANT_URL/merchants" '{"code":"DEMO-M1","name":"demo-merchant-1",
 case "$STATUS" in
   200|201) info "PASS: 商户注册 (== $STATUS)"; jget "d['id']"; MERCHANT_ID="$VALUE" ;;
   409|500)
-    if echo "$BODY" | grep -qi 'already exists\|already exist\|已存在'; then
+    if echo "$BODY" | grep -qiE 'already exists|already exist|已存在'; then
       warn "商户已存在（内存仓储/历史进程残留），取回 id=1"; MERCHANT_ID=1
     else
       fail "商户注册: 非预期状态 [$STATUS] body=[$BODY]"
@@ -84,9 +84,9 @@ esac
 # 审批：200 正常 / 409 已审批过（内存仓储跨 reset 保留），二者皆视为就绪
 http POST "$MERCHANT_URL/merchants/$MERCHANT_ID/approve"
 case "$STATUS" in
-  200) info "PASS: 商户审批（id=$MERCHANT_ID）" ;;
-  409) warn "商户已审批过，跳过（id=$MERCHANT_ID）" ;;
-  *)   fail "商户审批（id=$MERCHANT_ID）: 非预期状态 [$STATUS]" ;;
+  200) info "PASS: 商户审批（id=${MERCHANT_ID}）" ;;
+  409) warn "商户已审批过，跳过（id=${MERCHANT_ID}）" ;;
+  *)   fail "商户审批（id=${MERCHANT_ID}）: 非预期状态 [$STATUS]" ;;
 esac
 
 # --- 商品：1 个已上架商品 ---
@@ -94,7 +94,7 @@ http POST "$CATALOG_URL/products" '{"productCode":"DEMO-P1","name":"demo-digital
 assert_status 201 "商品创建"
 jget "d['id']"; PRODUCT_ID="$VALUE"
 http POST "$CATALOG_URL/products/$PRODUCT_ID/list"
-assert_status 200 "商品上架（id=$PRODUCT_ID）"
+assert_status 200 "商品上架（id=${PRODUCT_ID}）"
 
 # --- SKU：101 正价（99.00 CNY）、102 退款用（129.00 CNY）、103 秒杀（1.00 CNY，Phase 4 启用） ---
 # create_sku <code> <name> <priceMinor> <stockTotal> [<seckillTotal>]
@@ -103,7 +103,7 @@ create_sku() {
   assert_status 201 "SKU 创建 $1"
   jget "d['id']"; local id="$VALUE"
   http POST "$CATALOG_URL/skus/$id/activate"
-  assert_status 200 "SKU 激活 $1（id=$id）"
+  assert_status 200 "SKU 激活 $1（id=${id}）"
   # 预置库存（三段式：下单预占 → 支付成功确认扣减）
   http POST "$CATALOG_URL/internal/stock/seed" "{\"skuId\":$id,\"total\":$4}"
   assert_status 200 "库存预置 $1（skuId=$id, total=$4）"

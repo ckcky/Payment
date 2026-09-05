@@ -11,7 +11,7 @@ wait_for_services
 
 # 周期带时分秒：同日重复跑 run-all 不会复用上一批（上批差异已处理完，门禁反例会失效）
 PERIOD="demo-$(date +%Y%m%d%H%M%S)"
-echo "==> ① 触发对账批（周期 $PERIOD）"
+echo "==> ① 触发对账批（周期 ${PERIOD}）"
 http POST "$RECON_URL/internal/reconciliation/batches" "{\"period\":\"$PERIOD\"}"
 assert_status 200 "对账批创建"
 jget "d['id']"; BATCH_ID="$VALUE"
@@ -22,7 +22,7 @@ echo "==> ② 列出差异"
 http GET "$RECON_URL/internal/reconciliation/batches/$BATCH_ID/differences"
 assert_status 200 "差异列表"
 DIFF_COUNT="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);print(len(d) if isinstance(d,list) else 0)")"
-info "差异数=$DIFF_COUNT（样例账单 vs 真实支付，不一致即演示差异收敛）"
+info "差异数=${DIFF_COUNT}（样例账单 vs 真实支付，不一致即演示差异收敛）"
 
 echo "==> ③ 关闭门禁反例：尚有未处理差异时关闭应被拒（400）"
 http POST "$RECON_URL/internal/reconciliation/batches/$BATCH_ID/close" "{\"operator\":\"demo-auditor\"}"

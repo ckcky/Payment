@@ -77,7 +77,7 @@ echo "==> [4] 启动持续请求发射器（GET /skus + POST 秒杀扣减），�
 ) >> "$EMIT_LOG" 2>&1 &
 EMIT_PID=$!
 echo "$EMIT_PID continuous-emit" >> "$PID_FILE"
-echo "    持续发射器 PID $EMIT_PID（约 40 req/s，GET 缓存读 + 秒杀扣减）"
+echo "    持续发射器 PID ${EMIT_PID}（约 40 req/s，GET 缓存读 + 秒杀扣减）"
 
 # 5) 打开监控
 echo ""
