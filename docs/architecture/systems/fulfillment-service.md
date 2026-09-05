@@ -155,6 +155,8 @@ PENDING --cancel--> CANCELLED
 
 `PaymentSuccessRpcController.onPaymentSucceeded` → `FulfillmentApplicationService.acceptPaymentSucceeded`（`FulfillmentApplicationService.java:35`）：
 
+> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：本端点的**调用方**将由 payment-service 变为 **order-service**（支付成功后由 order 层驱动履约；`fulfillment → entitlement` 链保留不变）。端点契约与下方 1~6 步语义均不变，实施完成后本节随代码更新。
+
 1. `sourcePaymentNo = request.paymentNo()`；`repository.findBySourcePaymentNo` 回查（幂等）。
 2. 命中 → 直接返回已有履约（**不重复创建、不重复交付、不重复触发权益**）。
 3. 未命中 → `newFulfillment(orderNo, sourcePaymentNo)`（状态 PENDING）→ `fulfillment.start()`（PENDING → PROCESSING）。
@@ -166,20 +168,19 @@ PENDING --cancel--> CANCELLED
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    participant P as payment-service
+    participant O as order-service [ADR-0054 后；现状为 payment-service]
     participant F as fulfillment-service
     participant E as entitlement-service
-    P->>F: POST /internal/fulfillments/on-payment-succeeded (幂等)
+    O->>F: POST /internal/fulfillments/on-payment-succeeded (幂等)
     F->>F: findBySourcePaymentId 回查
     alt 已存在
-        F-->>P: 返回已有履约 (FulfillmentAcceptedResponse)
+        F-->>O: 返回已有履约 (FulfillmentAcceptedResponse)
     else 新建
         F->>F: start → deliver (Mock 交付)
         F->>F: save (DELIVERED)
         F->>E: notifyFulfillmentCompleted (RPC)
         E-->>F: EntitlementGrantedResponse
-        F-->>P: FulfillmentAcceptedResponse
+        F-->>O: FulfillmentAcceptedResponse
     end
 ```
 

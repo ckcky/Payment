@@ -10,8 +10,8 @@
 | Catalog | Product、SKU | Product 组织 SKU；SKU 提供可购买和交付定义 |
 | Order | Order | Order 包含 Order Items 和 Price Snapshots |
 | Transaction | Transaction | MVP 中与 Order 1:1，表达支付义务 |
-| Payment | Payment | MVP 中与 Transaction 1:1；包含 Payment Attempts |
-| Payment | PaymentAttempt | 一个 Payment 允许多次尝试；每次尝试最多对应一个渠道引用 |
+| Payment | Payment | MVP 中与 Transaction **1:N**（一交易多支付单，ADR-0064：用户每选一个支付方式即新建一张支付单）；包含 Payment Attempts |
+| Payment | PaymentAttempt | 一个 Payment 对应**一条**尝试记录（`payment_no : payment_attempts = 1:1`，ADR-0054 口径；代码证据 `PaymentPersistence.java:56` 每支付单仅建一条 attempt）；渠道重试在同一 attempt 行内以 `retry_count` 递增，**不新建行**；每条尝试最多对应一个渠道引用 |
 | Fulfillment | Fulfillment | 由 PaymentSucceeded 触发，引用 Order/Order Item |
 | Entitlement | Entitlement | 由履约或其他合法来源授予，关联用户和交付内容 |
 | Refund | Refund | 引用原 Order、Payment，可包含多个 Refund Items |
@@ -45,7 +45,7 @@
 ### Payment
 
 - Payment 身份、Transaction 引用、支付意图、金额、币种、幂等键、状态、当前/关联尝试引用。
-- 约束：MVP 中一个 Transaction 对应一个 Payment；金额和币种必须与 Transaction 一致；终态成功不能被后到的失败回调覆盖。
+- 约束：一个 Transaction 可对应**多个 Payment**（一交易多支付单，ADR-0064：`transaction_no : payment_no = 1:N`，去掉 `uk_payments_transaction_id` 唯一约束、以 `attempt_seq` 区分）；金额和币种必须与 Transaction 一致；终态成功不能被后到的失败回调覆盖。
 
 ### PaymentAttempt
 

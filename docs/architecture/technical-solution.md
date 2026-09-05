@@ -187,9 +187,9 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | Merchant | 谁可经营商品、接收交易并参与结算 | 订单、支付执行、履约、对账差异 | Merchant、Settlement Account | 待审核 → 有效 → 暂停/终止 |
 | Product | 面向用户与商家的商品概念与生命周期 | 销售价格快照、订单、支付 | Product、Product Version | 草稿 → 上架 → 下架 → 归档 |
 | SKU | 哪个具体销售单元可被购买、以何属性交付 | 订单金额确认、支付状态 | SKU、Price、Delivery Definition | 草稿 → 可售 → 暂停 → 失效 |
-| Order | 用户买什么、向谁买、订单金额与购买生命周期 | 渠道协议、资金收取、直接发权益 | Order、Order Item、Price Snapshot | 待确认 → 待支付 → 已支付 → 履约中 → 已完成/取消/关闭 |
-| Transaction | 商业交易如何关联订单与支付、是否完成 | 渠道通信、履约交付、权益管理 | Transaction、Transaction Relation | 待处理 → 处理中 → 成功/失败/取消/未知 |
-| Payment | 一次资金收取意图与支付尝试的生命周期 | 商品、履约、具体渠道协议 | Payment、Payment Attempt、Payment Result | 待支付 → 处理中 → 成功/失败/未知 → 已关闭 |
+| Order | 用户买什么、向谁买、订单金额与购买生命周期；支付成功后的订单侧动作（markPaid/confirmStock/履约驱动，ADR-0054） | 渠道协议、资金收取、退款执行 | Order、Order Item、Price Snapshot | 待确认 → 待支付 → 已支付 → 履约中 → 已完成/取消/关闭 |
+| Transaction | 商业交易如何关联订单与支付、是否完成；交易动作编排（正常/surplus 判定 + 自动退款发起，ADR-0054） | 渠道通信、履约交付、权益管理、退款执行 | Transaction、Transaction Relation | 待处理 → 处理中 → 成功/失败/取消/未知 |
+| Payment | 一次资金收取意图与支付尝试的生命周期；支付指令编排（渠道支付 + 记账，记账保留在 payment，ADR-0054） | 商品、履约、具体渠道协议、退款决策与发起 | Payment、Payment Attempt、Payment Result | 待支付 → 处理中 → 成功/失败/未知 → 已关闭 |
 | Payment Channel | 如何与外部支付机构交互并解释其结果 | 平台订单、履约、权益、最终业务判断 | Channel、Channel Attempt、Channel Reference | 可用 → 不可用/停用 |
 | Refund | 为什么退、退多少、是否可退、退款整体进度 | 单独替代支付退款、履约撤销、对账 | Refund、Refund Item、Refund Decision | 申请中 → 处理中 → 成功/部分/失败/未知/拒绝/关闭（**本期只做全额退款，「部分」不开放，见 §2.4**） |
 | Fulfillment | 如何交付商品或服务、交付是否完成 | 支付结果确认、权益内部生命周期 | Fulfillment、Fulfillment Item、Delivery | 待履约 → 履约中 → 已交付/部分/失败/取消 |
@@ -202,10 +202,12 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 **MVP 基数关系**：
 
 ```text
-Order (1) ───── (1) Transaction (1) ───── (1) Payment (1) ───── (N) PaymentAttempt
+Order (1) ───── (1) Transaction (1) ───── (N) Payment (1) ───── (1) PaymentAttempt
    │                                                                      │
    └─ Order Items / Price Snapshots                             每次尝试 ≤ 1 个渠道引用
 ```
+
+> **基数修订**：`Transaction : Payment = 1:N`（ADR-0064：一交易多支付单，用户每选一个支付方式即新建一张支付单，`payments.attempt_seq` 区分）；`Payment : PaymentAttempt = 1:1`（ADR-0054：每张支付单仅一条渠道尝试记录，渠道重试在同一 attempt 行内 `retry_count` 递增、不新建行）。
 
 **核心状态机**（领域自持，集中状态转换函数，禁止散落 set）：
 
@@ -247,16 +249,22 @@ sequenceDiagram
     P->>Ch: 发起支付（渠道接口抽象）
     Ch-->>P: 明确成功/失败/未知
     alt 支付成功
-        P->>F: 请求履约（RPC）
+        P->>P: 编排支付指令：记账 ledger postPaymentCapture（保留在 payment）
+        P->>O: 支付成功通知（业务侧仅通知 order，ADR-0054）
+        O->>O: transaction 层判定正常/surplus → 委派 order 层
+        O->>O: order 层：markPaid + transaction.succeed() + confirmStock
+        O->>F: 请求履约（RPC，order 层驱动）
         F->>E: 履约完成后请求权益授予（RPC）
     else 支付未知
         P->>P: 进入 UNKNOWN，等待查询/回调/对账/人工收敛
     end
 ```
 
+> **现状 vs 目标（ADR-0054 / spec 016，Proposed 未实施）**：当前代码仍是 payment 直调履约（`PaymentResultProcessor:73`）并自行 catch 409 发起自动退款（`:82`）；目标链路为上图——payment 业务侧仅通知 order，order transaction 层判定正常/surplus（surplus 时以 `transactionNo + paymentNo` 发起自动退款），order 层执行 confirmStock + 驱动履约，记账保留在 payment。实施按 `docs/specs/016-order-payment-orchestration/` T1~T5 推进，完成后本图即为现状。
+
 #### 4.3.2 支付回调与 UNKNOWN 收敛
 
-渠道通知**可能重复、乱序、延迟**到达。payment-service 依据「渠道交易引用 + 支付尝试」幂等吸收重复通知，不回退已确认的合法状态；终态成功不被后到的失败回调覆盖。回调只更新 Payment/PaymentAttempt，并通过同步 RPC 触发 order-service 回写订单/交易状态（Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`）、fulfillment-service 履约，不直接改写其他领域内部数据。
+渠道通知**可能重复、乱序、延迟**到达。payment-service 依据「渠道交易引用 + 支付尝试」幂等吸收重复通知，不回退已确认的合法状态；终态成功不被后到的失败回调覆盖。回调只更新 Payment/PaymentAttempt；payment 完成自身支付指令编排（含记账，保留在 payment 内）后，**业务侧仅通过同步 RPC 通知 order-service**，由 order 编排下游（回写订单/交易状态、履约触发），不直接改写其他领域内部数据（ADR-0054，现状 payment 直调履约待迁移，见 §4.3.1 注）。
 
 渠道超时/断连/响应不完整时，Payment/Refund **进入 UNKNOWN**（不是失败别名）。收敛路径：主动查询接口、后续回调、对账、人工处理；在未收敛前**不得重复执行不可确认的资金动作**。
 
@@ -265,6 +273,25 @@ sequenceDiagram
 > - **人工收敛端点（原 ADR-0006 / spec US4）已实现**：`POST /payments/{id}/resolve` + `ResolveAuthorizationInterceptor`（未配置 `PAYMENT_ADMIN_TOKEN` 时返回 503 拒绝，不放行），详见 `runbook.md`。高危资金操作由 admin-token 守卫 + 审计日志兜底；完整权限体系仍待路线图 Phase 9 统一建设。自动收敛（主动查询 + 超时 + 重试）覆盖绝大多数 UNKNOWN，剩余保持 UNKNOWN 依赖对账流程兜底（ADR-0007）。
 
 #### 4.3.3 退款链路
+
+**退款编排三步链**（负责人 2026-09-06 明确，ADR-0054 / spec 016 FR-017）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant T as order transaction 层
+    participant RF as payment 退款域
+    participant A as payment_attempts (渠道交互记录)
+    participant Ch as Channel Adapter
+    T->>RF: ① 退款请求 (transactionNo+paymentNo) → 生成 refundNo (RF+雪花, 幂等+防超退)
+    RF->>A: ② 落退款渠道尝试记录 (channel_reference = 渠道退款流水号)
+    RF->>Ch: ③ channel.refund 外部渠道退款
+    Ch-->>RF: SUCCEEDED / FAILED / UNKNOWN → 收敛退款状态机
+    RF->>RF: 成功 → 后处理编排 (履约撤销→权益吊销→记账冲正)
+```
+
+- 常规退款入口与 surplus 自动退款共用此链（发起方不同：用户申请 vs order transaction 层）。
+- 退款渠道流水号 MUST 落库（修复缺口：现状 `PaymentRefundService` 调渠道后 `channelReference` 仅回传不落库，对账退款事实用 `"refund-{id}"` 合成引用，见 spec 016 N4）。
 
 ```mermaid
 flowchart LR
@@ -285,7 +312,7 @@ flowchart LR
 
 #### 4.3.4 履约与权益
 
-`PaymentSucceeded`（Payment 服务内部事实）→ 通过 RPC 请求 fulfillment-service 履约；履约完成后再请求 entitlement-service 授予权益。支付成功只**触发**履约，不决定履约最终状态；履约失败不回写支付为失败；权益授予失败保留履约事实、可重试/人工补发，不重复扣款。
+`PaymentSucceeded`（Payment 服务内部事实）→ payment 业务侧仅通知 **order-service**（ADR-0054）；由 order transaction 层判定「正常到账 / surplus」后**委派 order 层**执行 markPaid + confirmStock 并通过 RPC 请求 fulfillment-service 履约（**confirmStock 与履约驱动属 order 层**）；履约完成后再请求 entitlement-service 授予权益（`fulfillment → entitlement` 链保留）。支付成功只**触发**履约，不决定履约最终状态；履约失败不回写支付为失败；权益授予失败保留履约事实、可重试/人工补发，不重复扣款。重复/超额支付（surplus）由 order transaction 层以 `transactionNo + paymentNo` 发起自动退款（payment 仅执行）。
 
 #### 4.3.5 资金闭环：记账、对账与结算
 
@@ -316,12 +343,17 @@ flowchart LR
 order-service → catalog-service               校验 SKU + 取销售数据
 order-service → payment-service               创建支付意图
 payment-service → Channel Adapter             发起支付 / 查询渠道结果
-payment-service → fulfillment-service         支付成功后请求履约
+payment-service → ledger-service              支付/退款记账（支付指令编排的一部分，保留在 payment）
+payment-service → order-service               支付成功通知（业务侧仅通知 order，ADR-0054）
+order-service → fulfillment-service           支付成功后由 order 层请求履约（ADR-0054）
 fulfillment-service → entitlement-service     履约完成后请求权益授予
-payment-service（refund 包）→ 渠道/ fulfillment/entitlement   退款编排 + 退款后处理（进程内，Feature 015 起不再跨服务）
+order-service → payment-service               退款命令（surplus 自动退款，transactionNo+paymentNo，ADR-0054）
+payment-service（refund 包）→ 渠道            退款渠道尝试（进程内，Feature 015 起退款域并入 payment）
 reconciliation-service → payment-service      读已确认支付/退款事实
 settlement-service → merchant/reconciliation  校验结算资格 + 生成结算批次
 ```
+
+> **现状标注**：上述 order→fulfillment 履约触发与 order→payment 退款命令为 ADR-0054 目标链路（spec 016 未实施）；当前代码仍是 payment→fulfillment 直调 + payment catch 409 自发起退款。
 
 ### 4.4 一致性模型（幂等 / 状态机 / 重试 / UNKNOWN）
 

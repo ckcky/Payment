@@ -231,6 +231,8 @@ sequenceDiagram
 3. `changed` 时 `save`；`transactionRepository.findByOrderId` → `succeed()`（`PROCESSING → SUCCEEDED`，`PENDING` 时先 `start()`）。
 4. 事务边界：`onPaymentSucceeded` 标 `@Transactional`（订单 + 交易在同一本地事务原子提交）。
 
+> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：目标架构下本流程扩展为——新增 **transaction 层**（`TransactionApplicationService`）接收通知并判定「正常到账 / surplus」：正常 → **委派 order 层**执行 markPaid + transaction.succeed() + confirmStock 并**驱动履约**（`FulfillmentGateway.notifyPaymentSucceeded`，`fulfillment → entitlement` 链保留）；surplus → 以 `transactionNo + paymentNo` 经 `PaymentGateway.refund(...)` 发起自动退款（不再向 payment 抛 409）。**confirmStock 与履约驱动属 order 层，不在 transaction 层**。实施完成后本节随代码更新。
+
 ```mermaid
 sequenceDiagram
     autonumber

@@ -47,3 +47,7 @@
 
 见 `docs/specs/015-multi-channel-payment/acceptance.md`（SC-001~007 逐条对照 + 全量
 `mvn -o clean verify -fae` 门禁）。
+
+## 后续演进
+
+> **Superseded by ADR-0054**（2026-09-06，`docs/adr/0025-order-payment-orchestration.md`）：本 ADR **第 4 条**（order 返回 409 `ORDER_NOT_PAYABLE` → payment 捕获后自发起自动退款）已被 ADR-0054 取代——自动退款的**决策与发起**归属 order-service 的 transaction 层（以 `transactionNo + paymentNo` 发起），payment-service 退回能力提供方。其余条款（一交易多支付单、退款域并入 payment-service、三渠道 mock）**保持不变**。
