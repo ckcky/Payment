@@ -95,8 +95,8 @@ description: "支付成功回写订单与交易状态 — 任务清单（补齐�
 
 **目标**: 补齐应用层单测与 OrderGateway 断言缺口，落实 FR-009 异常留痕，在本地 MySQL 实跑 quickstart 并产出验收，完成 review 与 Roadmap 更新。
 
-- [ ] T022 [P] 新增 `OrderApplicationServiceTest.onPaymentSucceeded` 单测：`markPaid` + `Transaction.succeed` 后断言 `order.status==PAID`、`order.paidMinor==totalMinor`、`transaction.status==SUCCEEDED`；非法前态（`CANCELLED`/`CLOSED`）断言抛 `STATE_TRANSITION_VIOLATION`。文件路径：`order-service/src/test/java/com/payment/order/application/OrderApplicationServiceTest.java`。
-- [ ] T023 [P] 在 `PaymentCallbackContractTest` 补充对 `stack.order`（RecordingOrderGateway）的断言：SUCCESS 时 `order.succeededRequests` 恰好 1 次、FAILURE / UNKNOWN 时为 0 次（对称于既有的 fulfillment 断言）。文件路径：`payment-service/src/test/java/com/payment/payment/contract/PaymentCallbackContractTest.java`。
+- [x] T022 [P] 新增 `OrderApplicationServiceTest.onPaymentSucceeded` 单测：`markPaid` + `Transaction.succeed` 后断言 `order.status==PAID`、`order.paidMinor==totalMinor`、`transaction.status==SUCCEEDED`；非法前态（`CANCELLED`/`CLOSED`）断言抛 `STATE_TRANSITION_VIOLATION`。文件路径：`order-service/src/test/java/com/payment/order/application/OrderApplicationServiceTest.java`。
+- [x] T023 [P] 在 `PaymentCallbackContractTest` 补充对 `stack.order`（RecordingOrderGateway）的断言：SUCCESS 时 `order.succeededRequests` 恰好 1 次、FAILURE / UNKNOWN 时为 0 次（对称于既有的 fulfillment 断言）。文件路径：`payment-service/src/test/java/com/payment/payment/contract/PaymentCallbackContractTest.java`。
 - [ ] T024 落实 FR-009 异常留痕：在 `PaymentResultProcessor.applyAndNotify` 的 order RPC catch 分支，对「订单非法前态拒绝」补充结构化审计 / 告警（不回滚支付成功，仅留痕供人工 / 对账）。文件路径：`payment-service/src/main/java/com/payment/payment/application/PaymentResultProcessor.java`。
 - [ ] T025 本地 MySQL 实跑 `quickstart.md` 全链路：建 SKU（可售）→ 建单（默认 Mock SUCCESS，订单同步 PAID）→ 校验 `GET /orders/{id}` 为 PAID、`GET /payments/{id}` 为 SUCCEEDED；并将结果记录到 `acceptance.md`。
 - [ ] T026 [P] 运行 `./mvnw verify`，确认全部测试通过（含 T022 / T023 新增用例），记录测试数与通过数到 `acceptance.md`。

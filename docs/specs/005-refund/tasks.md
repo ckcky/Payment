@@ -93,7 +93,7 @@
 
 - [x] T015 [P] [US2] ✅ 行为由 `integration/RefundScenarioTest` 覆盖：`successfulRefundFiresAttemptAndPostProcessExactlyOnce` / `postProcessFailureDoesNotRollBackRefundSuccess` / `unknownRefundConvergesToSuccessAndPostProcessIsIdempotent`（未单独立文件）
 - [x] T016 [P] [US2] ✅ 由 `RefundScenarioTest#postProcessFailureDoesNotRollBackRefundSuccess` 覆盖（静默 catch 已由 `RefundPostProcessOrchestrator` 的尝试记录 + 指标替代）
-- [ ] T017 [P] [US2] ⚠️ **未落地**：`FulfillmentRefundController`（`POST /internal/fulfillments/on-refund`）已实现，但**缺专属测试**，属遗留测试债
+- [x] T017 [P] [US2] ✅ 2026-09-06 已补：`FulfillmentRefundControllerTest`（standalone MockMvc）覆盖 `POST /internal/fulfillments/on-refund` 的接线、请求透传与 CANCELLED/SKIPPED 响应映射
 
 ### Implementation for US2
 
@@ -138,8 +138,8 @@
 
 ### Tests for US4
 
-- [ ] T030 [P] [US4] ⚠️ **未落地**：`LedgerPostingGateway` 已实现并接入编排，但**缺记账断言测试**（幂等键格式 `REFUND:<idempotencyKey>`、金额、重复吸收），属遗留测试债
-- [ ] T031 [P] [US4] ⚠️ **未落地**：失败记账已落 `RefundPostProcessAttempt` 记录（LEDGER 目标），但**缺专属测试**
+- [x] T030 [P] [US4] ✅ 2026-09-06 已补：`RefundLedgerPostingTest` 覆盖记账断言（幂等键格式 `REFUND:<idempotencyKey>`、sourceId=refundNo、申请全额、重复幂等吸收、REJECTED 不记账）
+- [x] T031 [P] [US4] ✅ 2026-09-06 已补：`RefundPostProcessAttemptTest` 覆盖失败记账落 attempt（target=LEDGER、FAILED、重试 3 次、退款成功不回滚）
 
 ### Implementation for US4
 
@@ -240,4 +240,4 @@
 - 跨服务同步 RPC + 幂等，不引入 MQ / 2PC（ADR-0001、Constitution §IV）
 - **MUST NOT** 删测试或改测试迎合错误实现（Constitution §VIII.3/4）
 - 实现前务必先确认 ADR-0016~0018（Constitution §VIII.6 / Governance §8.3/§8.4/§8.8）—— ✅ 已于 2026-08-30 确认
-- **遗留测试债（已知，未闭环）**：T017（fulfillment 退款端点测试）、T030/T031（退款记账测试）。不影响资金正确性主路径，但应在后续阶段补齐
+- ~~**遗留测试债（已知，未闭环）**：T017（fulfillment 退款端点测试）、T030/T031（退款记账测试）~~ ✅ **2026-09-06 已全部补齐**（`FulfillmentRefundControllerTest` / `RefundLedgerPostingTest` / `RefundPostProcessAttemptTest`），测试债清零

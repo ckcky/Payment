@@ -4,7 +4,7 @@
 
 **Prerequisites**: spec.md ✅、plan.md ✅、data-model.md ✅、checklists/ ✅、acceptance.md ✅、quickstart.md ✅
 
-**Current Progress（2026-08-29）**: 文档先行阶段已完成。**实现状态：全部未开始**。ADR-0019~0021 状态 **Proposed**，待负责人确认（Constitution §8.3/§8.4/§8.8）。
+**Current Progress（2026-09-06 核实回填）**: 实现已全部落地（代码先行；ADR-0019~0021 已 Accepted，见 roadmap「ADR 状态」）。本清单已按代码证据回填勾选。**真缺口**：T003 周期 fixture（仅有 sample.csv）、T018 fixture-dir 配置键（默认值硬编码在 loader）、T035 read-timeout 未达 3000ms、T040 `difference_amount_minor` 指标、T019 null reference WARN、T028 `@NotBlank` 校验；**测试债**：T011/T013/T014/T021~T024/T030~T032/T037~T039 对应测试类缺失（T012/T020 已由既有测试覆盖核心用例）。
 
 **Tests**: 本 Feature 涉及金额判定与状态机门禁，按 Constitution §VII 与 spec FR-020，**MUST** 包含测试任务（已内联到各 US 阶段）；**MUST NOT** 删测试或改测试迎合错误实现。
 
@@ -47,7 +47,7 @@
 - [ ] T007 [P] 新增 `domain/ChannelStatementSource.java` 值对象（`sourceType`/`locator`/`entryCount`/`fallbackUsed`，data-model.md §5）
 - [ ] T008 [P] 修改 `infra/persistence/ReconciliationBatchEntity.java` + `MybatisReconciliationRepository.java`：`statement_source`/`closed_at`/`closed_by` 映射与 `toDomain`/`toEntity` 同步（`:84-100`）
 - [ ] T009 [P] 修改 `domain/Difference.java`：`resolve(note, actor, at)`（`:56`）—— 校验 `note` 非空白（`INVALID_ARGUMENT`），写入 `resolvedAt`/`resolvedBy`；已 `RESOLVED` 重复处理按 ADR-0019 决策（幂等刷新 or 拒绝）
-- [ ] T010 [P] 修改 `api/ReconciliationBatchResponse.java`：新增 `unresolvedDifferenceCount`、`statementSource`、`closedAt`（向后兼容，仅增字段，data-model.md §2.2 / FR-017）
+- [x] T010 [P] 修改 `api/ReconciliationBatchResponse.java`：新增 `unresolvedDifferenceCount`、`statementSource`、`closedAt`（向后兼容，仅增字段，data-model.md §2.2 / FR-017）
 
 **Checkpoint**: 领域与持久层可承载生命周期闭合、账单来源与处理依据；既有状态机测试仍全绿
 
@@ -142,7 +142,7 @@
 ### Implementation for US4
 
 - [ ] T040 [US4] 修改 `application/ReconciliationApplicationService.java:77-81`：增加 `reconciliation.difference_amount_minor`（按差异金额求和，保持 `long`）
-- [ ] T041 [US4] 修改 `api/ReconciliationBatchResponse.from(...)`：输出 `unresolvedDifferenceCount`（复用 `batch.unresolvedCount()`，与 `settlementSummary` 同源，`:117-132`）
+- [x] T041 [US4] 修改 `api/ReconciliationBatchResponse.from(...)`：输出 `unresolvedDifferenceCount`（复用 `batch.unresolvedCount()`，与 `settlementSummary` 同源，`:117-132`）
 
 **Checkpoint**: 全部 US 可独立工作
 

@@ -30,18 +30,18 @@
 **Purpose**: 确认决策与骨架
 
 - [ ] T001 [P] 负责人确认 ADR-0008~0011（Constitution §8 人类决策边界），更新 `docs/adr/0004-ledger-design-decisions.md` 状态为 Accepted
-- [ ] T002 [P] 新建 `ledger-service` 模块（pom.xml 继承父 POM；端口 8090；依赖 common-core/common-dto/MyBatis-Plus/OpenFeign/Micrometer）；`LedgerApplication` 启动类 + 上下文测试
-- [ ] T003 [P] 编写 `deployment/schema/09-ledger-schema.sql`（`accounts`/`postings`/`ledger_entries` 三表 + 唯一约束 + 索引，见 data-model.md §2~§7）；接入 Flyway/Compose 应用机制（若已落地）
+- [x] T002 [P] 新建 `ledger-service` 模块（pom.xml 继承父 POM；端口 8090；依赖 common-core/common-dto/MyBatis-Plus/OpenFeign/Micrometer）；`LedgerApplication` 启动类 + 上下文测试
+- [x] T003 [P] 编写 `deployment/schema/09-ledger-schema.sql`（`accounts`/`postings`/`ledger_entries` 三表 + 唯一约束 + 索引，见 data-model.md §2~§7）；接入 Flyway/Compose 应用机制（若已落地）
 
 ## Phase 2: Foundational（阻塞前置，MUST 先于任何 US）
 
 **⚠️ CRITICAL**: 用户故事工作须等本阶段完成
 
-- [ ] T004 实现 `domain/Account.java`、`Posting.java`（聚合根，平衡校验 `isBalanced()`）、`LedgerEntry.java`（不可变值对象）、`LedgerRepository.java`
-- [ ] T005 [P] 实现 `application/LedgerPostingService.java`：`validate → checkBalance → persistInTxn → audit`；借贷不平衡拒绝（`UNBALANCED`）；幂等键唯一约束 + `DuplicateKeyException` 回查
-- [ ] T006 [P] 实现 `application/BalanceChecker.java`：全局借贷平衡性校验（按币种聚合 `sum(debit) - sum(credit)` 应 = 0）
-- [ ] T007 [P] 实现 `api/LedgerController.java` + `api/dto/PostingRequest.java` + `common-dto` 记账 RPC DTO；仅暴露内部记账端点
-- [ ] T008 [P] 资金审计：`FINANCIAL_AUDIT` 记录每次成功记账（来源/金额/科目/前后余额摘要）；指标 `ledger.posted` / `ledger.posting_failed`
+- [x] T004 实现 `domain/Account.java`、`Posting.java`（聚合根，平衡校验 `isBalanced()`）、`LedgerEntry.java`（不可变值对象）、`LedgerRepository.java`
+- [x] T005 [P] 实现 `application/LedgerPostingService.java`：`validate → checkBalance → persistInTxn → audit`；借贷不平衡拒绝（`UNBALANCED`）；幂等键唯一约束 + `DuplicateKeyException` 回查
+- [x] T006 [P] 实现 `application/BalanceChecker.java`：全局借贷平衡性校验（按币种聚合 `sum(debit) - sum(credit)` 应 = 0）
+- [x] T007 [P] 实现 `api/LedgerController.java` + `api/dto/PostingRequest.java` + `common-dto` 记账 RPC DTO；仅暴露内部记账端点
+- [x] T008 [P] 资金审计：`FINANCIAL_AUDIT` 记录每次成功记账（来源/金额/科目/前后余额摘要）；指标 `ledger.posted` / `ledger.posting_failed`
 
 **Checkpoint**: 账本服务可独立记账与校验
 
@@ -55,13 +55,13 @@
 
 ### Tests for US1
 
-- [ ] T009 [P] [US1] `LedgerPostingServiceTest`：支付记账借贷平衡；重复幂等吸收；不平衡拒绝
-- [ ] T010 [P] [US1] `PaymentCapturePostingIntegrationTest`（Testcontainers）：端到端支付成功→账本落分录
+- [x] T009 [P] [US1] `LedgerPostingServiceTest`：支付记账借贷平衡；重复幂等吸收；不平衡拒绝
+- [x] T010 [P] [US1] `PaymentCaptureLedgerPostingTest`：支付成功 → 恰好一次记账，幂等键 `PAYMENT:{paymentNo}`、sourceId=业务单号、重复回调不重复记账（按仓库约定以进程内 RecordingGateway 断言网关契约，账本侧平衡已由 `LedgerPostingServiceTest` 覆盖；未引入 Testcontainers）
 
 ### Implementation for US1
 
-- [ ] T011 [US1] payment-service 实现 `application/LedgerPostingGateway.java`（Feign → ledger-service，沿用 `ResilientFulfillmentGateway` 重试/超时模式）
-- [ ] T012 [US1] 在支付成功路径（payment-service 既有成功回写处）调用 `LedgerPostingGateway.postPaymentCapture(...)`；失败入「待记账」兜底（不回滚支付成功，ADR-0009）
+- [x] T011 [US1] payment-service 实现 `application/LedgerPostingGateway.java`（Feign → ledger-service，沿用 `ResilientFulfillmentGateway` 重试/超时模式）
+- [x] T012 [US1] 在支付成功路径（payment-service 既有成功回写处）调用 `LedgerPostingGateway.postPaymentCapture(...)`；失败入「待记账」兜底（不回滚支付成功，ADR-0009）
 
 **Checkpoint**: US1 可独立验证
 
@@ -79,7 +79,7 @@
 
 ### Implementation for US2
 
-- [ ] T014 [US2] refund-service 实现 `LedgerPostingGateway.java` + 在退款确认路径调用 `postRefund(...)`
+- [x] T014 [US2] **payment-service**（refund 域，ADR-0063 起 refund 已并入 payment-service，原 `refund-service` 退役）实现 `LedgerPostingGateway.java` + 在退款确认路径调用 `postRefund(...)`
 
 **Checkpoint**: US1+US2 可独立工作
 
@@ -97,7 +97,7 @@
 
 ### Implementation for US3
 
-- [ ] T016 [US3] settlement-service 实现 `LedgerPostingGateway.java` + 在批次结算路径调用 `postSettlement(...)`
+- [x] T016 [US3] settlement-service 实现 `LedgerPostingGateway.java` + 在批次结算路径调用 `postSettlement(...)`
 
 **Checkpoint**: US1~US3 可独立工作
 
@@ -111,12 +111,12 @@
 
 ### Tests for US4
 
-- [ ] T017 [P] [US4] `BalanceCheckerTest`：多笔后全局平衡；注入不平衡被拒
-- [ ] T018 [P] [US4] `SourceTraceabilityTest`：按 source_type/source_id 回查分录
+- [x] T017 [P] [US4] `BalanceCheckerTest`：多笔后全局平衡；注入不平衡被拒
+- [x] T018 [P] [US4] `SourceTraceabilityTest`：按 source_type/source_id 回查分录
 
 ### Implementation for US4
 
-- [ ] T019 [US4] 暴露平衡性校验端点/查询（供 reconciliation 调用）；确保 `LedgerEntry` 冗余 `source_type/source_id` 索引可用
+- [x] T019 [US4] 暴露平衡性校验端点/查询（供 reconciliation 调用）；确保 `LedgerEntry` 冗余 `source_type/source_id` 索引可用
 
 **Checkpoint**: 全部 US 可独立工作
 
@@ -124,7 +124,7 @@
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T020 [P] 补 `LedgerIdempotencyTest`：并发重复记账不重复分录（DB 唯一约束兜底）
+- [x] T020 [P] 补 `LedgerIdempotencyTest`：并发重复记账不重复分录（DB 唯一约束兜底）
 - [ ] T021 [P] 运行 `mvnw verify` 全量通过；按 quickstart.md 跑本地手动 e2e
 - [ ] T022 对照 spec SC-001~SC-005 / FR-001~FR-011 回检缺口，更新 acceptance.md
 - [ ] T023 更新 `docs/architecture/roadmap.md`：Current Status 推进 004；更新 `docs/architecture/systems/ledger-service.md`
