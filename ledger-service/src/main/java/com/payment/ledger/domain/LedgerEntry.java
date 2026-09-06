@@ -99,6 +99,8 @@ public class LedgerEntry {
         PAYMENT_CAPTURE,
         FEE,
         REFUND,
-        SETTLEMENT
+        SETTLEMENT,
+        /** 挂账 / 调账分录（spec 017 / ADR-0065）。 */
+        ADJUSTMENT
     }
 }

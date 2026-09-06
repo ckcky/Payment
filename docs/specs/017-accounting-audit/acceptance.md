@@ -136,3 +136,22 @@
 | 模拟数据 fixture（代码 / SQL / CSV） | ⏸ 未开始（批次 H） |
 | `audit.html` 落位 + `scenario-audit.sh` | ⏸ 未开始（批次 I） |
 | 构建门禁 / 自动化 / E2E / 冒烟 | ⏸ 均待后端交付后执行 |
+
+
+## 执行结果（2026-09-07，feature/017-accounting-audit）
+
+### 测试
+- 全模块 `mvnw clean test -fae`：全部通过（含新增 audit 应用层测试：CertificateAuditorTest / LedgerAuditorTest / RealAuditorTest / AdjustmentPolicyTest / AuditApplicationServiceTest、settlement 门禁 AuditSettlementGateTest）。
+- ArchUnit 边界门禁绿：audit 经 Feign + common-dto，服务间保持编译期零耦合（T065）。
+
+### Demo（真实 MySQL + 全量服务）
+- `scenario-audit.sh` 全部断言通过：批 AB222395451029299200 捕获 5 类差异（MISSING_POSTING PM-AUD-0003 / ORPHAN_POSTING PM-AUD-GHOST1 / AMOUNT_MISMATCH PM-AUD-0001 / DUPLICATE_POSTING PM-AUD-0002 / SETTLEMENT 跨账），未收口关批 409 拒绝，挂账（AD/LP 单号、借贷方向正确）→ TRANSFER 转出 → SUSPENSE 归零 → 全部差异 VERIFIED → 关批 CLOSED → 试算平衡 balanced=true → 台账 10 条留痕；重复执行幂等通过。
+- 回归 `scenario-reconciliation.sh` 通过（审计门禁未误伤既有结算链路）。
+
+### 压测（k6，20 VU / 60s）
+- 5581 请求，错误率 0.00%，吞吐 92.4 req/s（含 200ms 迭代间隔）。
+- 延迟（毫秒）：全局 P95=30.45 / P99=48.69；重端点 trial-balance（全账本聚合）P95=24.74 / P99=36.04；远低于阈值（P95<500 / P99<1000）。
+
+### 已知口径说明
+- F8（账实长款）由渠道账单 CSV（CH-AUD-X1）注入，REAL/ALL scope 触发；F9（账表）依赖 006 批次 matches，演示默认不注入（ReportAuditor 对无报表周期跳过）。
+- DUPLICATE_POSTING 差异金额 = Σ重复 posting − 期望（多记部分），处置语义为红冲多记。

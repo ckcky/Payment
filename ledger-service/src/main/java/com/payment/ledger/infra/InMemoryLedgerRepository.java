@@ -40,6 +40,13 @@ public class InMemoryLedgerRepository implements LedgerRepository {
     }
 
     @Override
+    public List<Posting> findAllPostings() {
+        return byId.values().stream()
+                .sorted(java.util.Comparator.comparingLong(Posting::getId).reversed())
+                .toList();
+    }
+
+    @Override
     public List<LedgerEntry> findAllEntries() {
         List<LedgerEntry> all = new ArrayList<>();
         byId.values().forEach(p -> all.addAll(p.getEntries()));

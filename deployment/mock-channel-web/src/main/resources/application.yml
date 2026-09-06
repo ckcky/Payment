@@ -41,6 +41,10 @@ mock-channel:
     refund: http://localhost:8084
     fulfillment: http://localhost:8086
     entitlement: http://localhost:8087
+    # Feature 017（spec 017 / FR-023）：对账控制台 audit.html 的 LIVE 模式经 /proxy 透传
+    recon: http://localhost:8088
+    settlement: http://localhost:8089
+    ledger: http://localhost:8090
 
 management:
   metrics:

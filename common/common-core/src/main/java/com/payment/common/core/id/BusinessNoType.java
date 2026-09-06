@@ -21,7 +21,11 @@ public enum BusinessNoType {
     /** 对账批 */
     RECONCILIATION_BATCH("RB"),
     /** 记账流水 */
-    LEDGER_POSTING("LP");
+    LEDGER_POSTING("LP"),
+    /** 审计批次（spec 017：四核对作业批次） */
+    AUDIT_BATCH("AB"),
+    /** 审计调账单（spec 017 / ADR-0065：挂账、调账凭证号） */
+    AUDIT_ADJUSTMENT("AD");
 
     private final String prefix;
 

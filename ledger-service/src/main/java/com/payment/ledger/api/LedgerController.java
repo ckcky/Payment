@@ -67,6 +67,18 @@ public class LedgerController {
                 .orElseThrow(() -> new IllegalArgumentException("posting not found: " + idempotencyKey));
     }
 
+    /** 全部记账批次及分录（spec 017：审计账证/账账核对只读入口，按 id 倒序，上限 1000）。 */
+    @GetMapping("/postings/all")
+    public List<PostingResponse> allPostings(
+            @RequestParam(required = false) String sourceType) {
+        List<Posting> postings = ledgerRepository.findAllPostings();
+        if (sourceType != null && !sourceType.isBlank()) {
+            LedgerSourceType st = LedgerSourceType.valueOf(sourceType);
+            postings = postings.stream().filter(p -> p.getSourceType() == st).toList();
+        }
+        return postings.stream().map(LedgerController::toResponse).toList();
+    }
+
     /** 全局借贷平衡性校验（FR-007）。 */
     @GetMapping("/balance")
     public BalanceView balance() {

@@ -38,7 +38,7 @@ class SettlementMetricsTest {
 
         SettlementApplicationService service = new SettlementApplicationService(
                 repository, merchantClient, reconciliationClient, adjustmentRepository,
-                ledgerGateway, metrics, new StructuredAuditLogger());
+                ledgerGateway, AuditGateClient.disabled(), metrics, new StructuredAuditLogger());
 
         SettlementBatch batch = service.createBatch("1", "2026-08", "idem-1");
 
@@ -67,7 +67,7 @@ class SettlementMetricsTest {
 
         SettlementApplicationService service = new SettlementApplicationService(
                 repository, merchantClient, reconciliationClient, adjustmentRepository,
-                ledgerGateway, metrics, new StructuredAuditLogger());
+                ledgerGateway, AuditGateClient.disabled(), metrics, new StructuredAuditLogger());
 
         service.createBatch("1", "2026-08", "idem-neg");
 

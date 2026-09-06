@@ -50,6 +50,16 @@ public class MybatisLedgerRepository implements LedgerRepository {
     }
 
     @Override
+    public List<Posting> findAllPostings() {
+        return postingMapper.selectList(
+                        Wrappers.<PostingEntity>lambdaQuery().orderByDesc(PostingEntity::getId))
+                .stream()
+                .limit(1000)
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<LedgerEntry> findAllEntries() {
         return entryMapper.selectList(null).stream().map(this::toEntry).toList();
     }

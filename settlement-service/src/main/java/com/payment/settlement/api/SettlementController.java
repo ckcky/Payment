@@ -66,4 +66,11 @@ public class SettlementController {
                 request.reason(), request.operator());
         return SettlementAdjustmentResponse.from(adjustment);
     }
+
+    /** 审计事实只读端点（spec 017 / FR-001）：四核对消费的结算批次视图。 */
+    @GetMapping("/audit-facts")
+    public List<SettlementApplicationService.SettlementAuditFactView> auditFacts(
+            @RequestParam String period) {
+        return applicationService.auditFacts(period);
+    }
 }

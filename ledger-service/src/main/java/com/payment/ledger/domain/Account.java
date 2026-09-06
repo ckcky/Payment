@@ -15,7 +15,9 @@ public enum Account {
     /** 平台手续费收入。 */
     PLATFORM_FEE_REVENUE(3L, "PLATFORM_FEE_REVENUE", AccountType.REVENUE),
     /** 已结算待出款（MVP 不出款）。 */
-    SETTLEMENT_PAYABLE(4L, "SETTLEMENT_PAYABLE", AccountType.LIABILITY);
+    SETTLEMENT_PAYABLE(4L, "SETTLEMENT_PAYABLE", AccountType.LIABILITY),
+    /** 待处理差错款（spec 017 / ADR-0065）：挂账过渡科目，期末余额应趋于 0。 */
+    SUSPENSE(5L, "SUSPENSE", AccountType.ASSET);
 
     private final long id;
     private final String code;
