@@ -38,11 +38,19 @@ if [ -n "$PIDS" ]; then
 fi
 
 cd "$ROOT_DIR"
-# 注意：spring-boot:run 默认 fork 独立 JVM，直接 -D<prop> 留在 Maven 进程里传不进去，
-# 必须经 spring-boot.run.jvmArguments 注入（ADR-0049 场景为构造期注入）。
-nohup $MAVEN_CMD -pl payment-service spring-boot:run \
-  -Dspring-boot.run.jvmArguments="-Dpayment.channel.mock-scenario=$SCENARIO" \
-  > "$ROOT_DIR/deployment/logs/payment-service.log" 2>&1 &
+# 双模式：发布包（jars/payment-service-*.jar 存在）→ java -jar 直跑；
+# 源码仓库 → spring-boot:run（场景为构造期注入 ADR-0049，运行期不可热切换）。
+JAR="$ROOT_DIR/jars/payment-service-0.1.0-SNAPSHOT.jar"
+if [ -f "$JAR" ]; then
+  nohup java "-Dpayment.channel.mock-scenario=$SCENARIO" -jar "$JAR" \
+    > "$ROOT_DIR/deployment/logs/payment-service.log" 2>&1 &
+else
+  # 注意：spring-boot:run 默认 fork 独立 JVM，直接 -D<prop> 留在 Maven 进程里传不进去，
+  # 必须经 spring-boot.run.jvmArguments 注入（ADR-0049 场景为构造期注入）。
+  nohup $MAVEN_CMD -pl payment-service spring-boot:run \
+    -Dspring-boot.run.jvmArguments="-Dpayment.channel.mock-scenario=$SCENARIO" \
+    > "$ROOT_DIR/deployment/logs/payment-service.log" 2>&1 &
+fi
 echo "$! payment-service" >> "$PID_FILE"
 echo "payment-service 以 mock-scenario=$SCENARIO 重启（PID $!）；等待健康…"
 sleep 5
