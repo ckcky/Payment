@@ -2,7 +2,7 @@
 #
 # make-release.sh —— 生成「可直接运行」的发布包（预构建二进制，非源码）
 #
-# 产物：payment-platform-<VERSION>-bin.tar.gz（仓库根目录）+ .sha256 校验和
+# 产物：payment-platform-<VERSION>-bin.tar.gz（仓库根目录，已 gitignore）+ .sha256 校验和
 #
 # 包内含：
 #   jars/                    10 个 Spring Boot fat jar（Maven 打包后统一落 deployment/output/jars）
@@ -13,11 +13,13 @@
 #
 # 目标机器只需：JDK 21 + Docker（含 Compose v2）。
 #
-# 用法：bash make-release.sh
+# 用法：bash deployment/release/make-release.sh
+#       CI：tag push（v*）时 .github/workflows/release.yml 自动调用本脚本并发布 Release
 #
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
 
 VERSION="$(tr -d '[:space:]' < VERSION 2>/dev/null || true)"

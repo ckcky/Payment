@@ -28,7 +28,7 @@ jobs:
         run: ./mvnw -B verify
 
       - name: Build release tarball
-        run: bash make-release.sh
+        run: bash deployment/release/make-release.sh
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
