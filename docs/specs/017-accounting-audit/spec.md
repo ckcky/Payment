@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-06
 
-**Status**: Draft（架构决策待拍板，见 [plan.md §11](plan.md#11-待拍板决策点)；**本 Feature 当前仅文档，未写业务代码**）
+**Status**: ✅ Accepted（2026-09-06 负责人拍板全部决策点，见 [ADR-0065](../../adr/0026-accounting-audit-suspense-adjustment.md)；**本 Feature 当前仅文档，未写业务代码**，实施自 tasks 批次 C 起）
 
 **Input**: 负责人需求：「账账核对，账证核对，账实核对，还有个账什么核对来着。你看看我们项目需要做哪些怎么搞法」→ 出方案；追加要求：「在里面加上测试和验收的，要有模拟的数据，最好是在 demo 搞个界面能看到对账任务的触发和执行，还有结果，挂账调账这些」。
 
@@ -277,4 +277,4 @@
 - 验收执行与 DoD：[acceptance.md](acceptance.md)
 - 界面原型（离线可点，文档附件）：[audit-console-mockup.html](audit-console-mockup.html)
 - 相关 Spec：004-ledger、006-reconciliation、007-settlement、011-demo-showcase、016-order-payment-orchestration
-- 相关 ADR：ADR-0001（无 MQ / 分布式事务）、ADR-0054（领域分层）；本项目建议新增 ADR-0055（挂账 / 调账与复核对闭环），待 §11 决策确认后立项
+- 相关 ADR：ADR-0001（无 MQ / 分布式事务）、ADR-0054（领域分层）；本项目已立项 ADR-0065（挂账 / 调账与复核对闭环，2026-09-06 负责人拍板）

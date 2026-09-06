@@ -1,9 +1,9 @@
 # 方案：会计四核对（账证 / 账账 / 账实 / 账表）在 PaymentArch 的落地
 
-**版本**：0.2（方案稿，待负责人拍板；**未写业务代码**，仅含一个演示用静态页原型 `audit.html`）
+**版本**：0.3（决策已拍板，进入实施待办；**未写业务代码**，仅含一个演示用静态页原型 `audit.html`）
 **日期**：2026-09-06
-**状态**：Proposed
-**关联**：spec 004-ledger（FR-007/FR-008、SC-005）、spec 006-reconciliation、spec 007-settlement、spec 016（N4 缺口）、spec 011-demo-showcase、ADR-0054
+**状态**：✅ Accepted（2026-09-06 负责人拍板 §11 全部 6 点，ADR-0065 立项；实施自批次 C 起）
+**关联**：spec 004-ledger（FR-007/FR-008、SC-005）、spec 006-reconciliation、spec 007-settlement、spec 016（N4 缺口）、spec 011-demo-showcase、ADR-0054、ADR-0065
 
 > **v0.2 变更**（本轮需求："加测试和验收、要模拟数据、demo 里搞个界面能看到触发/执行/结果、挂账调账"）
 > 1. 新增 **§7 挂账与调账**（Suspense / Adjustment）：差异不再只是"记录 + 人工备注"，而是有**会计处置动作**与**复核对闭环**；

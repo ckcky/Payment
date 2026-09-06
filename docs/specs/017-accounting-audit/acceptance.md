@@ -120,7 +120,7 @@
 - [ ] **L2** TC-01~TC-24 全部通过（H2 MySQL 兼容模式）
 - [ ] **L3** `scenario-audit.sh` ①~⑩ 全绿；既有 `scenario-reconciliation.sh` **无回归**（NFR-006）
 - [ ] **L4** `audit.html` MOCK 与 LIVE 双模式均走通 §5 九步
-- [ ] ADR-0055 已立项并注册；`spec.md` / `plan.md` 状态 → Accepted
+- [ ] ADR-0065 已立项并注册；`spec.md` / `plan.md` 状态 → Accepted
 - [ ] `docs/architecture/systems/reconciliation-service.md`、`technical-solution.md`、004 SC-005 标注、`roadmap.md` 均已同步
 - [ ] 提交并 merge 到 master
 

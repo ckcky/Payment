@@ -22,6 +22,7 @@
 | [0014](0014-next-stage-decisions.md) | 下一阶段决策集合（ADR-0038~0046） | **Accepted**（0041~0046 于 2026-08-31 收口；**0038 Superseded by 0048**；**0039/0040 于 2026-09-02 补写**；0044 偏离 roadmap §7 论证闸门） | 012-entry-idempotency（0039 幂等键签发与存储 / 0040 并发幂等接管策略）+ 013-inventory-reservation（0041 库存域归属 / 0042 扣减时机 / 0043 超时释放机制）+ 014-seckill-and-cache（0044 Redis 引入论证·偏离 / 0045 用途边界 / 0046 限流策略）；代码先行，见 ADR-0053。**0039/0040 的补写消除了代码中已存在但文档缺失的悬空引用**（`OrderController` / `OrderEntryIdempotencyService` / `IdempotencyDecision` / `docker-compose.yml`） |
 | [0015](0015-wip-ahead-of-roadmap.md) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置（ADR-0053） | **Accepted**（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码） | 偏离 / 处置日志：working tree 含 013-inventory-reservation / 014-seckill-and-cache 实质性实现，**超前顺序、缺 spec/ADR-0041~0046、014 的 Redis 引入未经 roadmap §7 论证闸门**；决策=保留代码（编译+测试通过，且与 011 在 order-service 纠缠不可干净拆分），spec/ADR 补写列为 TODO，待复盘收口 |
 | [0025](0025-order-payment-orchestration.md) | 支付编排职责归位（ADR-0054） | ✅ **Accepted**（2026-09-06 落地） | spec 016；Supersedes ADR-0064 §决策#4（自动退款归属） |
+| [0026](0026-accounting-audit-suspense-adjustment.md) | 会计四核对与挂账·调账闭环（ADR-0065） | ✅ **Accepted**（2026-09-06 负责人拍板 6 决策点；**文档立项，代码待实施**） | spec 017；新增 SUSPENSE(5) 科目（Constitution §8 变更已批准）、结算分级门禁、账实双轨、双人复核降级软提示 |
 
 ## ADR 编号速查（0001–0064）
 
@@ -37,6 +38,7 @@
 | [0063](0023-cross-service-reference-by-business-no.md#adr-0063) | 跨系统关联一律使用业务单号，数值主键不跨服务（关联列/接口/回调全部切单号，2026-09-04） | 0023 |
 | [0064](0024-multi-payment-per-transaction.md#adr-0064) | 一交易多支付单（Feature 015）：下单不建单/显式选渠道、幂等键含 attemptSeq、409 ORDER_NOT_PAYABLE + 自动退款、退款域并入 payment-service（10→9）、三渠道 mock（2026-09-04） | 0024 |
 | [0054](0025-order-payment-orchestration.md#adr-0054) | 支付编排职责归位：order 升为业务编排者 / payment 退回能力提供方；自动退款决策与发起归属 order transaction 层（transactionNo + paymentNo）；Supersedes ADR-0064 §决策#4（✅ Accepted，2026-09-06 落地） | 0025 |
+| [0065](0026-accounting-audit-suspense-adjustment.md#adr-0065) | 会计四核对与挂账·调账闭环：账证/账账/账实(双轨)/账表 + SUSPENSE 挂账 + 五类调账 + recheck 关批 + 结算分级门禁（✅ Accepted，2026-09-06 拍板，代码待实施） | 0026 |
 
 > 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 
@@ -99,7 +101,8 @@
 ## 编号规则
 
 - 编号**只增不改、不复用**；一个 ADR 文档可容纳同一 Feature 的多条决策标签（如 0006 含 0016~0018 与 0047）。
-- **下一可用编号：ADR-0055**（ADR-0054 已用于「016 支付编排职责归位」，见 `0025-order-payment-orchestration.md`）。
+- **下一可用编号：ADR-0066**（ADR-0065 已用于「017 会计四核对与挂账·调账闭环」，见 `0026-accounting-audit-suspense-adjustment.md`）。
+- ⚠️ **编号冲突备案（2026-09-06）**：`0016-core-payment-correctness.md` 与 `0025-order-payment-orchestration.md` **同时使用了 ADR-0054**（前者为确认性纪录「核心支付正确性约束」，后者为 016 编排职责归位）。速查表两行并存，引用时以「文件名 + 标题」消歧；后续如重排编号需全库同步引用（spec 016 / CLAUDE.md / systems 文档多处引用 0025 的 ADR-0054，改动成本高，暂保持现状）。
 - ✅ **ADR-0038~0046 号段已全部落文（无空号）**，均收录于 `0014-next-stage-decisions.md`：
   - **0038**（演示形态）→ **Superseded by ADR-0048**（议题由 0048 处理，结论一致：做 `mock-channel-web` 收银台组件）；
   - **0039/0040**（012 幂等键签发 / 并发幂等接管）→ 2026-09-02 **补写**（此前代码已引用但无文档）；

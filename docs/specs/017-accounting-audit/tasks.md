@@ -13,9 +13,9 @@
 - [x] **T005** 界面原型 `audit-console-mockup.html`（离线可点：触发 → 执行 → 结果 → 挂账 → 调账 → 复核 → 关闭）——**文档附件，暂不落工程目录**
 - [x] **T006** 编写 `tasks.md`（本文件）
 - [x] **T007** 编写 `acceptance.md`（验收执行方式 + DoD 检查表 + 用例矩阵落位）
-- [ ] **T008** 拍板 [plan.md §11](plan.md#11-待拍板决策点) 六个决策点（放哪做 / 账实双轨 / 结算门禁 / P0 是否并入 / SUSPENSE 科目 / 双人复核）
-- [ ] **T009** 立项 ADR-0055（挂账 / 调账与复核对闭环）+ `docs/adr/README.md` 注册（依赖 T008）
-- [ ] **T010** `spec.md` / `plan.md` 状态 Draft → Accepted（依赖 T008）
+- [x] **T008** 拍板 [plan.md §11](plan.md#11-待拍板决策点) 六个决策点（放哪做 / 账实双轨 / 结算门禁 / P0 是否并入 / SUSPENSE 科目 / 双人复核）
+- [x] **T009** 立项 ADR-0065（挂账 / 调账与复核对闭环）+ `docs/adr/README.md` 注册（依赖 T008）
+- [x] **T010** `spec.md` / `plan.md` 状态 Draft → Accepted（依赖 T008）
 
 ## 批次 B — P0 前置：退款渠道流水号（依赖：无）
 
@@ -95,7 +95,7 @@
 - [ ] **T081** `docs/architecture/technical-solution.md` 同步（职责 / 调用清单 / 数据模型引用）
 - [x] **T082** `docs/specs/004-ledger/spec.md` SC-005 标注：已加「⚠️ 从未实现（reconciliation 对 ledger 零引用）→ 由 spec 017 A1 兑现」；**017 落地后需回填为「已兑现」**
 - [x] **T083** `docs/architecture/roadmap.md` 登记 Feature 017（规划中，待拍板）+ 补登 016（已实现）
-- [ ] **T084** `docs/adr/README.md` 注册 ADR-0055（依赖 T009）
+- [x] **T084** `docs/adr/README.md` 注册 ADR-0065（依赖 T009）
 - [ ] **T085** 全量 `mvn -o clean verify -fae` 绿（SC-007）
 - [ ] **T086** 提交并 merge 到 master（宪法提交节奏：每个 Spec 完成即提交合并）
 - [ ] **T087** 回填 `tasks.md` 勾选 + `acceptance.md` 记录执行结果
