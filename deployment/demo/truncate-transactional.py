@@ -9,7 +9,8 @@ truncate-transactional.py —— 演示环境「轻度复位」：只清空事�
                                与 merchant 内存仓储。适合「刚跑完一轮链路演示，想快速再来一次」。
 
 前置条件：
-  1) MySQL 已在 localhost:3306 监听（docker compose 或本机 MySQL 均可），且 9 个业务库已建。
+  1) MySQL 已在 localhost:3306 监听（docker compose 或本机 MySQL 均可），且各业务库已建。
+     库不存在时跳过该库（不中断整个脚本）。
   2) 安装依赖：pip install pymysql
   3) 连接参数写死为 root/root（与 deployment/docker-compose.yml 一致），如需修改请改下方 connect()。
 
@@ -21,22 +22,38 @@ truncate-transactional.py —— 演示环境「轻度复位」：只清空事�
 
 import pymysql
 
-# (db, [tables]) —— 只列事务表；主数据表（如 ledger.accounts、catalog 的字典表）不在此列
+# (db, [tables]) —— 只列事务表；主数据表（如 ledger.accounts、catalog 的字典表）不在此列。
+# 注意：Feature 015（ADR-0064）后 refund 库已退役，退款 4 表全部位于 payment 库。
 plan = {
     'catalog': ['products', 'skus'],
     'order': ['order_items', 'orders', 'transactions'],
-    'payment': ['payment_attempts', 'payments'],
-    'refund': ['refund_items', 'refunds', 'refund_intake_locks'],
+    'payment': [
+        'payment_attempts', 'payments',
+        'refunds', 'refund_items', 'refund_intake_locks', 'refund_post_process_attempts',
+    ],
     'fulfillment': ['fulfillments'],
     'entitlement': ['entitlements'],
-    'reconciliation': ['reconciliation_differences', 'reconciliation_batches'],
+    'reconciliation': [
+        # 对账差异内嵌在批次行中（无独立 differences 表），只清批次即可
+        'reconciliation_batches',
+        'audit_batches', 'audit_differences', 'audit_adjustments',
+    ],
     'settlement': ['settlement_items', 'settlement_batches'],
     'ledger': ['ledger_entries', 'postings'],
 }
 
 conn = pymysql.connect(host='localhost', port=3306, user='root', password='root', connect_timeout=5)
 cur = conn.cursor()
+cur.execute(
+    "SELECT schema_name FROM information_schema.schemata "
+    "WHERE schema_name IN (%s)" % ",".join(["%s"] * len(plan)),
+    tuple(plan.keys()),
+)
+existing_dbs = {row[0] for row in cur.fetchall()}
 for db, tables in plan.items():
+    if db not in existing_dbs:
+        print(f"skip {db}: database not found")
+        continue
     cur.execute(f"USE `{db}`")
     cur.execute("SET FOREIGN_KEY_CHECKS=0")
     for t in tables:
