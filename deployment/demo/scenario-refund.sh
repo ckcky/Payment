@@ -41,26 +41,29 @@ if [ "$PAY_STATUS" = "PROCESSING" ]; then
 fi
 assert_eq "$PAY_STATUS" "SUCCEEDED" "支付 → SUCCEEDED"
 
-echo "==> ③ 发起退款（¥50.00，幂等键 rk-001）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"rk-001\"}"
+# 幂等键动态生成：idempotency_key 全局唯一（uk_refunds_idempotency_key），
+# 写死的键跨运行会命中重放、污染后续断言（无 reset 直跑复现过）
+IDEM_BASE="rk-$(date +%s)-$$"
+echo "==> ③ 发起退款（¥50.00，幂等键 $IDEM_BASE-1）"
+http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"$IDEM_BASE-1\"}"
 assert_status 200 "退款创建"
 jget "d['refundNo']"; REFUND_NO="$VALUE"
 jget "d['status']"; REFUND_STATUS="$VALUE"
 # 退款创建后状态取决于渠道形态：同步收敛为 SUCCEEDED；异步渠道为 CREATED（待回调/确认）。二者均合法。
 case "$REFUND_STATUS" in
-  CREATED|SUCCEEDED) info "PASS: 退款创建（状态 $REFUND_STATUS）" ;;
+  CREATED|SUCCEEDED) info "PASS: 退款创建（状态 ${REFUND_STATUS}）" ;;
   *) fail "退款创建: 非预期状态 [$REFUND_STATUS]" ;;
 esac
 info "refundNo=$REFUND_NO"
 
 echo "==> ④ 同一幂等键重放 → 返回同一退款（不重复创建）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"rk-001\"}"
+http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"$IDEM_BASE-1\"}"
 assert_status 200 "幂等重放受理"
 jget "d['refundNo']"; REFUND_NO2="$VALUE"
 assert_eq "$REFUND_NO2" "$REFUND_NO" "幂等重放返回同一退款单号（不重复）"
 
 echo "==> ⑤ 超额退款被拒（累计 5000+6000=11000 > 已付 9900，触发 H1 防超额）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":6000,\"currencyCode\":\"CNY\",\"reason\":\"demo-over\",\"idempotencyKey\":\"rk-002\"}"
+http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":6000,\"currencyCode\":\"CNY\",\"reason\":\"demo-over\",\"idempotencyKey\":\"$IDEM_BASE-2\"}"
 # 现网契约：超额不回 409，而是受理为 REJECTED 退款记录（HTTP 200 + status=REJECTED，资金约束落领域状态）
 assert_status 200 "超额退款受理"
 jget "d['status']"; REJ_STATUS="$VALUE"
