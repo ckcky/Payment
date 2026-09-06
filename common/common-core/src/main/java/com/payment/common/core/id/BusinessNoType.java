@@ -12,6 +12,8 @@ public enum BusinessNoType {
     TRANSACTION("TX"),
     /** 订单 */
     ORDER("OR"),
+    /** 订单明细（spec 018 / ADR-0066：明细跨服务引用用业务单号，数值主键不出边界 ADR-0063） */
+    ORDER_ITEM("OI"),
     /** 支付单 */
     PAYMENT("PM"),
     /** 退款单 */

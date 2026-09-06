@@ -3,16 +3,16 @@ DROP TABLE IF EXISTS settlement_batches;
 
 CREATE TABLE settlement_batches (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    merchant_id VARCHAR(32) NOT NULL,
     batch_no VARCHAR(32) NOT NULL,
+    merchant_id VARCHAR(32) NOT NULL,
     period VARCHAR(32) NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     income_minor BIGINT NOT NULL,
     refund_minor BIGINT NOT NULL,
     adjustment_minor BIGINT NOT NULL,
     net_minor BIGINT NOT NULL,
     status VARCHAR(32) NOT NULL,
-    idempotency_key VARCHAR(128) NOT NULL,
     fact_count INT NOT NULL DEFAULT 0,
     source_period VARCHAR(32),
     created_at TIMESTAMP NOT NULL,

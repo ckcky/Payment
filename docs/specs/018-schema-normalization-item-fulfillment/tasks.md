@@ -11,15 +11,15 @@
 
 ## 批次 B — DDL 规范化（依赖：无）
 
-- [ ] **T003** 全表列序审查结论入档：[plan.md §3 附录](plan.md#3-附录22-张表列序审查结论t003-落物)（22 张逐表目标列序；违规 5 张 + order_items 连带）
-- [ ] **T004** order_item_no 落地：`BusinessNoType` 加 `ORDER_ITEM("OI")`；order_items 加列（第 2 位，`uk_order_items_order_item_no`）；`fulfillments.order_item_id` / `refund_items.order_item_id` 语义升级为 OI 单号（列名不改）
-- [ ] **T005** 迁移脚本 `deployment/schema/018-schema-normalization.sql`（幂等 information_schema + PREPARE；禁用 MariaDB 方言）：
+- [x] **T003** 全表列序审查结论入档：[plan.md §3 附录](plan.md#3-附录22-张表列序审查结论t003-落物)（22 张逐表目标列序；违规 5 张 + order_items 连带）
+- [x] **T004** order_item_no 落地：`BusinessNoType` 加 `ORDER_ITEM("OI")`；order_items 加列（第 2 位，`uk_order_items_order_item_no`）；`fulfillments.order_item_id` / `refund_items.order_item_id` 语义升级为 OI 单号（列名不改）
+- [x] **T005** 迁移脚本 `deployment/schema/018-schema-normalization.sql`（幂等 information_schema + PREPARE；禁用 MariaDB 方言）：
   - order 库：order_items 加列 → 回填 `CONCAT('OI', id)` → NOT NULL + 唯一键 → 列序链
   - payment 库：payment_attempts 加 amount_minor/currency_code → JOIN payments 回填 → NOT NULL → 列序（requested_at/responded_at/version 最后三列）；payments / refunds 列序调整
   - fulfillment 库：存量 NULL 回填 `LEGACY-{id}` → order_item_id NOT NULL → source_payment_no 提第 2 位 → 一条 ALTER 换 uk 为 `(source_payment_no, order_item_id)`
   - entitlement / settlement 库列序调整
-- [ ] **T006** 基线 CREATE TABLE 同步：`01-order-schema.sql` / `03-payment-schema.sql` / `04-fulfillment-schema.sql` / `05-entitlement-schema.sql` / `08-settlement-schema.sql`
-- [ ] **T007** H2 测试 schema.sql 同步（order / payment / fulfillment / entitlement / settlement 5 处）
+- [x] **T006** 基线 CREATE TABLE 同步：`01-order-schema.sql` / `03-payment-schema.sql` / `04-fulfillment-schema.sql` / `05-entitlement-schema.sql` / `08-settlement-schema.sql`
+- [x] **T007** H2 测试 schema.sql 同步（order / payment / fulfillment / entitlement / settlement 5 处）
 
 ## 批次 C — 按 order_item 粒度履约（依赖：批次 B）
 

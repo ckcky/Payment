@@ -2,9 +2,9 @@ DROP TABLE IF EXISTS entitlements;
 
 CREATE TABLE entitlements (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    source_fulfillment_id VARCHAR(64) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
     order_no VARCHAR(64) NOT NULL,
-    source_fulfillment_id VARCHAR(64) NOT NULL,
     grant_ref VARCHAR(64),
     available_quantity INT NOT NULL,
     scope VARCHAR(64) NOT NULL,

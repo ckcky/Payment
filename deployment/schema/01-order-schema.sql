@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 CREATE TABLE IF NOT EXISTS order_items (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    order_item_no VARCHAR(32) NOT NULL COMMENT '明细业务单号 OI+雪花（spec 018 / ADR-0066，跨服务引用标识，ADR-0063）',
     order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     sku_id VARCHAR(64) NOT NULL,
     sku_code VARCHAR(64) NOT NULL,
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     updated_by VARCHAR(64),
     version INT NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
+    UNIQUE KEY uk_order_items_order_item_no (order_item_no),
     KEY idx_order_items_order_no (order_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

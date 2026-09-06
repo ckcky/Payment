@@ -22,6 +22,7 @@ CREATE TABLE orders (
 
 CREATE TABLE order_items (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_item_no VARCHAR(32) NOT NULL,
     order_no VARCHAR(32) NOT NULL,
     sku_id VARCHAR(64) NOT NULL,
     sku_code VARCHAR(64) NOT NULL,
@@ -33,7 +34,8 @@ CREATE TABLE order_items (
     updated_at TIMESTAMP NOT NULL,
     created_by VARCHAR(64),
     updated_by VARCHAR(64),
-    version INT NOT NULL DEFAULT 1
+    version INT NOT NULL DEFAULT 1,
+    CONSTRAINT uk_order_items_order_item_no UNIQUE (order_item_no)
 );
 
 CREATE TABLE transactions (
