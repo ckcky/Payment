@@ -2,13 +2,6 @@
 
 > 本地单机运行与 Docker Compose 的最小 how-to。完整架构见 [docs/architecture/technical-solution.md](../docs/architecture/technical-solution.md)。
 
-## 环境要求（前置条件）
-
-- **JDK 21 LTS**：项目基于 Spring Boot 3.x，**必须 JDK 21**；用 JDK 11/17 直接 `./mvnw` 会编译失败。确认 `java -version` 输出含 `21`。
-- **Docker / Docker Desktop**：本地运行依赖 Compose 拉起 MySQL 8、Redis 7、Nacos（业务必需）与 Prometheus / Grafana / Loki / Promtail（可观测，可选）。Windows 在 **Git Bash** 里跑脚本，macOS/Linux 直接跑。
-- **Maven**：用仓库自带的 `./mvnw`（Wapper，锁版本）；无需另行安装。
-- **Nacos（注册中心，硬依赖）**：跨服务 Feign 调用经 Nacos 服务名发现（ADR-0059）。**未起 Nacos 则所有跨服务调用 `Connection refused`**——`start-all.sh` 会自动 `docker compose up -d` 拉起，但手动 `spring-boot:run` 前务必先启动 Nacos。
-
 ## 目录收口原则
 
 仓库根目录**只放领域服务模块与工程元数据**（`*-service/`、`common/`、`pom.xml`、`mvnw`、`README.md`、`CLAUDE.md`）。
@@ -18,7 +11,7 @@
 |---|---|---|
 | `schema/` | 各服务建表脚本（当前手工执行，未挂 Flyway） | 否 |
 | `initdb/` | Compose 首次启动建库脚本 | 否 |
-| `docker-compose.yml` | MySQL + Redis + Nacos（业务必需）+ Prometheus / Grafana / Loki / Promtail（可观测）本地编排 | 否 |
+| `docker-compose.yml` | MySQL + Prometheus + Grafana 本地编排 | 否 |
 | `mock-channel-web/` | Mock 渠道收银台 + 演示控制台（8091，演示组件非领域服务） | **是** |
 | `architecture-tests/` | ArchUnit 服务边界门禁（无业务代码，必须最后构建） | **是** |
 | `demo/` | 演示脚本：种子数据、四场景链路、复位 | 否 |
@@ -50,14 +43,11 @@
 | Catalog（目录） | `catalog-service` | 8082 | `/actuator/health` |
 | Order（订单） | `order-service` | 8083 | `/actuator/health` |
 | Payment（支付） | `payment-service` | 8084 | `/actuator/health` |
+| Refund（退款） | `refund-service` | 8085 | `/actuator/health` |
 | Fulfillment（履约） | `fulfillment-service` | 8086 | `/actuator/health` |
 | Entitlement（权益） | `entitlement-service` | 8087 | `/actuator/health` |
 | Reconciliation（对账） | `reconciliation-service` | 8088 | `/actuator/health` |
 | Settlement（结算） | `settlement-service` | 8089 | `/actuator/health` |
-| Ledger（账本） | `ledger-service` | 8090 | `/actuator/health` |
-| Mock 渠道收银台（演示组件，非领域服务） | `deployment/mock-channel-web` | 8091 | `/actuator/health` |
-
-> `refund-service`（原 8085）已于 Feature 015 并入 `payment-service`（`com.payment.refund` 包，端口退役）；退款相关接口现由 `payment-service` 提供。共 **9 个领域服务 + 1 个演示组件 = 10 个进程**。
 
 ## 数据库连接配置
 
@@ -71,7 +61,7 @@
 
 ## Docker Compose（本地 MySQL + 可观测）
 
-Compose 提供 **MySQL 8（业务库）+ Redis 7（下单入口幂等，ADR-0039/0040/0044）+ Nacos（服务发现，ADR-0059，硬依赖）** 三项业务必需组件，以及 **Prometheus / Grafana / Loki / Promtail** 可观测组件（可选）：
+Compose 提供 MySQL 8、Prometheus 与 Grafana（各微服务镜像与编排在 Dockerfile 就绪后补齐）：
 
 ```sh
 # 启动 MySQL（首次会执行 initdb/01-create-databases.sql，只建空库）
@@ -96,7 +86,7 @@ docker compose -f deployment/docker-compose.yml down
 docker compose -f deployment/docker-compose.yml down -v
 ```
 
-- 首次 `up -d` 时，`./initdb/01-create-databases.sql` 只创建 8 个**空数据库**：`catalog / order / payment / fulfillment / entitlement / reconciliation / settlement / ledger`（`merchant` 无库；`refund` 库已随退款域并入 payment-service 于 Feature 015 退役）。**不创建任何业务表**。
+- 首次 `up -d` 时，`./initdb/01-create-databases.sql` 只创建 8 个**空数据库**：`catalog / order / payment / refund / fulfillment / entitlement / reconciliation / settlement`（`merchant` 无库）。**不创建任何业务表**。
 - 完整业务表 DDL 参考见 [`schema/`](schema/)（不挂载、不自动执行）；表结构由后续各服务自己的 migration 负责。
 - MySQL 实例：`mysql:8.0`，容器名 `payment-mysql`，宿主机端口 `3306`，命名卷 `mysql-data` 持久化数据。
 
@@ -105,11 +95,11 @@ docker compose -f deployment/docker-compose.yml down -v
 项目提供两个脚本（Windows 在 **Git Bash** 里跑，macOS/Linux 直接跑）：
 
 ```sh
-bash deployment/start-all.sh   # 起 MySQL/Redis/Nacos（业务必需）+ Prometheus/Grafana/Loki（可观测）+ 9 个领域服务（+ `mock-channel-web` 演示收银台，共 10 个进程），日志落 deployment/logs/
+bash deployment/start-all.sh   # 起 MySQL/Prometheus/Grafana + 10 个微服务（+ `mock-channel-web` 演示收银台），日志落 deployment/logs/
 bash deployment/stop-all.sh    # 停全部微服务 + 容器（保留 MySQL 数据卷）
 ```
 
-`start-all.sh` 依次做三件事：`docker compose up -d`（基础设施：MySQL/Redis/Nacos + 可观测）→ `./mvnw -q install -DskipTests`（首次构建，后续可跳过）→ 后台启动 **9 个领域服务（含 `ledger-service`）+ `mock-channel-web` 演示收银台，共 10 个进程**，每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
+`start-all.sh` 依次做三件事：`docker compose up -d`（基础设施）→ `./mvnw -q install -DskipTests`（首次构建，后续可跳过）→ 后台启动 10 个服务（+ `mock-channel-web` 演示收银台，共 11 个进程），每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
 
 > 前提：已安装并**启动 Docker Desktop**（Windows/macOS）或 docker 引擎（Linux），且 `docker` 在 PATH 上。首次 `install` 较慢属正常。
 
@@ -165,12 +155,11 @@ curl http://localhost:8081/actuator/health   # Merchant
 curl http://localhost:8082/actuator/health   # Catalog
 curl http://localhost:8083/actuator/health   # Order
 curl http://localhost:8084/actuator/health   # Payment
+curl http://localhost:8085/actuator/health   # Refund
 curl http://localhost:8086/actuator/health   # Fulfillment
 curl http://localhost:8087/actuator/health   # Entitlement
 curl http://localhost:8088/actuator/health   # Reconciliation
 curl http://localhost:8089/actuator/health   # Settlement
-curl http://localhost:8090/actuator/health   # Ledger
-curl http://localhost:8091/actuator/health   # Mock 渠道收银台（演示组件）
 ```
 
 预期返回 `{"status":"UP"}`。
@@ -192,7 +181,7 @@ docker compose -f deployment/docker-compose.yml up -d prometheus grafana
 # Grafana（admin/admin）：http://localhost:3000  → 内置「PaymentArch 业务指标」看板
 ```
 
-**Windows 能看到 Grafana 吗？** 能。前提是装了 Docker Desktop 并处于 Running。Prometheus 抓取目标用 `host.docker.internal:8081~8091`（Docker Desktop 会把该主机名映射到宿主机，覆盖 9 个领域服务 + 演示组件），服务默认绑定 `0.0.0.0`，容器内可达。两点注意：
+**Windows 能看到 Grafana 吗？** 能。前提是装了 Docker Desktop 并处于 Running。Prometheus 抓取目标用 `host.docker.internal:8081~8089`（Docker Desktop 会把该主机名映射到宿主机），服务默认绑定 `0.0.0.0`，容器内可达。两点注意：
 
 - 若 `docker` 命令在 Git Bash 里 `command not found`，通常是 Docker Desktop 未启动或未装，先启动再跑脚本。
 - Windows Defender 防火墙首次可能拦截 `java`/端口入站，允许即可；若 Prometheus 里 target 状态为 DOWN 且日志是连接拒绝，多半就是防火墙。

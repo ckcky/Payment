@@ -115,7 +115,6 @@ function summarize(records, elapsedMs) {
   await Promise.all(inFlight);
   inFlight = [];
   console.log(`预热完成（约 ${sent} 请求）`);
-  sent = 0; // 重置计数：测量阶段的 toSend 按「测量起点」计算，若沿用预热计数会恒为 0
 
   // 正式测量
   const records = [];

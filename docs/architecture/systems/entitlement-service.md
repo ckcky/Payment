@@ -115,7 +115,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 **错误**：`NOT_FOUND`（不在此接口）、`STATE_TRANSITION_VIOLATION`（仅在并发/异常时）、`CONFLICT`（乐观锁冲突）。
 
-### 3.2 退款成功 → 撤销权益（内部 RPC，供 payment-service 退款域）
+### 3.2 退款成功 → 撤销权益（内部 RPC，供 refund-service）
 
 `POST /internal/entitlements/on-refund` → `200`
 
@@ -174,7 +174,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 ```text
 payment-service ──RPC──> fulfillment-service ──履约完成 RPC──> entitlement-service (grant)
-payment-service 退款域 ──退款后处理 RPC──> entitlement-service (revokeForRefund)
+refund-service  ──退款后处理 RPC──> entitlement-service (revokeForRefund)
 ```
 
 - 支付成功**只触发**履约，不决定履约/权益最终状态（[technical-solution §4.3.4](../../docs/architecture/technical-solution.md)）。

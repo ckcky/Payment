@@ -1,6 +1,6 @@
 # Tasks: 016-order-payment-orchestration
 
-> 承载 ADR-0065（支付编排职责归位）：order-service 升为业务编排者，payment-service 退回能力提供方。
+> 承载 ADR-0054（支付编排职责归位）：order-service 升为业务编排者，payment-service 退回能力提供方。
 > 每个任务完成后跑对应模块 `./mvnw test` 门禁，最后统一全量门禁。本文档为落地后收口登记。
 
 ## T1 契约前置 + 退款三步链落地
@@ -10,7 +10,7 @@
 - [x] payment 暴露退款命令入口 `PaymentRefundCommandController`（`/internal/payments/refund-command`，复用退款域三步链）
 - [x] `PaymentAttempt` 领域增 `attemptType`（PAYMENT/REFUND）+ `PaymentAttempt.refundAttempt(...)` 工厂；实体/仓储/H2 schema/迁移脚本 `016-refund-channel-attempt.sql` 同步
 - [x] `PaymentRefundService` 落退款渠道尝试记录（复用 `payment_attempts`，`channel_reference=渠道退款流水号`，`DuplicateKeyException` 幂等吸收）
-- [x] `RefundFactsService` 对账退款事实改取真实渠道退款流水号（无尝试记录的存量回退 `refund-{id}` 合成引用）——修 ADR-0065 背景表 N4 对账缺口
+- [x] `RefundFactsService` 对账退款事实改取真实渠道退款流水号（无尝试记录的存量回退 `refund-{id}` 合成引用）——修 ADR-0054 背景表 N4 对账缺口
 
 ## T2 order transaction 层 + 委派改造
 - [x] 新增 `order-service/application/TransactionApplicationService`：接收 `PaymentSucceededRequest`，判定正常 / surplus（已取消订单同 surplus）；正常 → 委派 `OrderApplicationService`；surplus → 以 `transactionNo + paymentNo` 调 `PaymentGateway.refund`（幂等键 `autorefund:{transactionNo}:{paymentNo}`）
@@ -32,7 +32,7 @@
 
 ## T5 文档收口
 - [x] `data-model.md`：PaymentAttempt 基数 1:1 → 1:N（`attempt_type` 区分 PAYMENT/REFUND）
-- [x] ADR-0064（`0024`）§决策#4 标注 **Superseded by ADR-0065**
-- [x] `adr/README.md` 索引：ADR-0065 Proposed → **Accepted**
-- [x] ADR-0065（`0025`）状态 Proposed → **Accepted**
+- [x] ADR-0064（`0024`）§决策#4 标注 **Superseded by ADR-0054**
+- [x] `adr/README.md` 索引：ADR-0054 Proposed → **Accepted**
+- [x] ADR-0054（`0025`）状态 Proposed → **Accepted**
 - [x] 全量门禁通过后统一提交

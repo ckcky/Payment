@@ -6,34 +6,6 @@
 
 ---
 
-## [2026-09-04 ~ 2026-09-06] Feature 015/016 落地与文档治理
-
-### 架构演进（ADR-0059 ~ ADR-0065）
-- `0019-enable-nacos.md` → **ADR-0059**：启用 Nacos 服务发现（硬依赖），撤销 ADR-0056「暂不启用」偏离；12 个 `@FeignClient` 去掉硬编码 URL，未起 Nacos 则跨服务调用 `Connection refused`。
-- `0020-redis-lettuce-pool.md` → **ADR-0060**：Redis 客户端启用 Lettuce 连接池。
-- `0021-observability-panel-fix.md` → **ADR-0061**：可观测性补全与演示脚本漂移修复。
-- `0022-business-no-snowflake.md` → **ADR-0062**：业务单号统一两字母前缀 + 雪花算法（TX/OR/PM/RF/SB/RB/LP）。
-- `0023-cross-service-reference-by-business-no.md` → **ADR-0063**：跨系统关联一律用业务单号。
-- `0024-multi-payment-per-transaction.md` → **ADR-0064**：一交易多支付单 + 退款域并入 payment-service（服务数 10→9，端口 8085 退役）。
-- `0025-order-payment-orchestration.md` → **ADR-0065**：支付编排职责归位（order 升为编排者，spec 016）；Supersedes ADR-0064 §决策#4。
-
-### Feature 落地
-- **015**：多支付单模型 + 退款域并入 payment-service + 雪花业务单号 + 跨系统业务单号关联；下单改为两步式（`POST /orders` 仅建单，显式 `POST /orders/{orderNo}/payments` 建支付单）。
-- **016**：支付编排职责归位决策已确认（ADR-0065），代码迁移进行中（现状 payment 直调履约待迁移，见 `technical-solution.md` §4.3.1）。
-- `mock-channel-web` 收银台链路（payUrl 跳转）随 011 落地；演示页 `demo.html` 适配两步式建单。
-
-### 文档治理（2026-09-06）
-- `technical-solution.md` §7（项目计划与资源）与 §9（ADR 追溯索引）迁至 `roadmap.md`（单一事实源，正文内联体现 ADR）；同步修正 Nacos 状态、订单→支付两步式链路、服务数 10→9。
-- `roadmap.md` 增补 `项目计划与资源` 与 `附录 A：ADR 追溯索引`；修正进程计数与 Feature 状态。
-- `deployment/README.md`、`docs/operations/runbook.md`、根 `README.md`、`demo/README.md` 对齐：JDK 21 前提、Nacos 硬依赖、服务/端口事实表（删 refund-service 8085、补 ledger-service 8090 / mock-channel-web 8091）、进程计数 = 9 领域服务 + 1 演示组件共 10。
-- `initdb/01-create-databases.sql`：移除已退役 `refund` 库，补 `ledger` 库。
-- `docs/README.md`、`CLAUDE.md`：纳入 `docs/operations/` 导航；说明 ADR 双轨编号（文件号 / 决策号）。
-
-### 相关提交
-- 见 `git log` 中 `feat(observability)`、`feat(016)`、`docs:` 等条目。
-
----
-
 ## [2026-09-03] 文档与目录治理（审计整改）
 
 **范围**：仅文档与目录治理，不动任何业务代码（例外：`.gitignore` 与 `git rm --cached` 属版本库治理）。对应核心指令「已决策 ADR 在技术方案/系统设计中体现；历史文档归档；系统架构与方案审计；目录规划清晰」。

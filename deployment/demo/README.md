@@ -22,7 +22,7 @@ bash deployment/start-all.sh
 
 1. 先启动 Docker Compose 基础设施（MySQL / Redis / Prometheus / Grafana / Nacos 等）
 2. 再 `./mvnw -q install -DskipTests` 构建依赖
-3. 再在本机后台启动 9 个 Java 领域服务 + mock 收银台（共 10 个进程）
+3. 再在本机后台启动 10 个 Java 服务和 mock 收银台
 4. 最后打印演示入口 URL 与日志位置
 
 > 这是“基础设施容器化 + Java 微服务本机进程化”。
@@ -40,11 +40,10 @@ bash deployment/start-all.sh
 
 ## 前置条件
 
-1. **JDK 21 LTS**：项目基于 Spring Boot 3.x，**必须 JDK 21**；JDK 11/17 会编译失败。先确认 `java -version` 含 `21`。
-2. **Docker Desktop**（MySQL / Redis / Prometheus / Grafana / Nacos / Loki 容器）。本机无 Docker 时无法起栈。**Nacos 为硬依赖**（ADR-0059）：未起 Nacos 则跨服务 Feign 调用全部 `Connection refused`。
-3. **Maven 可用**：`deployment/start-all.sh` 用 `./mvnw` 启动各服务（仓库自带，无需另装）。若 `./mvnw` 不可用，请改用本地 Maven
+1. **Docker Desktop**（MySQL / Redis / Prometheus / Grafana / Nacos 容器）。本机无 Docker 时无法起栈。
+2. **Maven 可用**：`deployment/start-all.sh` 用 `./mvnw` 启动各服务。若 `./mvnw` 不可用，请改用本地 Maven
    （如 `export MAVEN_CMD="mvn"` 并相应改造启动命令，或直接 `java -jar` 各服务的 fat-jar）。
-4. **服务启动并开启 mock 收银台**：`bash deployment/demo/start-stack.sh`
+3. **服务启动并开启 mock 收银台**：`bash deployment/demo/start-stack.sh`
    - 默认会 `export PAYMENT_MOCK_CASHIER_ENABLED=true`（支付走「收银台跳转」路径，响应带 `payUrl`）。
    - 默认注入演示用 `PAYMENT_ADMIN_TOKEN=demo-admin-token`（UNKNOWN 收敛端点鉴权）。
    - 启动后等待所有服务 `/actuator/health` 返回 200。

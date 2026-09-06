@@ -17,7 +17,7 @@
 | 维度 | 说明 |
 |---|---|
 | **负责** | 接收支付成功事件、履约聚合与自有状态机、交付执行（当前 Mock）、幂等（同支付只建一条履约）、履约完成后触发权益授予 RPC；自身失败记录与终态 |
-| **不负责** | 支付金额/渠道/退款决策（归属 payment-service 退款域）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
+| **不负责** | 支付金额/渠道/退款决策（归属 payment/refund-service）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -155,7 +155,7 @@ PENDING --cancel--> CANCELLED
 
 `PaymentSuccessRpcController.onPaymentSucceeded` → `FulfillmentApplicationService.acceptPaymentSucceeded`（`FulfillmentApplicationService.java:35`）：
 
-> **迁移标注（ADR-0065 / spec 016，Proposed 未实施）**：本端点的**调用方**将由 payment-service 变为 **order-service**（支付成功后由 order 层驱动履约；`fulfillment → entitlement` 链保留不变）。端点契约与下方 1~6 步语义均不变，实施完成后本节随代码更新。
+> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：本端点的**调用方**将由 payment-service 变为 **order-service**（支付成功后由 order 层驱动履约；`fulfillment → entitlement` 链保留不变）。端点契约与下方 1~6 步语义均不变，实施完成后本节随代码更新。
 
 1. `sourcePaymentNo = request.paymentNo()`；`repository.findBySourcePaymentNo` 回查（幂等）。
 2. 命中 → 直接返回已有履约（**不重复创建、不重复交付、不重复触发权益**）。
@@ -168,7 +168,7 @@ PENDING --cancel--> CANCELLED
 
 ```mermaid
 sequenceDiagram
-    participant O as order-service [ADR-0065 后；现状为 payment-service]
+    participant O as order-service [ADR-0054 后；现状为 payment-service]
     participant F as fulfillment-service
     participant E as entitlement-service
     O->>F: POST /internal/fulfillments/on-payment-succeeded (幂等)

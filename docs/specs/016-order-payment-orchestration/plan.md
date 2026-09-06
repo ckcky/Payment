@@ -1,4 +1,4 @@
-# Plan: 支付编排职责归位（Feature 016 / ADR-0065）
+# Plan: 支付编排职责归位（Feature 016 / ADR-0054）
 
 > Spec 阶段见 `spec.md`；本文件是 **Plan 阶段**产物：现状检查、目标架构、数据模型 delta、契约预览、涉及文件、依赖顺序、风险与验证。本 Feature **不写代码**（实现阶段另立 Task 后执行）。
 
@@ -126,8 +126,8 @@ RefundAttemptRequest {
 
 **文档**
 - `docs/specs/001-core-business-model/data-model.md`：Transaction 1:1 → 1:N（FR-011）。
-- `docs/adr/0024-multi-payment-per-transaction.md`（ADR-0064）：#4 标注 `Superseded by ADR-0065`。
-- `docs/adr/README.md`：注册 ADR-0065、下一可用编号改 0055。
+- `docs/adr/0024-multi-payment-per-transaction.md`（ADR-0064）：#4 标注 `Superseded by ADR-0054`。
+- `docs/adr/README.md`：注册 ADR-0054、下一可用编号改 0055。
 
 ## 6. 依赖顺序 / 落地阶段（实现期 Task 拆分参考）
 

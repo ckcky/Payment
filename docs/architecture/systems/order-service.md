@@ -16,12 +16,8 @@
 
 | 维度 | 说明 |
 |---|---|
-| **负责** | 订单创建、订单明细与价格快照（不可变）、订单状态机、订单金额不变量（总额/已支付/已退款）、Order 1:1 Transaction、**支付单创建的编排入口（显式选渠道 → 建支付单，ADR-0064/ADR-0065）**、支付成功回调回写订单/交易状态、surplus 判定与自动退款发起（transaction 层） |
+| **负责** | 订单创建、订单明细与价格快照（不可变）、订单状态机、订单金额不变量（总额/已支付/已退款）、Order 1:1 Transaction、下单时同步创建支付意图、支付成功回调回写订单/交易状态 |
 | **不负责** | 支付执行/渠道协议（归属 payment-service）；商品定义（归属 catalog-service）；履约/权益最终状态 |
-
-> ⚠️ **契约变更（Feature 015 / ADR-0064）**：`POST /orders` **只建订单，不再同步创建支付单**。
-> 支付单由调用方显式 `POST /orders/{orderNo}/payments`（带 `channelCode`）创建，一张交易可关联多张支付单（Transaction : Payment = 1:N）。
-> 历史上「下单即返回 paymentNo / payUrl」的写法已失效——演示脚本与演示页曾因此长期写错。
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -68,7 +64,7 @@ COMPLETED/CANCELLED --close--> CLOSED
 ```
 
 - `confirm()`：PENDING_CONFIRMATION → PENDING_PAYMENT。
-- `recordPayment(paymentNo)`：记录**建支付单**时 payment-service 返回的支付业务单号（PM+雪花，ADR-0062/0063），不改变订单状态。
+- `recordPayment(paymentNo)`：下单时同步 RPC 返回的支付业务单号（PM+雪花），不改变订单状态。
 - `markPaid(paymentNo)`：PENDING_PAYMENT → PAID（整单支付，不支持部分支付）；记录下游支付业务单号、`paidMinor = totalMinor`；对已 PAID 的重复回调返回 `false` 幂等吸收。
 - `markFulfilling()` / `complete()`：PAID → FULFILLING → COMPLETED。
 - `cancel()`：仅 PENDING_CONFIRMATION/PENDING_PAYMENT；`close()`：仅 COMPLETED/CANCELLED。
@@ -84,7 +80,7 @@ PENDING --cancel--> CANCELLED
 
 - 关键不变量：未知只能由权威结果收敛，不可猜成败；`succeed()/fail()` 对终态返回 `false`。
 
-> **状态回写（已实现，Feature 002）**：显式建支付单后，Transaction 由 `start()` 进入 `PROCESSING`；支付成功回调通过内部 RPC（[OrderPaymentRpcController](../../order-service/src/main/java/com/payment/order/api/OrderPaymentRpcController.java)）驱动 Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`，重复回调幂等吸收。
+> **状态回写（已实现，Feature 002）**：下单创建支付意图后，Transaction 由 `start()` 进入 `PROCESSING`；支付成功回调通过内部 RPC（[OrderPaymentRpcController](../../order-service/src/main/java/com/payment/order/api/OrderPaymentRpcController.java)）驱动 Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`，重复回调幂等吸收。
 
 ### 2.3 表结构与索引策略
 
@@ -97,7 +93,7 @@ PENDING --cancel--> CANCELLED
 | id | BIGINT PK AUTO_INCREMENT | 订单 ID |
 | user_id | VARCHAR(64) NOT NULL | 用户 |
 | merchant_id | VARCHAR(64) NOT NULL | 商户 |
-| payment_no | VARCHAR(32) NULL | 关联支付单**业务单号**（PM+雪花，ADR-0062/0063）；建支付单时写入、支付成功回调确认。⚠️ 非数值主键——数值主键不跨服务 |
+| payment_id | BIGINT NULL | 下游支付单号（payment-service 的 payment.id；下单时同步 RPC 返回、支付成功回调确认） |
 | status | VARCHAR(32) NOT NULL | 状态机枚举名 |
 | currency_code | VARCHAR(8) NOT NULL | 币种 |
 | total_minor / paid_minor / refunded_minor | BIGINT NOT NULL | 总额 / 已支付 / 已退款（分） |
@@ -153,37 +149,13 @@ PENDING --cancel--> CANCELLED
 | items[].skuId | Long | 是 | SKU ID |
 | items[].quantity | int | 是 | 数量（> 0） |
 
-**响应** `CreateOrderResponse`：`{ orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl }`（业务单号，ADR-0063）。⚠️ **两步式下 `POST /orders` 不再建支付单**，`paymentNo / paymentStatus / payUrl` 三项恒为 `null`；实际支付单号与收银台链接由 `POST /orders/{ref}/payments`（§3.2）返回。
+**响应** `CreateOrderResponse`：`{ orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl }`（业务单号，ADR-0063）。
 
-**流程副作用**：创建订单 + 明细快照 → 创建 1:1 Transaction → `confirm()`（订单进入 `PENDING_PAYMENT`、交易保持 `PENDING`，**不建支付单**）。支付单由调用方显式 `POST /orders/{ref}/payments` 创建（见 §3.2）。
+**流程副作用**：创建订单 + 明细快照 → 创建 1:1 Transaction → `confirm()` → 同步 RPC 创建支付意图。
 
 **错误**：`INVALID_ARGUMENT`（明细为空、多币种混用）、`CONFLICT`（SKU 不可售）、`NOT_FOUND`（SKU 不存在）、`AMOUNT_INVARIANT_VIOLATION`（金额不变量）。
 
-### 3.2 创建支付单（两步式，Feature 015 / ADR-0064）
-
-`POST /orders/{ref}/payments` → `201 Created`
-
-> `ref` 为 `orderNo` 或 `transactionNo`（ADR-0063 业务单号）；仅当订单处于 `PENDING_PAYMENT` 时可建支付单。
-
-**请求** `CreateOrderPaymentRequest`：
-
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| channelCode | String | 是 | 渠道编码（如 `MOCK`）；决定走哪个 Channel Adapter |
-
-**响应** `CreatePaymentResponse`：`{ paymentNo, status, payUrl }`（均为业务单号，ADR-0062/0063）。
-
-- `paymentNo`：支付单业务单号（PM+雪花）。
-- `status`：支付单初始状态（`PENDING` / `PROCESSING`）。
-- `payUrl`：mock 收银台跳转链接（仅 `payment.channel.mock-cashier.enabled=true` 时非空；演示控制台以 `window.open(payUrl)` 打开，ADR-0048）。
-
-**流程副作用**：`transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentNo)`（记录下游支付单业务单号，不改变订单状态）+ 同步 RPC `paymentGateway.createPayment`（经 **Nacos 服务名发现**，无硬编码 URL）。
-
-**幂等**：同一订单多次调用每次新建一张支付单（Transaction : Payment = 1:N，ADR-0064）；幂等键由 payment-service 维护（混合幂等：调用方 key 优先，缺省 `payment:{orderNo}:{channelCode}:{attemptSeq}`）。
-
-**错误**：`STATE_TRANSITION_VIOLATION`（订单非 `PENDING_PAYMENT`）、`NOT_FOUND`（订单/交易不存在）、`AMOUNT_INVARIANT_VIOLATION`（金额不变量）。
-
-### 3.3 查询订单
+### 3.2 查询订单
 
 `GET /orders/{id}` → `200`
 
@@ -191,7 +163,7 @@ PENDING --cancel--> CANCELLED
 
 **错误**：`NOT_FOUND`。
 
-### 3.4 错误码枚举（全局，common-core `ErrorCodes`）
+### 3.3 错误码枚举（全局，common-core `ErrorCodes`）
 
 | 错误码 | 语义 | 本服务使用场景 |
 |---|---|---|
@@ -213,9 +185,8 @@ PENDING --cancel--> CANCELLED
 
 | 目标 | 路径 | 请求/响应 |
 |---|---|---|
-| catalog-service | `GET /skus/{id}`（Feign，经 **Nacos 服务名发现**） | 响应 `CatalogSkuDto` → `SkuSnapshot` |
-| payment-service | `POST /orders/{orderNo}/payments`（Feign，经 **Nacos 服务名发现**；ADR-0064 两步式） | `CreatePaymentRequest(channelCode)` → `CreatePaymentResponse(paymentNo, status, payUrl)` |
-| payment-service | `POST /internal/payments/refund`（自动退款 / surplus，ADR-0065） | `transactionNo + paymentNo` → 退款受理 |
+| catalog-service | `GET /skus/{id}`（Feign，默认 `http://localhost:8082`） | 响应 `CatalogSkuDto` → `SkuSnapshot` |
+| payment-service | `POST /payments`（Feign，默认 `http://localhost:8084`） | `CreatePaymentRequest` → `CreatePaymentResponse` |
 
 ---
 
@@ -230,8 +201,9 @@ PENDING --cancel--> CANCELLED
 3. `new Order(userId, merchantId, currencyCode, items)`：总额 = `Σ Math.addExact(subtotalMinor)`。
 4. `orderRepository.save(order)` → `new Transaction(orderNo, totalMinor, currencyCode, "PURCHASE")` → `transactionRepository.save(transaction)`。
 5. `order.confirm()`（PENDING_CONFIRMATION → PENDING_PAYMENT）→ `save`。
-6. `timeoutScheduler.schedule(orderId)`：登记订单超时（时间轮），到点未支付则取消并释放预占库存（ADR-0043）。
-7. 返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, null, null, null)`——**两步式**：`paymentNo / paymentStatus / payUrl` 恒为 `null`，支付单由调用方显式 `POST /orders/{ref}/payments` 创建（见 §3.2）。
+6. `paymentGateway.createPayment(CreatePaymentRequest(...))`：同步 RPC 创建支付意图（CreatePaymentRequest 携 orderNo/transactionNo，ADR-0063）。
+7. `transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentNo)`：交易进入处理中、订单记录下游支付业务单号。
+8. 返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl)`。
 
 ```mermaid
 sequenceDiagram
@@ -245,12 +217,9 @@ sequenceDiagram
     Cat-->>O: SkuSnapshot (sellable, priceMinor, currencyCode)
     O->>O: 构造 OrderItem 快照 + 计算总额 (Math.addExact)
     O->>O: save Order + save Transaction (1:1) + confirm (本地事务)
-    O-->>U: CreateOrderResponse {orderNo, transactionNo, status}（paymentNo/payUrl 为 null）
-    Note over U,O: 两步式——下单不建支付单，需显式选渠道
-    U->>O: POST /orders/{orderNo}/payments (channelCode)
-    O->>P: createPayment (经 Nacos 服务名发现)
+    O->>P: POST /payments (CreatePaymentRequest: orderNo/transactionNo)
     P-->>O: CreatePaymentResponse (paymentNo, status, payUrl)
-    O-->>U: CreatePaymentResponse（payUrl 用于跳转收银台）
+    O-->>U: CreateOrderResponse
 ```
 
 ### 4.2 支付成功回调回写（Feature 002）
@@ -262,7 +231,7 @@ sequenceDiagram
 3. `changed` 时 `save`；`transactionRepository.findByOrderId` → `succeed()`（`PROCESSING → SUCCEEDED`，`PENDING` 时先 `start()`）。
 4. 事务边界：`onPaymentSucceeded` 标 `@Transactional`（订单 + 交易在同一本地事务原子提交）。
 
-> **迁移标注（ADR-0065 / spec 016，Proposed 未实施）**：目标架构下本流程扩展为——新增 **transaction 层**（`TransactionApplicationService`）接收通知并判定「正常到账 / surplus」：正常 → **委派 order 层**执行 markPaid + transaction.succeed() + confirmStock 并**驱动履约**（`FulfillmentGateway.notifyPaymentSucceeded`，`fulfillment → entitlement` 链保留）；surplus → 以 `transactionNo + paymentNo` 经 `PaymentGateway.refund(...)` 发起自动退款（不再向 payment 抛 409）。**confirmStock 与履约驱动属 order 层，不在 transaction 层**。实施完成后本节随代码更新。
+> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：目标架构下本流程扩展为——新增 **transaction 层**（`TransactionApplicationService`）接收通知并判定「正常到账 / surplus」：正常 → **委派 order 层**执行 markPaid + transaction.succeed() + confirmStock 并**驱动履约**（`FulfillmentGateway.notifyPaymentSucceeded`，`fulfillment → entitlement` 链保留）；surplus → 以 `transactionNo + paymentNo` 经 `PaymentGateway.refund(...)` 发起自动退款（不再向 payment 抛 409）。**confirmStock 与履约驱动属 order 层，不在 transaction 层**。实施完成后本节随代码更新。
 
 ```mermaid
 sequenceDiagram
@@ -340,7 +309,8 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 | `spring.datasource.url` | `jdbc:mysql://localhost:3306/order` | Testcontainers MySQL | 环境变量/配置中心 |
 | `spring.datasource.username/password` | root/root | — | 环境变量注入 |
 | `server.port` | 8083 | 随机 | 8083 |
-| 下游服务调用（catalog / payment） | Nacos 服务名发现（无静态 URL） | Nacos 服务名发现 | 经 Nacos 服务名发现（ADR-0059，硬依赖）；**无静态 URL**，未起 Nacos 则 Feign 调用 `Connection refused` |
+| `services.catalog.url` | `http://localhost:8082` | fake | Nacos 服务发现 |
+| `services.payment.url` | `http://localhost:8084` | fake | Nacos 服务发现 |
 | 连接池大小 `maximum-pool-size` | 默认 10 | — | `[目标]` 按并发调优 |
 | 出站 Feign 超时 | 未配置 | — | `[目标]` connect 1s / read 3s |
 
@@ -348,12 +318,12 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 ```text
 1. MySQL 8.0 就绪（order schema 由 deployment/schema/01-order-schema.sql 建库建表）
-2. catalog-service 就绪（下单时 Feign 调用 GET /skus/{id}，经 Nacos 服务名发现）
-3. payment-service 就绪（创建支付单时 Feign 调用 `POST /orders/{orderNo}/payments`，经 Nacos 服务名发现，两步式）
+2. catalog-service 就绪（下单时 Feign 调用 GET /skus/{id}；缺省 url 8082）
+3. payment-service 就绪（下单时 Feign 调用 POST /payments；缺省 url 8084）
 4. 启动 order-service（端口 8083）
 ```
 
-> 下游 catalog/payment 必须就绪，否则下单 / 建支付单 RPC 失败；已接入 **Nacos 服务发现（ADR-0059，硬依赖）**，无硬编码 url——未起 Nacos 则跨服务调用全部 `Connection refused`。
+> 下游 catalog/payment 必须就绪，否则下单 RPC 失败；`[目标]` 接入 Nacos 服务发现后解除硬编码 url 依赖。
 
 ### 6.4 埋点与日志键（本服务）
 

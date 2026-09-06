@@ -27,7 +27,6 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true  # P99 面板依赖 http_server_requests_seconds_bucket
-        http.client.requests: true  # RPC 面板依赖 http_client_requests_seconds_bucket（Feign）
   endpoints:
     web:
       exposure:

@@ -4,11 +4,11 @@
 
 **Created**: 2026-09-06
 
-**Status**: Draft（架构决策见 `docs/adr/0025-order-payment-orchestration.md`（ADR-0065，Proposed）；Supersedes ADR-0064 §决策#4）
+**Status**: Draft（架构决策见 `docs/adr/0025-order-payment-orchestration.md`（ADR-0054，Proposed）；Supersedes ADR-0064 §决策#4）
 
 **Input**: 负责人裁决：「重复支付 / 超额支付的处理归属订单 / 交易编排层，用 `transaction_no + payment_no` 去发起自动退款；支付成功回调通知到 order-service 这层，再由 order-service 去通知履约和权益。order-service 内含 order 层（订单创建 / 商品 / 金额）与 transaction 层（交易动作含重复支付自动退款），order-no 与 transaction-no 一比一；payment 层负责支付流程编排（调用 payment_attempts 各渠道支付 + 记账），transaction-no 与 payment-no 一比多。保留 `fulfillment → entitlement` 链。」
 
-> 本 Feature **不是从零构建**——`payment-service` / `order-service` / `fulfillment-service` / `entitlement-service` 的核心能力均已落地。本 Spec 是**职责迁移 / 领域边界收口型** Spec：把「支付成功后的业务编排权」从 payment-service 移交到 order-service（**transaction 层**负责正常 / surplus 判定与自动退款发起；**order 层**负责订单状态推进、confirmStock 与履约驱动——负责人 2026-09-06 明确），并让自动退款的**决策与发起**归属 order。涉及重大服务边界变化，按 `ai-workflow.md` 先立 ADR-0065，再写本 Spec。
+> 本 Feature **不是从零构建**——`payment-service` / `order-service` / `fulfillment-service` / `entitlement-service` 的核心能力均已落地。本 Spec 是**职责迁移 / 领域边界收口型** Spec：把「支付成功后的业务编排权」从 payment-service 移交到 order-service（**transaction 层**负责正常 / surplus 判定与自动退款发起；**order 层**负责订单状态推进、confirmStock 与履约驱动——负责人 2026-09-06 明确），并让自动退款的**决策与发起**归属 order。涉及重大服务边界变化，按 `ai-workflow.md` 先立 ADR-0054，再写本 Spec。
 
 ## 当前代码现实（已核实，禁止按绿地项目理解）
 
@@ -135,7 +135,7 @@
 - **FR-008**: 履约 / 权益 / 记账的既有能力（`fulfillment→entitlement`、`ledger postPaymentCapture`）MUST 保持不变；本 Feature 仅迁移「触发职责」，不改动这些能力本身。
 - **FR-009**: 所有跨服务调用 MUST 使用业务单号（orderNo / transactionNo / paymentNo / refundNo），不暴露数值 ID（沿用 ADR-0063）。
 - **FR-010**: 移除 payment 侧 `AutoRefundGateway` 自发起逻辑后，既有「重复支付 → 退款」端到端行为 MUST 仍可达（仅发起方变更）；相关测试 MUST 从 payment 视角迁至 order 视角（如 `TransactionCallbackConflictTest`）。
-- **FR-011**: 实现完成后 MUST 同步修正文档漂移：`docs/specs/001-core-business-model/data-model.md` 的「Transaction 1:1 Payment」更新为 1:N（对齐 ADR-0064 现实）；ADR-0064 #4 标记为被 ADR-0065 supersede；本 spec / plan 与代码对齐。
+- **FR-011**: 实现完成后 MUST 同步修正文档漂移：`docs/specs/001-core-business-model/data-model.md` 的「Transaction 1:1 Payment」更新为 1:N（对齐 ADR-0064 现实）；ADR-0064 #4 标记为被 ADR-0054 supersede；本 spec / plan 与代码对齐。
 - **FR-012**: 金额 MUST 一律用最小货币单位 `long` 分或 `BigDecimal`（明确 scale），MUST NOT 使用 `float`/`double`（Constitution §II.1）。
 - **FR-013**: 所有跨服务出站 RPC（order→payment 退款、order→fulfillment 履约、payment→order 通知）MUST 显式配置超时（Constitution §V.6）。
 - **FR-014**: 数据库-per-service：各服务只读写自有 Schema，MUST NOT 直接 SQL 他服务表（Constitution §IV.4）。
@@ -167,7 +167,7 @@
 - **SC-004**: 自动退款 `RefundAttemptRequest` **含** `transactionNo`；退款幂等键 **含** `transactionNo`（FR-005）。
 - **SC-005**: 对账 / 结算链路不受影响，其引用仍为渠道流水号 `out_channel_no`（FR-009 之外契约不变）。
 - **SC-006**: `mvn -o clean verify -fae` 全量通过；相关测试从 payment 视角迁至 order 视角（FR-010/FR-015）；无 `float`/`double` 出现在金额路径。
-- **SC-007**: 文档漂移收口：data-model.md Transaction 改 1:N；ADR-0064 #4 标记 superseded by ADR-0065（FR-011）。
+- **SC-007**: 文档漂移收口：data-model.md Transaction 改 1:N；ADR-0064 #4 标记 superseded by ADR-0054（FR-011）。
 - **SC-008**: 退款三步链：surplus 退款后 `payment_attempts` 存在对应退款尝试记录（`channel_reference` = 渠道退款流水号）；对账退款事实的引用为该真实流水号（非 `"refund-{id}"` 合成值）（FR-017 / N4）。
 
 ## Assumptions
@@ -184,7 +184,7 @@
 | 依赖 | 状态 | 说明 |
 |---|---|---|
 | ADR-0063（跨系统业务单号） | ✅ Accepted | 本 Feature 跨服务调用沿用业务单号纪律 |
-| ADR-0064（一交易多支付单 / 退款域并入 payment-service） | ✅ Accepted（#4 将被本 ADR-0065 supersede） | transaction 1:N payment 建模、退款域在 payment-service 内，是本 Feature 的前提 |
+| ADR-0064（一交易多支付单 / 退款域并入 payment-service） | ✅ Accepted（#4 将被本 ADR-0054 supersede） | transaction 1:N payment 建模、退款域在 payment-service 内，是本 Feature 的前提 |
 | `payment-service` 退款能力（`PaymentRefundService`） | 已实现 | order 调用的退款命令执行落于此 |
 | `fulfillment-service` `EntitlementGateway` | 已实现（保留） | 权益授予链不变 |
 | `order-service` `FulfillmentGateway`（→ fulfillment） | 已实现 | 改由 order 层调用 |
@@ -196,7 +196,7 @@
 ### Session 2026-09-06
 
 - **性质**：职责迁移 / 领域边界收口型 Spec，非绿地构建。当前是「payment 为扇出中心」，目标是「order 为业务编排者、payment 退回能力提供方」（见文首差距表 G1~G4）。
-- **与 ADR-0064 的关系**：本 Feature **Supersedes ADR-0064 §决策#4**（自动退款由 payment catch 409 自行发起）；ADR-0064 其余条款（一交易多支付单、退款域并入 payment-service、三渠道 mock）**保持不变**。ADR-0065 已注明 Supersedes，ADR-0064 须补反向指针（README 状态机要求双向链接）。
+- **与 ADR-0064 的关系**：本 Feature **Supersedes ADR-0064 §决策#4**（自动退款由 payment catch 409 自行发起）；ADR-0064 其余条款（一交易多支付单、退款域并入 payment-service、三渠道 mock）**保持不变**。ADR-0054 已注明 Supersedes，ADR-0064 须补反向指针（README 状态机要求双向链接）。
 - **负责人已拍板的四点**：
   1. **保留 `fulfillment → entitlement`**：权益仍由 fulfillment 完成后触发，order 只作为编排发起方（FR-008）。
   2. **自动退款用 `transactionNo + paymentNo` 发起**：决策与发起归 order transaction 层，payment 仅执行（FR-004/FR-005）。

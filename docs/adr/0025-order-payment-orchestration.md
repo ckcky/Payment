@@ -1,11 +1,8 @@
-<a id="adr-0065"></a>
-<!-- 兼容旧链接：本 ADR 曾误用 ADR-0054（与 0016-core-payment-correctness.md 重号），2026-09-06 更正为 ADR-0065 -->
 <a id="adr-0054"></a>
 
-# ADR-0065: 支付编排职责归位——order-service 升为业务编排者，payment-service 退回能力提供方
+# ADR-0054: 支付编排职责归位——order-service 升为业务编排者，payment-service 退回能力提供方
 
 - 状态：✅ **Accepted**（2026-09-06 spec 016 评审通过并落地；代码事实已与本 ADR 对齐）
-- **编号更正（2026-09-06 文档治理）**：本文原标 `ADR-0054`，与 [`0016-core-payment-correctness.md`](0016-core-payment-correctness.md) 的 ADR-0054 **重号**，现更正为 **ADR-0065**（ADR-0064 之后的下一个可用号）。旧锚点 `adr-0054` 保留以兼容既有链接；新引用请一律使用 **ADR-0065**。
 - 关联：ADR-0063（跨系统业务单号）、ADR-0064（一交易多支付单 / 退款域并入 payment-service）、spec 016、Constitution §7（领域边界）、Constitution §8（人类决策边界）
 - 需求源头：负责人裁决「重复支付 / 超额支付的处理归属订单 / 交易编排层，用 `transaction_no + payment_no` 去发起自动退款；支付成功回调通知到 order-service 这层，再由 order-service 去通知履约和权益相关操作。order-service 内含 order 层（订单创建 / 商品 / 金额）与 transaction 层（交易动作含重复支付自动退款），order-no 与 transaction-no 一比一；payment 层负责支付流程编排（调用 payment_attempts 各渠道支付 + 记账），transaction-no 与 payment-no 一比多。保留 fulfillment→entitlement 链。」
 
