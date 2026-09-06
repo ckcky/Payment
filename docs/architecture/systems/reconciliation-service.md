@@ -149,12 +149,12 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 ### 3.6 出站 RPC（reconciliation → payment / refund，只读）
 
 **payment-service**：`GET /internal/payments/confirmed-facts`（Feign `PaymentFactsFeignClient`，[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/client/PaymentFactsFeignClient.java)）
-- 目标服务：`payment-service`，url `${services.payment.url:http://localhost:8084}`。
+- 目标服务：`payment-service`（Nacos 服务名发现，无静态 URL，ADR-0059）。
 - 映射为 `PlatformFact(type=PAYMENT)`（FeignPaymentFactsClient.java:22）；payment 侧端点 [ReconciliationFactsController](../../payment-service/src/main/java/com/payment/payment/api/ReconciliationFactsController.java) 仅返回 `SUCCEEDED` 支付。
 
-**refund-service**：`GET /internal/refunds/confirmed-facts`（Feign `RefundFactsFeignClient`）
-- 目标服务：`refund-service`，url `${services.refund.url:http://localhost:8085}`。
-- 映射为 `PlatformFact(type=REFUND)`（FeignRefundFactsClient.java:22）；refund 侧端点 [RefundFactsController](../../refund-service/src/main/java/com/payment/refund/api/RefundFactsController.java) 仅返回已确认退款。
+**payment-service（退款事实端点，原 refund-service 已退役）**：`GET /internal/refunds/confirmed-facts`（Feign `RefundFactsFeignClient`，ADR-0064）
+- 目标服务：`payment-service`（Nacos 服务名发现，无静态 URL）。退款域已并入 `payment-service`（`com.payment.refund` 包，ADR-0064），该端点随退款域迁至 8084；原 `refund-service`（8085）已从 Nacos 注册表退役。
+- 映射为 `PlatformFact(type=REFUND)`（FeignRefundFactsClient.java:22）；payment 侧端点 [RefundFactsController](../../payment-service/src/main/java/com/payment/refund/api/RefundFactsController.java) 仅返回已确认退款。
 
 > 两者均为**只读查询**，不触发任何写操作——满足「绝不修改原始事实」硬约束。
 
@@ -190,7 +190,7 @@ sequenceDiagram
     autonumber
     participant R as reconciliation-service
     participant P as payment-service
-    participant F as refund-service
+    participant F as payment-service（退款事实端点）
     participant C as CSV fixture
     participant DB as reconciliation DB
     R->>P: GET /internal/payments/confirmed-facts (只读)
@@ -288,11 +288,9 @@ management:
     health:
       show-details: always
 
-services:
-  payment:
-    url: http://localhost:8084
-  refund:
-    url: http://localhost:8085
+# 跨服务调用统一走 Nacos 服务名发现（ADR-0059），不再配置静态 url。
+# 退款域已并入 payment-service（ADR-0064），
+# /internal/payments/confirmed-facts 与 /internal/refunds/confirmed-facts 均指向 payment-service。
 
 mybatis-plus:
   configuration:
@@ -306,8 +304,7 @@ mybatis-plus:
 | `spring.datasource.url` | `jdbc:mysql://localhost:3306/reconciliation` | Testcontainers MySQL | 环境变量/配置中心，指向生产实例 |
 | `spring.datasource.username/password` | root/root | — | 环境变量注入，禁止硬编码 |
 | `server.port` | 8088 | 随机 | 8088（或编排指定） |
-| `services.payment.url` | `http://localhost:8084` | fake | Nacos 服务发现（去掉硬编码 url） |
-| `services.refund.url` | `http://localhost:8085` | fake | Nacos 服务发现（去掉硬编码 url） |
+| `services.payment.url` / `services.refund.url` | `http://localhost:8084` / `http://localhost:8085` | fake | 已移除：跨服务调用统一走 Nacos 服务名发现（ADR-0059）；退款域已并入 payment-service，无独立 refund-service（ADR-0064） |
 | 连接池大小 `spring.datasource.hikari.maximum-pool-size` | 默认 10 | — | `[目标]` 按并发调优 |
 | 出站 Feign 超时 | 未配置 | — | `[目标]` connect 1s / read 3s |
 
@@ -316,7 +313,7 @@ mybatis-plus:
 ```text
 1. MySQL 8.0 就绪（reconciliation schema 由 deployment/schema/07-reconciliation-schema.sql 建库建表）
 2. Nacos 就绪（注册 + 配置）  [目标：生产启用；当前本地直连 MySQL，未强制依赖 Nacos]
-3. payment-service / refund-service 可就续（仅被对账只读查询，缺失时对账失败但不阻塞启动）
+3. payment-service 可就续（仅被对账只读查询，缺失时对账失败但不阻塞启动；退款事实端点已随退款域并入 payment-service，ADR-0064）
 4. 启动 reconciliation-service（端口 8088），完成 Feign 客户端装配
 5. 下游 settlement-service 可延后就绪（拉 settlement-summary，不阻塞启动）
 ```

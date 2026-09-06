@@ -35,13 +35,13 @@ skinparam database {
 
 node "宿主机 · 10 个独立 JVM 进程" as HOST {
   rectangle "无 Dockerfile，未容器化" as TAG #F1EFE8
-  rectangle "8081 merchant · 8082 catalog · 8083 order · 8084 payment · 8085 refund" as ROW1
-  rectangle "8086 fulfillment · 8087 entitlement · 8088 reconciliation · 8089 settlement · 8090 ledger" as ROW2
+  rectangle "8081 merchant · 8082 catalog · 8083 order · 8084 payment · 8086 fulfillment" as ROW1
+  rectangle "8087 entitlement · 8088 reconciliation · 8089 settlement · 8090 ledger · 8091 mock-channel-web" as ROW2
 }
 
 node "Docker Compose · 基础设施容器" as DOCKER {
   database "MySQL 8.0\n3306 · 9 个独立 Schema，卷持久化" as MySQL
-  rectangle "Prometheus\n9090 · 抓取宿主 8081–8090 指标" as Prom #D7E9F5
+  rectangle "Prometheus\n9090 · 抓取宿主 8081–8091 指标" as Prom #D7E9F5
   rectangle "Grafana\n3000 · 内置业务指标看板" as Graf #D7E9F5
 }
 

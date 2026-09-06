@@ -17,7 +17,7 @@
 | 维度 | 说明 |
 |---|---|
 | **负责** | 接收支付成功事件、履约聚合与自有状态机、交付执行（当前 Mock）、幂等（同支付只建一条履约）、履约完成后触发权益授予 RPC；自身失败记录与终态 |
-| **不负责** | 支付金额/渠道/退款决策（归属 payment/refund-service）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
+| **不负责** | 支付金额/渠道/退款决策（归属 payment-service 退款域）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
 
 ### 1.2 硬约束（Constitution / ADR）
 

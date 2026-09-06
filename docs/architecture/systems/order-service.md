@@ -153,13 +153,37 @@ PENDING --cancel--> CANCELLED
 | items[].skuId | Long | 是 | SKU ID |
 | items[].quantity | int | 是 | 数量（> 0） |
 
-**响应** `CreateOrderResponse`：`{ orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl }`（业务单号，ADR-0063）。
+**响应** `CreateOrderResponse`：`{ orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl }`（业务单号，ADR-0063）。⚠️ **两步式下 `POST /orders` 不再建支付单**，`paymentNo / paymentStatus / payUrl` 三项恒为 `null`；实际支付单号与收银台链接由 `POST /orders/{ref}/payments`（§3.2）返回。
 
-**流程副作用**：创建订单 + 明细快照 → 创建 1:1 Transaction → `confirm()` → 同步 RPC 创建支付意图。
+**流程副作用**：创建订单 + 明细快照 → 创建 1:1 Transaction → `confirm()`（订单进入 `PENDING_PAYMENT`、交易保持 `PENDING`，**不建支付单**）。支付单由调用方显式 `POST /orders/{ref}/payments` 创建（见 §3.2）。
 
 **错误**：`INVALID_ARGUMENT`（明细为空、多币种混用）、`CONFLICT`（SKU 不可售）、`NOT_FOUND`（SKU 不存在）、`AMOUNT_INVARIANT_VIOLATION`（金额不变量）。
 
-### 3.2 查询订单
+### 3.2 创建支付单（两步式，Feature 015 / ADR-0064）
+
+`POST /orders/{ref}/payments` → `201 Created`
+
+> `ref` 为 `orderNo` 或 `transactionNo`（ADR-0063 业务单号）；仅当订单处于 `PENDING_PAYMENT` 时可建支付单。
+
+**请求** `CreateOrderPaymentRequest`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| channelCode | String | 是 | 渠道编码（如 `MOCK`）；决定走哪个 Channel Adapter |
+
+**响应** `CreatePaymentResponse`：`{ paymentNo, status, payUrl }`（均为业务单号，ADR-0062/0063）。
+
+- `paymentNo`：支付单业务单号（PM+雪花）。
+- `status`：支付单初始状态（`PENDING` / `PROCESSING`）。
+- `payUrl`：mock 收银台跳转链接（仅 `payment.channel.mock-cashier.enabled=true` 时非空；演示控制台以 `window.open(payUrl)` 打开，ADR-0048）。
+
+**流程副作用**：`transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentNo)`（记录下游支付单业务单号，不改变订单状态）+ 同步 RPC `paymentGateway.createPayment`（经 **Nacos 服务名发现**，无硬编码 URL）。
+
+**幂等**：同一订单多次调用每次新建一张支付单（Transaction : Payment = 1:N，ADR-0064）；幂等键由 payment-service 维护（混合幂等：调用方 key 优先，缺省 `payment:{orderNo}:{channelCode}:{attemptSeq}`）。
+
+**错误**：`STATE_TRANSITION_VIOLATION`（订单非 `PENDING_PAYMENT`）、`NOT_FOUND`（订单/交易不存在）、`AMOUNT_INVARIANT_VIOLATION`（金额不变量）。
+
+### 3.3 查询订单
 
 `GET /orders/{id}` → `200`
 
@@ -167,7 +191,7 @@ PENDING --cancel--> CANCELLED
 
 **错误**：`NOT_FOUND`。
 
-### 3.3 错误码枚举（全局，common-core `ErrorCodes`）
+### 3.4 错误码枚举（全局，common-core `ErrorCodes`）
 
 | 错误码 | 语义 | 本服务使用场景 |
 |---|---|---|
@@ -206,9 +230,8 @@ PENDING --cancel--> CANCELLED
 3. `new Order(userId, merchantId, currencyCode, items)`：总额 = `Σ Math.addExact(subtotalMinor)`。
 4. `orderRepository.save(order)` → `new Transaction(orderNo, totalMinor, currencyCode, "PURCHASE")` → `transactionRepository.save(transaction)`。
 5. `order.confirm()`（PENDING_CONFIRMATION → PENDING_PAYMENT）→ `save`。
-6. `paymentGateway.createPayment(CreatePaymentRequest(...))`：同步 RPC 创建支付意图（CreatePaymentRequest 携 orderNo/transactionNo，ADR-0063）。
-7. `transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentNo)`：交易进入处理中、订单记录下游支付业务单号。
-8. 返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl)`。
+6. `timeoutScheduler.schedule(orderId)`：登记订单超时（时间轮），到点未支付则取消并释放预占库存（ADR-0043）。
+7. 返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, null, null, null)`——**两步式**：`paymentNo / paymentStatus / payUrl` 恒为 `null`，支付单由调用方显式 `POST /orders/{ref}/payments` 创建（见 §3.2）。
 
 ```mermaid
 sequenceDiagram
@@ -222,9 +245,12 @@ sequenceDiagram
     Cat-->>O: SkuSnapshot (sellable, priceMinor, currencyCode)
     O->>O: 构造 OrderItem 快照 + 计算总额 (Math.addExact)
     O->>O: save Order + save Transaction (1:1) + confirm (本地事务)
-    O->>P: POST /payments (CreatePaymentRequest: orderNo/transactionNo)
+    O-->>U: CreateOrderResponse {orderNo, transactionNo, status}（paymentNo/payUrl 为 null）
+    Note over U,O: 两步式——下单不建支付单，需显式选渠道
+    U->>O: POST /orders/{orderNo}/payments (channelCode)
+    O->>P: createPayment (经 Nacos 服务名发现)
     P-->>O: CreatePaymentResponse (paymentNo, status, payUrl)
-    O-->>U: CreateOrderResponse
+    O-->>U: CreatePaymentResponse（payUrl 用于跳转收银台）
 ```
 
 ### 4.2 支付成功回调回写（Feature 002）
@@ -314,8 +340,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 | `spring.datasource.url` | `jdbc:mysql://localhost:3306/order` | Testcontainers MySQL | 环境变量/配置中心 |
 | `spring.datasource.username/password` | root/root | — | 环境变量注入 |
 | `server.port` | 8083 | 随机 | 8083 |
-| `services.catalog.url` | `http://localhost:8082` | fake | Nacos 服务发现 |
-| `services.payment.url` | `http://localhost:8084` | fake | Nacos 服务发现 |
+| 下游服务调用（catalog / payment） | Nacos 服务名发现（无静态 URL） | Nacos 服务名发现 | 经 Nacos 服务名发现（ADR-0059，硬依赖）；**无静态 URL**，未起 Nacos 则 Feign 调用 `Connection refused` |
 | 连接池大小 `maximum-pool-size` | 默认 10 | — | `[目标]` 按并发调优 |
 | 出站 Feign 超时 | 未配置 | — | `[目标]` connect 1s / read 3s |
 
@@ -323,12 +348,12 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 ```text
 1. MySQL 8.0 就绪（order schema 由 deployment/schema/01-order-schema.sql 建库建表）
-2. catalog-service 就绪（下单时 Feign 调用 GET /skus/{id}；缺省 url 8082）
-3. payment-service 就绪（下单时 Feign 调用 POST /payments；缺省 url 8084）
+2. catalog-service 就绪（下单时 Feign 调用 GET /skus/{id}，经 Nacos 服务名发现）
+3. payment-service 就绪（创建支付单时 Feign 调用 `POST /orders/{orderNo}/payments`，经 Nacos 服务名发现，两步式）
 4. 启动 order-service（端口 8083）
 ```
 
-> 下游 catalog/payment 必须就绪，否则下单 RPC 失败；`[目标]` 接入 Nacos 服务发现后解除硬编码 url 依赖。
+> 下游 catalog/payment 必须就绪，否则下单 / 建支付单 RPC 失败；已接入 **Nacos 服务发现（ADR-0059，硬依赖）**，无硬编码 url——未起 Nacos 则跨服务调用全部 `Connection refused`。
 
 ### 6.4 埋点与日志键（本服务）
 

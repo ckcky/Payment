@@ -20,10 +20,13 @@ Spring Cloud 微服务（见 [docs/adr/0001](docs/adr/0001-adopt-spring-cloud-mi
 | `entitlement-service` | 权益授予 / 使用 |
 | `reconciliation-service` | 基础对账 |
 | `settlement-service` | 基础结算批次 |
+| `ledger-service` | Ledger 复式记账（资金核心：科目 / 分录 / 借贷平衡 / 记账幂等） |
 
 `gateway` 不在本 MVP 范围；`ledger-service`（8090）**已实现**并接入 payment/refund/settlement 记账。
 
 ## 快速开始
+
+> **环境要求**：JDK 21 LTS（Spring Boot 3.x 必需；JDK 11/17 会编译失败）、Docker / Docker Desktop（本地运行依赖 Compose 拉起 MySQL / Redis / Nacos）、仓库自带 `./mvnw`（无需另装 Maven）。跨服务调用经 Nacos 服务发现（ADR-0059，**未起 Nacos 则 `Connection refused`**）——`start-all.sh` 会自动拉起。
 
 **构建与测试**（Maven Wrapper 锁定版本）：
 
@@ -37,7 +40,7 @@ mvnw.cmd verify
 
 **本地运行**：各服务用 `./mvnw -pl <service> spring-boot:run` 启动（端口见各服务 `application.yml`，8081–8090（另 `mock-channel-web` 演示收银台 8091））。
 
-**Docker Compose**（最小依赖 MySQL）：`docker compose -f deployment/docker-compose.yml up -d`
+**Docker Compose**（业务必需：MySQL + Redis + Nacos；可观测：Prometheus / Grafana / Loki）：`docker compose -f deployment/docker-compose.yml up -d`
 
 **一键演示入口**：
 

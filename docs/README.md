@@ -11,6 +11,7 @@
 | [guides/](guides/) | 工程规范、开发指南、AI 工作流 | Reference + How-to（怎么做） |
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
 | [archive/audits/](archive/audits/) | 历史审计报告（已归档，标注 Status，不再作为权威事实源） | 历史留档 |
+| [operations/](operations/) | 运行手册（runbook）、代码债登记（code-debt-backlog）、服务拆分提案模板（split-proposal-template） | Operations（怎么运维/排障/回滚） |
 | [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录） | Feature 生命周期产物 |
 
 ## 文档清单与职责
@@ -20,14 +21,15 @@
 | **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.3.0） | 架构级变化时（走宪法修订流程） |
 | **CLAUDE.md** | 根目录 | Claude Code 自动加载的项目地图与指针 | 架构 / 文档路径变化时 |
 | **ADR** | `docs/adr/NNNN-*.md`（索引见 [docs/adr/README.md](adr/README.md)） | 记录不可逆/重要架构决策 | 每次重要决策时 |
-| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（9 节，含 §9 ADR 追溯索引）：总体架构、详细流程、非功能、部署、计划、风险、已决策 ADR 体现 | 架构基线变化时 |
-| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（10 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
+| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案：总体架构、详细流程、非功能、部署、风险、已决策 ADR 内联体现（§7 项目计划与 §9 ADR 追溯索引已迁至 roadmap.md） | 架构基线变化时 |
+| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（10 篇，含 1 篇已退役的 refund-service.md） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
 | **Roadmap** | `docs/architecture/roadmap.md` | 项目阶段、当前状态、Feature 依赖和下一步 | 阶段或里程碑变化时 |
 | **目录结构** | `docs/architecture/project-structure.md` | 项目骨架约定 | 模块增删时 |
 | **工程规范** | `docs/guides/engineering-standards.md` | 编码/测试/CI 的具体约束 | 规范调整时 |
 | **开发入口** | `docs/guides/development-guide.md` | 从需求到交付的日常开发入口 | 流程调整时 |
 | **AI 工作流** | `docs/guides/ai-workflow.md` | SDD 流程补充（配合 spec-kit 命令） | 流程调整时 |
 | **部署说明** | `deployment/README.md` | 本地/Compose 启动最小 how-to | 运行方式变化时 |
+| **运行手册** | `docs/operations/runbook.md` | 服务清单/端口、启动顺序、数据库、环境变量、常见故障与处置、回滚 | 排障 / 运维方式变化时 |
 | **Feature Spec** | `docs/specs/<feature>/spec.md` | 特性的需求、边界与验收（单一事实源） | 特性新增或变更时 |
 | **README** | 根目录 | 项目目标、架构总览、快速开始 | 保持最新 |
 
@@ -60,7 +62,7 @@ Constitution（.specify/memory/constitution.md，最高宪法）
 ## 文档规则
 
 1. **单一事实源**：一个需求只在 Spec 定义，不在代码注释里另起炉灶；代码与 Spec 不一致时，先判断是需求变更还是实现缺陷，再同步修订。
-2. **ADR 编号**：顺序递增 `0001`、`0002`…，用英文短横线命名；状态机见 [docs/adr/README.md](adr/README.md)。
+2. **ADR 编号**：每个 ADR 有**两套编号**——① 文件顺序号（`0001`、`0002`…，即文件名 `NNNN-*.md`）与 ② 决策编号（`ADR-0001`、`ADR-0002`…，`docs/adr/README.md` 速查表依据决策编号）。两套递增但互不直接对应（一个文件可承载多个 ADR 决策）；引用统一用 `ADR-00XX`。新增决策时两者均顺序递增、禁止复用已退役编号；状态机见 [docs/adr/README.md](adr/README.md)。
 3. **Spec 布局**：Spec Kit 的 `docs/specs/<feature>/`（spec.md + plan.md + tasks.md），特性目录由 `/speckit-specify` 生成；路径统一为 `docs/specs/<feature>/`。
 4. **写文档的时机**：决策当场写 ADR，需求澄清当场写 Spec，不事后补记。
 5. **文档也走 Review**：ADR / Spec 变更同样需要人类确认（涉及宪法「人类决策边界」时 MUST）。
