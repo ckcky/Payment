@@ -1,0 +1,42 @@
+name: release
+
+# 在推送版本标签（v*）时，自动构建、跑测试、打包发布 tarball 并发布到 GitHub Releases。
+# GitHub-hosted runner 自带 JDK 21 + Docker + gh，因此在此处产出可下载的发布包。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # softprops/action-gh-release 需要创建 Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify (compile + tests)
+        run: ./mvnw -B verify
+
+      - name: Build release tarball
+        run: bash make-release.sh
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Payment Platform ${{ github.ref_name }}
+          files: |
+            payment-platform-*.tar.gz
+            payment-platform-*.tar.gz.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
