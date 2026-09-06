@@ -1,14 +1,14 @@
 {
   "uid": "payment-arch",
   "title": "PaymentArch · SRE 黄金指标",
-  "description": "Google SRE 四大黄金信号（延迟 / 流量 / 错误 / 饱和度）+ 业务指标。耗时相关面板统一毫秒 (ms)。",
+  "description": "Google SRE 四大黄金信号（延迟 / 流量 / 错误 / 饱和度）+ 服务间 RPC（Feign）+ 业务指标。耗时统一毫秒 (ms)，服务图例均为中文名（service_cn）。",
   "tags": [
     "payment-arch",
     "sre-golden-signals"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "10s",
   "time": {
     "from": "now-1h",
@@ -292,8 +292,9 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket[5m]))) * 1000",
-          "refId": "A"
+          "expr": "histogram_quantile(0.99, sum by (le, service_cn) (rate(http_server_requests_seconds_bucket[5m]))) * 1000",
+          "refId": "A",
+          "legendFormat": "{{service_cn}}"
         }
       ],
       "options": {
@@ -345,8 +346,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (job) (rate(http_server_requests_seconds_count[1m]))",
-          "refId": "A"
+          "expr": "sum by (service_cn) (rate(http_server_requests_seconds_count[1m]))",
+          "refId": "A",
+          "legendFormat": "{{service_cn}}"
         }
       ],
       "options": {
@@ -460,14 +462,14 @@
       },
       "targets": [
         {
-          "expr": "100 * sum by (job) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / sum by (job) (rate(http_server_requests_seconds_count[5m]))",
+          "expr": "100 * sum by (service_cn) (rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / sum by (service_cn) (rate(http_server_requests_seconds_count[5m]))",
           "refId": "A",
-          "legendFormat": "5xx {{job}}"
+          "legendFormat": "5xx {{service_cn}}"
         },
         {
-          "expr": "100 * sum by (job) (rate(http_server_requests_seconds_count{status=~\"4..\"}[5m])) / sum by (job) (rate(http_server_requests_seconds_count[5m]))",
+          "expr": "100 * sum by (service_cn) (rate(http_server_requests_seconds_count{status=~\"4..\"}[5m])) / sum by (service_cn) (rate(http_server_requests_seconds_count[5m]))",
           "refId": "B",
-          "legendFormat": "4xx {{job}}"
+          "legendFormat": "4xx {{service_cn}}"
         }
       ],
       "options": {
@@ -565,19 +567,19 @@
       },
       "targets": [
         {
-          "expr": "sum by (job) (hikaricp_connections_active)",
+          "expr": "sum by (service_cn) (hikaricp_connections_active)",
           "refId": "A",
-          "legendFormat": "active {{job}}"
+          "legendFormat": "活跃 {{service_cn}}"
         },
         {
-          "expr": "sum by (job) (hikaricp_connections_idle)",
+          "expr": "sum by (service_cn) (hikaricp_connections_idle)",
           "refId": "B",
-          "legendFormat": "idle {{job}}"
+          "legendFormat": "空闲 {{service_cn}}"
         },
         {
-          "expr": "sum by (job) (hikaricp_connections_pending)",
+          "expr": "sum by (service_cn) (hikaricp_connections_pending)",
           "refId": "C",
-          "legendFormat": "pending {{job}}"
+          "legendFormat": "等待 {{service_cn}}"
         }
       ],
       "options": {
@@ -617,8 +619,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (job) (jvm_memory_used_bytes{area=\"heap\"})",
-          "refId": "A"
+          "expr": "sum by (service_cn) (jvm_memory_used_bytes{area=\"heap\"})",
+          "refId": "A",
+          "legendFormat": "{{service_cn}}"
         }
       ],
       "options": {
@@ -657,8 +660,9 @@
       },
       "targets": [
         {
-          "expr": "process_cpu_usage * 100",
-          "refId": "A"
+          "expr": "sum by (service_cn) (process_cpu_usage) * 100",
+          "refId": "A",
+          "legendFormat": "{{service_cn}}"
         }
       ],
       "options": {
@@ -695,6 +699,149 @@
       }
     },
     {
+      "id": 70,
+      "type": "row",
+      "title": "⑤ 服务间调用 RPC（Feign，调用方 → 目标服务）",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "panels": []
+    },
+    {
+      "id": 71,
+      "type": "timeseries",
+      "title": "RPC 调用速率 (req/s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 42
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (service_cn, rpc_cn) (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(rate(http_client_requests_seconds_count[1m]), \"rpc_cn\", \"其他\", \"clientName\", \".*\"), \"rpc_cn\", \"商品服务\", \"clientName\", \".*CatalogFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*RefundFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFeignClient\"), \"rpc_cn\", \"履约服务\", \"clientName\", \".*FulfillmentFeignClient\"), \"rpc_cn\", \"订单服务\", \"clientName\", \".*OrderFeignClient\"), \"rpc_cn\", \"账务服务\", \"clientName\", \".*LedgerFeignClient\"), \"rpc_cn\", \"权益服务\", \"clientName\", \".*EntitlementFeignClient\"), \"rpc_cn\", \"商户服务\", \"clientName\", \".*MerchantFeignClient\"), \"rpc_cn\", \"对账服务\", \"clientName\", \".*ReconciliationFeignClient\"))",
+          "refId": "A",
+          "legendFormat": "{{service_cn}} → {{rpc_cn}}"
+        }
+      ],
+      "description": "Feign 客户端指标 http.client.requests（feign-micrometer）。rpc_cn 已映射为中文目标服务名。"
+    },
+    {
+      "id": 72,
+      "type": "timeseries",
+      "title": "RPC 延迟 P95 / P99 (ms)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 42
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, rpc_cn) (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(rate(http_client_requests_seconds_bucket[5m]), \"rpc_cn\", \"其他\", \"clientName\", \".*\"), \"rpc_cn\", \"商品服务\", \"clientName\", \".*CatalogFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*RefundFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFeignClient\"), \"rpc_cn\", \"履约服务\", \"clientName\", \".*FulfillmentFeignClient\"), \"rpc_cn\", \"订单服务\", \"clientName\", \".*OrderFeignClient\"), \"rpc_cn\", \"账务服务\", \"clientName\", \".*LedgerFeignClient\"), \"rpc_cn\", \"权益服务\", \"clientName\", \".*EntitlementFeignClient\"), \"rpc_cn\", \"商户服务\", \"clientName\", \".*MerchantFeignClient\"), \"rpc_cn\", \"对账服务\", \"clientName\", \".*ReconciliationFeignClient\"))) * 1000",
+          "refId": "A",
+          "legendFormat": "{{rpc_cn}} p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, rpc_cn) (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(rate(http_client_requests_seconds_bucket[5m]), \"rpc_cn\", \"其他\", \"clientName\", \".*\"), \"rpc_cn\", \"商品服务\", \"clientName\", \".*CatalogFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*RefundFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFeignClient\"), \"rpc_cn\", \"履约服务\", \"clientName\", \".*FulfillmentFeignClient\"), \"rpc_cn\", \"订单服务\", \"clientName\", \".*OrderFeignClient\"), \"rpc_cn\", \"账务服务\", \"clientName\", \".*LedgerFeignClient\"), \"rpc_cn\", \"权益服务\", \"clientName\", \".*EntitlementFeignClient\"), \"rpc_cn\", \"商户服务\", \"clientName\", \".*MerchantFeignClient\"), \"rpc_cn\", \"对账服务\", \"clientName\", \".*ReconciliationFeignClient\"))) * 1000",
+          "refId": "B",
+          "legendFormat": "{{rpc_cn}} p99"
+        }
+      ],
+      "description": "依赖 management.metrics.distribution.percentiles-histogram.http.client.requests=true（已在 5 个 Feign 调用方开启）"
+    },
+    {
+      "id": 73,
+      "type": "timeseries",
+      "title": "RPC 错误率 (非 2xx/3xx, %)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 42
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "100 * sum by (service_cn, rpc_cn) (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(rate(http_client_requests_seconds_count{http_status_code!~\"2..|3..\"}[5m]), \"rpc_cn\", \"其他\", \"clientName\", \".*\"), \"rpc_cn\", \"商品服务\", \"clientName\", \".*CatalogFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*RefundFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFeignClient\"), \"rpc_cn\", \"履约服务\", \"clientName\", \".*FulfillmentFeignClient\"), \"rpc_cn\", \"订单服务\", \"clientName\", \".*OrderFeignClient\"), \"rpc_cn\", \"账务服务\", \"clientName\", \".*LedgerFeignClient\"), \"rpc_cn\", \"权益服务\", \"clientName\", \".*EntitlementFeignClient\"), \"rpc_cn\", \"商户服务\", \"clientName\", \".*MerchantFeignClient\"), \"rpc_cn\", \"对账服务\", \"clientName\", \".*ReconciliationFeignClient\")) / sum by (service_cn, rpc_cn) (label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(label_replace(rate(http_client_requests_seconds_count[5m]), \"rpc_cn\", \"其他\", \"clientName\", \".*\"), \"rpc_cn\", \"商品服务\", \"clientName\", \".*CatalogFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*RefundFactsFeignClient\"), \"rpc_cn\", \"支付服务\", \"clientName\", \".*PaymentFeignClient\"), \"rpc_cn\", \"履约服务\", \"clientName\", \".*FulfillmentFeignClient\"), \"rpc_cn\", \"订单服务\", \"clientName\", \".*OrderFeignClient\"), \"rpc_cn\", \"账务服务\", \"clientName\", \".*LedgerFeignClient\"), \"rpc_cn\", \"权益服务\", \"clientName\", \".*EntitlementFeignClient\"), \"rpc_cn\", \"商户服务\", \"clientName\", \".*MerchantFeignClient\"), \"rpc_cn\", \"对账服务\", \"clientName\", \".*ReconciliationFeignClient\"))",
+          "refId": "A",
+          "legendFormat": "{{service_cn}} → {{rpc_cn}}"
+        }
+      ],
+      "description": "http_status_code 含异常标记 CLIENT_ERROR / TIMEOUT；无流量时显示 NaN 属正常"
+    },
+    {
       "id": 50,
       "type": "row",
       "title": "业务指标（支付 / 退款 / 履约 / 结算 / 秒杀）",
@@ -702,7 +849,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 50
       },
       "panels": []
     },
@@ -718,7 +865,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 42
+        "y": 51
       },
       "targets": [
         {
@@ -768,7 +915,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 42
+        "y": 51
       },
       "targets": [
         {
@@ -816,7 +963,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 42,
+        "y": 51,
         "w": 6,
         "h": 8
       },
@@ -869,7 +1016,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 59
       },
       "panels": []
     },
@@ -885,7 +1032,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 60
       },
       "targets": [
         {
@@ -963,7 +1110,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 42,
+        "y": 51,
         "w": 6,
         "h": 8
       },

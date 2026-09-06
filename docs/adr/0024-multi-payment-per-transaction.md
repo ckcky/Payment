@@ -1,3 +1,5 @@
+<a id="adr-0064"></a>
+
 # ADR-0064: 一交易多支付单（Feature 015）——支付单与订单解耦、退款域并入 payment-service
 
 - 状态：✅ Accepted（2026-09-04）
@@ -23,7 +25,7 @@
    PAID+SUCCEEDED+确认扣库存，扣库存必须由 order-service 发起）；FAILURE → 只更新支付单 FAILED，
    不通知 order；UNKNOWN → 进主动查询收敛。同订单另一张支付单的成功回调不被幂等吸收——
    order 识别后走自动退款（见 4）。
-4. **C5 修复 + 自动退款闭环**（⚠️ **Superseded by ADR-0054 / spec 016**，2026-09-06：
+4. **C5 修复 + 自动退款闭环**（⚠️ **Superseded by ADR-0065 / spec 016**，2026-09-06：
    自动退款决策与发起归属 order transaction 层——order 不再返回 409 `ORDER_NOT_PAYABLE`，
    payment 侧 `OrderNotPayableException` / `AutoRefundGateway` / payment 直调履约扇出已删除；
    surplus 判定改由 order transaction 层以 `transactionNo + paymentNo` 调 `PaymentGateway.refund` 发起；
@@ -55,4 +57,4 @@
 
 ## 后续演进
 
-> **Superseded by ADR-0054**（2026-09-06，`docs/adr/0025-order-payment-orchestration.md`）：本 ADR **第 4 条**（order 返回 409 `ORDER_NOT_PAYABLE` → payment 捕获后自发起自动退款）已被 ADR-0054 取代——自动退款的**决策与发起**归属 order-service 的 transaction 层（以 `transactionNo + paymentNo` 发起），payment-service 退回能力提供方。其余条款（一交易多支付单、退款域并入 payment-service、三渠道 mock）**保持不变**。
+> **Superseded by ADR-0065**（2026-09-06，`docs/adr/0025-order-payment-orchestration.md`）：本 ADR **第 4 条**（order 返回 409 `ORDER_NOT_PAYABLE` → payment 捕获后自发起自动退款）已被 ADR-0065 取代——自动退款的**决策与发起**归属 order-service 的 transaction 层（以 `transactionNo + paymentNo` 发起），payment-service 退回能力提供方。其余条款（一交易多支付单、退款域并入 payment-service、三渠道 mock）**保持不变**。

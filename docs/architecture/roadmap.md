@@ -30,34 +30,66 @@
 
 ## Feature Dependency Graph
 
+> **编号口径**：下图的 Feature 编号取 `docs/specs/` 目录的实际编号。注意历史遗留的两处歧义——
+> ① `008` 为有意保留的缺口，不补号；② 并行能力块中的 `009 Observability Baseline` /
+> `010 Delivery / CI-CD Baseline` 与下方 `009-risk-security` / `010-distributed-evolution`
+> **编号撞车**（后者是按 spec 目录顺序编号，与 roadmap 原并行能力编号无关），引用时以 `docs/specs/` 目录名为准。
+
 ```text
 Phase 0 Foundation
         ↓
 001 Core Business Model
         ↓
-002 Payment Reliability
+002 payment-order-callback
         ↓
-003 Refund
+003 payment-reliability
         ↓
-004 Reconciliation
+004 ledger
         ↓
-005 Settlement
+005 refund
         ↓
-006 Ledger
+006 reconciliation
         ↓
-007 Risk / Security
+007 settlement
         ↓
-008 Distributed Evolution
+009 risk-security → 010 distributed-evolution
+        ↓
+011 demo-showcase → 012 entry-idempotency → 013 inventory-reservation → 014 seckill-and-cache
+        ↓
+015 multi-payment-per-transaction / snowflake-business-no（多支付单模型 + 退款并入 payment + 雪花单号）
+        ↓
+016 order-payment-orchestration（两步式建支付单 + 支付编排归位）
 ```
 
 可并行但不阻塞主链路的能力：
 
 ```text
-001 Core Business Model ──┬── 009 Observability Baseline
-                          └── 010 Delivery / CI-CD Baseline
+001 Core Business Model ──┬── Observability Baseline
+                          └── Delivery / CI-CD Baseline
 ```
 
-009 和 010 可以在核心业务 Feature 的适当阶段并行，但不能取代主链路验收。
+两者可以在核心业务 Feature 的适当阶段并行，但不能取代主链路验收。
+
+## 项目计划与资源
+
+**当前阶段**：Roadmap 主链 Phase 0~10 已走完，终点 `014-seckill-and-cache`；015（多支付单 + 退款并入 + 雪花单号）、016（支付编排归位）为后续增量，已落地。当前处于演示/打磨期。
+
+| 阶段 | 目标 | 交付边界 |
+|---|---|---|
+| Phase 0 · Foundation | 收口架构裁决、服务目录、端口、Schema、Spec Kit 入口 | 不实现业务、不接真实支付、不建 Ledger、不引 MQ/K8s |
+| Phase 1 · Commerce Core | Merchant/Product/SKU/Order/Transaction 最小可运行 | 不含 Payment、退款、权益、结算、库存/促销/税费 |
+| Phase 2 · Payment Core | Payment/Attempt/Channel Adapter + Mock Channel | 不含真实渠道、Ledger、路由/风控/多币种 |
+| Phase 3 · Payment Reliability | UNKNOWN 收敛、重复/乱序/延迟回调、有限重试、审计 | 不含生产级 SLA、多活、复杂风控、自动补偿 |
+| Phase 4 · Fulfillment & Entitlement | 支付成功后履约 → 权益授予 | 不含复杂仓储物流、权益商城、退款回收政策 |
+| Phase 5 · Refund | **单笔退款只回三态**（成功恒为全额；部分退款追踪本期不做，[技术方案 §2.4](technical-solution.md) #6 / ADR-0047）、支持同一支付多笔退款、幂等、退款后处理 | 不含单笔部分成功追踪、审批、权益回收政策、真实出款；**退款侧 Ledger 冲正已接入**（退款成功经 `FeignLedgerPostingGateway` 留反向分录，ADR-0018） |
+| Phase 6 · Reconciliation | 平台事实与渠道账单比对、差异处理 | 不含真实账单、自动调账、真实资金修正 |
+| Phase 7 · Settlement | 商户周期结算批次、调整项、模拟结算结果 | 不真实出款、不接银行、不接多币种清分（结算侧记账经 ledger-service，见 [技术方案 §4.3.5](technical-solution.md)） |
+| Phase 8 · Ledger | 复式记账、科目、分录、记账幂等 | 不含复杂会计准则、多币种清分、总账 |
+| Phase 9 · Risk / Security | 认证、授权、签名校验、敏感数据、最小风控 | 不含全量合规、复杂风控平台 |
+| Phase 10 · Distributed Evolution | 有证据地独立数据库/服务治理演进 | 不默认引入 Service Mesh/K8s/CQRS/ES |
+
+> 上述各 Phase 的**目标 / 为什么现在做 / 前置条件 / 包含的 Feature / 不包含 / 验收标准 / 完成后获得的能力 / 进入下一阶段原因**详见本文下方 Phase 0~10 各章节；
+> 本表只作一屏速览，不重复展开。每个 Feature 的 SOP 见本文末「每个 Feature 完成后的 SOP」。
 
 ## Phase 0 — Foundation
 
@@ -515,3 +547,66 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 8. 运行 `/review`；涉及支付、退款、对账、结算或 Ledger 时运行 `/payment-review`。
 9. 更新本 Roadmap 的 Current Status、Next Feature 和 Feature 状态。
 10. 将未完成内容转为后续 Feature，不把临时决定悄悄留在代码中。
+
+---
+
+## 附录 A：已决策 ADR 追溯索引
+
+> **迁移说明**：本节自 `technical-solution.md` §9 迁入（2026-09-06 文档治理）。
+> 审计要求（Phase 5）不变——**已决策的 ADR 必须在技术方案与系统设计文档中体现**；
+> 但索引改为集中在本文维护，`technical-solution.md` 按「决策内联在对应章节」的方式体现，
+> 不再另立索引表（索引与正文分离必然漂移）。
+> 全部 ADR 的「编号 → 承载文件 → 锚点」全局跳转表见 [`docs/adr/README.md`](../adr/README.md)。
+>
+> 标记：**【内联】** = 已在技术方案/系统设计正文对应章节体现；**【索引】** = 本表集中索引；
+> **【ADR 文件】** = 仅纪录于 `docs/adr/`，正文未展开（按惯例以 ADR 文件为权威）。
+
+### A.1 已在技术方案正文内联体现的 ADR
+
+| ADR | 决策 | 落点 |
+|---|---|---|
+| ADR-0002 | 技术栈选型 | [技术方案 §3.5](technical-solution.md) |
+| ADR-0010 | 金额表示：long 分 + currencyCode，Money VO 不启用 | [技术方案 §4.2](technical-solution.md) |
+| ADR-0018 | 退款 → Ledger 记账接入（冲正分录） | 本文 Phase 5 |
+| ADR-0019 / 0020 / 0021 | 对账：状态机接线 / 渠道账单周期 fixture / 事实读取弹性 | [技术方案 §4.3.5](technical-solution.md)、[systems/reconciliation-service.md](systems/reconciliation-service.md) |
+| ADR-0021 | 不引入熔断中间件 | [技术方案 §4.4](technical-solution.md) |
+| ADR-0024 / 0025 / 0027 / 0028 | 安全：鉴权空实现 / 验签空实现 / 脱敏不做 / 风控不做 | [技术方案 §2.4、§5.2](technical-solution.md) |
+| ADR-0026 | 密钥明文 env 注入 | [技术方案 §5.2](technical-solution.md) |
+| ADR-0039 / 0040 | 下单入口幂等键（Redis 唯一存储、409 + Retry-After） | [systems/order-service.md](systems/order-service.md) |
+| ADR-0041 / 0042 / 0043 | 库存域归属 catalog / 三段式扣减 / ZSet 超时释放 | [systems/catalog-service.md](systems/catalog-service.md)、[systems/order-service.md](systems/order-service.md) |
+| ADR-0044 / 0045 / 0046 | Redis 引入论证 / 用途边界（非数据源）/ 固定窗口限流 | [技术方案 §3.5、§5](technical-solution.md) |
+| ADR-0047 | 退款金额校验口径（累计不超付） | [技术方案 §4.3.3](technical-solution.md) |
+| ADR-0048 ~ 0051 | 演示形态：收银台 / 场景配置化 / 演示账单 / 脚本纪律 | [技术方案 §3.1、§6](technical-solution.md) |
+| ADR-0052 | 渠道回调验签接入（回退至 ADR-0025 空实现） | [技术方案 §5.2](technical-solution.md) |
+| ADR-0053 | 013/014 代码超前 roadmap 落地处置 | 本文「已知偏离」 |
+| **ADR-0059** | **启用 Nacos 服务发现（硬依赖）** | [技术方案 §3.1、§3.5](technical-solution.md)——撤销 ADR-0056「暂不启用」偏离 |
+| **ADR-0062 / 0063** | **雪花业务单号 / 跨系统关联一律用业务单号** | [技术方案 §3.4、§4.2](technical-solution.md) |
+| **ADR-0064** | **一交易多支付单 + 退款域并入 payment-service（10→9）** | [技术方案 §3.2、§4.2](technical-solution.md) |
+| **ADR-0065** | **支付编排职责归位（order 升为编排者，spec 016）** | [技术方案 §4.1、§4.3](technical-solution.md)；Supersedes ADR-0064 §决策#4 |
+
+> ⚠️ **编号提示**：ADR-0065 曾误标 ADR-0054（与 `0016-core-payment-correctness.md` 重号），2026-09-06 更正。见 [`docs/adr/README.md`](../adr/README.md) 编号规则。
+
+### A.2 集中索引（正文未展开）
+
+| ADR | 决策要点 | 落点 |
+|---|---|---|
+| ADR-0012 | 双响应码错误分类（通信失败一律重试，业务失败不重试） | [技术方案 §4.4](technical-solution.md) / [systems/payment-service.md](systems/payment-service.md) |
+| ADR-0013 | 重试不落库、请求内联重试（3 次退避 1s/2s/4s） | [技术方案 §4.4](technical-solution.md) |
+| ADR-0014 | 同 attempt 重放（重试复用同一 attempt，靠幂等吸收） | [技术方案 §4.4](technical-solution.md) |
+| ADR-0015 | UNKNOWN 真实收敛时长度量（`entered_unknown_at`） | [技术方案 §5.1 / §5.3](technical-solution.md) |
+| 超时口径 | 出站 RPC 1s / 对外 HTTP 1.5s（全服务统一） | [技术方案 §3.3 / §4.4](technical-solution.md) |
+| ADR-0038 | 演示形态 → **Superseded by ADR-0048** | [技术方案 §6](technical-solution.md) |
+| ADR-0048 | 新增 `mock-channel-web` 收银台组件（payUrl 跳转链路） | [技术方案 §3.1 / §6](technical-solution.md)（8091） |
+| ADR-0049 | Mock 渠道场景配置化（`payment.channel.mock-scenario`） | [技术方案 §4.3](technical-solution.md) |
+| ADR-0050 | 对账演示账单生成 CSV 写入 `target/classes` | [技术方案 §4.3.5](technical-solution.md) |
+| ADR-0051 | 演示脚本纪律（只编排不伪造、断言失败即非零退出） | [技术方案 §6](technical-solution.md) / `deployment/` |
+| ADR-0055 | 支付意图幂等键由 order-service 生成 | [systems/order-service.md](systems/order-service.md) |
+| ADR-0056 | Nacos 启用决策（落实 ADR-0002；实施记录见 ADR-0059） | [技术方案 §3.5](technical-solution.md) |
+| ADR-0057 | 服务未容器化 | [技术方案 §6](technical-solution.md) |
+| ADR-0058 | 性能与容量基线 | [技术方案 §5.1](technical-solution.md) / `deployment/performance/` |
+| ADR-0060 | Redis 客户端启用 Lettuce 连接池 | [技术方案 §3.5](technical-solution.md) |
+| ADR-0061 | 可观测性补全与演示脚本漂移修复 | [技术方案 §5.3](technical-solution.md) |
+
+### A.3 仅纪录于 ADR 文件（正文未展开，以 ADR 文件为权威）
+
+ADR-0001（Spring Cloud 架构）、ADR-0003~0007（支付可靠性集合）、ADR-0008~0011（Ledger 设计集合）、ADR-0016~0017（退款模型/编排）、ADR-0022~0023（结算调整项/闸门）、ADR-0029~0033（分布式演进）、ADR-0034~0037（内部令牌，已不做）、ADR-0054（核心资金正确性，见 `0016-core-payment-correctness.md`）。

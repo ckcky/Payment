@@ -177,7 +177,7 @@ PROCESSING 超 30s 由 `TimeoutScanner` 转 UNKNOWN「点了不回调」→ `Cha
 
 ## 6. R6 · Feature 016 验证压测（2026-09-06）
 
-> 承载 spec 016 / ADR-0054 落地验证：主链压测新增 **surplus 双支付分支**，
+> 承载 spec 016 / ADR-0065 落地验证：主链压测新增 **surplus 双支付分支**，
 > 断言「订单 PAID 后第二张支付单回调成功 → order transaction 层判 surplus 发起自动退款，
 > **全程 0 次 409**」（FR-007 / SC-001）。k6 二进制在沙箱被代理拦截，主链改用零依赖
 > Node 版负载生成器（stdlib http，与 k6 场景等价）。

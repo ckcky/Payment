@@ -16,8 +16,12 @@
 
 | 维度 | 说明 |
 |---|---|
-| **负责** | 订单创建、订单明细与价格快照（不可变）、订单状态机、订单金额不变量（总额/已支付/已退款）、Order 1:1 Transaction、下单时同步创建支付意图、支付成功回调回写订单/交易状态 |
+| **负责** | 订单创建、订单明细与价格快照（不可变）、订单状态机、订单金额不变量（总额/已支付/已退款）、Order 1:1 Transaction、**支付单创建的编排入口（显式选渠道 → 建支付单，ADR-0064/ADR-0065）**、支付成功回调回写订单/交易状态、surplus 判定与自动退款发起（transaction 层） |
 | **不负责** | 支付执行/渠道协议（归属 payment-service）；商品定义（归属 catalog-service）；履约/权益最终状态 |
+
+> ⚠️ **契约变更（Feature 015 / ADR-0064）**：`POST /orders` **只建订单，不再同步创建支付单**。
+> 支付单由调用方显式 `POST /orders/{orderNo}/payments`（带 `channelCode`）创建，一张交易可关联多张支付单（Transaction : Payment = 1:N）。
+> 历史上「下单即返回 paymentNo / payUrl」的写法已失效——演示脚本与演示页曾因此长期写错。
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -64,7 +68,7 @@ COMPLETED/CANCELLED --close--> CLOSED
 ```
 
 - `confirm()`：PENDING_CONFIRMATION → PENDING_PAYMENT。
-- `recordPayment(paymentNo)`：下单时同步 RPC 返回的支付业务单号（PM+雪花），不改变订单状态。
+- `recordPayment(paymentNo)`：记录**建支付单**时 payment-service 返回的支付业务单号（PM+雪花，ADR-0062/0063），不改变订单状态。
 - `markPaid(paymentNo)`：PENDING_PAYMENT → PAID（整单支付，不支持部分支付）；记录下游支付业务单号、`paidMinor = totalMinor`；对已 PAID 的重复回调返回 `false` 幂等吸收。
 - `markFulfilling()` / `complete()`：PAID → FULFILLING → COMPLETED。
 - `cancel()`：仅 PENDING_CONFIRMATION/PENDING_PAYMENT；`close()`：仅 COMPLETED/CANCELLED。
@@ -80,7 +84,7 @@ PENDING --cancel--> CANCELLED
 
 - 关键不变量：未知只能由权威结果收敛，不可猜成败；`succeed()/fail()` 对终态返回 `false`。
 
-> **状态回写（已实现，Feature 002）**：下单创建支付意图后，Transaction 由 `start()` 进入 `PROCESSING`；支付成功回调通过内部 RPC（[OrderPaymentRpcController](../../order-service/src/main/java/com/payment/order/api/OrderPaymentRpcController.java)）驱动 Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`，重复回调幂等吸收。
+> **状态回写（已实现，Feature 002）**：显式建支付单后，Transaction 由 `start()` 进入 `PROCESSING`；支付成功回调通过内部 RPC（[OrderPaymentRpcController](../../order-service/src/main/java/com/payment/order/api/OrderPaymentRpcController.java)）驱动 Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`，重复回调幂等吸收。
 
 ### 2.3 表结构与索引策略
 
@@ -93,7 +97,7 @@ PENDING --cancel--> CANCELLED
 | id | BIGINT PK AUTO_INCREMENT | 订单 ID |
 | user_id | VARCHAR(64) NOT NULL | 用户 |
 | merchant_id | VARCHAR(64) NOT NULL | 商户 |
-| payment_id | BIGINT NULL | 下游支付单号（payment-service 的 payment.id；下单时同步 RPC 返回、支付成功回调确认） |
+| payment_no | VARCHAR(32) NULL | 关联支付单**业务单号**（PM+雪花，ADR-0062/0063）；建支付单时写入、支付成功回调确认。⚠️ 非数值主键——数值主键不跨服务 |
 | status | VARCHAR(32) NOT NULL | 状态机枚举名 |
 | currency_code | VARCHAR(8) NOT NULL | 币种 |
 | total_minor / paid_minor / refunded_minor | BIGINT NOT NULL | 总额 / 已支付 / 已退款（分） |
@@ -185,8 +189,9 @@ PENDING --cancel--> CANCELLED
 
 | 目标 | 路径 | 请求/响应 |
 |---|---|---|
-| catalog-service | `GET /skus/{id}`（Feign，默认 `http://localhost:8082`） | 响应 `CatalogSkuDto` → `SkuSnapshot` |
-| payment-service | `POST /payments`（Feign，默认 `http://localhost:8084`） | `CreatePaymentRequest` → `CreatePaymentResponse` |
+| catalog-service | `GET /skus/{id}`（Feign，经 **Nacos 服务名发现**） | 响应 `CatalogSkuDto` → `SkuSnapshot` |
+| payment-service | `POST /orders/{orderNo}/payments`（Feign，经 **Nacos 服务名发现**；ADR-0064 两步式） | `CreatePaymentRequest(channelCode)` → `CreatePaymentResponse(paymentNo, status, payUrl)` |
+| payment-service | `POST /internal/payments/refund`（自动退款 / surplus，ADR-0065） | `transactionNo + paymentNo` → 退款受理 |
 
 ---
 
@@ -231,7 +236,7 @@ sequenceDiagram
 3. `changed` 时 `save`；`transactionRepository.findByOrderId` → `succeed()`（`PROCESSING → SUCCEEDED`，`PENDING` 时先 `start()`）。
 4. 事务边界：`onPaymentSucceeded` 标 `@Transactional`（订单 + 交易在同一本地事务原子提交）。
 
-> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：目标架构下本流程扩展为——新增 **transaction 层**（`TransactionApplicationService`）接收通知并判定「正常到账 / surplus」：正常 → **委派 order 层**执行 markPaid + transaction.succeed() + confirmStock 并**驱动履约**（`FulfillmentGateway.notifyPaymentSucceeded`，`fulfillment → entitlement` 链保留）；surplus → 以 `transactionNo + paymentNo` 经 `PaymentGateway.refund(...)` 发起自动退款（不再向 payment 抛 409）。**confirmStock 与履约驱动属 order 层，不在 transaction 层**。实施完成后本节随代码更新。
+> **迁移标注（ADR-0065 / spec 016，Proposed 未实施）**：目标架构下本流程扩展为——新增 **transaction 层**（`TransactionApplicationService`）接收通知并判定「正常到账 / surplus」：正常 → **委派 order 层**执行 markPaid + transaction.succeed() + confirmStock 并**驱动履约**（`FulfillmentGateway.notifyPaymentSucceeded`，`fulfillment → entitlement` 链保留）；surplus → 以 `transactionNo + paymentNo` 经 `PaymentGateway.refund(...)` 发起自动退款（不再向 payment 抛 409）。**confirmStock 与履约驱动属 order 层，不在 transaction 层**。实施完成后本节随代码更新。
 
 ```mermaid
 sequenceDiagram
