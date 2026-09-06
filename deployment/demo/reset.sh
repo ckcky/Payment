@@ -13,7 +13,8 @@ ROOT_DIR="$(cd "$HERE/../.." && pwd)"
 source "$HERE/lib.sh"
 
 SCHEMA_DIR="$ROOT_DIR/deployment/schema"
-DATABASES=(catalog "order" payment refund fulfillment entitlement reconciliation settlement ledger)
+# Feature 015（ADR-0064）后 refund 库已退役，退款表在 payment 库内，随 payment 一起清
+DATABASES=(catalog "order" payment fulfillment entitlement reconciliation settlement ledger)
 
 echo "==> [1/3] 重建业务 Schema（重放 deployment/schema/*.sql + 清空业务表）"
 # 只重放「全量 schema」（NN-*.sql，各文件自带 CREATE DATABASE + USE）。
