@@ -47,4 +47,29 @@ class RpcContractTest {
         assertThat(com.payment.common.dto.rpc.PaymentSucceededRequest.class.getPackageName())
                 .isEqualTo("com.payment.common.dto.rpc");
     }
+
+    @Test
+    void refundCommandCarriesTransactionRefundNo() {
+        // spec 019 / ADR-0067：order 先生成 TXRF，payment 幂等键 = TXRF，响应 refundNo 即 PMRF
+        RefundCommandRequest req = new RefundCommandRequest(
+                "TXRF1", "TX1", "PM1", "OR1", "user-1", 500L, "CNY");
+        assertThat(req.transactionRefundNo()).isEqualTo("TXRF1");
+        assertThat(req.paymentNo()).isEqualTo("PM1");
+        assertThat(req.amountMinor()).isEqualTo(500L);
+
+        RefundCommandResponse resp = new RefundCommandResponse("PMRF1", "PROCESSING");
+        assertThat(resp.refundNo()).isEqualTo("PMRF1");
+        assertThat(resp.status()).isEqualTo("PROCESSING");
+    }
+
+    @Test
+    void refundResultNotificationCarriesBothNos() {
+        // payment → order 收口通知：TXRF + PMRF 双号互传，终态 + 失败原因
+        RefundResultNotification n = new RefundResultNotification(
+                "TXRF1", "PMRF1", "TX1", "OR1", "PM1", 500L, "CNY", "SUCCEEDED", null);
+        assertThat(n.transactionRefundNo()).isEqualTo("TXRF1");
+        assertThat(n.paymentRefundNo()).isEqualTo("PMRF1");
+        assertThat(n.status()).isEqualTo("SUCCEEDED");
+        assertThat(n.failureReason()).isNull();
+    }
 }

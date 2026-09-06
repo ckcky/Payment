@@ -61,7 +61,7 @@ class PaymentAutoRefundServiceTest {
     }
 
     private RefundCommandRequest command(String paymentNo) {
-        return new RefundCommandRequest("TXN-AR", paymentNo, "order-ar", "user-ar", 100, "CNY");
+        return new RefundCommandRequest("TXRF-AR-1", "TXN-AR", paymentNo, "order-ar", "user-ar", 100, "CNY");
     }
 
     @Test

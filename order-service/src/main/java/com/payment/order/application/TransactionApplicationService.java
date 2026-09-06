@@ -2,6 +2,8 @@ package com.payment.order.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
@@ -93,9 +95,11 @@ public class TransactionApplicationService {
                 request.currencyCode(), "FINANCIAL_AUDIT", request.transactionNo(), "payment", request.paymentNo());
         log.warn("surplus 判定，发起自动退款 cause={} transactionNo={} paymentNo={} orderNo={} amount={}",
                 cause, request.transactionNo(), request.paymentNo(), order.getOrderNo(), request.amountMinor());
+        // spec 019 / ADR-0067：交易层先生成退款单号 TXRF，幂等键 = TXRF（同号重试回放）
+        String transactionRefundNo = BusinessNos.of(BusinessNoType.TRANSACTION_REFUND);
         RefundCommandResponse response = paymentGateway.refund(new RefundCommandRequest(
-                request.transactionNo(), request.paymentNo(), order.getOrderNo(), order.getUserId(),
-                request.amountMinor(), request.currencyCode()));
+                transactionRefundNo, request.transactionNo(), request.paymentNo(), order.getOrderNo(),
+                order.getUserId(), request.amountMinor(), request.currencyCode()));
         log.warn("surplus 自动退款完成 transactionNo={} paymentNo={} refundNo={} refundStatus={}",
                 request.transactionNo(), request.paymentNo(), response.refundNo(), response.status());
     }
