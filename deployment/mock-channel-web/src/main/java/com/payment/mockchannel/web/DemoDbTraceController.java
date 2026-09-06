@@ -169,6 +169,57 @@ public class DemoDbTraceController {
         return resp;
     }
 
+    /**
+     * 退款渠道尝试（演示控制台 ③ 退款卡片）：按订单只读直查 payment_attempts 中
+     * attempt_type=REFUND 的行（Feature 016 / FR-017：PaymentRefundService 调渠道后落库，
+     * channel_reference 即真实渠道退款流水号，015 对账事实以它寻址）。
+     *
+     * <p>注意：受理即拒（REJECTED，防超额 H1）发生在调渠道之前，不产生尝试记录 —— 属预期。</p>
+     */
+    @GetMapping("/demo/refund-attempts")
+    public Map<String, Object> refundAttempts(@RequestParam("orderId") String orderId,
+                                              HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("orderId", orderId);
+
+        List<Map<String, Object>> sections = new ArrayList<>();
+        if (jdbc == null) {
+            resp.put("attempts", List.of());
+            resp.put("error", "JdbcTemplate 不可用（依赖缺失）");
+            return resp;
+        }
+
+        boolean numeric = NUMERIC.matcher(orderId).matches();
+        List<Map<String, Object>> orders = query(sections, "order-service", "orders",
+                numeric ? "SELECT * FROM `order`.orders WHERE id = ?"
+                        : "SELECT * FROM `order`.orders WHERE order_no = ?",
+                new Object[]{numeric ? Long.parseLong(orderId) : orderId});
+        if (orders.isEmpty()) {
+            resp.put("attempts", List.of());
+            resp.put("error", "orders 表无此记录：" + orderId);
+            return resp;
+        }
+        String orderNo = String.valueOf(orders.get(0).get("order_no"));
+
+        List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
+                "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo});
+        List<Object> paymentNos = ids(payments, "payment_no");
+        if (paymentNos.isEmpty()) {
+            resp.put("attempts", List.of());
+            resp.put("note", "该订单尚无支付单 —— 未建支付单则无退款尝试");
+            return resp;
+        }
+        List<Map<String, Object>> attempts = query(sections, "payment-service", "payment_attempts",
+                "SELECT id, payment_no, attempt_type, channel_code, channel_reference, status, "
+                        + "failure_reason, created_at FROM payment.payment_attempts "
+                        + "WHERE attempt_type = 'REFUND' AND payment_no IN (" + placeholders(paymentNos) + ") "
+                        + "ORDER BY id",
+                paymentNos.toArray());
+        resp.put("attempts", attempts);
+        return resp;
+    }
+
     /** 单查封装：异常兜底为该 section 的 error，行值做可读化（Date→字符串）。 */
     private List<Map<String, Object>> query(List<Map<String, Object>> sections, String system,
                                             String table, String sql, Object[] args) {

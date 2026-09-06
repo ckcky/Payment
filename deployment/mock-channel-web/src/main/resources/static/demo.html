@@ -87,6 +87,13 @@
     </thead><tbody id="refundRows">
       <tr><td colspan="5" style="color:#9ca3af">（尚无退款 —— 支付成功后发起）</td></tr>
     </tbody></table>
+    <div class="note" style="margin-top:10px">渠道尝试（Feature 016：调渠道后落 payment_attempts，attempt_type=REFUND，
+      channel_reference 即真实渠道退款流水号，对账事实以它寻址。REJECTED 在调渠道前被拒，无尝试记录，属预期）：</div>
+    <table><thead>
+      <tr><th>payment_no</th><th>类型</th><th>渠道</th><th>channel_reference</th><th>状态</th></tr>
+    </thead><tbody id="refundAttemptRows">
+      <tr><td colspan="5" style="color:#9ca3af">（尚无退款渠道尝试）</td></tr>
+    </tbody></table>
   </div>
 
   <div class="card">
@@ -252,6 +259,28 @@ function resetRefunds() {
   lastRefund = null;
   document.getElementById('refundRows').innerHTML =
     '<tr><td colspan="5" style="color:#9ca3af">（尚无退款 —— 支付成功后发起）</td></tr>';
+  document.getElementById('refundAttemptRows').innerHTML =
+    '<tr><td colspan="5" style="color:#9ca3af">（尚无退款渠道尝试）</td></tr>';
+}
+
+async function loadRefundAttempts() {
+  if (!currentOrderNo) return;
+  const r = await fetch('/demo/refund-attempts?orderId=' + encodeURIComponent(currentOrderNo), { cache: 'no-store' });
+  if (r.status !== 200) return;
+  const data = await r.json();
+  const rows = data.attempts || [];
+  const box = document.getElementById('refundAttemptRows');
+  if (rows.length === 0) {
+    box.innerHTML = '<tr><td colspan="5" style="color:#9ca3af">'
+      + esc(data.note || data.error || '（尚无退款渠道尝试）') + '</td></tr>';
+    return;
+  }
+  box.innerHTML = rows.map(a =>
+    '<tr><td class="no">' + esc(a.payment_no) + '</td>'
+    + '<td>' + esc(a.attempt_type) + '</td>'
+    + '<td>' + esc(a.channel_code) + '</td>'
+    + '<td class="no">' + esc(a.channel_reference || 'NULL') + '</td>'
+    + '<td class="st st-' + esc(a.status) + '">' + esc(a.status) + '</td></tr>').join('');
 }
 
 function renderRefundRow(r) {
@@ -298,6 +327,7 @@ async function createRefund() {
     startRefundPoll();
   }
   traceOrder(currentOrderNo);   // 退款落库后刷新全链路 DB 视图
+  loadRefundAttempts();         // 同步刷新退款渠道尝试（payment_attempts attempt_type=REFUND）
 }
 
 async function replayRefund() {
@@ -329,6 +359,8 @@ async function pollRefundsOnce() {
       if (REFUND_TERMINAL.includes(r.data.status)) {
         log('   退款 ' + refundNo + ' → ' + r.data.status);
         stopRefundPoll();
+        loadRefundAttempts();     // 终态后补一次渠道尝试与 DB 视图（异步收敛场景落库晚于发起）
+        traceOrder(currentOrderNo);
       }
     }
   }
