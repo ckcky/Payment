@@ -60,7 +60,7 @@ bash stop.sh              # 全部停止（保留数据卷，下次 start.sh 数
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `PAYMENT_NACOS_IP` | 自动 | 多网卡机器强制服务向 Nacos 注册指定 IP |
+| `PAYMENT_NACOS_IP` | `127.0.0.1` | 覆盖服务向 Nacos 注册的 IP（分布式部署时改） |
 | `JAVA_TOOL_OPTIONS` | `-Xmx512m ...` | JVM 内存上限 |
 | `PAYMENT_ADMIN_TOKEN` | `demo-admin-token` | 支付管理端点令牌 |
 | `PAYMENT_CHANNEL_SECRET` | `demo-channel-secret-2026` | 渠道回调签名演示密钥 |

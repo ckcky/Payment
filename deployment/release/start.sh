@@ -9,7 +9,7 @@
 #       10 个 JVM 进程(9 领域服务 + mock-channel-web 演示组件) → 等健康
 #
 # 可选环境变量：
-#   PAYMENT_NACOS_IP=<ip>   多网卡机器强制服务向 Nacos 注册指定 IP（默认自动）
+#   PAYMENT_NACOS_IP=<ip>   覆盖服务向 Nacos 注册的 IP（默认 127.0.0.1，分布式部署时改）
 #   JAVA_TOOL_OPTIONS=...   JVM 内存上限（默认 -Xmx512m -Xms128m -XX:MaxMetaspaceSize=192m）
 #
 set -euo pipefail
@@ -79,12 +79,12 @@ export PAYMENT_CHANNEL_SECRET="${PAYMENT_CHANNEL_SECRET:-demo-channel-secret-202
 export PAYMENT_ADMIN_TOKEN="${PAYMENT_ADMIN_TOKEN:-demo-admin-token}"
 export PAYMENT_MOCK_CASHIER_ENABLED="${PAYMENT_MOCK_CASHIER_ENABLED:-true}"
 
-# 多网卡机器可 PAYMENT_NACOS_IP=<ip> 强制注册 IP（Feign 经 Nacos 服务名寻址）
-NACOS_IP_OPTS=()
-if [ -n "${PAYMENT_NACOS_IP:-}" ]; then
-  NACOS_IP_OPTS=(-Dspring.cloud.nacos.discovery.ip="$PAYMENT_NACOS_IP")
-  echo "    服务将向 Nacos 注册 IP: $PAYMENT_NACOS_IP"
-fi
+# 单机发行包默认向 Nacos 注册 127.0.0.1：服务与注册中心同机，回环最稳
+# （注册局域网 IP 在防火墙/多网卡环境易踩坑）。分布式部署时显式覆盖：
+#   PAYMENT_NACOS_IP=<ip> bash start.sh
+export PAYMENT_NACOS_IP="${PAYMENT_NACOS_IP:-127.0.0.1}"
+NACOS_IP_OPTS=(-Dspring.cloud.nacos.discovery.ip="$PAYMENT_NACOS_IP")
+echo "    服务向 Nacos 注册 IP: $PAYMENT_NACOS_IP"
 
 for jar in jars/*.jar; do
   name="$(basename "$jar" -0.1.0-SNAPSHOT.jar)"
