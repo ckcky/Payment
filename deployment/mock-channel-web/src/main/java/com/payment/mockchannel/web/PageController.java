@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class PageController {
 
+    /** 门户主界面（演示组件入口聚合页）。 */
+    @GetMapping("/")
+    public String portal() {
+        return "forward:/portal.html";
+    }
+
     /** 收银台页：{@code GET /cashier?paymentNo=&orderNo=&amountMinor=&currencyCode=}。 */
     @GetMapping("/cashier")
     public String cashier() {

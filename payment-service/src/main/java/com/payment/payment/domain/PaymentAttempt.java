@@ -37,17 +37,25 @@ public class PaymentAttempt {
      * 重试判定只看通信响应码 {@code TransportCode}。
      */
     private PaymentAttemptErrorType errorType;
+    /**
+     * 本次渠道交互的资金口径（spec 018 / US1 / D2）：金额（最小货币单位）与币种。
+     * PAYMENT 尝试记支付单金额；REFUND 尝试记所属支付单金额（非退款金额）。
+     */
+    private long amountMinor;
+    private String currencyCode;
 
-    public PaymentAttempt(String paymentNo, String channelCode, int retryCount) {
+    public PaymentAttempt(String paymentNo, String channelCode, int retryCount, long amountMinor, String currencyCode) {
         this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
         this.channelCode = Objects.requireNonNull(channelCode, "channelCode");
+        this.amountMinor = amountMinor;
+        this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.requestedAt = Instant.now();
         this.retryCount = retryCount;
     }
 
     /** 退款渠道尝试（Feature 016 / FR-017 第②步）：复用 payment_attempts，channel_reference=渠道退款流水号。 */
-    public static PaymentAttempt refundAttempt(String paymentNo, String channelCode) {
-        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0);
+    public static PaymentAttempt refundAttempt(String paymentNo, String channelCode, long amountMinor, String currencyCode) {
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode);
         attempt.attemptType = TYPE_REFUND;
         return attempt;
     }
@@ -60,9 +68,9 @@ public class PaymentAttempt {
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
-                                           Integer version) {
+                                           Integer version, long amountMinor, String currencyCode) {
         return rehydrate(id, paymentNo, channelCode, retryCount, requestedAt, respondedAt, channelReference,
-                status, failureReason, errorType, version, TYPE_PAYMENT);
+                status, failureReason, errorType, version, TYPE_PAYMENT, amountMinor, currencyCode);
     }
 
     /** 全量重建（含尝试类型，Feature 016）。 */
@@ -70,8 +78,8 @@ public class PaymentAttempt {
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
-                                           Integer version, String attemptType) {
-        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, retryCount);
+                                           Integer version, String attemptType, long amountMinor, String currencyCode) {
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, retryCount, amountMinor, currencyCode);
         attempt.id = id;
         attempt.attemptType = attemptType == null ? TYPE_PAYMENT : attemptType;
         attempt.requestedAt = requestedAt;
@@ -175,6 +183,16 @@ public class PaymentAttempt {
 
     public String getChannelCode() {
         return channelCode;
+    }
+
+    /** 本次渠道交互金额（最小货币单位，spec 018 / US1 / D2）。 */
+    public long getAmountMinor() {
+        return amountMinor;
+    }
+
+    /** 本次渠道交互币种（spec 018 / US1 / D2）。 */
+    public String getCurrencyCode() {
+        return currencyCode;
     }
 
     /** 尝试类型：PAYMENT / REFUND（Feature 016）。 */

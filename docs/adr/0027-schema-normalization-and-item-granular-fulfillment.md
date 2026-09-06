@@ -2,7 +2,7 @@
 
 # ADR-0066: 表结构列序规范化与按订单明细粒度履约——order_item_no 业务单号引入（spec 018 立项）
 
-- 状态：✅ **Accepted**（2026-09-07 负责人拍板 D1~D4；**代码未实施**，任务见 [spec 018 tasks](../specs/018-schema-normalization-item-fulfillment/tasks.md)）
+- 状态：✅ **已实施**（2026-09-07 代码落地：批次 B 迁移/基线/H2 同步 + 批次 C 契约与三服务改造 + 批次 D demo 注释与门户；单测全绿，live 冒烟双明细履约/attempts 金额/中文标签通过）
 - 关联：ADR-0062（业务单号两字母前缀+雪花）、ADR-0063（跨服务按业务单号关联）、ADR-0064（一交易多支付单）、ADR-0054（支付编排职责归位）、spec 016（payment_attempts/attempt_type 现状）、spec 018（[spec](../specs/018-schema-normalization-item-fulfillment/spec.md) / [plan](../specs/018-schema-normalization-item-fulfillment/plan.md)）
 - 需求源头：负责人 2026-09-07 四项指示——「payment attempts 里要记录上金额信息……attempt_type 放到第四列」「审查每个表的结构，第一列是 mysql 的自增 id，第二列必须是这个表的主键，然后是唯一索引」「fulfillments 这个表为什么没有 order_item_id，踏马的要有才行啊」「demo 全链路 DB 数据标注中文注释 + 搞个主界面」。
 

@@ -70,8 +70,11 @@ UPDATE payment_attempts a JOIN payments p ON a.payment_no = p.payment_no
   SET a.amount_minor = p.amount_minor, a.currency_code = p.currency_code
   WHERE a.amount_minor IS NULL;
 
--- 2.3 收紧 NOT NULL
+-- 2.3 收紧 NOT NULL；并把 attempt_type 归位第 4 列（存量库 016 时代 ADD COLUMN 追加在表尾，
+--     必须先归位 attempt_type，amount/currency 的 AFTER 链才能落到 FR-001 目标位）；
+--     MODIFY ... AFTER 幂等可重放
 SET @sql = 'ALTER TABLE payment_attempts
+  MODIFY COLUMN attempt_type VARCHAR(16) NOT NULL DEFAULT ''PAYMENT'' COMMENT ''尝试类型 PAYMENT/REFUND（Feature 016 / FR-017）'' AFTER channel_code,
   MODIFY COLUMN amount_minor BIGINT NOT NULL COMMENT ''资金口径：PAYMENT=支付金额；REFUND=所属支付单金额（spec 018 / FR-002）'' AFTER attempt_type,
   MODIFY COLUMN currency_code VARCHAR(8) NOT NULL AFTER amount_minor';
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

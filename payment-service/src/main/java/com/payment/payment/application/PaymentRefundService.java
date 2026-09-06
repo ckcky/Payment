@@ -68,7 +68,8 @@ public class PaymentRefundService {
         }
         ChannelResult result = channel.refund(new RefundRequest(request.paymentNo(), request.refundNo(),
                 request.amountMinor(), request.currencyCode(), "mock"));
-        recordRefundChannelAttempt(request, result);
+        // D2（spec 018）：REFUND 尝试记所属支付单金额（payment 金额），而非退款金额（request.amountMinor）
+        recordRefundChannelAttempt(payment, request, result);
         String mappedStatus = switch (result.status()) {
             case SUCCESS -> "SUCCEEDED";
             case FAILURE -> "FAILED";
@@ -83,8 +84,10 @@ public class PaymentRefundService {
      * 对账退款事实据此取得真实渠道退款流水号（废弃 {@code refund-{id}} 合成引用）。
      * 渠道引用重复（重试/幂等重放）按唯一约束吸收，不影响退款结果回传。
      */
-    private void recordRefundChannelAttempt(RefundAttemptRequest request, ChannelResult result) {
-        PaymentAttempt attempt = PaymentAttempt.refundAttempt(request.paymentNo(), "mock");
+    private void recordRefundChannelAttempt(Payment payment, RefundAttemptRequest request, ChannelResult result) {
+        // D2：记所属支付单金额，而非退款金额
+        PaymentAttempt attempt = PaymentAttempt.refundAttempt(request.paymentNo(), "mock",
+                payment.getAmountMinor(), payment.getCurrencyCode());
         switch (result.status()) {
             case SUCCESS -> {
                 attempt.accept(result.channelReference());

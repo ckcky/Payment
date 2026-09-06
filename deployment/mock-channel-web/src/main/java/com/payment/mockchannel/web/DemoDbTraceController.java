@@ -59,7 +59,7 @@ public class DemoDbTraceController {
         resp.put("sections", sections);
 
         if (jdbc == null) {
-            sections.add(errorSection("—", "—", "JdbcTemplate 不可用（依赖缺失）"));
+            sections.add(errorSection("—", "—", "JdbcTemplate 不可用（依赖缺失）", "诊断依赖（JdbcTemplate 不可用）"));
             return resp;
         }
 
@@ -68,7 +68,7 @@ public class DemoDbTraceController {
         List<Map<String, Object>> orders = query(sections, "order-service", "orders",
                 numeric ? "SELECT * FROM `order`.orders WHERE id = ?"
                         : "SELECT * FROM `order`.orders WHERE order_no = ?",
-                new Object[]{numeric ? Long.parseLong(orderId) : orderId});
+                new Object[]{numeric ? Long.parseLong(orderId) : orderId}, "订单主表");
         if (orders.isEmpty()) {
             resp.put("found", false);
             resp.put("note", "orders 表无此记录（orderId/orderNo=" + orderId + "），后续系统无从关联");
@@ -81,17 +81,17 @@ public class DemoDbTraceController {
 
         // ② 订单明细 + 交易单（order-service 库，按 order_no 关联）
         query(sections, "order-service", "order_items",
-                "SELECT * FROM `order`.order_items WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM `order`.order_items WHERE order_no = ?", new Object[]{orderNo}, "订单明细");
         query(sections, "order-service", "transactions",
-                "SELECT * FROM `order`.transactions WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM `order`.transactions WHERE order_no = ?", new Object[]{orderNo}, "交易单");
 
         // ③ 支付单（order_no 关联）+ 尝试记录（payment_no 关联），收集渠道引用供结算/对账反查
         List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
-                "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo}, "支付单");
         List<Object> paymentNos = ids(payments, "payment_no");
         List<Map<String, Object>> attempts = query(sections, "payment-service", "payment_attempts",
                 "SELECT * FROM payment.payment_attempts WHERE payment_no IN (" + placeholders(paymentNos) + ")",
-                paymentNos.toArray());
+                paymentNos.toArray(), "渠道交互尝试记录");
         List<Object> channelRefs = new ArrayList<>();
         for (Map<String, Object> a : attempts) {
             Object ref = a.get("channel_reference");
@@ -102,27 +102,27 @@ public class DemoDbTraceController {
 
         // ④ 退款（Feature 015 后 refund 域并入 payment-service，refunds 表迁至 payment 库）／履约／权益
         List<Map<String, Object>> refunds = query(sections, "payment-service", "refunds",
-                "SELECT * FROM payment.refunds WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM payment.refunds WHERE order_no = ?", new Object[]{orderNo}, "退款单");
         List<Object> refundNos = ids(refunds, "refund_no");
         query(sections, "fulfillment-service", "fulfillments",
-                "SELECT * FROM fulfillment.fulfillments WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM fulfillment.fulfillments WHERE order_no = ?", new Object[]{orderNo}, "履约记录（按订单明细）");
         query(sections, "entitlement-service", "entitlements",
-                "SELECT * FROM entitlement.entitlements WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM entitlement.entitlements WHERE order_no = ?", new Object[]{orderNo}, "权益");
 
         // ⑤ 结算：items.reference 是渠道引用（对账匹配事实），反查所属批次
         List<Map<String, Object>> settleItems = query(sections, "settlement-service", "settlement_items",
                 "SELECT * FROM settlement.settlement_items WHERE reference IN (" + placeholders(channelRefs) + ")",
-                channelRefs.toArray());
+                channelRefs.toArray(), "结算明细");
         List<Object> batchIds = ids(settleItems, "batch_id");
         List<Map<String, Object>> settleBatches = query(sections, "settlement-service", "settlement_batches",
                 "SELECT * FROM settlement.settlement_batches WHERE id IN (" + placeholders(batchIds) + ")",
-                batchIds.toArray());
+                batchIds.toArray(), "结算批次");
         List<Object> batchNos = ids(settleBatches, "batch_no");
 
         // ⑥ 对账批次：匹配/差异以 JSON 内嵌，按渠道引用文本反查
         if (channelRefs.isEmpty()) {
             sections.add(emptySection("reconciliation-service", "reconciliation_batches",
-                    "（该订单尚无渠道引用 —— 未过渠道，或对账批次未建）"));
+                    "（该订单尚无渠道引用 —— 未过渠道，或对账批次未建）", "对账批次"));
         } else {
             StringBuilder sql = new StringBuilder("SELECT * FROM reconciliation.reconciliation_batches WHERE (");
             List<Object> args = new ArrayList<>();
@@ -135,7 +135,7 @@ public class DemoDbTraceController {
                 args.add("%" + channelRefs.get(i) + "%");
             }
             sql.append(")");
-            query(sections, "reconciliation-service", "reconciliation_batches", sql.toString(), args.toArray());
+            query(sections, "reconciliation-service", "reconciliation_batches", sql.toString(), args.toArray(), "对账批次");
         }
 
         // ⑦ 账本：postings.source_id 是 varchar(64)，存业务单号（ADR-0063），按单号反查再取分录
@@ -156,15 +156,15 @@ public class DemoDbTraceController {
         }
         if (clauses.isEmpty()) {
             sections.add(emptySection("ledger-service", "postings",
-                    "（无 PAYMENT/REFUND/SETTLEMENT 来源可查 —— 尚无记账）"));
+                    "（无 PAYMENT/REFUND/SETTLEMENT 来源可查 —— 尚无记账）", "记账批次"));
         } else {
             postingSql.append(String.join(" OR ", clauses));
             List<Map<String, Object>> postings = query(sections, "ledger-service", "postings",
-                    postingSql.toString(), postingArgs.toArray());
+                    postingSql.toString(), postingArgs.toArray(), "记账批次");
             List<Object> postingIds = ids(postings, "id");
             query(sections, "ledger-service", "ledger_entries",
                     "SELECT * FROM ledger.ledger_entries WHERE posting_id IN (" + placeholders(postingIds) + ")",
-                    postingIds.toArray());
+                    postingIds.toArray(), "账本分录");
         }
         return resp;
     }
@@ -194,7 +194,7 @@ public class DemoDbTraceController {
         List<Map<String, Object>> orders = query(sections, "order-service", "orders",
                 numeric ? "SELECT * FROM `order`.orders WHERE id = ?"
                         : "SELECT * FROM `order`.orders WHERE order_no = ?",
-                new Object[]{numeric ? Long.parseLong(orderId) : orderId});
+                new Object[]{numeric ? Long.parseLong(orderId) : orderId}, "订单主表");
         if (orders.isEmpty()) {
             resp.put("attempts", List.of());
             resp.put("error", "orders 表无此记录：" + orderId);
@@ -203,7 +203,7 @@ public class DemoDbTraceController {
         String orderNo = String.valueOf(orders.get(0).get("order_no"));
 
         List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
-                "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo});
+                "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo}, "支付单");
         List<Object> paymentNos = ids(payments, "payment_no");
         if (paymentNos.isEmpty()) {
             resp.put("attempts", List.of());
@@ -215,17 +215,18 @@ public class DemoDbTraceController {
                         + "failure_reason, created_at FROM payment.payment_attempts "
                         + "WHERE attempt_type = 'REFUND' AND payment_no IN (" + placeholders(paymentNos) + ") "
                         + "ORDER BY id",
-                paymentNos.toArray());
+                paymentNos.toArray(), "渠道交互尝试记录");
         resp.put("attempts", attempts);
         return resp;
     }
 
     /** 单查封装：异常兜底为该 section 的 error，行值做可读化（Date→字符串）。 */
     private List<Map<String, Object>> query(List<Map<String, Object>> sections, String system,
-                                            String table, String sql, Object[] args) {
+                                            String table, String sql, Object[] args, String label) {
         Map<String, Object> section = new LinkedHashMap<>();
         section.put("system", system);
         section.put("table", table);
+        section.put("label", label);
         section.put("sql", sql);
         sections.add(section);
         try {
@@ -249,19 +250,21 @@ public class DemoDbTraceController {
         }
     }
 
-    private Map<String, Object> emptySection(String system, String table, String note) {
+    private Map<String, Object> emptySection(String system, String table, String note, String label) {
         Map<String, Object> section = new LinkedHashMap<>();
         section.put("system", system);
         section.put("table", table);
+        section.put("label", label);
         section.put("rows", List.of());
         section.put("note", note);
         return section;
     }
 
-    private Map<String, Object> errorSection(String system, String table, String error) {
+    private Map<String, Object> errorSection(String system, String table, String error, String label) {
         Map<String, Object> section = new LinkedHashMap<>();
         section.put("system", system);
         section.put("table", table);
+        section.put("label", label);
         section.put("rows", List.of());
         section.put("error", error);
         return section;

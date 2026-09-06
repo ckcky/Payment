@@ -227,7 +227,7 @@ async function traceOrder(key) {
   if (data.found === false) { box.innerHTML = '<div class="empty">orders 表无此记录：' + (data.note || q) + '</div>'; return; }
   for (const s of (data.sections || [])) {
     const rows = s.rows || [];
-    let html = '<div class="sect"><h3><span>' + esc(s.system) + ' · ' + esc(s.table) + '</span>'
+    let html = '<div class="sect"><h3><span>' + esc(s.label || (s.system + ' · ' + s.table)) + '</span>'
       + '<span class="cnt">' + (rows.length) + ' 行</span></h3>';
     if (s.sql) html += '<div class="sql">' + esc(s.sql) + '</div>';
     if (s.error) html += '<div class="err">✗ ' + esc(s.error) + '</div>';
@@ -389,10 +389,11 @@ async function pollOnce() {
         if (p.data.paymentNo) document.getElementById('t-paymentNo').textContent = p.data.paymentNo;
       }
     }
-    // fulfillment：单对象（未创建 404）；entitlement：数组（空数组 = 未发放）
+    // fulfillment：数组（spec 018 按明细粒度，一单多明细 = 多条；未创建 404）；entitlement：数组
     const f = await api('GET', '/fulfillment/fulfillments/by-order/' + currentOrderNo);
     document.getElementById('t-fulfillment').textContent =
-      f.status === 200 ? f.data.status : (f.status === 404 ? '（未创建）' : 'HTTP ' + f.status);
+      f.status === 200 ? (Array.isArray(f.data) ? f.data.map(x => x.status).join(', ') : f.data.status)
+                       : (f.status === 404 ? '（未创建）' : 'HTTP ' + f.status);
     const e = await api('GET', '/entitlement/entitlements/by-order/' + currentOrderNo);
     document.getElementById('t-entitlement').textContent =
       Array.isArray(e.data) ? (e.data.length === 0 ? '（未发放）' : e.data.map(x => x.status).join(', ')) : 'HTTP ' + e.status;

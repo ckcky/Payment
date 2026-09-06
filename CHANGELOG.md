@@ -6,6 +6,23 @@
 
 ---
 
+## [2026-09-07] spec 018：表结构列序规范化 + payment_attempts 金额留痕 + 按 order_item 粒度履约
+
+**范围**：全项目 22 张表列序规范化 + 履约粒度升级 + 演示可观测性。决策见 [ADR-0066](docs/adr/0027-schema-normalization-and-item-granular-fulfillment.md)，实施记录见 [spec 018](docs/specs/018-schema-normalization-item-fulfillment/spec.md)。
+
+### 变更
+- **列序规范化（FR-001）**：统一为「自增 id → 业务主键 → 唯一索引列 → 业务列 → 审计列」；违规 5 张表（payment_attempts / payments / refunds / fulfillments / entitlements 等）经幂等迁移脚本 `deployment/schema/018-schema-normalization.sql`（information_schema 守卫 + PREPARE 动态 SQL，存量库重放两次验证幂等）归位，基线 CREATE TABLE 与 H2 测试 schema 同步。
+- **order_item_no 业务单号引入（FR-004 / ADR-0062）**：`BusinessNoType.ORDER_ITEM("OI")`，order_items 第 2 列 + 唯一键；`fulfillments.order_item_id` 语义升级为 OI 单号。
+- **按订单明细粒度履约（FR-005 / 消除 null 硬编码）**：`PaymentSucceededRequest` 契约加 `List<ItemLine>`（payment 传 null，order 以本库 order_items 富化后转发，单一事实源）；fulfillment 逐明细建履约，幂等键细化 `(source_payment_no, order_item_id)`；`onRefund` 遍历取消全部 PENDING；每条履约各自触发权益授予（授予链零改动）；`/fulfillments/by-order` 改返回数组。
+- **payment_attempts 金额留痕（FR-002）**：加 amount_minor / currency_code（PAYMENT=支付金额；REFUND=所属支付单金额，决策 D2）。
+- **演示可观测性**：全链路 DB 数据中文注释（16 调用点）；新增 portal.html 门户主界面（演示 / 对账 / Grafana / Prometheus / 压测五类入口）。
+
+### 附带修复
+- 迁移脚本对存量库 `attempt_type` 列（016 时代表尾追加）归位到第 4 列。
+- 016 迁移脚本 MariaDB 方言问题（`ADD COLUMN IF NOT EXISTS`）记入代码缺陷待办清单 #13，不在本 spec 修复。
+
+---
+
 ## [2026-09-07] v1.0.0 发行形态切换：源码包 → 预构建二进制发行包
 
 **范围**：发行工程，不动业务代码。首个正式版本 tag `v1.0.0`，由 CI（`.github/workflows/release.yml`）自动构建并发布。

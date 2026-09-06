@@ -2,6 +2,8 @@ package com.payment.common.dto.rpc;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -12,10 +14,22 @@ class RpcContractTest {
 
     @Test
     void paymentSucceededCarriesAmountAndCurrency() {
-        PaymentSucceededRequest req = new PaymentSucceededRequest(
+        PaymentSucceededRequest req = PaymentSucceededRequest.withoutItems(
                 "pay-1", "order-1", "txn-1", "user-1", 1250L, "CNY");
         assertThat(req.amountMinor()).isEqualTo(1250L);
         assertThat(req.currencyCode()).isEqualTo("CNY");
+        assertThat(req.items()).isNull(); // payment 不持有明细，order 层富化（spec 018）
+    }
+
+    @Test
+    void paymentSucceededCarriesItemLinesForItemGranularFulfillment() {
+        PaymentSucceededRequest req = new PaymentSucceededRequest(
+                "pay-1", "order-1", "txn-1", "user-1", 1250L, "CNY",
+                List.of(new PaymentSucceededRequest.ItemLine(
+                        "OI123", "SKU-1", "商品A", 2, 625L, "CNY")));
+        assertThat(req.items()).hasSize(1);
+        assertThat(req.items().get(0).orderItemNo()).isEqualTo("OI123");
+        assertThat(req.items().get(0).quantity()).isEqualTo(2);
     }
 
     @Test

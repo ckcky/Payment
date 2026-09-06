@@ -10,6 +10,8 @@ import com.payment.common.mybatis.BaseEntity;
 public class OrderItemEntity extends BaseEntity {
 
     private String orderNo;
+    /** 明细业务单号（OI+雪花，spec 018 / ADR-0066），第 2 列唯一键。 */
+    private String orderItemNo;
     private String skuId;
     private String skuCode;
     private String name;
@@ -24,6 +26,14 @@ public class OrderItemEntity extends BaseEntity {
 
     public void setOrderNo(String orderNo) {
         this.orderNo = orderNo;
+    }
+
+    public String getOrderItemNo() {
+        return orderItemNo;
+    }
+
+    public void setOrderItemNo(String orderItemNo) {
+        this.orderItemNo = orderItemNo;
     }
 
     public String getSkuId() {

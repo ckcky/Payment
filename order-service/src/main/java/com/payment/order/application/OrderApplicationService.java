@@ -2,6 +2,8 @@ package com.payment.order.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.common.dto.rpc.CreatePaymentResponse;
@@ -83,7 +85,8 @@ public class OrderApplicationService {
                 throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
                         "mixed currencies in one order are not allowed");
             }
-            items.add(new OrderItem(String.valueOf(sku.skuId()), sku.skuCode(), sku.name(),
+            items.add(new OrderItem(BusinessNos.of(BusinessNoType.ORDER_ITEM),
+                    String.valueOf(sku.skuId()), sku.skuCode(), sku.name(),
                     line.quantity(), sku.priceMinor(), sku.currencyCode()));
         }
 
@@ -250,10 +253,27 @@ public class OrderApplicationService {
         // 由 transaction 层判定「正常到账」后委派至此）；权益经既有 fulfillment → entitlement 链授予。
         // 履约 RPC 失败不回滚订单成功事实（catch 吞掉 + 重试/对账兜底，语义与迁移前一致）。
         try {
-            fulfillmentGateway.notifyPaymentSucceeded(request);
+            // spec 018 / ADR-0066：以本库 order_items 为单一事实源富化明细（含 orderItemNo），
+            // 转发 fulfillment 逐明细建履约，绝不信任上游 request.items() 的快照。
+            fulfillmentGateway.notifyPaymentSucceeded(enrichWithItems(request, order));
         } catch (RuntimeException ignored) {
             // 履约失败不得回滚 PAID（跨服务一致性由幂等 + 后续对账收敛）
         }
+    }
+
+    /**
+     * 以本库 order_items 为单一事实源富化明细（spec 018 / ADR-0066）：
+     * payment 侧不持有明细（items=null），order 层带上 orderItemNo 后转发 fulfillment，
+     * 逐明细建履约。绝不信任上游 request.items() 的快照。
+     */
+    private static PaymentSucceededRequest enrichWithItems(PaymentSucceededRequest request, Order order) {
+        List<PaymentSucceededRequest.ItemLine> items = order.getItems().stream()
+                .map(item -> new PaymentSucceededRequest.ItemLine(item.getOrderItemNo(),
+                        item.getSkuCode(), item.getName(), item.getQuantity(),
+                        item.getPriceMinor(), item.getCurrencyCode()))
+                .toList();
+        return new PaymentSucceededRequest(request.paymentNo(), request.orderNo(), request.transactionNo(),
+                request.userId(), request.amountMinor(), request.currencyCode(), items);
     }
 
     /**

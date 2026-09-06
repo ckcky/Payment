@@ -15,7 +15,7 @@ class OrderStateMachineTest {
 
     private static Order order(long unitPrice, int qty) {
         return new Order("u1", "m1", "CNY",
-                List.of(new OrderItem("1", "S1", "item", qty, unitPrice, "CNY")));
+                List.of(new OrderItem("OI-TEST-1", "1", "S1", "item", qty, unitPrice, "CNY")));
     }
 
     @Test

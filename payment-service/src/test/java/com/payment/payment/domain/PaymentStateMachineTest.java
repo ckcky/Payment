@@ -17,7 +17,7 @@ class PaymentStateMachineTest {
     }
 
     private static PaymentAttempt attempt() {
-        return new PaymentAttempt("PM-1", "mock", 0);
+        return new PaymentAttempt("PM-1", "mock", 0, 100, "CNY");
     }
 
     // ---- Payment ----
@@ -125,6 +125,8 @@ class PaymentStateMachineTest {
         assertThat(a.succeed()).isTrue();
         assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
         assertThat(a.getChannelReference()).isEqualTo("ref-1");
+        assertThat(a.getAmountMinor()).isEqualTo(100);
+        assertThat(a.getCurrencyCode()).isEqualTo("CNY");
     }
 
     @Test

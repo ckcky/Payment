@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Accepted（2026-09-07 负责人逐项拍板 4 项决策，见 [ADR-0066](../../adr/0027-schema-normalization-and-item-granular-fulfillment.md)；**代码未实施**，任务见 [tasks.md](tasks.md)）
+**Status**: ✅ 已实施（2026-09-07 代码落地，T001~T014 全绿 + live 冒烟通过；决策见 [ADR-0066](../../adr/0027-schema-normalization-and-item-granular-fulfillment.md)，任务勾结见 [tasks.md](tasks.md)）
 
 **Input**: 负责人需求原文：
 

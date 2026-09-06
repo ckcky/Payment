@@ -1,7 +1,7 @@
 # Tasks: 018-schema-normalization-item-fulfillment
 
 > 承载目标：全项目表结构列序规范化 + payment_attempts 金额留痕 + 按 order_item 粒度履约 + demo 中文注释 + 门户主界面。
-> **当前状态：文档已落地（2026-09-07），代码未实施**。批次 A 已完成；批次 B~E 待实施。
+> **当前状态：✅ 全部完成（2026-09-07）**。T001~T016 全勾：单测全绿 + `mvn clean verify -fae` 15 模块 BUILD SUCCESS + live 冒烟通过。
 > 每个任务完成后跑对应模块测试门禁，最后统一 `mvn -o clean verify -fae`。
 
 ## 批次 A — 文档与决策（已完成）
@@ -23,21 +23,21 @@
 
 ## 批次 C — 按 order_item 粒度履约（依赖：批次 B）
 
-- [ ] **T008** common-dto：`PaymentSucceededRequest` 加 `List<ItemLine> items`（orderItemNo/skuCode/name/quantity/priceMinor/currencyCode）；RpcContractTest 同步
-- [ ] **T009** order-service：`OrderItem` 加 orderItemNo（下单时生成）；`onPaymentSucceeded` 通知携带明细；`OrderItemEntity` / 仓储映射同步
-- [ ] **T010** fulfillment-service：`acceptPaymentSucceeded` 循环逐明细建单；幂等查询改 `findBySourcePaymentNoAndOrderItemId`；`newFulfillment(orderNo, orderItemId, sourcePaymentNo)` 消除 null 硬编码；`findByOrderNo` 改返回 List，`onRefund` 遍历取消全部 PENDING；每条履约各自通知 entitlement（授予链零改动）
-- [ ] **T011** payment-service：`PaymentAttempt` / Entity / 仓储加 amountMinor + currencyCode；两个创建点（`PaymentPersistence`、`PaymentRefundService.recordRefundChannelAttempt`）写入；测试断言补充
+- [x] **T008** common-dto：`PaymentSucceededRequest` 加 `List<ItemLine> items`（orderItemNo/skuCode/name/quantity/priceMinor/currencyCode）；RpcContractTest 同步
+- [x] **T009** order-service：`OrderItem` 加 orderItemNo（下单时生成）；`onPaymentSucceeded` 通知携带明细；`OrderItemEntity` / 仓储映射同步
+- [x] **T010** fulfillment-service：`acceptPaymentSucceeded` 循环逐明细建单；幂等查询改 `findBySourcePaymentNoAndOrderItemId`；`newFulfillment(orderNo, orderItemId, sourcePaymentNo)` 消除 null 硬编码；`findByOrderNo` 改返回 List，`onRefund` 遍历取消全部 PENDING；每条履约各自通知 entitlement（授予链零改动）
+- [x] **T011** payment-service：`PaymentAttempt` / Entity / 仓储加 amountMinor + currencyCode；两个创建点（`PaymentPersistence`、`PaymentRefundService.recordRefundChannelAttempt`）写入；测试断言补充
 
 ## 批次 D — demo 中文注释 + 门户主界面（依赖：无，可与批次 C 并行）
 
-- [ ] **T012** 全链路 DB 数据中文注释：`DemoDbTraceController` 三个封装加 label 参数（约 15 个调用点，标签清单见 [plan.md §2.4](plan.md#24-demo-中文注释实现方式问题-f)）；`demo.html` 标题行 1 行适配
-- [ ] **T013** 门户主界面：新建 `static/portal.html`（卡片式：演示控制台 / 对账控制台 / Grafana 3000 / Prometheus 9090 / 压测入口含 `deployment/performance/run-stress.sh` 与 `deployment/demo-monitor-stress.sh` 用法）；`PageController` 加 `/` 欢迎页路由
-- [ ] **T014** demo live 冒烟：下单 2 item → 2 条 fulfillments（OI 单号）→ payment_attempts 带金额 → portal 各入口可达
+- [x] **T012** 全链路 DB 数据中文注释：`DemoDbTraceController` 三个封装加 label 参数（约 15 个调用点，标签清单见 [plan.md §2.4](plan.md#24-demo-中文注释实现方式问题-f)）；`demo.html` 标题行 1 行适配
+- [x] **T013** 门户主界面：新建 `static/portal.html`（卡片式：演示控制台 / 对账控制台 / Grafana 3000 / Prometheus 9090 / 压测入口含 `deployment/performance/run-stress.sh` 与 `deployment/demo-monitor-stress.sh` 用法）；`PageController` 加 `/` 欢迎页路由
+- [x] **T014** demo live 冒烟：下单 2 item → 2 条 fulfillments（OI 单号）→ payment_attempts 带金额 → portal 各入口可达
 
 ## 批次 E — 收尾
 
-- [ ] **T015** 全量回归：各模块单测 → `mvn -o clean verify -fae`
-- [ ] **T016** 文档收口：spec/ADR 状态 Draft→（实施后）已实施；tasks 勾结；`016-refund-channel-attempt.sql` MariaDB 方言问题记入待办清单（不在本 spec 范围）
+- [x] **T015** 全量回归：各模块单测 → `mvn -o clean verify -fae`
+- [x] **T016** 文档收口：spec/ADR 状态 Draft→（实施后）已实施；tasks 勾结；`016-refund-channel-attempt.sql` MariaDB 方言问题记入待办清单（不在本 spec 范围）
 
 ## 已知边界（不在本 spec 处理）
 

@@ -22,7 +22,10 @@ public class PaymentSuccessRpcController {
 
     @PostMapping("/internal/fulfillments/on-payment-succeeded")
     public FulfillmentAcceptedResponse onPaymentSucceeded(@RequestBody PaymentSucceededRequest request) {
-        Fulfillment f = service.acceptPaymentSucceeded(request);
-        return new FulfillmentAcceptedResponse(f.getId(), f.getStatus().name());
+        // spec 018：逐明细建履约（1 单 N 明细 = N 条履约）；响应保持既有契约形态，
+        // 返回首条（幂等重复通知时为已存在明细），上游 order 侧不依赖逐条结果。
+        java.util.List<Fulfillment> fulfillments = service.acceptPaymentSucceeded(request);
+        Fulfillment first = fulfillments.get(0);
+        return new FulfillmentAcceptedResponse(first.getId(), first.getStatus().name());
     }
 }

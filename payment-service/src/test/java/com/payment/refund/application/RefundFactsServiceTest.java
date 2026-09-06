@@ -58,7 +58,7 @@ class RefundFactsServiceTest {
         refunds.save(succeeded);
 
         // 退款渠道尝试记录（Feature 016 / FR-017 ②）：channel_reference = 渠道退款流水号
-        PaymentAttempt refundAttempt = PaymentAttempt.refundAttempt("PM-1", "mock");
+        PaymentAttempt refundAttempt = PaymentAttempt.refundAttempt("PM-1", "mock", 1000L, "CNY");
         refundAttempt.accept("mock-refund-ref-real");
         refundAttempt.succeed();
         paymentAttempts.save(refundAttempt);
