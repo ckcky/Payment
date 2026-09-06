@@ -1,0 +1,13 @@
+-- =============================================================================
+-- 06-refund-schema.sql — 已退役（Feature 015 / P3，ADR-0064）
+--
+-- 退款域已并入 payment-service：原 refund 库的 refunds / refund_items /
+-- refund_intake_locks / refund_post_process_attempts 4 张表现由
+-- 03-payment-schema.sql（payment 库）承载，本文件仅保留占位说明，
+-- 不再创建独立 `refund` 数据库，避免演示 reset 出现孤儿库。
+--
+-- 历史说明：
+--   ADR-0016 已否决（负责人决议「部分退款不做」）：refunds 不再有 refunded_amount_minor 列。
+--   已部署旧环境迁表完成后可手工 DROP DATABASE `refund`。
+-- =============================================================================
+SELECT '06-refund-schema.sql retired by Feature 015 (ADR-0064): refund tables now in payment schema (03)' AS notice;

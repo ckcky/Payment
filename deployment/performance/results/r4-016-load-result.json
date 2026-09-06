@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "generated_at": "2026-09-05T19:18:22.501Z",
+    "tool": "node-stdlib-loadgen (k6 unavailable: binary download blocked by proxy)",
+    "base_url": "http://localhost:8082",
+    "sku_id": "3",
+    "seckill_sku_id": "3",
+    "note": "catalog-service 以 MySQL 8.0.46 (localhost:3306/catalog) + Redis 6379 运行，cache-aside 默认开启。Redis 可达且功能正常（秒杀 Lua 实测可写、sku:id:1 缓存键已写入）。读请求 33,627 次仅 5 次获取 DB 连接 → 缓存按设计卸载 DB 99.98%。秒杀配额 1,000,000 极大，压测全程 200 准入、未触发 409。"
+  },
+  "scenarios": {
+    "sku_cache_read": {
+      "name": "sku_cache_read",
+      "vus_peak": 200,
+      "duration_ms": 61179,
+      "total": 37315,
+      "rps": 609.93,
+      "status_hist": {
+        "200": 37315
+      },
+      "errors": 0,
+      "error_rate": 0,
+      "latency_ms": {
+        "avg": 2.88,
+        "min": 0.69,
+        "p50": 1.86,
+        "p90": 4.83,
+        "p95": 7.8,
+        "p99": 21.51,
+        "max": 66.71
+      },
+      "admitted": 37315,
+      "soldout": 0,
+      "sla": {
+        "p95<50ms": true,
+        "p99<120ms": true,
+        "errorRate<1%": true
+      }
+    },
+    "seckill_flash": {
+      "name": "seckill_flash",
+      "vus_peak": 500,
+      "duration_ms": 40174,
+      "total": 139150,
+      "rps": 3463.68,
+      "status_hist": {
+        "200": 138959,
+        "409": 191
+      },
+      "errors": 0,
+      "error_rate": 0,
+      "latency_ms": {
+        "avg": 37.15,
+        "min": 0.95,
+        "p50": 18.98,
+        "p90": 72.26,
+        "p95": 108.99,
+        "p99": 241,
+        "max": 1714.25
+      },
+      "admitted": 138959,
+      "soldout": 191,
+      "sla": {
+        "p95<50ms": false,
+        "p99<120ms": false
+      }
+    }
+  }
+}

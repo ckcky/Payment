@@ -12,8 +12,10 @@
 Spec（写清楚"要什么"和"为什么"）
   → Plan（怎么拆、涉及哪些服务、依赖顺序、风险）
     → Task（可执行的最小任务清单，粒度=一个可独立验证的提交）
-      → Implement（逐任务实现 + 测试）
+      → Branch（创建 feature/<NNN>-<slug> 分支；纯文档改动可豁免）
+      → Implement（逐任务实现 + 测试，全部提交在 feature 分支上）
         → Review（对照 Spec 回检缺口，补 ADR/文档）
+          → PR & Merge（推送分支 → 开 PR 引用 Spec → 自合并（--no-ff）回 master）
 ```
 
 Feature 开发的唯一入口是 Spec Kit；其他命令和 Skill 只能作为 Spec Kit 阶段中的辅助检查，不另起一套开发流程。
@@ -47,6 +49,7 @@ AI Agent 在流水线中的职责：
 - 绕过架构规则、跨服务直接改他服务数据。
 - 删测试或改测试来「通过」错误实现。
 - 擅自改领域模型 / 状态机 / 服务边界（须先提方案并获人类确认）。
+- **在 `master` 上直接提交代码改动**：非 docs-only 任务 MUST 先创建 feature 分支（`feature/<NNN>-<slug>` / `fix/<slug>` / `chore/<slug>`），通过 PR 合并回 master（Constitution Governance §提交与合并节奏；GitHub branch protection 会拒绝直推）。
 
 ## 实现前分析（由命令吸收，不再单独写流水账）
 

@@ -44,6 +44,17 @@
 - **CI 流水线**：`mvnw verify`（compile + test）→ lint（checkstyle/spotless）→ 打包。
 - **发布**：产物确定性；配置与代码分离（配置走 Nacos / 环境变量）。
 - **Git**：Conventional Commits；功能分支 + PR；合并前 Review。
+- **分支与合并细则**（与 Constitution §提交与合并节奏 一致）：
+  - **分支命名**：`feature/<NNN>-<slug>`（NNN = Spec 编号，如 `feature/016-order-orchestration`）；
+    非 Spec 的修复与杂务用 `fix/<slug>` / `chore/<slug>`。
+  - **一律走 PR**：代码改动（任何服务的源码、SQL、配置、构建脚本）MUST 在 feature 分支开发，
+    推送后开 PR 并自合并；PR 描述引用对应 Spec / ADR。
+  - **合并方式**：merge commit（`--no-ff`），禁止 fast-forward 与 squash 直推，
+    保证每个 Spec 在提交历史上是一个可回滚的边界。
+  - **直推白名单**：仅限纯文档（`docs/**`、`*.md`）与 CI/杂务微调（`chore:` / `docs:`）可直推 `master`；
+    其余直推视为违规（GitHub branch protection 兜底强制）。
+  - **AI 会话约束**：AI Agent 收到非 docs-only 任务时，第一步 MUST 是创建/切换 feature 分支，
+    禁止在 `master` 上直接提交代码改动。
 
 ## 7. 可观测（Observability，Constitution §6）
 
