@@ -192,8 +192,14 @@ public class OrderApplicationService {
     }
 
     /**
-     * 支付成功回调回写（T 新增）：payment-service 在支付真正成功时通过内部 RPC 通知，
-     * 驱动 Order PENDING_PAYMENT → PAID，并确认扣减库存（reserve → sold）。重复回调幂等吸收。
+     * 支付成功回调回写：驱动 Order PENDING_PAYMENT → PAID，并确认扣减库存（reserve → sold）。
+     * 重复回调幂等吸收。
+     *
+     * <p>Feature 016 / ADR-0054：本方法由 <b>transaction 层</b>
+     * （{@link TransactionApplicationService}）完成「正常到账 / surplus」判定后委派调用，
+     * <b>MUST NOT</b> 被 payment-service 直接调用——surplus 的自动退款发起在 transaction 层，
+     * 本层不感知退款通道。对非 PENDING_PAYMENT 状态抛 {@code INTERNAL_ERROR} 快速失败，
+     * 不再以 {@code ORDER_NOT_PAYABLE} 交回 payment 静默吞掉。</p>
      */
     @Transactional
     public void onPaymentSucceeded(PaymentSucceededRequest request) {
@@ -203,17 +209,20 @@ public class OrderApplicationService {
             if (request.paymentNo().equals(order.getPaymentNo())) {
                 return; // 幂等重复回调：同一支付单的重复通知，吸收（库存也已确认过）
             }
-            // Feature 015 / INV-2：订单已被另一张支付单支付（如换渠道后旧单也回调成功），
-            // 本支付单多收了钱 → 明确 409，payment-service 捕获后触发自动退款。
-            throw BizException.of(ErrorCodes.ORDER_NOT_PAYABLE,
-                    "order already paid by other payment: " + request.orderNo()
+            // Feature 016 / ADR-0054：surplus（重复 / 超额支付）的判定与自动退款发起已上移到
+            // transaction 层，本层 MUST NOT 再对 payment 抛 ORDER_NOT_PAYABLE——payment 侧的
+            // AutoRefundGateway 已随职责归位删除，409 只会被 catch(RuntimeException ignored)
+            // 静默吞掉，导致多收的钱无人退款。走到此处说明调用方绕过了 transaction 层，
+            // 属内部契约违规 → 快速失败暴露问题，而非静默丢钱。
+            throw BizException.of(ErrorCodes.INTERNAL_ERROR,
+                    "surplus payment must be judged by transaction layer: " + request.orderNo()
                             + " paidBy=" + order.getPaymentNo() + " callback=" + request.paymentNo());
         }
         if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
-            // Feature 015 / C5：订单已取消/超时/关闭仍收到支付成功 → 明确 409，
-            // payment-service 捕获后触发自动退款（不再被 catch(RuntimeException ignored) 静默吞掉）。
-            throw BizException.of(ErrorCodes.ORDER_NOT_PAYABLE,
-                    "order not payable: " + request.orderNo() + " status=" + order.getStatus());
+            // 同上：订单已取消 / 超时 / 关闭仍收到支付成功 → transaction 层应先判定为 surplus
+            // 并发起自动退款；直接调用本层属契约违规，快速失败。
+            throw BizException.of(ErrorCodes.INTERNAL_ERROR,
+                    "order not pending payment: " + request.orderNo() + " status=" + order.getStatus());
         }
         boolean changed = order.markPaid(request.paymentNo());
         if (!changed) {
