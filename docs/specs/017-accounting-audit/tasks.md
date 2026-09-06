@@ -96,13 +96,13 @@
 
 ## 批次 J — 文档收口（每批完成后同步）
 
-- [ ] **T080** `docs/architecture/systems/reconciliation-service.md` 补「四核对 + 挂账调账」一节
-- [ ] **T081** `docs/architecture/technical-solution.md` 同步（职责 / 调用清单 / 数据模型引用）
+- [x] **T080** `docs/architecture/systems/reconciliation-service.md` 补「四核对 + 挂账调账」一节
+- [x] **T081** `docs/architecture/technical-solution.md` 同步（职责 / 调用清单 / 数据模型引用）
 - [x] **T082** `docs/specs/004-ledger/spec.md` SC-005 标注：已加「⚠️ 从未实现（reconciliation 对 ledger 零引用）→ 由 spec 017 A1 兑现」；**017 落地后需回填为「已兑现」**
 - [x] **T083** `docs/architecture/roadmap.md` 登记 Feature 017（规划中，待拍板）+ 补登 016（已实现）
 - [x] **T084** `docs/adr/README.md` 注册 ADR-0065（依赖 T009）
 - [x] **T085** 全量 `mvn -o clean verify -fae` 绿（SC-007）
-- [ ] **T086** 提交并 merge 到 master（宪法提交节奏：每个 Spec 完成即提交合并）
+- [x] **T086** 提交并 merge 到 master（宪法提交节奏：每个 Spec 完成即提交合并）
 - [x] **T087** 回填 `tasks.md` 勾选 + `acceptance.md` 记录执行结果
 
 ## 任务依赖图（简）

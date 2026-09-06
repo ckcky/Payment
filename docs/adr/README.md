@@ -22,7 +22,7 @@
 | [0014](0014-next-stage-decisions.md) | 下一阶段决策集合（ADR-0038~0046） | **Accepted**（0041~0046 于 2026-08-31 收口；**0038 Superseded by 0048**；**0039/0040 于 2026-09-02 补写**；0044 偏离 roadmap §7 论证闸门） | 012-entry-idempotency（0039 幂等键签发与存储 / 0040 并发幂等接管策略）+ 013-inventory-reservation（0041 库存域归属 / 0042 扣减时机 / 0043 超时释放机制）+ 014-seckill-and-cache（0044 Redis 引入论证·偏离 / 0045 用途边界 / 0046 限流策略）；代码先行，见 ADR-0053。**0039/0040 的补写消除了代码中已存在但文档缺失的悬空引用**（`OrderController` / `OrderEntryIdempotencyService` / `IdempotencyDecision` / `docker-compose.yml`） |
 | [0015](0015-wip-ahead-of-roadmap.md) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置（ADR-0053） | **Accepted**（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码） | 偏离 / 处置日志：working tree 含 013-inventory-reservation / 014-seckill-and-cache 实质性实现，**超前顺序、缺 spec/ADR-0041~0046、014 的 Redis 引入未经 roadmap §7 论证闸门**；决策=保留代码（编译+测试通过，且与 011 在 order-service 纠缠不可干净拆分），spec/ADR 补写列为 TODO，待复盘收口 |
 | [0025](0025-order-payment-orchestration.md) | 支付编排职责归位（ADR-0054） | ✅ **Accepted**（2026-09-06 落地） | spec 016；Supersedes ADR-0064 §决策#4（自动退款归属） |
-| [0026](0026-accounting-audit-suspense-adjustment.md) | 会计四核对与挂账·调账闭环（ADR-0065） | ✅ **Accepted**（2026-09-06 负责人拍板 6 决策点；**文档立项，代码待实施**） | spec 017；新增 SUSPENSE(5) 科目（Constitution §8 变更已批准）、结算分级门禁、账实双轨、双人复核降级软提示 |
+| [0026](0026-accounting-audit-suspense-adjustment.md) | 会计四核对与挂账·调账闭环（ADR-0065） | ✅ **Accepted → 已实施**（2026-09-07 代码合并 master，450 测试全绿） | spec 017；新增 SUSPENSE(5) 科目（Constitution §8 变更已批准）、结算分级门禁、账实双轨、双人复核降级软提示 |
 
 ## ADR 编号速查（0001–0064）
 

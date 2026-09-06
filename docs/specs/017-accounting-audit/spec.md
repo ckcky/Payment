@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-06
 
-**Status**: ✅ Accepted（2026-09-06 负责人拍板全部决策点，见 [ADR-0065](../../adr/0026-accounting-audit-suspense-adjustment.md)；**本 Feature 当前仅文档，未写业务代码**，实施自 tasks 批次 C 起）
+**Status**: ✅ Accepted（2026-09-06 负责人拍板全部决策点，见 [ADR-0065](../../adr/0026-accounting-audit-suspense-adjustment.md)；**2026-09-07 已实现并合并 master（63f73d1），450 测试全绿，live 冒烟闭环通过**）
 
 **Input**: 负责人需求：「账账核对，账证核对，账实核对，还有个账什么核对来着。你看看我们项目需要做哪些怎么搞法」→ 出方案；追加要求：「在里面加上测试和验收的，要有模拟的数据，最好是在 demo 搞个界面能看到对账任务的触发和执行，还有结果，挂账调账这些」。
 
