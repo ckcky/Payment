@@ -27,6 +27,10 @@ Thumbs.db
 .env
 .env.*
 
+# 本地打包产物（release 由 CI 在 tag push 时构建并上传）
+payment-platform-*.tar.gz
+payment-platform-*.tar.gz.sha256
+
 # Claude Code local settings (may contain secrets)
 .claude/settings.local.json
 
