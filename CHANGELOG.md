@@ -6,6 +6,24 @@
 
 ---
 
+## [2026-09-07] v1.0.0 发行形态切换：源码包 → 预构建二进制发行包
+
+**范围**：发行工程，不动业务代码。首个正式版本 tag `v1.0.0`，由 CI（`.github/workflows/release.yml`）自动构建并发布。
+
+### 变更
+- **`make-release.sh` → `deployment/release/`**：与发行包启停脚本（start/stop/reset-demo）同居，打包从脚本位置上溯仓库根；CI 引用同步更新。产物为 `payment-platform-<V>-bin.tar.gz`（10 个 fat jar + 一键启停 + 建表 SQL + 演示场景 + k6 压测），目标机器只需 JDK 21 + Docker，零 Maven/构建。
+- **退役旧「源码发布包」形态**：删除根目录 `run.sh` / `stop.sh` / `run-tests.sh`（源码包解压入口，`git archive` 快照 + 现场 Maven 全量构建，违背「可直接运行」初衷）；`run-stress.sh` → `deployment/performance/` 与负载生成器同目录。
+- **发行包默认向 Nacos 注册 127.0.0.1**（单机包最稳，`PAYMENT_NACOS_IP` 可覆盖）；`restart-payment.sh` 双模式兼容包内 jars/ 与源码仓。
+- **RELEASE.md** 重写为二进制发布流程（tag push → CI → make-release.sh → Release 资产）。
+- 实机冒烟：冷启动 90s 10/10 服务 UP；happy-path / 退款（幂等重放 + 防超额）场景包内连跑全过。
+
+### 附带修复
+- `scenario-refund.sh` 幂等键动态化（原 rk-001/rk-002 写死，重跑命中重放污染断言）；漏网全角括号吞变量两处（`$REFUND_STATUS）`、`$SCENARIO）`）。
+- 演示控制台补退款流程与渠道尝试展示（attempt_type=REFUND）；复位脚本对齐 Feature 015 退款并库。
+- 根目录脚本清零：仓库根仅保留 Maven 标配（`mvnw` / `pom.xml` / `VERSION`）与文档。
+
+---
+
 ## [2026-09-03] 文档与目录治理（审计整改）
 
 **范围**：仅文档与目录治理，不动任何业务代码（例外：`.gitignore` 与 `git rm --cached` 属版本库治理）。对应核心指令「已决策 ADR 在技术方案/系统设计中体现；历史文档归档；系统架构与方案审计；目录规划清晰」。
