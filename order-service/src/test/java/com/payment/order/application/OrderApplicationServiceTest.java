@@ -81,7 +81,7 @@ class OrderApplicationServiceTest {
         OrderApplicationService service = service();
         String orderNo = newPendingPaymentOrder(service);
 
-        service.onPaymentSucceeded(new PaymentSucceededRequest("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY"));
+        service.onPaymentSucceeded(PaymentSucceededRequest.withoutItems("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY"));
 
         Order order = service.getOrder(orderNo);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
@@ -98,7 +98,7 @@ class OrderApplicationServiceTest {
         OrderApplicationService service = service();
         String orderNo = newPendingPaymentOrder(service);
         PaymentSucceededRequest request =
-                new PaymentSucceededRequest("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY");
+                PaymentSucceededRequest.withoutItems("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY");
 
         service.onPaymentSucceeded(request);
         service.onPaymentSucceeded(request); // 同一支付单重复回调
@@ -111,13 +111,13 @@ class OrderApplicationServiceTest {
     void successFromAnotherPaymentBypassingTransactionLayerFailsFast() {
         OrderApplicationService service = service();
         String orderNo = newPendingPaymentOrder(service);
-        service.onPaymentSucceeded(new PaymentSucceededRequest("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY"));
+        service.onPaymentSucceeded(PaymentSucceededRequest.withoutItems("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY"));
 
         // Feature 016 / ADR-0054：surplus 判定与自动退款发起已上移到 transaction 层。
         // 绕过它直接调 order 层属内部契约违规 → INTERNAL_ERROR 快速失败，
         // MUST NOT 再抛 ORDER_NOT_PAYABLE（payment 侧已无法据此触发退款，409 会被静默吞掉）。
         assertThatThrownBy(() -> service.onPaymentSucceeded(
-                new PaymentSucceededRequest("PM-2", orderNo, "txn-1", "u1", 5000L, "CNY")))
+                PaymentSucceededRequest.withoutItems("PM-2", orderNo, "txn-1", "u1", 5000L, "CNY")))
                 .isInstanceOfSatisfying(BizException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCodes.INTERNAL_ERROR));
         assertThat(service.getOrder(orderNo).getPaymentNo()).isEqualTo("PM-1");
@@ -133,7 +133,7 @@ class OrderApplicationServiceTest {
         // 同上：正常链路下 transaction 层应先判定为 surplus 并以 transactionNo+paymentNo 发起退款，
         // 不会走到本层；直接调用则快速失败，避免多收的钱无人处理。
         assertThatThrownBy(() -> service.onPaymentSucceeded(
-                new PaymentSucceededRequest("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY")))
+                PaymentSucceededRequest.withoutItems("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY")))
                 .isInstanceOfSatisfying(BizException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCodes.INTERNAL_ERROR));
         assertThat(service.getOrder(orderNo).getStatus()).isEqualTo(OrderStatus.CANCELLED);

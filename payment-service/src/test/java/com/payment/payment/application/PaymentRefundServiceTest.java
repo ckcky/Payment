@@ -66,7 +66,7 @@ class PaymentRefundServiceTest {
         PaymentRefundService service = service(new MockChannelAdapter(MockChannelAdapter.Scenario.SUCCESS));
 
         RefundAttemptResponse response = service.refund(new RefundAttemptRequest(
-                "RF-1", payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 100, "CNY", "reason", "rk-1"));
+                "RF-1", payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(), 50, "CNY", "reason", "rk-1"));
 
         assertThat(response.refundNo()).isEqualTo("RF-1");
         assertThat(response.status()).isEqualTo("SUCCEEDED");
@@ -77,6 +77,9 @@ class PaymentRefundServiceTest {
         assertThat(attempt.getAttemptType()).isEqualTo(PaymentAttempt.TYPE_REFUND);
         assertThat(attempt.getChannelReference()).isEqualTo(response.channelReference());
         assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        // spec 018 / US1 / D2：REFUND 尝试记所属支付单金额（100），而非退款金额（50）
+        assertThat(attempt.getAmountMinor()).isEqualTo(100);
+        assertThat(attempt.getCurrencyCode()).isEqualTo("CNY");
     }
 
     @Test

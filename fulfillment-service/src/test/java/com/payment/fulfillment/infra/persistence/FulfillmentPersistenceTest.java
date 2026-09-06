@@ -36,7 +36,7 @@ class FulfillmentPersistenceTest {
         assertThat(reloaded.getStatus()).isEqualTo(FulfillmentStatus.DELIVERED);
         assertThat(reloaded.getVersion()).isEqualTo(1);
 
-        assertThat(fulfillmentRepository.findBySourcePaymentNo("pay_1")).isPresent();
+        assertThat(fulfillmentRepository.findBySourcePaymentNoAndOrderItemId("pay_1", "item_1")).isPresent();
     }
 
     @Test

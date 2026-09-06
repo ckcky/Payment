@@ -9,6 +9,7 @@ import com.payment.fulfillment.domain.FulfillmentStatus;
 public record FulfillmentResponse(
         Long id,
         String orderNo,
+        String orderItemId,
         String sourcePaymentNo,
         FulfillmentStatus status,
         String failureReason) {
@@ -17,6 +18,7 @@ public record FulfillmentResponse(
         return new FulfillmentResponse(
                 fulfillment.getId(),
                 fulfillment.getOrderNo(),
+                fulfillment.getOrderItemId(),
                 fulfillment.getSourcePaymentNo(),
                 fulfillment.getStatus(),
                 fulfillment.getFailureReason());

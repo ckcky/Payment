@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * 履约查询接口（只读，无命令入口——履约由 payment-service 的同步 RPC 触发）。
  */
@@ -40,10 +42,15 @@ public class FulfillmentController {
      * @return 该订单的履约；不存在时抛 {@code NOT_FOUND}
      */
     @GetMapping("/by-order/{orderNo}")
-    public FulfillmentResponse getFulfillmentByOrderId(@PathVariable String orderNo) {
-        Fulfillment fulfillment = repository.findByOrderNo(orderNo)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
-                        "Fulfillment not found for order: " + orderNo));
-        return FulfillmentResponse.from(fulfillment);
+    public List<FulfillmentResponse> getFulfillmentsByOrderId(@PathVariable String orderNo) {
+        // spec 018 / ADR-0066：按订单明细粒度履约，一单多明细 = 多条履约
+        List<FulfillmentResponse> fulfillments = repository.findByOrderNo(orderNo).stream()
+                .map(FulfillmentResponse::from)
+                .toList();
+        if (fulfillments.isEmpty()) {
+            throw BizException.of(ErrorCodes.NOT_FOUND,
+                    "Fulfillment not found for order: " + orderNo);
+        }
+        return fulfillments;
     }
 }

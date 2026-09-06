@@ -38,7 +38,7 @@ class FulfillmentOrderQueryTest {
     }
 
     @Test
-    @DisplayName("命中：按订单号返回该订单的履约，含状态与来源支付")
+    @DisplayName("命中：按订单号返回该订单的履约数组（spec 018 按明细粒度，可多条），含状态与来源支付")
     void returnsFulfillmentOfOrder() throws Exception {
         Fulfillment fulfillment = new Fulfillment("order-1", "item-1", "digital-key-1", "pay-1");
         fulfillment.start();
@@ -47,9 +47,10 @@ class FulfillmentOrderQueryTest {
 
         mockMvc.perform(get("/fulfillments/by-order/order-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.orderNo").value("order-1"))
-                .andExpect(jsonPath("$.sourcePaymentNo").value("pay-1"))
-                .andExpect(jsonPath("$.status").value(FulfillmentStatus.DELIVERED.name()));
+                .andExpect(jsonPath("$[0].orderNo").value("order-1"))
+                .andExpect(jsonPath("$[0].orderItemId").value("item-1"))
+                .andExpect(jsonPath("$[0].sourcePaymentNo").value("pay-1"))
+                .andExpect(jsonPath("$[0].status").value(FulfillmentStatus.DELIVERED.name()));
     }
 
     @Test

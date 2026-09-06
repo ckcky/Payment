@@ -8,6 +8,8 @@ import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
+import com.payment.payment.application.CreatePaymentCommand;
+import com.payment.payment.application.PaymentPersistence;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +28,9 @@ class PaymentPersistenceTest {
 
     @Autowired
     private PaymentAttemptRepository attemptRepository;
+
+    @Autowired
+    private PaymentPersistence paymentPersistence;
 
     @Test
     void paymentRoundTrip() {
@@ -51,7 +56,8 @@ class PaymentPersistenceTest {
         Payment payment = new Payment("txn-att", "order-att", "user-att", 100L, "CNY", "idem-att");
         paymentRepository.save(payment);
 
-        PaymentAttempt attempt = new PaymentAttempt(payment.getPaymentNo(), "mock", 0);
+        PaymentAttempt attempt = new PaymentAttempt(payment.getPaymentNo(), "mock", 0,
+                payment.getAmountMinor(), payment.getCurrencyCode());
         attempt.accept("ref-att");
         attemptRepository.save(attempt);
 
@@ -63,6 +69,9 @@ class PaymentPersistenceTest {
         assertThat(reloaded.getStatus()).isEqualTo(PaymentAttemptStatus.ACCEPTED);
         assertThat(reloaded.getRetryCount()).isEqualTo(0);
         assertThat(reloaded.getVersion()).isEqualTo(1);
+        // spec 018 / US1：尝试金额留痕（PAYMENT=支付单金额）
+        assertThat(reloaded.getAmountMinor()).isEqualTo(100L);
+        assertThat(reloaded.getCurrencyCode()).isEqualTo("CNY");
 
         assertThat(attemptRepository.findByPaymentNo(payment.getPaymentNo())).hasSize(1);
     }
@@ -84,5 +93,20 @@ class PaymentPersistenceTest {
         assertThatThrownBy(() -> paymentRepository.save(second))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.CONFLICT));
+    }
+
+    @Test
+    void insertPendingRecordsPaymentAmountOnAttempt() {
+        CreatePaymentCommand cmd = new CreatePaymentCommand("txn-ip", "order-ip", "user-ip",
+                250L, "USD", "idem-ip", "mock");
+        PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd);
+        assertThat(pending.created()).isTrue();
+
+        PaymentAttempt attempt = attemptRepository.findByPaymentNo(pending.payment().getPaymentNo())
+                .stream().findFirst().orElseThrow();
+        // spec 018 / US1 / 创建点一：PAYMENT 尝试记支付单金额
+        assertThat(attempt.getAttemptType()).isEqualTo(PaymentAttempt.TYPE_PAYMENT);
+        assertThat(attempt.getAmountMinor()).isEqualTo(250L);
+        assertThat(attempt.getCurrencyCode()).isEqualTo("USD");
     }
 }

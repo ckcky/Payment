@@ -9,6 +9,8 @@ import com.payment.fulfillment.infra.InMemoryFulfillmentRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -21,7 +23,8 @@ class FulfillmentMetricsTest {
             request -> new EntitlementGrantedResponse(1L, "GRANTED");
 
     private static PaymentSucceededRequest request() {
-        return new PaymentSucceededRequest("pay-1", "order_1", "txn_1", "user_1", 1250L, "USD");
+        return new PaymentSucceededRequest("pay-1", "order_1", "txn_1", "user_1", 1250L, "USD",
+                List.of(new PaymentSucceededRequest.ItemLine("OI-1", "SKU-1", "商品", 1, 1250L, "USD")));
     }
 
     @Test
@@ -43,8 +46,8 @@ class FulfillmentMetricsTest {
                 new InMemoryFulfillmentRepository(), NOOP_GATEWAY,
                 new MicrometerBusinessMetrics(registry)) {
             @Override
-            Fulfillment newFulfillment(String orderNo, String sourcePaymentNo) {
-                return new Fulfillment(orderNo, null, "mock delivery", sourcePaymentNo) {
+            Fulfillment newFulfillment(String orderNo, String orderItemId, String sourcePaymentNo) {
+                return new Fulfillment(orderNo, orderItemId, "mock delivery", sourcePaymentNo) {
                     @Override
                     public void deliver() {
                         throw new RuntimeException("mock delivery failure");
@@ -53,9 +56,10 @@ class FulfillmentMetricsTest {
             }
         };
 
-        Fulfillment fulfillment = service.acceptPaymentSucceeded(request());
+        List<Fulfillment> fulfillments = service.acceptPaymentSucceeded(request());
 
-        assertThat(fulfillment.getStatus()).isEqualTo(FulfillmentStatus.FAILED);
+        assertThat(fulfillments).hasSize(1);
+        assertThat(fulfillments.get(0).getStatus()).isEqualTo(FulfillmentStatus.FAILED);
         assertThat(registry.get("fulfillment.failed").counter().count()).isEqualTo(1.0);
     }
 }

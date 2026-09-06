@@ -75,7 +75,7 @@ class ChannelQueryTest {
             payments.save(payment);
             attempts.save(PaymentAttempt.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
                     Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
-                    null, null, 0));
+                    null, null, 0, 0L, "CNY"));
             return payment;
         }
     }

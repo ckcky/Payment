@@ -31,7 +31,7 @@ class OrderPersistenceTest {
     @Test
     void orderRoundTrip() {
         Order order = new Order("u1", "m1", "CNY",
-                List.of(new OrderItem("1", "SKU-A", "Item A", 2, 100, "CNY")));
+                List.of(new OrderItem("OI-TEST-1", "1", "SKU-A", "Item A", 2, 100, "CNY")));
         order.confirm();
         orderRepository.save(order);
 
@@ -47,7 +47,7 @@ class OrderPersistenceTest {
     @Test
     void optimisticLockRejectsStaleUpdate() {
         Order order = new Order("u1", "m1", "CNY",
-                List.of(new OrderItem("1", "SKU-A", "Item A", 2, 100, "CNY")));
+                List.of(new OrderItem("OI-TEST-2", "1", "SKU-A", "Item A", 2, 100, "CNY")));
         order.confirm();
         orderRepository.save(order);
 

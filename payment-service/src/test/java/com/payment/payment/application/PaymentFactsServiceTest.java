@@ -23,7 +23,8 @@ class PaymentFactsServiceTest {
     void confirmedFactsReturnsOnlySucceededPayments() {
         Payment succeeded = new Payment("txn-1", "order-1", "user-1", 100, "CNY", "idem-1");
         succeeded = payments.save(succeeded);
-        PaymentAttempt attempt = new PaymentAttempt(succeeded.getPaymentNo(), "mock", 0);
+        PaymentAttempt attempt = new PaymentAttempt(succeeded.getPaymentNo(), "mock", 0,
+                succeeded.getAmountMinor(), succeeded.getCurrencyCode());
         attempt = attempts.save(attempt);
         attempt.accept("channel-ref-1");
         succeeded.start(attempt.getId());
@@ -33,7 +34,8 @@ class PaymentFactsServiceTest {
 
         Payment failed = new Payment("txn-2", "order-2", "user-1", 200, "CNY", "idem-2");
         failed = payments.save(failed);
-        PaymentAttempt failedAttempt = new PaymentAttempt(failed.getPaymentNo(), "mock", 0);
+        PaymentAttempt failedAttempt = new PaymentAttempt(failed.getPaymentNo(), "mock", 0,
+                failed.getAmountMinor(), failed.getCurrencyCode());
         failedAttempt = attempts.save(failedAttempt);
         failed.start(failedAttempt.getId());
         failed.fail("declined");

@@ -53,7 +53,8 @@ public class PaymentPersistence {
         Payment payment = new Payment(cmd.transactionId(), cmd.orderNo(), cmd.userId(),
                 cmd.amountMinor(), cmd.currencyCode(), idempotencyKey);
         payment = insertNew(payment);
-        PaymentAttempt attempt = new PaymentAttempt(payment.getPaymentNo(), cmd.channelCode(), 0);
+        PaymentAttempt attempt = new PaymentAttempt(payment.getPaymentNo(), cmd.channelCode(), 0,
+                payment.getAmountMinor(), payment.getCurrencyCode());
         attempt = attemptRepository.save(attempt);
         payment.start(attempt.getId());
         payment = paymentRepository.save(payment);

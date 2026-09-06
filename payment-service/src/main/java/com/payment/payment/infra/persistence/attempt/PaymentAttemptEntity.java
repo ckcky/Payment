@@ -16,6 +16,10 @@ public class PaymentAttemptEntity extends BaseEntity {
     private String channelCode;
     /** 尝试类型：PAYMENT / REFUND（Feature 016 / FR-017，退款渠道尝试复用本表）。 */
     private String attemptType = "PAYMENT";
+    /** 本次渠道交互金额（最小货币单位，spec 018 / US1 / D2）。 */
+    private Long amountMinor;
+    /** 本次渠道交互币种（spec 018 / US1 / D2）。 */
+    private String currencyCode;
     private Instant requestedAt;
     private Instant respondedAt;
     /** 渠道引用：数据库唯一约束兜底，重复回调映射到同一渠道交互。 */
@@ -49,6 +53,22 @@ public class PaymentAttemptEntity extends BaseEntity {
 
     public void setAttemptType(String attemptType) {
         this.attemptType = attemptType;
+    }
+
+    public Long getAmountMinor() {
+        return amountMinor;
+    }
+
+    public void setAmountMinor(Long amountMinor) {
+        this.amountMinor = amountMinor;
+    }
+
+    public String getCurrencyCode() {
+        return currencyCode;
+    }
+
+    public void setCurrencyCode(String currencyCode) {
+        this.currencyCode = currencyCode;
     }
 
     public Instant getRequestedAt() {

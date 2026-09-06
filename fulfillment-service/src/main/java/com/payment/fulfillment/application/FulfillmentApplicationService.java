@@ -1,5 +1,7 @@
 package com.payment.fulfillment.application;
 
+import com.payment.common.core.error.BizException;
+import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
@@ -10,13 +12,16 @@ import com.payment.fulfillment.domain.FulfillmentRepository;
 import com.payment.fulfillment.domain.FulfillmentStatus;
 import org.springframework.stereotype.Service;
 
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * 履约应用服务：接收 payment-service 的同步 RPC，创建幂等履约任务；
- * 履约完成后通过同步 RPC（{@link EntitlementGateway}）触发权益授予。
+ * 履约应用服务：接收 payment-service 的同步 RPC，按订单明细（order_item）粒度创建幂等履约任务
+ * （spec 018 / ADR-0066：每个 order_item 一条履约，orderItemId = OI 业务单号）；
+ * 履约完成后通过同步 RPC（{@link EntitlementGateway}）逐条触发权益授予。
  *
- * <p>「支付成功」只触发履约，不决定最终履约状态；重复请求（同 paymentNo）不产生第二条履约。</p>
+ * <p>幂等粒度 = {@code (sourcePaymentNo, orderItemId)}（AC3.3）：重复通知不产生重复履约，
+ * 部分明细已存在的场景逐条跳过、仅补建缺失明细。</p>
  */
 @Service
 public class FulfillmentApplicationService {
@@ -35,61 +40,77 @@ public class FulfillmentApplicationService {
         this.metrics = metrics;
     }
 
-    public Fulfillment acceptPaymentSucceeded(PaymentSucceededRequest request) {
-        String sourcePaymentNo = String.valueOf(request.paymentNo());
-
-        // 幂等：同一 sourcePaymentNo 只创建一条履约。
-        Optional<Fulfillment> existing = repository.findBySourcePaymentNo(sourcePaymentNo);
-        if (existing.isPresent()) {
-            return existing.get();
+    public List<Fulfillment> acceptPaymentSucceeded(PaymentSucceededRequest request) {
+        String sourcePaymentNo = request.paymentNo();
+        List<PaymentSucceededRequest.ItemLine> items = request.items();
+        // spec 018 / FR-005：order 层负责以本库 order_items 富化明细；items 缺失属契约违规，快速失败。
+        if (items == null || items.isEmpty()) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                    "payment succeeded request without items (contract violation, spec 018): "
+                            + request.paymentNo());
         }
 
-        Fulfillment fulfillment = newFulfillment(request.orderNo(), sourcePaymentNo);
-        fulfillment.start();
+        List<Fulfillment> result = new ArrayList<>(items.size());
+        for (PaymentSucceededRequest.ItemLine item : items) {
+            // 明细粒度幂等：同一 (sourcePaymentNo, orderItemId) 已存在直接跳过（重复通知/部分重复吸收）
+            var existing = repository.findBySourcePaymentNoAndOrderItemId(sourcePaymentNo, item.orderItemNo());
+            if (existing.isPresent()) {
+                result.add(existing.get());
+                continue;
+            }
 
-        // 同步 mock 处理（PROCESSING → DELIVERED）。真实实现会在此处调用交付渠道；
-        // 未知结果绝不臆断为成功——异常时记录失败，不触发权益、不回写支付事实。
-        try {
-            fulfillment.deliver();
-        } catch (RuntimeException ex) {
-            fulfillment.fail(ex.getMessage());
-            metrics.counter("fulfillment.failed", 1.0, "module", MODULE);
-            return repository.save(fulfillment);
+            Fulfillment fulfillment = newFulfillment(request.orderNo(), item.orderItemNo(), sourcePaymentNo);
+            fulfillment.start();
+
+            // 同步 mock 处理（PROCESSING → DELIVERED）。真实实现会在此处调用交付渠道；
+            // 未知结果绝不臆断为成功——异常时记录失败，不触发权益、不回写支付事实。
+            try {
+                fulfillment.deliver();
+            } catch (RuntimeException ex) {
+                fulfillment.fail(ex.getMessage());
+                metrics.counter("fulfillment.failed", 1.0, "module", MODULE);
+                result.add(repository.save(fulfillment));
+                continue;
+            }
+
+            metrics.counter("fulfillment.completed", 1.0, "module", MODULE);
+
+            Fulfillment saved = repository.save(fulfillment);
+            result.add(saved);
+
+            // 每条履约完成后各自触发权益授予（同步 RPC）；权益失败不反写履约成功事实。
+            entitlementGateway.notifyFulfillmentCompleted(
+                    new FulfillmentCompletedRequest(saved.getId(), saved.getOrderNo(), request.userId()));
         }
-
-        metrics.counter("fulfillment.completed", 1.0, "module", MODULE);
-
-        Fulfillment saved = repository.save(fulfillment);
-
-        // 履约完成后触发权益授予（同步 RPC）；权益失败不反写履约成功事实（按 plan 语义，履约已 DELIVERED）。
-        entitlementGateway.notifyFulfillmentCompleted(
-                new FulfillmentCompletedRequest(saved.getId(), saved.getOrderNo(), request.userId()));
-        return saved;
+        return result;
     }
 
     /** 测试缝隙：供单测注入可失败的 mock 交付（不改动状态机）。 */
-    Fulfillment newFulfillment(String orderNo, String sourcePaymentNo) {
-        return new Fulfillment(orderNo, null, "mock delivery", sourcePaymentNo);
+    Fulfillment newFulfillment(String orderNo, String orderItemId, String sourcePaymentNo) {
+        return new Fulfillment(orderNo, orderItemId, "mock delivery", sourcePaymentNo);
     }
 
     /**
      * 退款 → 履约撤销（ADR-0017）：仅「请求撤销」而非「保证撤销」，尊重履约自身状态机。
      *
-     * <p>PENDING 履约可取消（返回 CANCELLED）；其余状态（PROCESSING/DELIVERED/已取消等）不可逆，
-     * 返回 SKIPPED（可解释、非错误）；找不到履约也返回 SKIPPED。已交付履约的回收不在本 Feature。</p>
+     * <p>spec 018 / AC3.4：一单多明细 = 多条履约，遍历取消全部 PENDING；任一条取消成功返回
+     * CANCELLED；全部不可撤销（PROCESSING/DELIVERED/已取消等）返回 SKIPPED（可解释、非错误）；
+     * 找不到履约也返回 SKIPPED。已交付履约的回收不在本 Feature。</p>
      */
     public RefundFulfillmentResponse onRefund(RefundFulfillmentRequest request) {
-        Optional<Fulfillment> opt = repository.findByOrderNo(request.orderNo());
-        if (opt.isEmpty()) {
+        List<Fulfillment> fulfillments = repository.findByOrderNo(request.orderNo());
+        if (fulfillments.isEmpty()) {
             return new RefundFulfillmentResponse(request.refundNo(), "SKIPPED");
         }
-        Fulfillment fulfillment = opt.get();
-        if (fulfillment.getStatus() == FulfillmentStatus.PENDING) {
-            fulfillment.cancel();
-            repository.save(fulfillment);
-            metrics.counter("fulfillment.refund_cancelled", 1.0, "module", MODULE);
-            return new RefundFulfillmentResponse(request.refundNo(), "CANCELLED");
+        boolean anyCancelled = false;
+        for (Fulfillment fulfillment : fulfillments) {
+            if (fulfillment.getStatus() == FulfillmentStatus.PENDING) {
+                fulfillment.cancel();
+                repository.save(fulfillment);
+                metrics.counter("fulfillment.refund_cancelled", 1.0, "module", MODULE);
+                anyCancelled = true;
+            }
         }
-        return new RefundFulfillmentResponse(request.refundNo(), "SKIPPED");
+        return new RefundFulfillmentResponse(request.refundNo(), anyCancelled ? "CANCELLED" : "SKIPPED");
     }
 }

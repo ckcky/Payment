@@ -33,7 +33,7 @@ class TerminalConflictTest {
                 100, "CNY", "idem-" + paymentId, status, attemptId, null, 0, null, 0, 1);
         payments.save(payment);
         attempts.save(PaymentAttempt.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
-                Instant.now(), null, null, PaymentAttemptStatus.ACCEPTED, null, null, 0));
+                Instant.now(), null, null, PaymentAttemptStatus.ACCEPTED, null, null, 0, 0L, "CNY"));
         return payment;
     }
 

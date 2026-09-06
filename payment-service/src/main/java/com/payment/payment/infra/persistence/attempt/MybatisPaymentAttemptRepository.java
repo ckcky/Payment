@@ -63,7 +63,8 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
                 entity.getChannelReference(), PaymentAttemptStatus.valueOf(entity.getStatus()),
                 entity.getFailureReason(),
                 entity.getErrorType() == null ? null : PaymentAttemptErrorType.valueOf(entity.getErrorType()),
-                entity.getVersion(), entity.getAttemptType());
+                entity.getVersion(), entity.getAttemptType(),
+                entity.getAmountMinor() == null ? 0L : entity.getAmountMinor(), entity.getCurrencyCode());
     }
 
     private PaymentAttemptEntity toEntity(PaymentAttempt attempt) {
@@ -72,6 +73,8 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
         entity.setPaymentNo(attempt.getPaymentNo());
         entity.setChannelCode(attempt.getChannelCode());
         entity.setAttemptType(attempt.getAttemptType());
+        entity.setAmountMinor(attempt.getAmountMinor());
+        entity.setCurrencyCode(attempt.getCurrencyCode());
         entity.setRequestedAt(attempt.getRequestedAt());
         entity.setRespondedAt(attempt.getRespondedAt());
         entity.setChannelReference(attempt.getChannelReference());

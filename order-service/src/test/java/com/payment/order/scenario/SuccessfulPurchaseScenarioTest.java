@@ -208,7 +208,7 @@ class SuccessfulPurchaseScenarioTest {
         CreateOrderResult result = service.createOrder("u1", "m1", List.of(new OrderLine(1L, 2)), "idk-1");
         assertThat(client.available(1L)).isEqualTo(48L);
 
-        service.onPaymentSucceeded(new PaymentSucceededRequest("PM-1", result.orderNo(),
+        service.onPaymentSucceeded(PaymentSucceededRequest.withoutItems("PM-1", result.orderNo(),
                 result.transactionNo(), "u1", 200L, "CNY"));
 
         // 确认扣减后 reserved 归零、sold 增加

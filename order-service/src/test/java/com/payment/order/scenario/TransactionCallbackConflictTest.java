@@ -60,7 +60,7 @@ class TransactionCallbackConflictTest {
     }
 
     private static PaymentSucceededRequest succeeded(String orderNo, String paymentNo) {
-        return new PaymentSucceededRequest(paymentNo, orderNo, "txn-x", "u1", 200L, "CNY");
+        return PaymentSucceededRequest.withoutItems(paymentNo, orderNo, "txn-x", "u1", 200L, "CNY");
     }
 
     @Test

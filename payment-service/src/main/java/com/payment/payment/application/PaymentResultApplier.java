@@ -42,7 +42,8 @@ final class PaymentResultApplier {
     }
 
     static PaymentSucceededRequest toSucceededRequest(Payment payment) {
-        return new PaymentSucceededRequest(payment.getPaymentNo(), payment.getOrderNo(),
+        // payment 侧不持有订单明细，按约定传空 items（由 order 层富化，FR-005 / ADR-0066）
+        return PaymentSucceededRequest.withoutItems(payment.getPaymentNo(), payment.getOrderNo(),
                 payment.getTransactionId(), payment.getUserId(),
                 payment.getAmountMinor(), payment.getCurrencyCode());
     }

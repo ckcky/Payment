@@ -78,7 +78,7 @@ class OrderTimeoutSchedulerTest {
     @Test
     void processExpiredCancelsPendingOrderAndReleasesStockAndRemovesMember() {
         when(zSet.rangeByScore(eq("order:timeouts"), anyDouble(), anyDouble())).thenReturn(Set.of("7"));
-        OrderItem item = new OrderItem("7", "SKU", "n", 2, 100L, "CNY");
+        OrderItem item = new OrderItem("OI-TEST-1", "7", "SKU", "n", 2, 100L, "CNY");
         Order order = new Order("u1", "m1", "CNY", List.of(item));
         order.confirm(); // PENDING_PAYMENT
         when(orderRepository.findById(7L)).thenReturn(java.util.Optional.of(order));

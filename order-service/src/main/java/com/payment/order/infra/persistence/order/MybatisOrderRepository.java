@@ -81,8 +81,8 @@ public class MybatisOrderRepository implements OrderRepository {
     }
 
     private OrderItem toItem(OrderItemEntity entity) {
-        return new OrderItem(entity.getSkuId(), entity.getSkuCode(), entity.getName(),
-                entity.getQuantity(), entity.getPriceMinor(), entity.getCurrencyCode());
+        return new OrderItem(entity.getOrderItemNo(), entity.getSkuId(), entity.getSkuCode(),
+                entity.getName(), entity.getQuantity(), entity.getPriceMinor(), entity.getCurrencyCode());
     }
 
     private OrderEntity toEntity(Order order) {
@@ -104,6 +104,7 @@ public class MybatisOrderRepository implements OrderRepository {
     private OrderItemEntity toItemEntity(String orderNo, OrderItem item) {
         OrderItemEntity entity = new OrderItemEntity();
         entity.setOrderNo(orderNo);
+        entity.setOrderItemNo(item.getOrderItemNo());
         entity.setSkuId(item.getSkuId());
         entity.setSkuCode(item.getSkuCode());
         entity.setName(item.getName());
