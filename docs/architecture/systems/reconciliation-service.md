@@ -331,3 +331,34 @@ mybatis-plus:
 | `reconciliation.difference` | counter | module=reconciliation, type=差异类型 | 对账产出差异（按 AMOUNT_MISMATCH/STATUS_MISMATCH/PLATFORM_ONLY/CHANNEL_ONLY） |
 
 **资金审计 / 关联字段**：对账为只读、不落资金账，沿用 `traceId`（`TraceContext`）跨服务传播；差异处理记录 `resolutionNote` 作为人工跟进依据，满足 roadmap Phase 6 验收「原始事实不被静默改写」。
+
+## 7. 审计四核对 + 挂账调账闭环（spec 017 / ADR-0065，2026-09-07 落地）
+
+### 7.1 职责
+
+在既有「台账 ↔ 渠道账单」对账（006 链路，契约不动）之外，新增 `audit` 包承载会计四核对与处置闭环：
+
+| 核对 | 审计器 | 产出差异（11 类中的对应项） |
+|---|---|---|
+| A1 账证 | `CertificateAuditor` | MISSING_POSTING / ORPHAN_POSTING / AMOUNT_MISMATCH / CURRENCY_MISMATCH / DIRECTION_MISMATCH / DUPLICATE_POSTING |
+| A2 账账 | `LedgerAuditor` | BALANCE_BREAK / ACCOUNT_RECON_BREAK（应付商户 + SUSPENSE 勾稽）/ CROSS_LEDGER_MISMATCH |
+| A3 账实 | `RealAuditor` | LEDGER_VS_STATEMENT_BREAK |
+| A4 账表 | `ReportAuditor` | REPORT_MISMATCH（006 批次匹配汇总 ↔ 业务回算） |
+
+编排入口 `AuditApplicationService.runBatch(period, scope, triggeredBy)`：`(period, scope)` 唯一键幂等回查；scope ∈ CERTIFICATE / LEDGER / REAL / REPORT / ALL；`@Scheduled` 日切 T-1 自动触发（`audit.schedule.enabled` 可关）与手动端点并存。
+
+### 7.2 处置闭环
+
+- **挂账** `POST /internal/audit/batches/{batchNo}/differences/{id}/suspend`：生成平衡过渡分录（账少记 借 CUSTOMER_CASH / 贷 SUSPENSE；多记反向），台账 `audit_adjustments` 留痕，单号 AD 前缀。
+- **调账** `POST .../{id}/adjust`：SUPPLEMENT / REVERSE / CORRECT / TRANSFER / WRITE_OFF 五类，经 ledger 标准记账通道（幂等键 `adjust:{adjustNo}`），硬规则（平衡 / 累计 ≤ 差异额 / operator+reason / 双人复核软约束 / append-only）由 `AdjustmentPolicy` 纯函数承载。
+- **复核** 调账后自动 recheck，通过置 VERIFIED；`POST .../recheck` 可全批复核。
+- **关批** `POST .../close`：存在 PENDING / SUSPENDED / ADJUSTED 差异时 409 拒绝。
+- **结算门禁** `GET /internal/audit/settlement-gate?period=`：无未收口差异或已挂账留痕 → ALLOW；BLOCKING → BLOCK（settlement 侧 fail-closed）。
+
+### 7.3 依赖与数据
+
+只读拉取 payment/refunds（confirmed-facts）、settlement（audit-facts）、ledger（postings/all + balance）三路事实，均为 Feign + common-dto，不破坏服务间编译期零耦合。自有表 `audit_batches` / `audit_differences` / `audit_adjustments`（`deployment/schema/10-audit-schema.sql`，幂等可重放）。
+
+### 7.4 演示
+
+`deployment/demo/scenario-audit.sh`（fixture F1~F7 幂等注入 + 渠道账单 CSV）与控制台 `http://localhost:8091/audit`（MOCK / LIVE 双模式）覆盖「触发 → 差异 → 挂账 → 调账 → 复核 → 关批 → 试算平衡」全流程。

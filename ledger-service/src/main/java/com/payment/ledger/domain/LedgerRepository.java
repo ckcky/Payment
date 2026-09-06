@@ -16,6 +16,9 @@ public interface LedgerRepository {
     /** 按业务来源回查（FR-008 追溯）。 */
     List<Posting> findBySource(LedgerSourceType sourceType, String sourceId);
 
+    /** 全部记账批次（spec 017：审计账证/账账核对用，按 id 倒序，上限由调用方控制）。 */
+    List<Posting> findAllPostings();
+
     /** 全部分录（全局平衡性校验用，FR-007）。 */
     List<LedgerEntry> findAllEntries();
 

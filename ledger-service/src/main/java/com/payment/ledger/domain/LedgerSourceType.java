@@ -6,5 +6,7 @@ package com.payment.ledger.domain;
 public enum LedgerSourceType {
     PAYMENT,
     REFUND,
-    SETTLEMENT
+    SETTLEMENT,
+    /** 挂账 / 调账（spec 017 / ADR-0065）：source_id 为 AD 单号，幂等键 adjust:{adjustNo}。 */
+    ADJUSTMENT
 }

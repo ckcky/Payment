@@ -55,10 +55,11 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
     KEY idx_entries_account (account_id, currency)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- MVP 预置科目（与 com.payment.ledger.domain.Account 枚举一一对应）
+-- MVP 预置科目（与 com.payment.ledger.domain.Account 枚举一一对应；spec 017 新增 id=5 SUSPENSE）
 INSERT INTO accounts (id, code, name, type, currency, created_at) VALUES
     (1, 'CUSTOMER_CASH',          '客户资金',     'ASSET',     'CNY', NOW()),
     (2, 'MERCHANT_PAYABLE',       '应付商户净额', 'LIABILITY', 'CNY', NOW()),
     (3, 'PLATFORM_FEE_REVENUE',   '平台手续费收入', 'REVENUE',   'CNY', NOW()),
-    (4, 'SETTLEMENT_PAYABLE',     '已结算待出款', 'LIABILITY', 'CNY', NOW())
+    (4, 'SETTLEMENT_PAYABLE',     '已结算待出款', 'LIABILITY', 'CNY', NOW()),
+    (5, 'SUSPENSE',               '待处理差错款', 'ASSET',     'CNY', NOW())
 ON DUPLICATE KEY UPDATE name = VALUES(name);

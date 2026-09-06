@@ -545,3 +545,21 @@ Phase 0 Foundation → 001 Core Business Model → 002 payment-order-callback �
 ### 9.3 仅纪录于 ADR 文件（正文未展开，按惯例以 ADR 为权威）
 
 ADR-0001（Spring Cloud 架构）、ADR-0003~0007（支付可靠性集合）、ADR-0008~0011（Ledger 设计集合）、ADR-0016~0017（退款模型/编排）、ADR-0022~0023（结算调整项/闸门）、ADR-0029~0033（分布式演进）、ADR-0034~0037（内部令牌，已不做）、ADR-0054~0058（核心资金正确性 / 入口与基础设施 / 性能基线，见 `docs/adr/0016~0018-*.md`）。
+
+## 10. Feature 017：审计四核对 + 挂账调账闭环（ADR-0065）
+
+**职责变化**：reconciliation-service 从「渠道对账 + 差异记录」升级为「会计审计中心」——账证（业务事实 ↔ 账本分录）、账账（借贷平衡 + 科目勾稽 + 跨账）、账实（账本 ↔ 渠道账单）、账表（006 报表 ↔ 业务回算）四核对，以及挂账 → 调账 → 复核 → 关批处置闭环。ledger 新增第 5 科目 `SUSPENSE`（待处理差错款，ASSET）；settlement 建批前接入审计门禁（fail-closed）。
+
+**新增调用清单**（全部只读 + 标准记账通道，Feign + common-dto）：
+
+| 调用 | 端点 | 用途 |
+|---|---|---|
+| reconciliation → payment / refund | GET /internal/payments|refunds/confirmed-facts | 账证事实 |
+| reconciliation → settlement | GET /internal/settlements/audit-facts?period= | 账证 + 跨账事实（sourceId = 批次 id） |
+| reconciliation → ledger | GET /internal/ledger/postings/all、GET /internal/ledger/balance | 分录与平衡视图 |
+| reconciliation → ledger | POST /internal/ledger/postings | 挂账/调账记账（source_type=ADJUSTMENT，幂等键 adjust:{adjustNo}） |
+| settlement → reconciliation | GET /internal/audit/settlement-gate?period= | 结算门禁 |
+
+**数据模型 delta**：reconciliation 库 `audit_batches` / `audit_differences`（11 类差异 × 三级 severity × 5 态状态机）/ `audit_adjustments`（处置台账）；ledger `accounts` 新增 id=5 SUSPENSE seed；业务单号新增 AB（审计批）/ AD（调账）前缀（ADR-0062 扩展）。
+
+**关联文档**：spec/plan/tasks → `docs/specs/017-accounting-audit/`；服务视角 → `docs/architecture/systems/reconciliation-service.md` §7。

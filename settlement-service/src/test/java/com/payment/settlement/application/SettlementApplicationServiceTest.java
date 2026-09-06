@@ -34,7 +34,8 @@ class SettlementApplicationServiceTest {
 
     private SettlementApplicationService service() {
         return new SettlementApplicationService(repository, merchantClient, reconciliationClient,
-                adjustmentRepository, ledgerGateway, new NoopBusinessMetrics(), new StructuredAuditLogger());
+                adjustmentRepository, ledgerGateway, AuditGateClient.disabled(),
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     @Test

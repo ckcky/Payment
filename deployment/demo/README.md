@@ -86,6 +86,14 @@ bash deployment/demo/stop-stack.sh
 | refund | 支付 `SUCCEEDED` → 退款 `CREATED`；同幂等键重放返回同一退款；**累计超额被 409 拒（H1 防超额）** |
 | payment-unknown | 支付 `UNKNOWN`（不猜成败落账）；无令牌 resolve 被 `403`；带令牌 resolve 收敛为 `FAILED` 终态 |
 | reconciliation | 批次产生差异；**未处理差异时关闭被 400 拒（门禁）**；处理全部差异后关闭 `CLOSED` |
+| audit | 注入 F1~F7 演示故障（幂等）；账证核对捕获漏记/孤儿/金额/重复/跨账 5 类差异；**未收口关批被 400 拒**；挂账（AD 单号、LP 记账）→ 调账转出 → SUSPENSE 归零 → 全部差异收口 → `CLOSED`；试算平衡 `balanced=true`；处置台账留痕 |
+
+## 审计演示（spec 017）
+
+- 入口：`bash deployment/demo/scenario-audit.sh`（或经 run-all）。故障注入使用 `fixtures/audit/audit-faults.sql`（幂等，可重复执行；仅限本地演示库）。
+- 演示控制台：`http://localhost:8091/audit` —— MOCK（内置确定性数据）/ LIVE（透传真实 `/internal/audit/**`）双模式，覆盖触发 → 差异 → 挂账 → 调账 → 复核 → 关批 → 试算平衡全流程。
+- 结算门禁：审计批有未收口差异时，settlement 建批被 `BLOCK`（fail-closed）；「已挂账」视为留痕放行，结算仍可继续（分级门禁，plan §6.1）。
+- `AUDIT_FULL=1 bash deployment/demo/scenario-audit.sh` 追加 ALL scope（账账科目勾稽 / 账实渠道核对 / 账表回算）。
 
 ## Mock 渠道场景切换（ADR-0049）
 

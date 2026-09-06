@@ -33,6 +33,8 @@ bash "$HERE/restart-payment.sh" BUSINESS_UNKNOWN
 bash "$HERE/scenario-payment-unknown.sh"
 bash "$HERE/restart-payment.sh" SUCCESS
 bash "$HERE/scenario-reconciliation.sh"
+# spec 017：审计四核对 + 挂账调账闭环（故障注入幂等，依赖 3306 本地演示库）
+bash "$HERE/scenario-audit.sh"
 
 echo ""
-info "✅ 全部演示场景通过（主链 / 退款 / UNKNOWN 收敛 / 每日对账）"
+info "✅ 全部演示场景通过（主链 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环）"

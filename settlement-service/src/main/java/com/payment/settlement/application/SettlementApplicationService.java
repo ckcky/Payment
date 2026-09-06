@@ -45,6 +45,7 @@ public class SettlementApplicationService {
     private final ReconciliationClient reconciliationClient;
     private final SettlementAdjustmentRepository adjustmentRepository;
     private final LedgerPostingGateway ledgerPostingGateway;
+    private final AuditGateClient auditGateClient;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
@@ -53,6 +54,7 @@ public class SettlementApplicationService {
                                         ReconciliationClient reconciliationClient,
                                         SettlementAdjustmentRepository adjustmentRepository,
                                         LedgerPostingGateway ledgerPostingGateway,
+                                        AuditGateClient auditGateClient,
                                         BusinessMetrics metrics,
                                         StructuredAuditLogger auditLogger) {
         this.settlementRepository = settlementRepository;
@@ -60,6 +62,7 @@ public class SettlementApplicationService {
         this.reconciliationClient = reconciliationClient;
         this.adjustmentRepository = adjustmentRepository;
         this.ledgerPostingGateway = ledgerPostingGateway;
+        this.auditGateClient = auditGateClient;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
@@ -88,6 +91,21 @@ public class SettlementApplicationService {
 
         // ADR-0023 闸门：本地逐条强制校验未确认事实，不通过则抛异常、不落任何批次。
         ConfirmedFactGate.gate(summary, CURRENCY, period, metrics);
+
+        // spec 017 分级审计门禁（plan §6.1）：BLOCKER 且未挂账拦截，已挂账/已调账放行留痕；
+        // 门禁不可达 fail-closed（实现侧已归一化异常）。
+        AuditGateDecision gate = auditGateClient.getSettlementGate(period);
+        if (gate.blocked()) {
+            metrics.counter("audit.settlement.gate.blocked", 1, "module", "settlement");
+            String blocking = gate.blockingDifferences().stream()
+                    .map(d -> d.kind() + "/" + d.sourceId())
+                    .reduce((a, b) -> a + "," + b).orElse("ledger imbalance");
+            throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
+                    "audit settlement gate blocked: " + blocking);
+        }
+        if (!gate.blockingDifferences().isEmpty()) {
+            metrics.counter("audit.settlement.gate.passed_with_suspense", 1, "module", "settlement");
+        }
 
         EligibilityDecision decision = SettlementEligibility.evaluate(
                 merchantActiveAndEligible, summary.unresolvedDifferenceCount());
@@ -199,6 +217,24 @@ public class SettlementApplicationService {
      */
     public List<SettlementBatch> listBatches(String merchantId, String period) {
         return settlementRepository.listBatches(merchantId, period);
+    }
+
+    /**
+     * 审计事实只读视图（spec 017 / FR-001）：reconciliation 的账证 / 跨账 / 账表核对消费。
+     * 只读，绝不修改批次。注意 ledger 侧 SETTLEMENT posting 的 sourceId 是批次 {@code id}。
+     */
+    public List<SettlementAuditFactView> auditFacts(String period) {
+        return settlementRepository.listBatches(null, period).stream()
+                .map(b -> new SettlementAuditFactView(b.getId(), b.getBatchNo(), b.getMerchantId(),
+                        b.getPeriod(), b.getCurrencyCode(), b.getIncomeMinor(), b.getRefundMinor(),
+                        b.getAdjustmentMinor(), b.getNetMinor(), b.getStatus().name()))
+                .toList();
+    }
+
+    /** 审计事实视图：{@code id} 为 ledger 侧跨账核对键（SETTLEMENT posting sourceId）。 */
+    public record SettlementAuditFactView(Long id, String batchNo, String merchantId, String period,
+                                          String currencyCode, long incomeMinor, long refundMinor,
+                                          long adjustmentMinor, long netMinor, String status) {
     }
 
     @Transactional

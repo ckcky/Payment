@@ -99,6 +99,11 @@ class LedgerIdempotencyTest {
         }
 
         @Override
+        public List<Posting> findAllPostings() {
+            return delegate.findAllPostings();
+        }
+
+        @Override
         public List<LedgerEntry> findAllEntries() {
             return delegate.findAllEntries();
         }
