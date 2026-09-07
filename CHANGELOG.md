@@ -6,6 +6,20 @@
 
 ---
 
+## [2026-09-07] spec 022（立项·待实施）：全链路自动化测试体系
+
+**状态**：仅落地文档（spec 四件套 + [ADR-0069](docs/adr/0030-end-to-end-automated-testing.md)），**代码未开发**；决策 D1~D8 见 [spec 022](docs/specs/022-full-chain-automated-testing/spec.md)，任务清单见 [tasks.md](docs/specs/022-full-chain-automated-testing/tasks.md)（批次 A 已完成，B~G 待实施）。
+
+**范围**：把「在 demo 控制台发起支付/退款 → 观察各系统状态与 DB 数据」变成可重复、可报告、可进 CI 的自动化测试，覆盖**退款功能正常 / 超退能拦截 / 对账准确 / 单号记对**四件事。
+
+- **形态**：新建独立 Maven 模块 `deployment/e2e-tests`（JUnit5 + AssertJ + Awaitility + JDK HttpClient + JDBC，黑盒不依赖业务模块），业务代码零改动。
+- **环境**：默认 `-De2e.env=local` 复用本地已起栈；`ci` profile 才用 Testcontainers；数据隔离用唯一业务号前缀 + 按单号过滤。
+- **断言**：行级复用现成 `/demo/trace`（跨 9 库 14 表快照），聚合不变量（借贷平衡/退款累计/单号互记/孤儿单）直连 MySQL，沉淀为 `Invariants` 断言原语库。
+- **门禁**：不引 SCC/Pact（改做内部 API schema 快照）；PR 快跑（单元+集成+快照+ArchUnit），E2E 与对账差异注入放 nightly。
+- **硬约束**：禁断言渠道回调验签（ADR-0025 占位恒放行，会假绿）；对账验收必须走 audit LIVE 模式（MOCK 纯前端）；「对账准不准」拆真实数据一致性与差异检出能力两套断言。
+
+---
+
 ## [2026-09-07] spec 020：演示界面设计系统统一——DESIGN.md 单一真相源 + 共享 Token 层
 
 **范围**：mock-channel-web 4 个演示页（portal / demo / cashier / audit）视觉层统一。决策见 [spec 020](docs/specs/020-demo-ui-design-system/spec.md)（D1–D5 采纳建议项），设计规范见 [docs/design/DESIGN.md](docs/design/DESIGN.md)。
