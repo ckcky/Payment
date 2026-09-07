@@ -71,7 +71,7 @@ class OverRefundGuardE2ETest extends E2eBase {
     void concurrentRefundsNeverExceedPaid() throws Exception {
         runCase("over-refund-concurrent", ctx -> {
             String uid = prefix("ovp");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 2); // 5000
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 2); // 5000
 
             // 并发 4 笔 × 2000：受理侧悲观锁（refund_intake_locks）保证总额不超付；
             // 允许至多 2 笔成功（5000/2000），其余 4xx 拒绝，任何组合都不超付。

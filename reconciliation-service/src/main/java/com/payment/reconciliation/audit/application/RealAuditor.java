@@ -30,6 +30,20 @@ public class RealAuditor {
     public List<AuditDifference> audit(List<CertificateFact> facts,
                                        List<ChannelStatement> statements,
                                        List<LedgerPostingView> postings) {
+        return audit(facts, statements, postings, false);
+    }
+
+    /**
+     * 带账单口径的账实核对（spec 022 T433 补齐）：
+     *
+     * @param statementFilePresent 账单口径——true = 命中周期正式账单文件（可做双向比对：
+     *                             正向 + 反向短款 + 重复流水）；false = 回退默认 fixture
+     *                             （非正式账单，只做正向比对，避免对历史账本全量误报短款）
+     */
+    public List<AuditDifference> audit(List<CertificateFact> facts,
+                                       List<ChannelStatement> statements,
+                                       List<LedgerPostingView> postings,
+                                       boolean statementFilePresent) {
         List<AuditDifference> differences = new ArrayList<>();
 
         // 渠道引用 → 账本资金科目带符号发生额（经由业务事实把 posting.sourceId 关联到 reference）
@@ -49,10 +63,13 @@ public class RealAuditor {
                     signedCustomerCash(posting, fact.sourceType()), Long::sum);
         }
 
+        // 正向：账单逐行 ↔ 账本；同 reference 多行（重复投递形态）单独报差异
+        Map<String, Integer> statementRowCount = new HashMap<>();
         for (ChannelStatement statement : statements) {
             if (!"SUCCEEDED".equals(statement.status())) {
                 continue;
             }
+            statementRowCount.merge(statement.reference(), 1, Integer::sum);
             long ledgerAmount = ledgerByReference.getOrDefault(statement.reference(), 0L);
             // 渠道账单口径：支付为正、退款为负（statement 本身不区分方向，类型由事实侧定义）
             boolean refundRow = isRefundReference(statement.reference(), facts);
@@ -62,6 +79,32 @@ public class RealAuditor {
                         statement.reference(), statement.reference(), statementSigned, ledgerAmount,
                         statement.currencyCode(), "账实不符：渠道账单 " + statementSigned + " / 账本资金科目 "
                                 + ledgerAmount));
+            }
+        }
+        // 重复渠道流水（同 reference 多行，无论金额是否与账本一致都必须留痕）
+        for (Map.Entry<String, Integer> e : statementRowCount.entrySet()) {
+            if (e.getValue() > 1) {
+                differences.add(AuditDifference.of(AuditDifferenceKind.LEDGER_VS_STATEMENT_BREAK, "CHANNEL",
+                        e.getKey(), e.getKey(), 0L, ledgerByReference.getOrDefault(e.getKey(), 0L), "CNY",
+                        "重复渠道流水：同引用出现 " + e.getValue() + " 行账单（重复投递/重出账单）"));
+            }
+        }
+
+        // 反向：正式账单周期内，账本有发生额而账单缺行（短款/单边账）。
+        // 仅在命中周期账单文件时开启——回退默认 fixture 不代表当期账单全集，
+        // 对历史账本全量反向会误报。
+        if (statementFilePresent) {
+            java.util.Set<String> statementRefs = new java.util.HashSet<>(statementRowCount.keySet());
+            for (Map.Entry<String, Long> e : ledgerByReference.entrySet()) {
+                if (!statementRefs.contains(e.getKey()) && e.getValue() != 0L) {
+                    CertificateFact fact = facts.stream()
+                            .filter(f -> f.confirmed() && e.getKey().equals(f.reference()))
+                            .findFirst().orElse(null);
+                    differences.add(AuditDifference.of(AuditDifferenceKind.LEDGER_VS_STATEMENT_BREAK, "CHANNEL",
+                            e.getKey(), e.getKey(), 0L, e.getValue(),
+                            fact == null ? "CNY" : fact.currency(),
+                            "账实不符：账本资金科目 " + e.getValue() + " / 渠道账单缺行（短款/单边账）"));
+                }
             }
         }
         return differences;

@@ -28,13 +28,14 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
     void duplicateOrderWithSameIdempotencyKeyIsAbsorbed() {
         runCase("idem-order", ctx -> {
             String uid = prefix("ido");
+            long skuId = skuWithPrice(ctx, 2500L);
 
-            Api.ApiResponse first = API.createOrder(uid + "-key", uid, uid, 1, 1);
+            Api.ApiResponse first = API.createOrder(uid + "-key", uid, uid, skuId, 1);
             ctx.response("order-1", first);
             assertThat(first.is2xx()).isTrue();
             String orderNo = first.json().path("orderNo").asText();
 
-            Api.ApiResponse replay = API.createOrder(uid + "-key", uid, uid, 1, 1);
+            Api.ApiResponse replay = API.createOrder(uid + "-key", uid, uid, skuId, 1);
             ctx.response("order-2", replay);
             assertThat(replay.is2xx()).as("同键重放应 2xx 吸收").isTrue();
             assertThat(replay.json().path("orderNo").asText())
@@ -48,7 +49,7 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
     void triplicateChannelCallbackIsAbsorbed() {
         runCase("idem-callback", ctx -> {
             String uid = prefix("idc");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             // 同一支付单重复回调 3 次：终态吸收、不重复后处理（记账/订单回写）
@@ -125,7 +126,7 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
     void outOfOrderCallbackDoesNotRegressTerminalState() {
         runCase("cb-out-of-order", ctx -> {
             String uid = prefix("ooo");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             // 终态（SUCCEEDED）后补发「过期」的 UNKNOWN 回调：终态必须吸收、不回退

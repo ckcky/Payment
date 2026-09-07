@@ -114,7 +114,9 @@ public class AuditApplicationService {
             differences.addAll(ledgerAuditor.audit(facts, settlementFacts, postings, balance, unclosedSuspense));
         }
         if (scope == AuditScope.REAL || scope == AuditScope.ALL) {
-            differences.addAll(realAuditor.audit(facts, factsGateway.channelStatements(period), postings));
+            AuditFactsGateway.ChannelStatementLoad statementLoad = factsGateway.channelStatementLoad(period);
+            differences.addAll(realAuditor.audit(facts, statementLoad.statements(), postings,
+                    statementLoad.officialFile()));
         }
         if (scope == AuditScope.REPORT || scope == AuditScope.ALL) {
             differences.addAll(reportAuditor.audit(reportMatches(period), facts));

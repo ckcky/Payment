@@ -155,7 +155,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
     void liveCleanRunHasZeroDifferences() {
         runCase("recon-clean", ctx -> {
             String uid = prefix("rc");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             String period = period("clean", uid);
@@ -175,7 +175,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
     void faultInjectionMatrixAllDetectedWithCorrectKind() {
         runCase("recon-fault-matrix", ctx -> {
             String uid = prefix("fm");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             for (Fault fault : faultMatrix(orderNo, paymentNo, uid)) {
@@ -209,7 +209,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
     void suspendLoopAndCloseSemantics() {
         runCase("recon-suspend-close", ctx -> {
             String uid = prefix("sc");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             // 注入 ORPHAN_POSTING（BLOCKER）→ 检出 → 挂账 → close 放行（挂账即收口）
@@ -229,9 +229,10 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                 JsonNode diffs = API.auditDifferences(batchNo).json();
                 assertThat(containsKind(diffs, "MISSING_POSTING")).isTrue();
 
-                // 逐条挂账
+                // 逐条挂账（仅可挂账 kind；ACCOUNT_RECON_BREAK 等勾稽类不可挂账，属告警口径）
                 for (JsonNode diff : diffs) {
-                    if ("PENDING".equals(diff.path("status").asText())) {
+                    if ("PENDING".equals(diff.path("status").asText())
+                            && isSuspendable(diff.path("kind").asText())) {
                         Api.ApiResponse susp = API.auditSuspend(batchNo, diff.path("id").asLong(),
                                 "e2e-operator", "e2e suspend");
                         ctx.response("suspend-" + diff.path("id").asLong(), susp);
@@ -315,6 +316,14 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         return backup.stream().filter(r -> direction.equals(r.get("direction")))
                 .map(r -> String.valueOf(r.get("id"))).findFirst()
                 .orElseThrow(() -> new AssertionError("no " + direction + " entry in backup"));
+    }
+
+    /** 可挂账差异 kind（处置域支持 SUSPEND 的账实差异；勾稽告警类不可挂账）。 */
+    private boolean isSuspendable(String kind) {
+        return "MISSING_POSTING".equals(kind) || "ORPHAN_POSTING".equals(kind)
+                || "DUPLICATE_POSTING".equals(kind) || "AMOUNT_MISMATCH".equals(kind)
+                || "CURRENCY_MISMATCH".equals(kind) || "DIRECTION_MISMATCH".equals(kind)
+                || "BALANCE_BREAK".equals(kind) || "LEDGER_VS_STATEMENT_BREAK".equals(kind);
     }
 
     private String joinIds(List<Map<String, Object>> rows, String col) {

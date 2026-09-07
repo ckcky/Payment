@@ -46,7 +46,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
         runCase("csv-diff-long", ctx -> {
             requireOverrideDir();
             String uid = prefix("csvl");
-            paidOrder(ctx, db, uid, uid, 1, 1);
+            paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
 
             String period = "e2e-long-" + Long.toString(System.currentTimeMillis(), 36);
             writeStatement(period, "reference,amountMinor,currencyCode,status\n"
@@ -63,7 +63,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
         runCase("csv-diff-short", ctx -> {
             requireOverrideDir();
             String uid = prefix("csvs");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             String period = "e2e-short-" + Long.toString(System.currentTimeMillis(), 36);
@@ -81,7 +81,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
         runCase("csv-diff-amount", ctx -> {
             requireOverrideDir();
             String uid = prefix("csva");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
             String channelRef = channelReferenceOf(paymentNo);
 
@@ -101,7 +101,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
         runCase("csv-diff-duplicate", ctx -> {
             requireOverrideDir();
             String uid = prefix("csvd");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
             String channelRef = channelReferenceOf(paymentNo);
 

@@ -34,7 +34,7 @@ class SeckillRestockE2ETest extends E2eBase {
 
             // 普通 SKU（1 号）做对照
             String uid = prefix("sr");
-            String normalOrder = paidOrder(ctx, db, uid + "-normal", uid, 1, 1);
+            String normalOrder = paidOrder(ctx, db, uid + "-normal", uid, skuWithPrice(ctx, 2500L), 1);
             long normalAvailableBefore = availableOf(1);
 
             String seckillOrder = paidOrder(ctx, db, uid + "-seckill", uid, seckillSkuId, 1);
