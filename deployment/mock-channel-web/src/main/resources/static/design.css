@@ -240,6 +240,8 @@ input[type=number] { font-variant-numeric: tabular-nums; }
 .pa-disc__body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .24s var(--pa-ease); }
 .pa-disc.is-open .pa-disc__body { grid-template-rows: 1fr; }
 .pa-disc__body > div { overflow: hidden; }
+/* 展开后放开横向：宽表（单号/科目）可横向滚动查看，纵向仍 hidden 以保住折叠动画 */
+.pa-disc.is-open .pa-disc__body > div { overflow-x: auto; overflow-y: hidden; }
 
 /* ---- sticky 摘要条（audit）---- */
 .pa-summary {
@@ -321,8 +323,13 @@ input[type=number] { font-variant-numeric: tabular-nums; }
 
 /* ---- 布局辅助 ---- */
 .pa-grid { display: grid; gap: var(--pa-s-3); }
-.pa-grid--2 { grid-template-columns: 1fr 1fr; }
-.pa-grid--3 { grid-template-columns: repeat(3, 1fr); }
+/* min-width:0 —— grid item 默认 min-width:auto 会被长单号/长科目撑开，导致右侧溢出被裁 */
+.pa-grid > * { min-width: 0; }
+.pa-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pa-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* 宽表兜底：容器横向可滚，最右侧列（金额/余额）不再被裁掉 */
+.pa-tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pa-tblwrap > .pa-table { min-width: max-content; }
 .pa-row { display: flex; gap: var(--pa-s-3); align-items: center; flex-wrap: wrap; }
 .pa-kv { display: inline-flex; flex-direction: column; gap: 2px; }
 .pa-kv > label { font-size: 12px; color: var(--pa-ink-3); }

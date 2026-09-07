@@ -15,6 +15,11 @@
   .pane.is-on { display: block; }
   .rules { font-size: 11.5px; color: var(--pa-ink-3); line-height: 1.7; margin-top: 12px; }
   .scroll { max-height: 420px; overflow: auto; }
+  /* 处置台账 + 试算平衡：宽屏并排，屏宽不足即上下堆叠（长单号/长科目不再互相挤压） */
+  .audit-tables { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pa-s-3); }
+  /* 科目列（英文码 + 中文名）需换行空间，别被余额列挤成截断 */
+  .audit-tables .acct { min-width: 190px; white-space: normal; }
+  @media (max-width: 1400px) { .audit-tables { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 900px) { .audit-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -107,24 +112,28 @@
 
       <!-- ⑦ 处置台账 + 试算平衡（disclosure）-->
       <div class="pa-card">
-        <div class="pa-disc">
+        <div class="pa-disc is-open">
           <button class="pa-disc__head" type="button">
             <span class="caret">›</span><span>挂账 / 调账台账 + 试算平衡</span><span class="cnt">audit_adjustments · ledger</span>
           </button>
           <div class="pa-disc__body"><div>
-            <div class="pa-grid pa-grid--2" style="padding:8px 12px 16px">
+            <div class="audit-tables" style="padding:8px 12px 16px">
               <div>
+                <div class="pa-tblwrap">
                 <table class="pa-table pa-mono" style="font-size:11.5px">
                   <thead><tr><th>adjust_no</th><th>kind</th><th>借</th><th>贷</th><th class="num">金额</th><th>posting_no</th><th>操作/复核</th></tr></thead>
                   <tbody id="adjBody"></tbody>
                 </table>
+                </div>
                 <div class="pa-note" id="adjEmpty">暂无处置记录。</div>
               </div>
               <div>
+                <div class="pa-tblwrap">
                 <table class="pa-table">
-                  <thead><tr><th>科目</th><th class="num">余额（借正 / 贷负）</th></tr></thead>
+                  <thead><tr><th class="acct">科目</th><th class="num">余额（借正 / 贷负）</th></tr></thead>
                   <tbody id="balBody"></tbody>
                 </table>
+                </div>
                 <div class="pa-note" id="balCheck"></div>
               </div>
             </div>
@@ -682,7 +691,7 @@ function renderBal() {
   document.getElementById('balBody').innerHTML = ACCOUNTS.map(function (a) {
     var v = S.bal[a] || 0;
     var color = v === 0 ? 'var(--pa-ink-3)' : (v > 0 ? 'var(--pa-ink)' : 'var(--pa-warn)');
-    return '<tr><td class="pa-mono">' + a + ' <span style="color:var(--pa-ink-3)">' + ACCOUNT_CN[a] + '</span></td>' +
+    return '<tr><td class="acct pa-mono">' + a + ' <span style="color:var(--pa-ink-3)">' + ACCOUNT_CN[a] + '</span></td>' +
       '<td class="num" style="color:' + color + '">' + fmt(v) + '</td></tr>';
   }).join('');
   var sum = ACCOUNTS.reduce(function (s, a) { return s + (S.bal[a] || 0); }, 0);
