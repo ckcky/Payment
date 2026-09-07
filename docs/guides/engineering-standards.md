@@ -55,6 +55,11 @@
     其余直推视为违规（GitHub branch protection 兜底强制）。
   - **AI 会话约束**：AI Agent 收到非 docs-only 任务时，第一步 MUST 是创建/切换 feature 分支，
     禁止在 `master` 上直接提交代码改动。
+  - **Spec 编写的 worktree 隔离（推荐）**：主工作区存在 feature WIP 时，编写新 Spec / 纯文档
+    MUST 使用 `./spec-worktree.sh new <NNN>-<slug>` 在独立 worktree + `docs/spec-<NNN>-<slug>`
+    分支上进行，完成后 `push` 子命令做 docs-only 白名单校验并直推 `origin/master`，
+    `rm` 清理——全程不触碰主工作区的未提交改动，spec 提交边界与 feature WIP 天然隔离。
+    注意：该流程仅适用于 docs-only 改动；代码改动仍一律走 feature 分支 + PR。
 
 ## 7. 可观测（Observability，Constitution §6）
 

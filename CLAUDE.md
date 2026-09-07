@@ -39,6 +39,7 @@
 - **测试 / 演示 / 压测组件收口在 `deployment/`**：`architecture-tests`、`mock-channel-web`、`demo`、`performance` 均属非领域组件，MUST 放在 `deployment/` 下；仓库根目录只允许放 Maven 多模块工程的服务与 common 模块。
 - **构建 / 运行产物不准污染根目录**：Maven 输出、性能测试报告（`perf-report.html`、`load-result.json`）、k6 脚本运行产物等 MUST 落在 `deployment/output/`（已被 gitignore）或系统临时目录，严禁写入仓库根目录。
 - **提交节奏与分支纪律见宪法**：非 docs-only 的代码改动 MUST 在 feature 分支开发（命名 `feature/<NNN>-<slug>` / `fix/<slug>` / `chore/<slug>`），推送后走 PR 合并回 master（merge commit，--no-ff）；每个 Spec 完成 MUST 立即 PR 合并，不允许跨 Spec 长期堆积改动。禁止在 `master` 上直接提交代码改动（纯文档 `docs:` / CI 杂务 `chore:` 例外）。细则见 `docs/guides/engineering-standards.md` §6 与 `.specify/memory/constitution.md` Governance §提交与合并节奏。
+- **Spec / 纯文档编写用 worktree 隔离**：主工作区有 feature WIP 时，新 Spec MUST 经 `./spec-worktree.sh new <NNN>-<slug>` 在独立 worktree 编写，`push` 子命令（docs-only 校验 + 直推 master）收口、`rm` 清理，不触碰主工作区（细则见 engineering-standards §6）。
 
 ## 命令与技能
 
