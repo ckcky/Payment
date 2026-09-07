@@ -64,9 +64,14 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                             + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
                     long pid = ((Number) db.scalar("ledger",
                             "SELECT id FROM postings WHERE posting_no='LPe2e-orphan-" + uid + "'")).longValue();
+                    // 平衡双分录挂 3 号科目（CUSTOMER_CASH=1/MERCHANT_PAYABLE=2 参与勾稽，单分录会触发
+                    // allPostings 的 domain 校验 400—— posting 级平衡在读路径强制）
                     db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
                             + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                            + ", 1, 'DEBIT', 100, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-orphan-" + uid + "', NOW())");
+                            + ", 3, 'DEBIT', 100, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-orphan-" + uid + "', NOW())");
+                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
+                            + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
+                            + ", 2, 'CREDIT', 100, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-orphan-" + uid + "', NOW())");
                 },
                 () -> {
                     db.execute("ledger", "DELETE FROM ledger_entries WHERE source_id='e2e-orphan-" + uid + "'");

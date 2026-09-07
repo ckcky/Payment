@@ -92,6 +92,7 @@ class OverRefundGuardE2ETest extends E2eBase {
                 pool.shutdown();
             }
             int accepted = 0;
+            java.util.Set<String> distinctTxrf = new java.util.HashSet<>();
             for (int i = 0; i < futures.size(); i++) {
                 Api.ApiResponse r;
                 try {
@@ -104,6 +105,12 @@ class OverRefundGuardE2ETest extends E2eBase {
                 }
                 ctx.response("concurrent-" + i, r);
                 if (r.is2xx()) {
+                    // 受理数按 distinct TXRF：并发同额请求命中在途回放守卫时
+                    // 以 2xx 幂等回放同一单（吸收语义），不产生新退款单
+                    String txrf = r.json().path("txrf").asText("");
+                    if (!txrf.isBlank()) {
+                        distinctTxrf.add(txrf);
+                    }
                     accepted++;
                 } else {
                     assertThat(r.status())
@@ -111,6 +118,7 @@ class OverRefundGuardE2ETest extends E2eBase {
                             .isBetween(400, 499);
                 }
             }
+            accepted = distinctTxrf.isEmpty() ? accepted : distinctTxrf.size();
             assertThat(accepted)
                     .as("并发受理笔数 ≤ 2（5000/2000）[order=%s]，实际 %d", orderNo, accepted)
                     .isLessThanOrEqualTo(2);
