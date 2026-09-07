@@ -69,4 +69,48 @@ class RealAuditorTest {
         assertThat(differences).hasSize(1);
         assertThat(differences.get(0).getKind()).isEqualTo(AuditDifferenceKind.LEDGER_VS_STATEMENT_BREAK);
     }
+
+    @Test
+    void shortStatementDetectedOnlyWithOfficialStatementFile() {
+        // 正式账单文件缺行（短款/单边账）：账本有发生额、账单无对应行 → 反向检出
+        List<CertificateFact> facts = List.of(
+                new CertificateFact("PAYMENT", "PM-AUD-0001", "CH-AUD-0001", 10000L, "CNY", "SUCCEEDED"));
+        List<ChannelStatement> statements = List.of(); // 账单文件存在但无数据行
+        List<LedgerPostingView> postings = List.of(
+                new LedgerPostingView("LP-1", "ik-1", "PAYMENT", "PM-AUD-0001", "CNY", List.of(
+                        new LedgerPostingView.LedgerEntryView(1L, "DEBIT", 10000L, "PAYMENT_CAPTURE",
+                                "PAYMENT", "PM-AUD-0001"),
+                        new LedgerPostingView.LedgerEntryView(2L, "CREDIT", 10000L, "PAYMENT_CAPTURE",
+                                "PAYMENT", "PM-AUD-0001"))));
+
+        List<AuditDifference> official = auditor.audit(facts, statements, postings, true);
+        assertThat(official).hasSize(1);
+        assertThat(official.get(0).getKind()).isEqualTo(AuditDifferenceKind.LEDGER_VS_STATEMENT_BREAK);
+        assertThat(official.get(0).getDetail()).contains("短款");
+
+        // 回退默认 fixture（非正式账单）：不反向比对，不误报
+        List<AuditDifference> fallback = auditor.audit(facts, statements, postings, false);
+        assertThat(fallback).isEmpty();
+    }
+
+    @Test
+    void duplicatedStatementRowsDetected() {
+        // 同 reference 两行（重复投递形态）：即使金额与账本一致也必须留痕
+        List<CertificateFact> facts = List.of(
+                new CertificateFact("PAYMENT", "PM-AUD-0001", "CH-AUD-0001", 10000L, "CNY", "SUCCEEDED"));
+        List<ChannelStatement> statements = List.of(
+                new ChannelStatement("CH-AUD-0001", 10000L, "CNY", "SUCCEEDED"),
+                new ChannelStatement("CH-AUD-0001", 10000L, "CNY", "SUCCEEDED"));
+        List<LedgerPostingView> postings = List.of(
+                new LedgerPostingView("LP-1", "ik-1", "PAYMENT", "PM-AUD-0001", "CNY", List.of(
+                        new LedgerPostingView.LedgerEntryView(1L, "DEBIT", 10000L, "PAYMENT_CAPTURE",
+                                "PAYMENT", "PM-AUD-0001"),
+                        new LedgerPostingView.LedgerEntryView(2L, "CREDIT", 10000L, "PAYMENT_CAPTURE",
+                                "PAYMENT", "PM-AUD-0001"))));
+
+        List<AuditDifference> differences = auditor.audit(facts, statements, postings, true);
+        assertThat(differences).hasSize(1);
+        assertThat(differences.get(0).getKind()).isEqualTo(AuditDifferenceKind.LEDGER_VS_STATEMENT_BREAK);
+        assertThat(differences.get(0).getDetail()).contains("重复");
+    }
 }

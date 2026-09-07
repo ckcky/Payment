@@ -114,25 +114,43 @@ public class TransactionApplicationService {
      * 手工退款入口（spec 019 / T104：POST /internal/orders/refund，运维 / 演示用）。
      * 校验：订单 PAID 态族 + 可退余额（第二道校验，{@code Order.applyRefund} 收口时还有终局校验）。
      * paymentNo 缺省取订单生效支付单。
+     *
+     * <p>受理侧串行化（spec 022 T433）：同订单并发退款在 JVM 锁内校验
+     * 「可退余额 − 在途退款合计 ≥ 申请额」——原「可退余额」校验与 SUCCEEDED 收口记账
+     * 存在时间窗，并发多笔在途同时通过校验会击穿总额（E2E 并发用例实证 4 笔全受理）。
+     * 单机演示栈用 JVM 锁；多实例部署需演进为 DB 悲观锁 / 分布式锁。</p>
      */
     public RefundOrder createRefund(String orderNo, String paymentNo, long amountMinor, String reason) {
-        Order order = orderRepository.findByOrderNo(orderNo)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + orderNo));
-        if (order.getStatus() != OrderStatus.PAID && order.getStatus() != OrderStatus.FULFILLING
-                && order.getStatus() != OrderStatus.COMPLETED
-                && order.getStatus() != OrderStatus.PARTIALLY_REFUNDED) {
-            throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
-                    "order not refundable: " + orderNo + " status=" + order.getStatus());
+        synchronized (orderNo.intern()) {
+            Order order = orderRepository.findByOrderNo(orderNo)
+                    .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + orderNo));
+            if (order.getStatus() != OrderStatus.PAID && order.getStatus() != OrderStatus.FULFILLING
+                    && order.getStatus() != OrderStatus.COMPLETED
+                    && order.getStatus() != OrderStatus.PARTIALLY_REFUNDED) {
+                throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
+                        "order not refundable: " + orderNo + " status=" + order.getStatus());
+            }
+            String effectivePaymentNo = paymentNo != null ? paymentNo : order.getPaymentNo();
+            long inFlight = inFlightRefundMinor(order, effectivePaymentNo);
+            if (order.getRefundableMinor() - inFlight < amountMinor) {
+                throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
+                        "refund exceeds refundable: refundable=" + order.getRefundableMinor()
+                                + " inFlight=" + inFlight + " requested=" + amountMinor);
+            }
+            RefundOrder refundOrder = doCreateRefund(order, effectivePaymentNo, amountMinor, reason, "MANUAL_REFUND");
+            metrics.counter("order.refund_initiated", 1.0, "module", MODULE, "cause", "MANUAL_REFUND");
+            return refundOrder;
         }
-        String effectivePaymentNo = paymentNo != null ? paymentNo : order.getPaymentNo();
-        if (order.getRefundableMinor() < amountMinor) {
-            throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
-                    "refund exceeds refundable: refundable=" + order.getRefundableMinor()
-                            + " requested=" + amountMinor);
-        }
-        RefundOrder refundOrder = doCreateRefund(order, effectivePaymentNo, amountMinor, reason, "MANUAL_REFUND");
-        metrics.counter("order.refund_initiated", 1.0, "module", MODULE, "cause", "MANUAL_REFUND");
-        return refundOrder;
+    }
+
+    /** 同订单同支付单的未收敛退款合计（REQUESTED/PROCESSING，占额未入账）。 */
+    private long inFlightRefundMinor(Order order, String paymentNo) {
+        return transactionRefundRepository.findByOrderNo(order.getOrderNo()).stream()
+                .filter(r -> r.getPaymentNo().equals(paymentNo))
+                .filter(r -> r.getStatus() == RefundOrderStatus.REQUESTED
+                        || r.getStatus() == RefundOrderStatus.PROCESSING)
+                .mapToLong(RefundOrder::getAmountMinor)
+                .sum();
     }
 
     /** surplus 处置（FR-004/FR-005）：记录多收事实并生成交易层退款单驱动退款（spec 019 双层单号）。 */

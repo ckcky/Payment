@@ -63,6 +63,16 @@ public abstract class E2eBase {
         if (paidPaymentNo != null && !String.valueOf(paidPaymentNo).isBlank()) {
             PAYMENT_NOS.put(orderNo, String.valueOf(paidPaymentNo));
         }
+        // 等账本 posting 落定：payment 记账与订单 PAID 收敛非同一事务边界，
+        // recon 故障注入按 posting 备份（空备份 joinIds → IN (NULL) 会静默失效）
+        String paymentNo = paidPaymentNo == null ? null : String.valueOf(paidPaymentNo);
+        if (paymentNo != null && !paymentNo.isBlank()) {
+            Await.until("账本 posting 落定 [payment=" + paymentNo + "]", () -> {
+                Object cnt = db.scalar("ledger",
+                        "SELECT COUNT(*) FROM postings WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'");
+                return cnt != null && ((Number) cnt).longValue() > 0;
+            });
+        }
         return orderNo;
     }
 

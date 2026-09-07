@@ -24,6 +24,21 @@ public interface AuditFactsGateway {
     /** 渠道账单（沿用 006 加载器口径；REAL 核对用）。 */
     List<com.payment.reconciliation.domain.ChannelStatement> channelStatements(String period);
 
+    /**
+     * 渠道账单加载（含口径标志，spec 022 T433）：{@code officialFile=true} 表示命中周期
+     * 正式账单文件（双向比对：正向 + 反向短款 + 重复流水）；false 表示回退默认 fixture
+     * （非正式账单全集，仅正向比对）。默认实现沿用 {@link #channelStatements(String)}，
+     * 一律视为非正式账单（保守口径）。
+     */
+    default ChannelStatementLoad channelStatementLoad(String period) {
+        return new ChannelStatementLoad(channelStatements(period), false);
+    }
+
+    /** 渠道账单加载结果：条目 + 是否命中周期正式账单文件。 */
+    record ChannelStatementLoad(List<com.payment.reconciliation.domain.ChannelStatement> statements,
+                                boolean officialFile) {
+    }
+
     /** 平衡性快捷视图。 */
     static boolean balanced(Map<String, Long> diffByCurrency) {
         return diffByCurrency.values().stream().allMatch(d -> d == 0L);

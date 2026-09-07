@@ -21,7 +21,7 @@ class BusinessNoChainE2ETest extends E2eBase {
     void fullChainNumberingIsTraceableAcrossStores() {
         runCase("no-chain", ctx -> {
             String uid = prefix("num");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             // 全额退款 → 触发 TXRF/PMRF/REFUND attempt 全链

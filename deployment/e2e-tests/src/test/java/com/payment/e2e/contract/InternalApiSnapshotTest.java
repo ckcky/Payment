@@ -56,7 +56,7 @@ class InternalApiSnapshotTest extends E2eBase {
     void orderResponseSchemaIsStable() {
         snapshotEndpoint("order-detail", ctx -> {
             String uid = prefix("snap");
-            String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, skuWithPrice(ctx, 2500L), 1);
             return API.getOrder(orderNo).json();
         });
     }
@@ -65,7 +65,7 @@ class InternalApiSnapshotTest extends E2eBase {
     void paymentResponseSchemaIsStable() {
         snapshotEndpoint("payment-detail", ctx -> {
             String uid = prefix("snap");
-            String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, skuWithPrice(ctx, 2500L), 1);
             return API.getPayment(paymentNoOf(dbHolder.get(), orderNo)).json();
         });
     }
@@ -74,7 +74,7 @@ class InternalApiSnapshotTest extends E2eBase {
     void refundResponseSchemaIsStable() {
         snapshotEndpoint("refund-detail", ctx -> {
             String uid = prefix("snap");
-            String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, 1, 1);
+            String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, skuWithPrice(ctx, 2500L), 1);
             var resp = API.refund(orderNo, null, 100L, "e2e snapshot");
             String pmrf = resp.json().path("pmrf").asText();
             return API.getRefund(pmrf).json();

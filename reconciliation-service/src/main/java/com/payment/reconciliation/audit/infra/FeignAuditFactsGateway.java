@@ -95,4 +95,11 @@ public class FeignAuditFactsGateway implements AuditFactsGateway {
     public List<ChannelStatement> channelStatements(String period) {
         return statementLoader.load(period).statements();
     }
+
+    @Override
+    public ChannelStatementLoad channelStatementLoad(String period) {
+        com.payment.reconciliation.application.ChannelStatementLoadResult result = statementLoader.load(period);
+        boolean officialFile = !result.source().fallbackUsed();
+        return new ChannelStatementLoad(result.statements(), officialFile);
+    }
 }
