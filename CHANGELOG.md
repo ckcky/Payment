@@ -18,6 +18,23 @@
 
 ---
 
+## [2026-09-07] spec 021：统一访问日志——结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 修复
+
+**范围**：全服务可观测性基建。决策见 [ADR-0068](docs/adr/0029-unified-access-logging.md)，实施见 [spec 021](docs/specs/021-unified-access-logging/tasks.md)。
+
+### 核心变更
+- **AccessLogFilter**（common-core `accesslog` 包）：`OncePerRequestFilter` + ContentCaching 包装，每请求结束落一条 `ACCESS_LOG` INFO——`method/uri/status/costMs/req/resp` 全字段单行（D2）；异常路径 try/finally 必打；`copyBodyToResponse()` 保证响应完整（NFR-002）。
+- **报文口径**（D4）：GET `req=-`；multipart/非文本 `<binary>` 占位；4KB 截断带 `...(truncated,total=N)`；`/actuator/**` 排除；`common.access-log.enabled=false` 整体关闭。
+- **脱敏桩**（D3）：`SensitiveBodyMasker` 接口 + `PassThroughBodyMasker` 透传（本期不真脱敏）；服务可覆盖，Filter 零改动。
+- **格式固定含服务名**（D5）：logback `springProperty` 注入 `spring.application.name`，全服务行格式统一 `service=<名>`。
+- **异步 MDC 修复**（D7）：`MdcTaskDecorator` + `TraceContext.runWithNewTrace()`；ChannelQuery / TimeoutScan / OrderTimeout / Audit 4 个 Scheduler 入口补 traceId，后台日志可全链路捞取。
+- **日志查看**（D6）：`deployment/demo/tail-logs.sh`（全栈合并实时视图，[服务名] 前缀）+ `trace-grep.sh <traceId>`（跨服务全链路捞取）。
+- **装配定序**：`TraceIdFilter` 显式 `FilterRegistrationBean` order=-200 → `AccessLogFilter` order=-100，14 服务零代码改动自动生效。
+
+### 明确不做（负责人拍板）
+- 真脱敏实现（只留桩）；Loki+Promtail 集中采集（后续期）；AOP 方法级日志；FileAppender。
+
+
 ## [2026-09-07] spec 019：order 驱动的两层退款单（TXRF/PMRF）+ 渠道退款异步回调闭环
 
 **范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0028-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/019-order-driven-refund/tasks.md)。

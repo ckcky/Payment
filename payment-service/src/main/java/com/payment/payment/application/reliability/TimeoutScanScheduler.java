@@ -1,6 +1,7 @@
 package com.payment.payment.application.reliability;
 
 import java.time.Instant;
+import com.payment.common.core.trace.TraceContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,7 @@ public class TimeoutScanScheduler {
 
     @Scheduled(fixedDelayString = "${payment.reliability.timeout-scan-interval-ms:10000}")
     public void run() {
-        scanner.scan(Instant.now());
+        // 调度线程不经 TraceIdFilter（spec 021 / AC3.1）：入口自建 traceId。
+        TraceContext.runWithNewTrace(() -> scanner.scan(Instant.now()));
     }
 }
