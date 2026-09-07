@@ -4,57 +4,49 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PaymentArch 演示控制台</title>
+<!-- UI 规范：docs/design/DESIGN.md（Feature 020）——改样式前先读它；token 在 /design.css -->
+<link rel="stylesheet" href="/design.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f6f9; color: #1f2937; padding: 24px; }
+  body { padding: 24px; }
   .wrap { max-width: 860px; margin: 0 auto; }
-  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  h1 { font-size: 20px; } h2 { font-size: 15px; margin-bottom: 12px; color: #374151; }
-  .sku { display: flex; align-items: center; justify-content: space-between; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
-  .sku .name { font-weight: 600; } .sku .price { color: #dc2626; font-weight: 700; } .sku .id { color: #9ca3af; font-size: 12px; }
-  input[type=number] { width: 64px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
-  button { padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; color: #fff; background: #2563eb; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  button.ghost { background: #64748b; }
+  .sku { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-md); padding: 10px 14px; margin-bottom: 8px; background: var(--pa-canvas); }
+  .sku .name { font-weight: 500; color: var(--pa-ink); } .sku .price { color: var(--pa-danger); font-weight: 500; font-variant-numeric: tabular-nums; } .sku .id { color: var(--pa-mute); font-size: 12px; font-variant-numeric: tabular-nums; }
+  input[type=number] { width: 64px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
-  .st { font-weight: 700; }
-  .st-PENDING_PAYMENT { color: #d97706; } .st-PAID, .st-SUCCEEDED, .st-AVAILABLE { color: #16a34a; }
-  .st-FAILED, .st-CANCELLED, .st-REVOKED, .st-REJECTED { color: #dc2626; } .st-UNKNOWN, .st-PROCESSING { color: #d97706; }
-  .st-PARTIALLY_SUCCEEDED, .st-CLOSED { color: #16a34a; } .st-REQUESTED { color: #d97706; }
-  #log { font-family: Consolas, monospace; font-size: 12px; background: #0f172a; color: #cbd5e1; border-radius: 8px; padding: 14px; max-height: 260px; overflow-y: auto; white-space: pre-wrap; line-height: 1.7; }
-  .note { font-size: 12px; color: #475569; line-height: 1.8; margin-top: 8px; }
-  .sect { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-  .sect h3 { font-size: 13px; padding: 7px 12px; background: #f8fafc; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; }
-  .sect h3 .cnt { color: #64748b; font-weight: 400; font-size: 12px; }
-  .sect .sql { font-family: Consolas, monospace; font-size: 11px; color: #94a3b8; padding: 5px 12px; background: #fcfcfd; border-bottom: 1px solid #f8fafc; word-break: break-all; }
-  .sect .err { color: #dc2626; font-size: 12px; padding: 6px 12px; }
-  .sect .empty { color: #9ca3af; font-size: 12px; padding: 6px 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pa-canvas-soft); font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  /* 状态色（.st / .st-*）由 design.css 统一供给（DESIGN.md §2 映射表） */
+  .note { font-size: 12px; color: var(--pa-ink-2); line-height: 1.8; margin-top: 8px; }
+  .sect { border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-md); margin-bottom: 10px; overflow: hidden; }
+  .sect h3 { font-size: 13px; font-weight: 500; padding: 7px 12px; background: var(--pa-canvas-soft); border-bottom: 1px solid var(--pa-hairline); display: flex; justify-content: space-between; }
+  .sect h3 .cnt { color: var(--pa-mute); font-weight: 400; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .sect .sql { font-family: var(--pa-mono); font-size: 11px; color: var(--pa-mute); padding: 5px 12px; background: var(--pa-canvas); border-bottom: 1px solid var(--pa-canvas-soft); word-break: break-all; }
+  .sect .err { color: var(--pa-danger); font-size: 12px; padding: 6px 12px; }
+  .sect .empty { color: var(--pa-mute); font-size: 12px; padding: 6px 12px; }
   .tblwrap { overflow-x: auto; overflow-y: auto; max-height: 360px; }
-  .tbl { border-collapse: collapse; font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.7; min-width: 100%; }
-  .tbl th, .tbl td { border: none; border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f8fafc; padding: 3px 12px; white-space: nowrap; text-align: left; }
-  .tbl thead th { position: sticky; top: 0; background: #f8fafc; color: #475569; font-weight: 600; z-index: 1; }
-  .tbl td.no, .tbl th.no { color: #2563eb; font-weight: 700; }
-  input[type=text] { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+  .tbl { border-collapse: collapse; font-family: var(--pa-mono); font-size: 11.5px; line-height: 1.7; min-width: 100%; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .tbl th, .tbl td { border: none; border-bottom: 1px solid var(--pa-canvas-soft); border-right: 1px solid var(--pa-canvas-soft); padding: 3px 12px; white-space: nowrap; text-align: left; }
+  .tbl thead th { position: sticky; top: 0; background: var(--pa-canvas-soft); color: var(--pa-ink-2); font-weight: 500; z-index: 1; }
+  .tbl td.no, .tbl th.no { color: var(--pa-primary-deep); font-weight: 500; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <h1>PaymentArch 演示控制台 <span style="font-size:12px;color:#9ca3af">（mock-channel-web :8091 · 同源代理，无 CORS）</span></h1>
+  <div class="pa-card" style="margin-bottom:16px">
+    <h1>PaymentArch 演示控制台 <span style="font-size:12px;color:var(--pa-mute);font-weight:400">（mock-channel-web :8091 · 同源代理，无 CORS）</span></h1>
     <div class="note">链路：下单(order) → 选渠道建支付单(payment，Feature 015) → 跳转收银台(payUrl) → 渠道回调(验签) → 履约(fulfillment) → 权益(entitlement) → 记账(ledger) → 退款(refund，并入 payment-service)。
       状态轮询经 /proxy 透传各服务只读接口。</div>
   </div>
 
-  <div class="card">
+  <div class="pa-card" style="margin-bottom:16px">
     <h2>① 商品与下单（种子 SKU，见 demo/reset.sh）</h2>
     <div id="skus">加载中…</div>
-    <div class="note">userId=<input id="userId" value="demo-user" style="width:120px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
-      merchantId=<input id="merchantId" value="1" style="width:64px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
+    <div class="note">userId=<input id="userId" value="demo-user" style="width:120px">
+      merchantId=<input id="merchantId" value="1" style="width:64px">
       <button class="ghost" onclick="loadSkus()" style="margin-left:8px">刷新 SKU</button></div>
   </div>
 
-  <div class="card">
+  <div class="pa-card" style="margin-bottom:16px">
     <h2>② 当前订单状态（每 2s 轮询）</h2>
     <table id="orderTable"><tbody>
       <tr><th>orderNo</th><td id="t-orderNo">—</td><th>order.status</th><td id="t-orderStatus">—</td></tr>
@@ -64,19 +56,19 @@
     <div class="note">
       <button class="ghost" onclick="pollOnce()">立即刷新</button>
       <button class="ghost" onclick="stopPoll()">停止轮询</button>
-      <span id="pollHint" style="margin-left:8px;color:#9ca3af"></span>
+      <span id="pollHint" style="margin-left:8px;color:var(--pa-mute)"></span>
     </div>
     <div class="note">跨系统关联一律用业务单号（ADR-0063）：orderNo=OR+雪花、paymentNo=PM+雪花；数值 id 仅各服务内部主键，不出服务、不上页面。</div>
   </div>
 
-  <div class="card">
+  <div class="pa-card" style="margin-bottom:16px">
     <h2>③ 退款（Feature 015 · 退款域并入 payment-service）</h2>
     <div class="note">前提：当前订单支付已 SUCCEEDED。退款经 /proxy/refund 透传 payment-service 的 /internal/refunds；
       异步渠道下状态为 CREATED/PROCESSING 并自动轮询，同步收敛为 SUCCEEDED。</div>
     <div class="note">
-      金额(元)=<input type="number" id="refundAmount" value="50.00" step="0.01" min="0.01" style="width:90px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
-      原因=<input type="text" id="refundReason" value="demo-partial" style="width:130px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px">
-      幂等键=<input type="text" id="refundIdemKey" style="width:230px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px" placeholder="留空自动生成">
+      金额(元)=<input type="number" id="refundAmount" value="50.00" step="0.01" min="0.01" style="width:90px">
+      原因=<input type="text" id="refundReason" value="demo-partial" style="width:130px">
+      幂等键=<input type="text" id="refundIdemKey" style="width:230px" placeholder="留空自动生成">
       <button onclick="createRefund()">发起退款</button>
       <button class="ghost" onclick="replayRefund()">同键幂等重放</button>
       <button class="ghost" onclick="stopRefundPoll()">停止退款轮询</button>
@@ -85,18 +77,18 @@
     <table id="refundTable" style="margin-top:8px"><thead>
       <tr><th>refundNo</th><th>金额</th><th>状态</th><th>失败原因</th><th>幂等键</th></tr>
     </thead><tbody id="refundRows">
-      <tr><td colspan="5" style="color:#9ca3af">（尚无退款 —— 支付成功后发起）</td></tr>
+      <tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款 —— 支付成功后发起）</td></tr>
     </tbody></table>
     <div class="note" style="margin-top:10px">渠道尝试（Feature 016：调渠道后落 payment_attempts，attempt_type=REFUND，
       channel_reference 即真实渠道退款流水号，对账事实以它寻址。REJECTED 在调渠道前被拒，无尝试记录，属预期）：</div>
     <table><thead>
       <tr><th>payment_no</th><th>类型</th><th>渠道</th><th>channel_reference</th><th>状态</th></tr>
     </thead><tbody id="refundAttemptRows">
-      <tr><td colspan="5" style="color:#9ca3af">（尚无退款渠道尝试）</td></tr>
+      <tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款渠道尝试）</td></tr>
     </tbody></table>
   </div>
 
-  <div class="card">
+  <div class="pa-card" style="margin-bottom:16px">
     <h2>④ 全链路 DB 数据（按订单实查各系统落库）</h2>
     <div class="note">
       orderNo=<input type="text" id="traceKey" value="" style="width:220px" placeholder="下单后自动填入，或输入 orderNo">
@@ -106,7 +98,7 @@
     <div id="traceBox" class="note">（下单后自动查询，或输入 orderNo 手动查询）</div>
   </div>
 
-  <div class="card"><h2>操作日志</h2><div id="log">// 日志</div></div>
+  <div class="pa-card" style="margin-bottom:16px"><h2>操作日志</h2><div id="log" class="pa-log" style="max-height:260px">// 日志</div></div>
 </div>
 <script>
 // SKU 列表由 /proxy/catalog/skus 动态拉取（reset 后 id 为自增 1/2/3，不硬编码）
@@ -258,9 +250,9 @@ function resetRefunds() {
   stopRefundPoll();
   lastRefund = null;
   document.getElementById('refundRows').innerHTML =
-    '<tr><td colspan="5" style="color:#9ca3af">（尚无退款 —— 支付成功后发起）</td></tr>';
+    '<tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款 —— 支付成功后发起）</td></tr>';
   document.getElementById('refundAttemptRows').innerHTML =
-    '<tr><td colspan="5" style="color:#9ca3af">（尚无退款渠道尝试）</td></tr>';
+    '<tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款渠道尝试）</td></tr>';
 }
 
 async function loadRefundAttempts() {
@@ -271,7 +263,7 @@ async function loadRefundAttempts() {
   const rows = data.attempts || [];
   const box = document.getElementById('refundAttemptRows');
   if (rows.length === 0) {
-    box.innerHTML = '<tr><td colspan="5" style="color:#9ca3af">'
+    box.innerHTML = '<tr><td colspan="5" style="color:var(--pa-mute)">'
       + esc(data.note || data.error || '（尚无退款渠道尝试）') + '</td></tr>';
     return;
   }

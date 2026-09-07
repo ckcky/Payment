@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: 📝 Draft（5 项决策点待负责人拍板，见文末「决策点」；拍板后转 Accepted，实施走本 feature 分支）
+**Status**: ✅ Accepted（2026-09-07 负责人拍板：D1–D5 全部采纳建议项——D1 Stripe light 基调 / D2 四页全改 / D3 系统字体栈 / D4 内联 SVG 图标 / D5 spec 直推 master、实现走本分支；**2026-09-07 本分支实施**）
 
 **Input**: 负责人 2026-09-07 需求（原文归纳）：
 

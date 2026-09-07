@@ -3,57 +3,54 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- UI 规范：docs/design/DESIGN.md（Feature 020）——改样式前先读它；token 在 /design.css -->
+<link rel="stylesheet" href="/design.css">
 <title>PaymentArch 平台门户</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f6f9; color: #1f2937; padding: 24px; }
+  body { padding: 24px; }
   .wrap { max-width: 1040px; margin: 0 auto; }
-  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  h1 { font-size: 20px; }
-  h2 { font-size: 15px; margin-bottom: 12px; color: #374151; }
-  .sub { font-size: 12px; color: #9ca3af; font-weight: 400; margin-left: 8px; }
-  .note { font-size: 12px; color: #475569; line-height: 1.8; margin-top: 8px; }
+  .sub { font-size: 12px; color: var(--pa-mute); font-weight: 400; margin-left: 8px; }
+  .note { font-size: 12px; color: var(--pa-ink-2); line-height: 1.8; margin-top: 8px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .entry { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; flex-direction: column; }
-  .entry .ico { font-size: 22px; margin-bottom: 8px; }
-  .entry a.title { font-size: 16px; font-weight: 700; color: #111827; text-decoration: none; }
-  .entry a.title:hover { color: #2563eb; }
-  .entry .desc { font-size: 12.5px; color: #475569; line-height: 1.7; margin-top: 8px; flex: 1; }
-  .entry .tag { display: inline-block; margin-top: 10px; font-size: 11px; color: #64748b; border: 1px solid #e5e7eb; border-radius: 6px; padding: 2px 8px; align-self: flex-start; }
-  .entry .off { margin-top: 8px; font-size: 11.5px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 4px 8px; display: none; }
-  .cmd { font-family: Consolas, monospace; font-size: 12px; background: #0f172a; color: #cbd5e1; border-radius: 8px; padding: 10px 12px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
-  .cmd .lbl { color: #94a3b8; }
-  button { padding: 7px 14px; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; color: #fff; background: #2563eb; }
-  button.ghost { background: #64748b; }
-  button:active { transform: translateY(1px); }
+  .entry { background: var(--pa-canvas); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-lg); padding: 18px 20px; box-shadow: var(--pa-shadow-1); display: flex; flex-direction: column; }
+  .entry .ico { width: 36px; height: 36px; border-radius: var(--pa-r-md); background: var(--pa-canvas-soft); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .entry .ico svg { width: 18px; height: 18px; }
+  .entry a.title { font-size: 15px; font-weight: 500; color: var(--pa-ink); text-decoration: none; }
+  .entry a.title:hover { color: var(--pa-primary); }
+  .entry .desc { font-size: 12.5px; color: var(--pa-ink-2); line-height: 1.7; margin-top: 8px; flex: 1; }
+  .entry .tag { display: inline-block; margin-top: 10px; font-size: 11px; color: var(--pa-mute); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-pill); padding: 2px 8px; align-self: flex-start; font-variant-numeric: tabular-nums; }
+  .entry .off { margin-top: 8px; font-size: 11.5px; color: var(--pa-warning); background: var(--pa-warning-soft); border: 1px solid #fde68a; border-radius: var(--pa-r-sm); padding: 4px 8px; display: none; }
+  .cmd { font-family: var(--pa-mono); font-size: 12px; background: var(--pa-brand-dark); color: #cbd5e1; border-radius: var(--pa-r-md); padding: 10px 12px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .cmd .lbl { color: #8b93b8; }
   .copyrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-  .copied { font-size: 11px; color: #16a34a; }
+  .copied { font-size: 11px; color: var(--pa-success); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
+  <div class="pa-card" style="margin-bottom:16px">
     <h1>PaymentArch 平台门户 <span class="sub">演示组件 mock-channel-web · 端口 8091</span></h1>
     <div class="note">统一入口：演示控制台 / 对账审计控制台 / 监控栈（Grafana · Prometheus） / 压测。监控与压测目标端口若未在本机启动，下方卡片会给出提示，属预期。</div>
   </div>
 
   <div class="grid">
     <div class="entry">
-      <div class="ico">🧪</div>
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M12 12l7-4M12 12v9M12 12L5 8"/></svg></div>
       <a class="title" href="/demo">演示控制台</a>
       <div class="desc">下单 → 选渠道建支付单 → 跳转收银台 → 渠道回调 → 履约 → 权益 → 记账 → 退款，并可在 ④ 区按订单实查各系统全链路落库（只读 SELECT）。</div>
       <span class="tag">本机 :8091 /demo</span>
     </div>
 
     <div class="entry">
-      <div class="ico">🧾</div>
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div>
       <a class="title" href="/audit.html">对账 / 审计控制台</a>
       <div class="desc">会计四核对（账证 · 账账 · 账实 · 账表）· 挂账 / 调账 / 复核闭环 · 关批。MOCK 纯前端演示，LIVE 经同源代理调 reconciliation-service(:8088)。</div>
       <span class="tag">本机 :8091 /audit.html</span>
     </div>
 
     <div class="entry">
-      <div class="ico">📊</div>
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></div>
       <a class="title" href="http://localhost:3000" target="_blank" rel="noopener">Grafana 监控</a>
       <div class="desc">SRE 黄金指标看板「PaymentArch · SRE 黄金指标」。登录 admin / admin。需本机已起 Grafana（端口 3000）。</div>
       <span class="tag">本机 :3000 · admin/admin</span>
@@ -61,7 +58,7 @@
     </div>
 
     <div class="entry">
-      <div class="ico">🔥</div>
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="var(--pa-primary)"/></svg></div>
       <a class="title" href="http://localhost:9090" target="_blank" rel="noopener">Prometheus</a>
       <div class="desc">指标抓取与 PromQL 查询。需本机已起 Prometheus（端口 9090）。</div>
       <span class="tag">本机 :9090</span>
@@ -69,9 +66,9 @@
     </div>
   </div>
 
-  <div class="card">
+  <div class="pa-card" style="margin-top:16px">
     <h2>压测入口</h2>
-    <div class="note">两条脚本均位于仓库 <span class="mono">deployment/</span> 目录，在 Payment 仓库根目录执行：</div>
+    <div class="note">两条脚本均位于仓库 <span class="pa-mono">deployment/</span> 目录，在 Payment 仓库根目录执行：</div>
 
     <div style="margin-top:12px">
       <div class="cmd"><span class="lbl"># 1) Node 零依赖负载：catalog 缓存读+秒杀 / 全链路 下单→支付→退款（报告落 deployment/performance/results/）</span>

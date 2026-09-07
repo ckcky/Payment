@@ -1,0 +1,157 @@
+/*!
+ * PaymentArch 演示设计系统 —— token 层（Feature 020）
+ * 规范：docs/design/DESIGN.md（改样式前先读它；token 值与 DESIGN.md 同步改）
+ * 零外部依赖：无 CDN / webfont / 图片（NFR-001）
+ */
+:root {
+  /* 品牌色（Stripe 风格基底） */
+  --pa-primary: #533afd;
+  --pa-primary-deep: #4434d4;
+  --pa-primary-press: #2e2b8c;
+  --pa-primary-soft: #665efd;
+  --pa-primary-subdued: #b9b9f9;
+  --pa-brand-dark: #1c1e54;
+  /* 文字 */
+  --pa-ink: #0d253d;
+  --pa-ink-2: #273951;
+  --pa-mute: #64748d;
+  /* 表面 */
+  --pa-canvas: #ffffff;
+  --pa-canvas-soft: #f6f9fc;
+  --pa-cream: #f5e9d4;
+  --pa-hairline: #e3e8ee;
+  --pa-hairline-input: #a8c3de;
+  /* 语义色（soft = chip/提示底色） */
+  --pa-success: #15803d;      --pa-success-soft: #dcfce7;
+  --pa-danger: #dc2626;       --pa-danger-soft: #fee2e2;
+  --pa-warning: #b45309;      --pa-warning-soft: #fef3c7;
+  --pa-info: #1d4ed8;         --pa-info-soft: #dbeafe;
+  /* 圆角 / 阴影 / 字体 */
+  --pa-r-sm: 6px; --pa-r-md: 8px; --pa-r-lg: 12px; --pa-r-pill: 9999px;
+  --pa-shadow-1: rgba(0,55,112,.08) 0 1px 3px;
+  --pa-shadow-2: rgba(0,55,112,.08) 0 8px 24px;
+  --pa-font: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --pa-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+/* ---- 基底 ---- */
+body {
+  font-family: var(--pa-font);
+  background: var(--pa-canvas-soft);
+  color: var(--pa-ink);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1 { font-size: 20px; font-weight: 300; letter-spacing: -0.5px; color: var(--pa-ink); }
+h2 { font-size: 15px; font-weight: 500; color: var(--pa-ink-2); }
+
+/* ---- 通用工具 ---- */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.pa-mono { font-family: var(--pa-mono); }
+.pa-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: uppercase; color: var(--pa-primary); }
+
+/* ---- 卡片 ---- */
+.pa-card {
+  background: var(--pa-canvas);
+  border: 1px solid var(--pa-hairline);
+  border-radius: var(--pa-r-lg);
+  padding: 20px 24px;
+  box-shadow: var(--pa-shadow-1);
+}
+
+/* ---- 按钮（一律 pill）---- */
+.pa-btn, button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--pa-r-pill);
+  font-size: 13px;
+  font-family: var(--pa-font);
+  cursor: pointer;
+  background: var(--pa-primary);
+  color: #fff;
+  transition: background .15s;
+}
+button:hover { background: var(--pa-primary-deep); }
+button:active { background: var(--pa-primary-press); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.ghost { background: var(--pa-canvas); color: var(--pa-ink); border: 1px solid var(--pa-hairline-input); }
+button.ghost:hover { background: var(--pa-canvas-soft); }
+button.danger { background: var(--pa-danger); }
+button.danger:hover { background: #b91c1c; }
+
+/* ---- 输入框 ---- */
+input, select {
+  font-family: var(--pa-font);
+  padding: 5px 10px;
+  border: 1px solid var(--pa-hairline-input);
+  border-radius: var(--pa-r-sm);
+  font-size: 13px;
+  color: var(--pa-ink);
+  background: var(--pa-canvas);
+}
+input:focus, select:focus { outline: none; border-color: var(--pa-primary); }
+
+/* ---- 表格（数据密集控制台）---- */
+.pa-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pa-table th { text-align: left; padding: 6px 8px; color: var(--pa-mute); font-weight: 500; border-bottom: 1px solid var(--pa-hairline); white-space: nowrap; }
+.pa-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pa-canvas-soft); font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- 日志面板（dark shell）---- */
+.pa-log {
+  font-family: var(--pa-mono);
+  font-size: 12px;
+  background: var(--pa-brand-dark);
+  color: #cbd5e1;
+  border-radius: var(--pa-r-md);
+  padding: 12px 14px;
+  max-height: 280px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.75;
+  font-variant-numeric: tabular-nums;
+}
+.pa-log .ok { color: #4ade80; } .pa-log .err { color: #f87171; } .pa-log .warn { color: #fbbf24; }
+
+/* ---- 渐变横幅（收银台 / 门户 hero，CSS 简化 mesh）---- */
+.pa-mesh {
+  background: linear-gradient(100deg, var(--pa-cream) 0%, #f6d8c0 18%, #d9d4f6 42%, var(--pa-primary-soft) 68%, #ea2261 100%);
+  border-radius: var(--pa-r-lg) var(--pa-r-lg) 0 0;
+  padding: 24px 28px;
+  color: var(--pa-ink);
+}
+
+/* ---- 状态 chip：业务状态 → 语义色（DESIGN.md §2 映射表）----
+   JS 动态拼接 class="st st-{STATUS}" / class="c-{STATUS}"，同名类在此统一供给。
+   未登记状态回退 warning（见 Do/Don't）。 */
+.st, .c {
+  display: inline-block; padding: 1px 10px; border-radius: var(--pa-r-pill);
+  font-size: 11px; font-weight: 500; background: var(--pa-warning-soft); color: var(--pa-warning);
+}
+/* success */
+.st-SUCCEEDED, .st-PAID, .st-AVAILABLE, .st-BALANCED, .st-VERIFIED, .st-CLOSED, .st-PARTIALLY_SUCCEEDED,
+.c-BALANCED, .c-CLOSED, .c-VERIFIED { background: var(--pa-success-soft); color: var(--pa-success); }
+/* danger */
+.st-FAILED, .st-CANCELLED, .st-REJECTED, .st-REVOKED,
+.c-BLOCKER, .c-HAS_DIFFERENCE, .c-PENDING_REVIEW { background: var(--pa-danger-soft); color: var(--pa-danger); }
+/* warning（默认即 warning，显式列出以防前序类覆盖） */
+.st-PENDING_PAYMENT, .st-PROCESSING, .st-UNKNOWN, .st-REQUESTED,
+.c-SUSPENDED, .c-PROCESSING, .c-RECHECKING, .c-PENDING, .c-MAJOR { background: var(--pa-warning-soft); color: var(--pa-warning); }
+/* info */
+.st-CREATED, .st-ADJUSTED, .c-ADJUSTED { background: var(--pa-info-soft); color: var(--pa-info); }
+/* 特例：MINOR 差异严重度 → 中性灰（MAJOR 归 warning，见 DESIGN.md §2） */
+.c-MINOR { background: var(--pa-canvas-soft); color: var(--pa-mute); }
+
+/* ---- 金额展示 ---- */
+.pa-amount {
+  font-size: 26px; font-weight: 300; letter-spacing: -0.5px;
+  color: var(--pa-ink);
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
+.pa-amount small { font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--pa-mute); }
+
+/* ---- 响应式兜底 ---- */
+@media (max-width: 768px) {
+  .pa-grid-2 { grid-template-columns: 1fr !important; }
+  button { min-height: 40px; }
+}
