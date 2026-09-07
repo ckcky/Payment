@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  e2e-tests（spec 022 / ADR-0069）：全链路自动化测试模块（黑盒 HTTP + JDBC）。
+
+  黑盒原则：不依赖任何业务模块——只通过服务 HTTP API 与 MySQL JDBC 驱动断言，
+  保证测的是真实部署形态而非进程内组装。
+
+  执行门禁：
+  - 默认 skipTests=true：根 reactor `./mvnw verify`（PR 快跑）不会执行本模块——
+    E2E 依赖 live 栈（10 个 JVM 进程 + MySQL/Redis/Nacos），进 PR 会假红；
+  - 显式传 -De2e.env=local（本地已起栈）或 -De2e.env=ci（CI 环境）时才激活执行：
+      mvn -pl deployment/e2e-tests test -De2e.env=local
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.payment</groupId>
+    <artifactId>payment-arch</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <!-- 本模块收口在 deployment/ 下，需上溯两级到仓库根 -->
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>e2e-tests</artifactId>
+  <name>e2e-tests :: 全链路自动化测试（L4/L5，live 栈，默认跳过）</name>
+
+  <properties>
+    <!-- 默认跳过：仅在 -De2e.env=* 激活 run-e2e profile 时执行 -->
+    <skipTests>true</skipTests>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>3.26.0</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <version>4.2.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.17.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <version>8.4.0</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.13</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <profiles>
+    <!-- -De2e.env=local|ci 时激活：skipTests 翻转为 false，surefire 真正执行 -->
+    <profile>
+      <id>run-e2e</id>
+      <activation>
+        <property>
+          <name>e2e.env</name>
+        </property>
+      </activation>
+      <properties>
+        <skipTests>false</skipTests>
+      </properties>
+    </profile>
+  </profiles>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <e2e.env>${e2e.env}</e2e.env>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

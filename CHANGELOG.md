@@ -6,6 +6,18 @@
 
 ---
 
+## [2026-09-07] spec 022：全链路自动化测试体系（代码落地，ADR-0069）
+
+**范围**：新建黑盒 `deployment/e2e-tests` Maven 模块（不依赖业务模块），承载「退款正常 / 超退拦截 / 对账准确 / 单号记对」四类全链路验证；决策与验收见 [spec 022](docs/specs/022-full-chain-automated-testing/spec.md)。**live 实跑验证待办**（T433/T434，`bash deployment/e2e-tests/run.sh`）。
+
+- **支撑层**：Env（local/ci 双环境）/ Api（JDK HttpClient 黑盒，4xx 原样返回）/ Db（9 schema JDBC 探针）/ Await（Awaitility 统一轮询，禁 Thread.sleep）/ Trace / Dump（失败自动落盘）/ Invariants（9 条断言原语：超退守卫、单号链、记账平衡、权益撤销、履约终止、库存守恒、幂等重放、无孤儿）/ E2eBase（用例级数据隔离 + 造单助手）。
+- **P0/P1 用例**：退款主链（部分/全额，六库一致 + 权益撤销 + 履约终止）、超退守卫（单次/累计/并发 4×2000 不超付）、对账四核对（LIVE CLEAN + 8 类 FAULT 注入矩阵，DB 直改备份→注入→检出→还原）、CSV 渠道账实差异注入（长/短/金额不符/重复，经 `statement-dir-override` 运行时落盘）、结算门禁、单号链、幂等与回调异常路径（重复 3 次 / 丢失→resolve→后处理不丢 / 乱序不回退）、API schema 快照（L3，`-De2e.update-snapshots=true` 重录基线）。
+- **确定性故障注入（T429 / D7）**：`MockChannelAdapter` 请求级触发——金额尾数 11=超时 / 12=无结论 / 15=业务拒绝；基线 `PAYMENT_MOCK_SCENARIO` 保留；E2E 经 catalog API 造指定价格 SKU 控制金额。
+- **CI 门禁（D4）**：PR 快跑不变（e2e 模块默认 `skipTests=true`）；新增 `e2e.yml` nightly + workflow_dispatch + v* tag 强制（起 MySQL/Nacos → 起 9 服务 → `-De2e.env=ci` → 上传 surefire + dump）。
+- **flaky 策略（T432）**：不自动重试，连续 flaky `@Disabled` 降级登记；秒杀用例未配置 SKU 时 Assumptions 跳过（防假红 NFR-005）。
+
+---
+
 ## [2026-09-07] spec 023：审计中性项收尾——可观测与一致性加固
 
 **范围**：2026-09-07 审计报告中性工程遗留项（安全类按负责人裁决保持桩实现不在范围，Testcontainers/E2E 归 spec 022）。决策与验收见 [spec 023](docs/specs/023-audit-ops-remediation/spec.md)。

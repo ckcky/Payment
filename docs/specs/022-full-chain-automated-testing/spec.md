@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Accepted → **待实施**（2026-09-07 负责人逐项拍板，见 [ADR-0069](../../adr/0030-end-to-end-automated-testing.md)；本次仅落地文档，代码任务见 [tasks.md](tasks.md) 批次 B~E）
+**Status**: ✅ Accepted → **Implemented（代码落地，live 实跑验证待办）**（2026-09-07 批次 B~F 代码完成：e2e-tests 模块 + 断言原语 + P0/P1 用例 + 请求级 mock 注入 + CI；T433 缺陷注入验证 / T434 live 全量回归需起 live 栈后执行，见 [tasks.md](tasks.md) 未勾项；决策依据 [ADR-0069](../../adr/0030-end-to-end-automated-testing.md)）
 
 **Input**: 负责人 2026-09-07 测试体系讨论（原文归纳）：
 
