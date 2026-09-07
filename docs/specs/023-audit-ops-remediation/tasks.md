@@ -25,9 +25,9 @@
 
 ## 收尾
 
-- [ ] T13 `./mvnw verify` 15 模块全绿
-- [ ] T14 demo happy path 实跑一轮 + 优雅停机演示
-- [ ] T15 CHANGELOG + feature 分支 `--no-ff` 合并 master + 推送
+- [x] T13 `./mvnw verify` 15 模块全绿（2026-09-08 00:08 实测）
+- [ ] T14 demo happy path 实跑一轮 + 优雅停机演示（live 栈实测项：需 start-all.sh 全栈就绪后执行）
+- [x] T15 CHANGELOG + feature 分支 `--no-ff` 合并 master + 推送
 
 ## 顺手项（不阻塞验收，做到即勾）
 
