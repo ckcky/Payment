@@ -14,6 +14,8 @@ public abstract class E2eBase {
 
     private static final AtomicLong SEQ = new AtomicLong();
     protected static final Api API = new Api();
+    /** paidOrder 造出的订单 → 生效支付单（DB 口径；OrderResponse 不暴露 paymentNo）。 */
+    private static final java.util.Map<String, String> PAYMENT_NOS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** 本用例唯一前缀（userId / merchantId 用，保证跨用例数据隔离）。 */
     protected String prefix(String caseName) {
@@ -56,6 +58,11 @@ public abstract class E2eBase {
             Api.ApiResponse resp = API.getOrder(orderNo);
             return resp.is2xx() && "PAID".equals(resp.json().path("status").asText());
         });
+        Object paidPaymentNo = db.scalar("order",
+                "SELECT payment_no FROM orders WHERE order_no='" + orderNo + "'");
+        if (paidPaymentNo != null && !String.valueOf(paidPaymentNo).isBlank()) {
+            PAYMENT_NOS.put(orderNo, String.valueOf(paidPaymentNo));
+        }
         return orderNo;
     }
 
@@ -90,13 +97,19 @@ public abstract class E2eBase {
         return skuId;
     }
 
-    /** 从订单详情取 paymentNo（生效支付单）。 */
-    protected String paymentNoOf(String orderNo) {
-        Api.ApiResponse resp = API.getOrder(orderNo);
-        String paymentNo = resp.json().path("paymentNo").asText(null);
+    /** 从 DB 取订单生效支付单（order.orders.payment_no；OrderResponse 不暴露该字段）。 */
+    protected String paymentNoOf(Db db, String orderNo) {
+        String cached = PAYMENT_NOS.get(orderNo);
+        if (cached != null && !cached.isBlank() && !"null".equals(cached)) {
+            return cached;
+        }
+        Object v = db.scalar("order",
+                "SELECT payment_no FROM orders WHERE order_no='" + orderNo + "'");
+        String paymentNo = v == null ? null : String.valueOf(v);
         if (paymentNo == null || paymentNo.isBlank() || "null".equals(paymentNo)) {
             throw new IllegalStateException("order has no effective paymentNo yet: " + orderNo);
         }
+        PAYMENT_NOS.put(orderNo, paymentNo);
         return paymentNo;
     }
 

@@ -49,7 +49,7 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
         runCase("idem-callback", ctx -> {
             String uid = prefix("idc");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             // 同一支付单重复回调 3 次：终态吸收、不重复后处理（记账/订单回写）
             for (int i = 0; i < 3; i++) {
@@ -93,10 +93,10 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
 
             // 回调丢失 → 支付 UNKNOWN、订单未支付
             Await.until("支付收敛 UNKNOWN [order=" + orderNo + "]", () -> {
-                Api.ApiResponse p = API.getPayment(paymentNoOf(orderNo));
+                Api.ApiResponse p = API.getPayment(paymentNoOf(db, orderNo));
                 return p.is2xx() && "UNKNOWN".equals(p.json().path("status").asText());
             });
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             // 人工收敛
             Api.ApiResponse resolved = API.resolvePayment(paymentNo, "SUCCESS", "e2e-resolve-ref", "e2e resolve");
@@ -126,7 +126,7 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
         runCase("cb-out-of-order", ctx -> {
             String uid = prefix("ooo");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             // 终态（SUCCEEDED）后补发「过期」的 UNKNOWN 回调：终态必须吸收、不回退
             Api.ApiResponse stale = API.paymentChannelCallback(paymentNo, "UNKNOWN",

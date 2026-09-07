@@ -64,7 +64,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
             requireOverrideDir();
             String uid = prefix("csvs");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             String period = "e2e-short-" + Long.toString(System.currentTimeMillis(), 36);
             writeStatement(period, "reference,amountMinor,currencyCode,status\n"); // 仅表头
@@ -82,7 +82,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
             requireOverrideDir();
             String uid = prefix("csva");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
             String channelRef = channelReferenceOf(paymentNo);
 
             // 同 reference、金额减 1 分 → 金额不符
@@ -102,7 +102,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
             requireOverrideDir();
             String uid = prefix("csvd");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
             String channelRef = channelReferenceOf(paymentNo);
 
             // 同 reference 两行（重复投递形态）
@@ -164,6 +164,14 @@ class ChannelStatementDiffE2ETest extends E2eBase {
                         + "' AND channel_reference IS NOT NULL ORDER BY id DESC LIMIT 1");
         assertThat(rows).as("渠道引用存在 [payment=%s, 表=payment.payment_attempts]", paymentNo).isNotEmpty();
         return String.valueOf(rows.get(0).get("channel_reference"));
+    }
+
+    /** 真实支付金额（分）——账单行金额必须与之对齐，不假设 SKU 价格。 */
+    private long paidAmountMinorOf(String paymentNo) {
+        List<Map<String, Object>> rows = db.query("payment",
+                "SELECT amount_minor FROM payments WHERE payment_no='" + paymentNo + "'");
+        assertThat(rows).as("支付单存在 [payment=%s, 表=payment.payments]", paymentNo).isNotEmpty();
+        return ((Number) rows.get(0).get("amount_minor")).longValue();
     }
 
     private boolean hasKind(JsonNode diffs, String kind) {

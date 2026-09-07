@@ -30,7 +30,8 @@ class OverRefundGuardE2ETest extends E2eBase {
     void singleOverPaidRefundIsRejected() {
         runCase("over-refund-single", ctx -> {
             String uid = prefix("ovs");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1); // 2500
+            long skuId = skuWithPrice(ctx, 2500L); // 自建指定价格 SKU（live 库预置 SKU 价格不可假设）
+            String orderNo = paidOrder(ctx, db, uid, uid, skuId, 1); // 2500
 
             Api.ApiResponse resp = API.refund(orderNo, null, 2501L, "e2e over single");
             ctx.response("refund-over", resp);
@@ -47,7 +48,8 @@ class OverRefundGuardE2ETest extends E2eBase {
     void cumulativeOverRefundIsRejected() {
         runCase("over-refund-cumulative", ctx -> {
             String uid = prefix("ovc");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 2); // 5000
+            long skuId = skuWithPrice(ctx, 2500L);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuId, 2); // 5000
 
             Api.ApiResponse r1 = API.refund(orderNo, null, 3000L, "e2e cum #1");
             ctx.response("refund-1", r1);

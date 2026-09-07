@@ -156,7 +156,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         runCase("recon-clean", ctx -> {
             String uid = prefix("rc");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             String period = period("clean", uid);
             Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e");
@@ -176,7 +176,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         runCase("recon-fault-matrix", ctx -> {
             String uid = prefix("fm");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             for (Fault fault : faultMatrix(orderNo, paymentNo, uid)) {
                 fault.apply();
@@ -210,7 +210,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         runCase("recon-suspend-close", ctx -> {
             String uid = prefix("sc");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             // 注入 ORPHAN_POSTING（BLOCKER）→ 检出 → 挂账 → close 放行（挂账即收口）
             List<Map<String, Object>> postingBackup = db.query("ledger",

@@ -1,0 +1,44 @@
+{
+  "type" : "object",
+  "fields" : {
+    "actualAmountMinor" : {
+      "type" : "integer"
+    },
+    "adjustedAmountMinor" : {
+      "type" : "integer"
+    },
+    "currency" : {
+      "type" : "string"
+    },
+    "detail" : {
+      "type" : "string"
+    },
+    "expectedAmountMinor" : {
+      "type" : "integer"
+    },
+    "id" : {
+      "type" : "integer"
+    },
+    "kind" : {
+      "type" : "string"
+    },
+    "reference" : {
+      "type" : "null"
+    },
+    "severity" : {
+      "type" : "string"
+    },
+    "sourceId" : {
+      "type" : "string"
+    },
+    "sourceType" : {
+      "type" : "string"
+    },
+    "status" : {
+      "type" : "string"
+    },
+    "suspendedAmountMinor" : {
+      "type" : "integer"
+    }
+  }
+}
