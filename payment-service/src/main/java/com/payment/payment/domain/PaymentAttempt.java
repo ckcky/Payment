@@ -109,10 +109,17 @@ public class PaymentAttempt {
      * ACCEPTED/UNKNOWN/PENDING → SUCCEEDED；终态冲突吸收（返回 false）。
      * PENDING 可收敛：收银台路径（ADR-0048 修订版）的尝试在取得渠道引用前即可能收到
      * 权威结果（人工裁定 / 迟到回调），此时尝试语义上仍"在途"，允许直接落终态。
+     *
+     * <p>成功收敛时清空 {@code failureReason}：受理/UNKNOWN 阶段的占位文案
+     * （如 mock 的 "awaiting async callback"）不是终态事实，成功后残留会误导查询方（fix）。</p>
      */
     public boolean succeed() {
-        return transitionTo(PaymentAttemptStatus.SUCCEEDED, "succeed",
+        boolean changed = transitionTo(PaymentAttemptStatus.SUCCEEDED, "succeed",
                 PaymentAttemptStatus.PENDING, PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
+        if (changed) {
+            this.failureReason = null;
+        }
+        return changed;
     }
 
     /** ACCEPTED/UNKNOWN/PENDING → FAILED（权威收敛语义同 {@link #succeed()}）；终态冲突吸收（返回 false）。 */

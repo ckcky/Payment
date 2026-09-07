@@ -42,6 +42,23 @@ class RefundStateMachineTest {
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
     }
 
+    /**
+     * 回归（fix）：UNKNOWN 阶段写入的受理占位文案（如 mock 的
+     * "mock refund accepted, awaiting async callback"）不得残留到 SUCCEEDED 行。
+     */
+    @Test
+    void succeedClearsStaleFailureReasonFromUnknownPhase() {
+        Refund refund = newRefund();
+        refund.process();
+        refund.markUnknown("mock refund accepted, awaiting async callback");
+        assertThat(refund.getFailureReason())
+                .isEqualTo("mock refund accepted, awaiting async callback");
+
+        assertThat(refund.succeed()).isTrue();
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
+        assertThat(refund.getFailureReason()).isNull();
+    }
+
     @Test
     void unknownConvergesToFailed() {
         Refund refund = newRefund();

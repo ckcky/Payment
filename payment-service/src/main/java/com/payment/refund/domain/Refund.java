@@ -108,9 +108,20 @@ public class Refund {
         this.failureReason = reason;
     }
 
-    /** PROCESSING/UNKNOWN → SUCCEEDED（全额退款）；终态冲突被吸收（返回 false）。 */
+    /**
+     * PROCESSING/UNKNOWN → SUCCEEDED（全额退款）；终态冲突被吸收（返回 false）。
+     *
+     * <p>成功收敛时清空 {@code failureReason}：UNKNOWN 阶段的受理占位文案
+     * （如 mock 的 "awaiting async callback"）只描述在途状态，不是终态事实，
+     * 成功后残留会误导查询方（fix）。</p>
+     */
     public boolean succeed() {
-        return transitionTo(RefundStatus.SUCCEEDED, "succeed", RefundStatus.PROCESSING, RefundStatus.UNKNOWN);
+        boolean changed = transitionTo(RefundStatus.SUCCEEDED, "succeed",
+                RefundStatus.PROCESSING, RefundStatus.UNKNOWN);
+        if (changed) {
+            this.failureReason = null;
+        }
+        return changed;
     }
 
     /**
@@ -124,8 +135,12 @@ public class Refund {
             throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
                     "partial refund amount must be in (0, amountMinor): " + refundedAmount);
         }
-        return transitionTo(RefundStatus.PARTIALLY_SUCCEEDED, "partiallySucceed",
+        boolean changed = transitionTo(RefundStatus.PARTIALLY_SUCCEEDED, "partiallySucceed",
                 RefundStatus.PROCESSING, RefundStatus.UNKNOWN);
+        if (changed) {
+            this.failureReason = null; // 成功口径同 succeed()：清空在途占位文案
+        }
+        return changed;
     }
 
     /** PROCESSING/UNKNOWN → FAILED；终态冲突被吸收（返回 false）。 */
