@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Accepted（2026-09-07 负责人逐项拍板 6 项决策，见 [ADR-0068](../../adr/0029-unified-access-logging.md)；**代码未实施**，任务见 [tasks.md](tasks.md)）
+**Status**: ✅ Accepted → Implemented（2026-09-07 负责人逐项拍板，见 [ADR-0068](../../adr/0029-unified-access-logging.md)；代码已实施，任务见 [tasks.md](tasks.md)）
 
 **Input**: 负责人 2026-09-07 日志规范化讨论（原文归纳）：
 

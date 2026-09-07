@@ -25,7 +25,7 @@
 | [0026](0026-accounting-audit-suspense-adjustment.md) | 会计四核对与挂账·调账闭环（ADR-0065） | ✅ **Accepted → 已实施**（2026-09-07 代码合并 master，450 测试全绿） | spec 017；新增 SUSPENSE(5) 科目（Constitution §8 变更已批准）、结算分级门禁、账实双轨、双人复核降级软提示 |
 | [0027](0027-schema-normalization-and-item-granular-fulfillment.md) | 表结构列序规范化与按订单明细粒度履约（ADR-0066） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地） | spec 018；列序规范（自增id→业务主键→唯一索引列，3 表豁免）、payment_attempts 加金额列、order_item_no（OI+雪花）、fulfillment 按 item 粒度、demo 中文注释 + 门户主界面 |
 | [0028](0028-order-driven-refund-two-layer-refund-order.md) | order 驱动的两层退款单模型与退款异步回调闭环（ADR-0067） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地，全量回归绿） | spec 019；双层退款单 TXRF（transaction 层）/PMRF（payment 层）互记、transactions 加 payment_no/refunded_minor、两层金额校验、渠道退款异步回调 + 三路收敛、秒杀库存回补、直调入口下线；明确不做：UNKNOWN 自动收敛器 / resolve Admin Token / 部分退款次数上限 |
-| [0029](0029-unified-access-logging.md) | 统一访问日志：结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 传播修复（ADR-0068） | ✅ **Accepted**（2026-09-07 拍板，代码待实施） | spec 021；Filter+ContentCaching 实现、结束时一条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断、/actuator 排除、可开关）、脱敏只留桩（SensitiveBodyMasker 透传）、logback springProperty 注入服务名、MdcTaskDecorator + 4 Scheduler 补 traceId、tail-logs.sh/trace-grep.sh；明确不做：真脱敏实现 / Loki 集中采集（后续期）/ AOP 方法级日志 |
+| [0029](0029-unified-access-logging.md) | 统一访问日志：结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 传播修复（ADR-0068） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地） | spec 021；Filter+ContentCaching 实现、结束时一条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断、/actuator 排除、可开关）、脱敏只留桩（SensitiveBodyMasker 透传）、logback springProperty 注入服务名、MdcTaskDecorator + 4 Scheduler 补 traceId、tail-logs.sh/trace-grep.sh；明确不做：真脱敏实现 / Loki 集中采集（后续期）/ AOP 方法级日志 |
 
 ## ADR 编号速查（0001–0068）
 
@@ -44,7 +44,7 @@
 | [0065](0026-accounting-audit-suspense-adjustment.md#adr-0065) | 会计四核对与挂账·调账闭环：账证/账账/账实(双轨)/账表 + SUSPENSE 挂账 + 五类调账 + recheck 关批 + 结算分级门禁（✅ Accepted，2026-09-06 拍板，代码待实施） | 0026 |
 | [0066](0027-schema-normalization-and-item-granular-fulfillment.md#adr-0066) | 表结构列序规范化（自增id→业务主键→唯一索引列，3 表豁免）+ payment_attempts 金额列 + order_item_no（OI+雪花）+ 按 order_item 粒度履约 + demo 中文注释/门户主界面（✅ Accepted，2026-09-07 拍板，代码待实施） | 0027 |
 | [0067](0028-order-driven-refund-two-layer-refund-order.md#adr-0067) | order 驱动的两层退款单模型（TXRF 交易层 / PMRF 支付层互记）+ 退款异步回调闭环（三路收敛）+ 秒杀库存回补 + 直调入口下线（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0028 |
-| [0068](0029-unified-access-logging.md#adr-0068) | 统一访问日志：结束时单条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断）+ 固定格式含服务名（springProperty 注入）+ 脱敏留桩（SensitiveBodyMasker）+ 异步 MDC 传播修复（MdcTaskDecorator + 4 Scheduler）+ 日志查看脚本（✅ Accepted，2026-09-07 拍板，代码待实施） | 0029 |
+| [0068](0029-unified-access-logging.md#adr-0068) | 统一访问日志：结束时单条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断）+ 固定格式含服务名（springProperty 注入）+ 脱敏留桩（SensitiveBodyMasker）+ 异步 MDC 传播修复（MdcTaskDecorator + 4 Scheduler）+ 日志查看脚本（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0029 |
 
 > 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 

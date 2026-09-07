@@ -44,4 +44,22 @@ class ModuleBoundaryTest {
                 .should().dependOnClassesThat().resideInAPackage("org.springframework..");
         rule.check(commonCore);
     }
+
+    /**
+     * accesslog 包边界（spec 021 / T309）：自包含基建——只依赖自身、servlet 容器与 Spring Web
+     * 基础设施，不得反向拉扯 common-core 其它包（避免日志基建成为共享层的耦合点）。
+     */
+    @Test
+    void accessLogPackageMustBeSelfContained() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.payment.common.core.accesslog..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "com.payment.common.core.error..", "com.payment.common.core.id..",
+                        "com.payment.common.core.money..", "com.payment.common.core.trace..",
+                        "com.payment.common.core.observability..", "com.payment.common.core.idempotency..",
+                        "com.payment.common.core.result..", "com.payment.common.core.rpc..",
+                        "com.payment.common.core.security..", "com.payment.common.core.client..",
+                        "com.payment.common.core.config..");
+        rule.check(commonCore);
+    }
 }

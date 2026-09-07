@@ -2,7 +2,7 @@
 
 # ADR-0068: 统一访问日志——结束时单条 ACCESS、固定格式含服务名与异步 MDC 传播修复（spec 021 立项）
 
-- 状态：✅ **Accepted**（2026-09-07 负责人拍板 D1~D7；**代码未实施**，任务见 [spec 021 tasks](../specs/021-unified-access-logging/tasks.md)）
+- 状态：✅ **Accepted → Implemented**（2026-09-07 负责人拍板 D1~D7；代码已实施，任务见 [spec 021 tasks](../specs/021-unified-access-logging/tasks.md)）
 - 关联：ADR-0022（业务单号与雪花 traceId 同族的关联 ID 体系；MDC traceId 沿用 `X-Trace-Id` 约定）、Constitution §6（跨服务调用用 traceId 串联、资金审计单列）、spec 017（FINANCIAL_AUDIT 审计流先例）、spec 021（[spec](../specs/021-unified-access-logging/spec.md) / [plan](../specs/021-unified-access-logging/plan.md)）
 - 需求源头：负责人 2026-09-07 日志规范化——「每个请求的入口和出口都要加上日志，入口打 request 完整报文，出口打 response 报文 + 耗时毫秒数」「日志格式固定一下 [服务名]」「看看业内比较先进的做法」；第二轮修正为「结束时一条 ACCESS」，并要求脱敏只留桩；追问「系统跑起来之后怎么看日志，不可能一个文件一个文件翻」。
 

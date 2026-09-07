@@ -52,6 +52,11 @@ public class OrderTimeoutScheduler {
 
     @Scheduled(fixedDelayString = "${order.timeout.poll-millis:5000}")
     public void processExpired() {
+        // 调度线程不经 TraceIdFilter（spec 021 / AC3.1）：入口自建 traceId，超时取消动作可被 trace-grep 关联。
+        com.payment.common.core.trace.TraceContext.runWithNewTrace(this::doProcessExpired);
+    }
+
+    private void doProcessExpired() {
         if (!props.isEnabled()) {
             return;
         }

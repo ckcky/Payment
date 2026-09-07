@@ -32,6 +32,11 @@ public class AuditScheduler {
     /** 每天 00:30（东八区）触发 T-1 账证核对；ALL 一次覆盖四核对。 */
     @Scheduled(cron = "${audit.schedule.cron:0 30 0 * * *}", zone = "Asia/Shanghai")
     public void runDailyAudit() {
+        // 调度线程不经 TraceIdFilter（spec 021 / AC3.1）：入口自建 traceId。
+        com.payment.common.core.trace.TraceContext.runWithNewTrace(this::doRunDailyAudit);
+    }
+
+    private void doRunDailyAudit() {
         if (!enabled) {
             return;
         }

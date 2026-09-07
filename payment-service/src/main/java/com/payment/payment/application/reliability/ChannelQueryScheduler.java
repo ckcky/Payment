@@ -1,5 +1,6 @@
 package com.payment.payment.application.reliability;
 
+import com.payment.common.core.trace.TraceContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,7 @@ public class ChannelQueryScheduler {
 
     @Scheduled(fixedDelayString = "${payment.reliability.query-interval-ms:15000}")
     public void run() {
-        queryService.queryRound();
+        // 调度线程不经 TraceIdFilter（spec 021 / AC3.1）：入口自建 traceId，后台日志可被 trace-grep 捞取。
+        TraceContext.runWithNewTrace(queryService::queryRound);
     }
 }

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <!-- 服务名（spec 021 / FR-004，ADR-0068）：来自各服务 spring.application.name，启动期注入一次；
+         无配置回退 unknown。多服务日志聚合后仍可按 service= 区分来源。 -->
+    <springProperty scope="context" name="svc" source="spring.application.name" defaultValue="unknown"/>
     <!-- 结构化日志基座：key=value 风格，带关联 ID（MDC: traceId，由 TraceIdFilter 写入）。
          各服务如需 JSON 日志可覆盖本文件。 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5level thread="%thread" traceId="%X{traceId:-N/A}" logger=%logger{36} msg="%msg"%n</pattern>
+            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5level thread="%thread" traceId="%X{traceId:-N/A}" service=${svc} logger=%logger{36} msg="%msg"%n</pattern>
         </encoder>
     </appender>
 
