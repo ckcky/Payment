@@ -6,6 +6,17 @@
 
 ---
 
+## [2026-09-07] spec 023：审计中性项收尾——可观测与一致性加固
+
+**范围**：2026-09-07 审计报告中性工程遗留项（安全类按负责人裁决保持桩实现不在范围，Testcontainers/E2E 归 spec 022）。决策与验收见 [spec 023](docs/specs/023-audit-ops-remediation/spec.md)。
+
+- **可观测**：删除 Prometheus 死目标 `refund`（:8085 已随 ADR-0064 退役，REFUND 指标由 payment-service 同进程暴露）。
+- **优雅停机**：9 领域服务统一 `server.shutdown=graceful` + 30s drain（审计 M5），SIGTERM 不再掐断在途回调。
+- **事务收窄（审计 M1）**：`onPaymentSucceeded` 的出站 RPC（confirmStock/履约）移出事务边界，DB 段改 TransactionTemplate 编程式事务；confirm 失败仅告警 + `order.stock_confirm_failed` 指标，不回滚 PAID（事实不回滚，ADR-0054）。
+- **文档漂移**：order/payment 系统文档对齐两步式下单与 ADR-0054/0067/019 实况，清除「Proposed 未实施」过时标注；docs 导航补 runbook（基线 H1/H3/H4/H5 全闭环）。
+
+---
+
 ## [2026-09-07] spec 022（立项·待实施）：全链路自动化测试体系
 
 **状态**：仅落地文档（spec 四件套 + [ADR-0069](docs/adr/0030-end-to-end-automated-testing.md)），**代码未开发**；决策 D1~D8 见 [spec 022](docs/specs/022-full-chain-automated-testing/spec.md)，任务清单见 [tasks.md](docs/specs/022-full-chain-automated-testing/tasks.md)（批次 A 已完成，B~G 待实施）。
