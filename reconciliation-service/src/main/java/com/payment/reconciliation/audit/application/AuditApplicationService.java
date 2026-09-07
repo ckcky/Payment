@@ -273,7 +273,9 @@ public class AuditApplicationService {
     }
 
     /**
-     * recheck（FR-017）：对该差异重跑比对——通过置 VERIFIED，未通过退回 SUSPENDED 继续暴露。
+     * recheck（FR-017）：全批差异重跑比对——通过置 VERIFIED，未通过的已处置差异退回
+     * SUSPENDED 继续暴露。PENDING 差异同样参与重算：底层账实已一致（如根因在别处修复）
+     * 时直接收口，仍不一致则保持 PENDING（{@code rejectRecheck} 对 PENDING 无副作用）。
      */
     @Transactional
     public AuditBatch recheck(String batchNo) {
@@ -283,9 +285,6 @@ public class AuditApplicationService {
         }
         batch.beginRechecking();
         for (AuditDifference difference : batch.getDifferences()) {
-            if (difference.getStatus() == AuditDifferenceStatus.PENDING) {
-                continue; // 未处置的差异保持暴露
-            }
             boolean verified = recheckDifference(batch, difference);
             if (!verified) {
                 difference.rejectRecheck();

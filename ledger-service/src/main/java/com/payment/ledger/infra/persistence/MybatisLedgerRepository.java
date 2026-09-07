@@ -8,7 +8,9 @@ import com.payment.ledger.domain.Posting;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -51,11 +53,24 @@ public class MybatisLedgerRepository implements LedgerRepository {
 
     @Override
     public List<Posting> findAllPostings() {
-        return postingMapper.selectList(
+        // 两步式批量加载（修 N+1）：全量读路径逐笔查 entries 会让 871 笔账本要 1s+，
+        // 调用方（recon 审计建批）贴着 Feign read-timeout 上限，数据一涨即超时
+        List<PostingEntity> entities = postingMapper.selectList(
                         Wrappers.<PostingEntity>lambdaQuery().orderByDesc(PostingEntity::getId))
                 .stream()
                 .limit(1000)
-                .map(this::toDomain)
+                .toList();
+        if (entities.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = entities.stream().map(PostingEntity::getId).toList();
+        Map<Long, List<LedgerEntry>> entriesByPostingId = entryMapper.selectList(
+                        Wrappers.<LedgerEntryEntity>lambdaQuery().in(LedgerEntryEntity::getPostingId, ids))
+                .stream()
+                .map(this::toEntry)
+                .collect(Collectors.groupingBy(LedgerEntry::getPostingId));
+        return entities.stream()
+                .map(e -> toDomain(e, entriesByPostingId.getOrDefault(e.getId(), List.of())))
                 .toList();
     }
 
@@ -111,12 +126,15 @@ public class MybatisLedgerRepository implements LedgerRepository {
     }
 
     private Posting toDomain(PostingEntity entity) {
-        List<LedgerEntry> entries = entryMapper.selectList(
+        return toDomain(entity, entryMapper.selectList(
                         Wrappers.<LedgerEntryEntity>lambdaQuery()
                                 .eq(LedgerEntryEntity::getPostingId, entity.getId()))
                 .stream()
                 .map(this::toEntry)
-                .toList();
+                .toList());
+    }
+
+    private Posting toDomain(PostingEntity entity, List<LedgerEntry> entries) {
         return Posting.rehydrate(entity.getId(), entity.getPostingNo(), entity.getIdempotencyKey(),
                 LedgerSourceType.valueOf(entity.getSourceType()), entity.getSourceId(),
                 entity.getCurrency(), Posting.Status.valueOf(entity.getStatus()), entries);
