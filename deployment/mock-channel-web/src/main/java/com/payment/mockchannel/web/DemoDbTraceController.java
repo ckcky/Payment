@@ -225,6 +225,39 @@ public class DemoDbTraceController {
         return resp;
     }
 
+    /**
+     * SKU 库存余量（演示控制台 ① 下单卡片）：只读直查 catalog.stock，
+     * 返回 available/total，供演示页展示「库存 n/m」与售罄提示。查询失败不阻断（返回 error）。
+     */
+    @GetMapping("/demo/stock")
+    public Map<String, Object> stock(@RequestParam("skuIds") String skuIds,
+                                     HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        Map<String, Object> resp = new LinkedHashMap<>();
+        List<Object> ids = new ArrayList<>();
+        for (String s : skuIds.split(",")) {
+            String t = s.trim();
+            if (NUMERIC.matcher(t).matches()) {
+                ids.add(Long.parseLong(t));
+            }
+        }
+        List<Map<String, Object>> rows = List.of();
+        if (jdbc == null) {
+            resp.put("error", "JdbcTemplate 不可用（依赖缺失）");
+        } else if (!ids.isEmpty()) {
+            try {
+                rows = jdbc.queryForList(
+                        "SELECT sku_id, total, available, reserved, sold FROM catalog.stock "
+                                + "WHERE sku_id IN (" + placeholders(ids) + ") ORDER BY sku_id",
+                        ids.toArray());
+            } catch (Exception ex) {
+                resp.put("error", ex.getClass().getSimpleName() + ": " + ex.getMessage());
+            }
+        }
+        resp.put("stocks", rows);
+        return resp;
+    }
+
     /** 单查封装：异常兜底为该 section 的 error，行值做可读化（Date→字符串）。 */
     private List<Map<String, Object>> query(List<Map<String, Object>> sections, String system,
                                             String table, String sql, Object[] args, String label) {
