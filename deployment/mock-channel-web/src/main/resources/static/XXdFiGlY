@@ -443,7 +443,7 @@ function previewEntry() {
     return '借 ' + p.debit + '（' + ACCOUNT_CN[p.debit] + '）&nbsp; ' + fmt(amt) +
            '<br>贷 ' + p.credit + '（' + ACCOUNT_CN[p.credit] + '）&nbsp; ' + fmt(amt);
   }).join('<br><span style="color:#94a3b8">—— 红蓝字第二组 ——</span><br>');
-  box.innerHTML += '<br><span style="color:var(--pa-success)">借贷平衡 ✓（每组分录等额）</span>';
+  box.innerHTML += '<br><span style="color:#16a34a">借贷平衡 ✓（每组分录等额）</span>';
 }
 
 function doAdjust() {
@@ -563,7 +563,7 @@ function refreshTrialBalance() {
     log('试算平衡：balanced=' + t.balanced + ' diff=' + JSON.stringify(t.diffByCurrency || {}),
         t.balanced ? 'ok' : 'err');
     document.getElementById('balCheck').innerHTML =
-      'LIVE 试算平衡 = <b style="color:' + (t.balanced ? 'var(--pa-success)' : 'var(--pa-danger)') + '">' + (t.balanced ? '平衡 ✓' : '不平衡 ✗') + '</b>';
+      'LIVE 试算平衡 = <b style="color:' + (t.balanced ? '#16a34a' : '#dc2626') + '">' + (t.balanced ? '平衡 ✓' : '不平衡 ✗') + '</b>';
   }).catch(function () { /* 静默 */ });
 }
 
@@ -653,16 +653,16 @@ function renderAdjs() {
 function renderBal() {
   document.getElementById('balBody').innerHTML = ACCOUNTS.map(function (a) {
     var v = S.bal[a] || 0;
-    var color = v === 0 ? '#64748b' : (v > 0 ? '#0f172a' : 'var(--pa-warning)');
+    var color = v === 0 ? '#64748b' : (v > 0 ? '#0f172a' : '#b45309');
     return '<tr><td class="mono">' + a + ' <span style="color:var(--pa-mute)">' + ACCOUNT_CN[a] + '</span></td>' +
       '<td class="num" style="color:' + color + '">' + fmt(v) + '</td></tr>';
   }).join('');
   var sum = ACCOUNTS.reduce(function (s, a) { return s + (S.bal[a] || 0); }, 0);
   var susp = -(S.bal.SUSPENSE || 0); // SUSPENSE 贷方余额为正展示
   document.getElementById('balCheck').innerHTML =
-    '试算平衡 Σ(借-贷) = <b style="color:' + (sum === 0 ? 'var(--pa-success)' : 'var(--pa-danger)') + '">' + fmt(sum) + '</b> ' +
+    '试算平衡 Σ(借-贷) = <b style="color:' + (sum === 0 ? '#16a34a' : '#dc2626') + '">' + fmt(sum) + '</b> ' +
     (sum === 0 ? '✅ 借贷恒平衡（每笔挂账/调账都是平衡分录）' : '✗ 不平衡') +
-    '<br>SUSPENSE 挂账余额 = <b style="color:' + (susp === 0 ? 'var(--pa-success)' : 'var(--pa-warning)') + '">' + fmt(susp) + '</b>' +
+    '<br>SUSPENSE 挂账余额 = <b style="color:' + (susp === 0 ? '#16a34a' : '#b45309') + '">' + fmt(susp) + '</b>' +
     (susp === 0 ? '（无未查清挂账）' : ' —— 期末非零即代表尚有未收口的挂账，应尽快定性转出');
 }
 

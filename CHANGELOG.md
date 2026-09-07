@@ -6,6 +6,18 @@
 
 ---
 
+## [2026-09-07] spec 020：演示界面设计系统统一——DESIGN.md 单一真相源 + 共享 Token 层
+
+**范围**：mock-channel-web 4 个演示页（portal / demo / cashier / audit）视觉层统一。决策见 [spec 020](docs/specs/020-demo-ui-design-system/spec.md)（D1–D5 采纳建议项），设计规范见 [docs/design/DESIGN.md](docs/design/DESIGN.md)。
+
+### 变更
+- **设计真相源**：新增 `docs/design/DESIGN.md`（Stripe 风格基底裁剪：靛紫 `#533afd` 主色、weight-300 展示字、tnum 表格数字、pill 按钮）+ `static/design.css` 共享 token 层（157 行，CSS variables + 语义类）；灵感来源 VoltAgent/awesome-design-md（MIT）。
+- **状态语义映射收口（FR-004）**：业务状态 → 语义色映射表落 DESIGN.md §2，`st-{STATUS}` / `c-{STATUS}` 动态类名拼接模式不变、样式由 design.css 同名类供给；新增状态 MUST 先登记映射表。
+- **四页改造**：收银台加渐变横幅 + 细体大字金额（¥ 格式，tnum）+ pill 按钮分级（实心仅主 CTA）；门户 emoji 换内联 SVG 图标；demo/audit 控制台 token 化 + 表格数字对齐 + dark shell 日志面板统一（`--pa-brand-dark`）。
+- **零依赖铁律（NFR-001）**：无 CDN / webfont / 图片 / npm；JS 行为与接口契约零改动（唯一展示性调整为收银台金额格式）。
+
+---
+
 ## [2026-09-07] spec 019：order 驱动的两层退款单（TXRF/PMRF）+ 渠道退款异步回调闭环
 
 **范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0028-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/019-order-driven-refund/tasks.md)。
