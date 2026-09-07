@@ -11,7 +11,7 @@ import com.payment.order.application.ReleaseStockCommand;
 import com.payment.order.application.ReserveStockCommand;
 
 /**
- * catalog-service 的 Feign 客户端。目标地址由 {@code services.catalog.url} 配置（本地默认端口）。
+ * catalog-service 的 Feign 客户端。目标地址由 Nacos 服务发现按服务名解析（ADR-0059）。
  */
 @FeignClient(name = "catalog-service")
 public interface CatalogFeignClient {

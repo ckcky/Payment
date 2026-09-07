@@ -36,14 +36,6 @@ management:
     health:
       show-details: always
 
-services:
-  merchant:
-    url: http://localhost:8081
-  reconciliation:
-    url: http://localhost:8088
-  ledger:
-    url: http://localhost:8090
-
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
