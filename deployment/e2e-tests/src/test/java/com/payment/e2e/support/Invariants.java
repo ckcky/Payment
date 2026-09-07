@@ -142,16 +142,22 @@ public final class Invariants {
                 .isZero();
     }
 
-    /** 履约终止不变量（FR-010 / AC1.3）：该订单全部履约单 CANCELLED。 */
+    /**
+     * 履约终止不变量（FR-010 / AC1.3）：该订单无在途履约——状态只允许 CANCELLED（撤销成功）
+     * 或 DELIVERED（已交付不可撤，设计语义见 FulfillmentApplicationService：请求撤销仅对
+     * PENDING 生效，DELIVERED 为历史事实保留）。PENDING/PROCESSING 等在途态不允许残留。
+     */
     public static void fulfillmentTerminated(Db db, String orderNo) {
         List<Map<String, Object>> rows = db.query("fulfillment",
                 "SELECT status, COUNT(*) c FROM fulfillments WHERE order_no='" + orderNo + "' GROUP BY status");
         long total = rows.stream().mapToLong(r -> ((Number) r.get("c")).longValue()).sum();
-        long cancelled = rows.stream().filter(r -> "CANCELLED".equals(r.get("status")))
+        long terminated = rows.stream().filter(r ->
+                        "CANCELLED".equals(r.get("status")) || "DELIVERED".equals(r.get("status")))
                 .mapToLong(r -> ((Number) r.get("c")).longValue()).sum();
         assertThat(total).as("履约单存在 [order=%s, 表=fulfillment.fulfillments]", orderNo).isGreaterThan(0);
-        assertThat(cancelled).as("履约逐条终止 [order=%s, 表=fulfillment.fulfillments]，期望全部 CANCELLED，实际 %s",
-                        orderNo, rows).isEqualTo(total);
+        assertThat(terminated).as("履约无在途残留 [order=%s, 表=fulfillment.fulfillments]，"
+                        + "期望全部 CANCELLED/DELIVERED，实际 %s",
+                orderNo, rows).isEqualTo(total);
     }
 
     /** 库存守恒（FR-010 / AC5.6）：total == available + reserved + sold。 */

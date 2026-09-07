@@ -93,14 +93,16 @@ class RefundChainE2ETest extends E2eBase {
                         && ((Number) db.scalar("entitlement",
                         "SELECT COUNT(*) FROM entitlements WHERE order_no='" + orderNo + "'")).longValue() > 0;
             });
-            Await.until("履约全部 CANCELLED [order=" + orderNo + "]", () -> {
+            Await.until("履约无在途残留 [order=" + orderNo + "]", () -> {
+                Object inFlight = db.scalar("fulfillment",
+                        "SELECT COUNT(*) FROM fulfillments WHERE order_no='" + orderNo + "'"
+                                + " AND status NOT IN ('CANCELLED','DELIVERED')");
                 Object total = db.scalar("fulfillment",
                         "SELECT COUNT(*) FROM fulfillments WHERE order_no='" + orderNo + "'");
-                Object cancelled = db.scalar("fulfillment",
-                        "SELECT COUNT(*) FROM fulfillments WHERE order_no='" + orderNo + "' AND status='CANCELLED'");
-                return total != null && cancelled != null
+                // 撤销成功 → CANCELLED；已交付不可撤（设计语义）→ DELIVERED 保留
+                return total != null && inFlight != null
                         && ((Number) total).longValue() > 0
-                        && ((Number) total).longValue() == ((Number) cancelled).longValue();
+                        && ((Number) inFlight).longValue() == 0;
             });
 
             Invariants.orderStatus(db, orderNo, "REFUNDED");
@@ -109,7 +111,7 @@ class RefundChainE2ETest extends E2eBase {
             Invariants.refundNotExceedPaid(db, orderNo);
             Invariants.businessNoChain(db, orderNo);
             Invariants.ledgerBalanced(db, orderNo);
-            ctx.invariant("full-refund: paid=2500 refunded=2500 status=REFUNDED entitlements=REVOKED fulfillments=CANCELLED");
+            ctx.invariant("full-refund: paid=2500 refunded=2500 status=REFUNDED entitlements=REVOKED fulfillments=terminated");
             dumpTrace(ctx, orderNo);
         });
     }

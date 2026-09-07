@@ -77,10 +77,12 @@ public class MybatisTransactionRefundRepository implements TransactionRefundRepo
     }
 
     private RefundOrder toDomain(TransactionRefundEntity entity) {
-        return RefundOrder.rehydrate(entity.getId(), entity.getRefundNo(), entity.getPaymentRefundNo(),
+        RefundOrder refundOrder = RefundOrder.rehydrate(entity.getId(), entity.getRefundNo(), entity.getPaymentRefundNo(),
                 entity.getTransactionNo(), entity.getOrderNo(), entity.getPaymentNo(), entity.getUserId(),
                 entity.getAmountMinor(), entity.getCurrencyCode(),
                 RefundOrderStatus.valueOf(entity.getStatus()), entity.getReason(), entity.getVersion());
+        refundOrder.setFailureReason(entity.getFailureReason());
+        return refundOrder;
     }
 
     private TransactionRefundEntity toEntity(RefundOrder refundOrder) {
@@ -96,6 +98,7 @@ public class MybatisTransactionRefundRepository implements TransactionRefundRepo
         entity.setCurrencyCode(refundOrder.getCurrencyCode());
         entity.setStatus(refundOrder.getStatus().name());
         entity.setReason(refundOrder.getReason());
+        entity.setFailureReason(refundOrder.getFailureReason());
         entity.setIdempotencyKey(refundOrder.getIdempotencyKey());
         entity.setVersion(refundOrder.getVersion());
         return entity;

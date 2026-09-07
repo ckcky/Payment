@@ -22,6 +22,8 @@ public class TransactionRefundEntity extends BaseEntity {
     private String currencyCode;
     private String status;
     private String reason;
+    /** 渠道/收敛失败原因（终态 FAILED/REJECTED 回填）。 */
+    private String failureReason;
     /** 幂等键 = TXRF。 */
     private String idempotencyKey;
 
@@ -103,6 +105,14 @@ public class TransactionRefundEntity extends BaseEntity {
 
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
     }
 
     public String getIdempotencyKey() {

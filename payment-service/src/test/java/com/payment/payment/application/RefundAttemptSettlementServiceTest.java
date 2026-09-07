@@ -82,15 +82,32 @@ class RefundAttemptSettlementServiceTest {
     }
 
     @Test
-    void convergeWithUnmatchedReferenceDoesNotMisattribute() {
-        unknownRefundAttempt("PM-1", "mock-refund-ref-1");
+    void unmatchedReferenceAdoptsSoleUnconvergedAttemptAndBackfillsReference() {
+        // 异步受理渠道未返回引用（channel_reference NULL），回调带引用来收敛：
+        // 唯一在途退款尝试归属无歧义 → adopt + 回填引用
+        unknownRefundAttempt("PM-1", null);
 
-        // 引用不匹配任何尝试行：不臆测归属，保持 UNKNOWN
+        service.convergeRefundAttempt("PM-1", "mock-refund-ref-cb",
+                ChannelResult.businessFailure("mock-refund-ref-cb", "channel declined"));
+
+        PaymentAttempt attempt = attempts.findByPaymentNo("PM-1").get(0);
+        assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.FAILED);
+        assertThat(attempt.getFailureReason()).isEqualTo("channel declined");
+        assertThat(attempt.getChannelReference()).isEqualTo("mock-refund-ref-cb");
+    }
+
+    @Test
+    void unmatchedReferenceWithMultipleUnconvergedDoesNotMisattribute() {
+        // 多条在途（归属有歧义）：不臆测归属，保持 UNKNOWN
+        unknownRefundAttempt("PM-1", "mock-refund-ref-1");
+        unknownRefundAttempt("PM-1", null);
+
         service.convergeRefundAttempt("PM-1", "mock-refund-ref-404",
                 ChannelResult.success("mock-refund-ref-404"));
 
-        assertThat(attempts.findByPaymentNo("PM-1").get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.UNKNOWN);
+        assertThat(attempts.findByPaymentNo("PM-1").stream()
+                .allMatch(a -> a.getStatus() == PaymentAttemptStatus.UNKNOWN))
+                .isTrue();
     }
 
     @Test

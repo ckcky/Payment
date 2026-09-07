@@ -1,0 +1,32 @@
+{
+  "type" : "object",
+  "fields" : {
+    "amountMinor" : {
+      "type" : "integer"
+    },
+    "currencyCode" : {
+      "type" : "string"
+    },
+    "failureReason" : {
+      "type" : "null"
+    },
+    "id" : {
+      "type" : "integer"
+    },
+    "orderNo" : {
+      "type" : "string"
+    },
+    "paymentNo" : {
+      "type" : "string"
+    },
+    "status" : {
+      "type" : "string"
+    },
+    "transactionId" : {
+      "type" : "string"
+    },
+    "userId" : {
+      "type" : "string"
+    }
+  }
+}
