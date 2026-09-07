@@ -4,121 +4,197 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PaymentArch 演示控制台</title>
-<!-- UI 规范：docs/design/DESIGN.md（Feature 020）——改样式前先读它；token 在 /design.css -->
+<!-- UI 规范：docs/design/DESIGN.md（Feature 024 · Apple 基底）——改样式前先读它；token 在 /design.css -->
 <link rel="stylesheet" href="/design.css">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { padding: 24px; }
-  .wrap { max-width: 860px; margin: 0 auto; }
-  .sku { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-md); padding: 10px 14px; margin-bottom: 8px; background: var(--pa-canvas); }
-  .sku .name { font-weight: 500; color: var(--pa-ink); } .sku .price { color: var(--pa-danger); font-weight: 500; font-variant-numeric: tabular-nums; } .sku .id { color: var(--pa-mute); font-size: 12px; font-variant-numeric: tabular-nums; }
-  input[type=number] { width: 64px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pa-canvas-soft); font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  /* 状态色（.st / .st-*）由 design.css 统一供给（DESIGN.md §2 映射表） */
-  .note { font-size: 12px; color: var(--pa-ink-2); line-height: 1.8; margin-top: 8px; }
-  .sect { border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-md); margin-bottom: 10px; overflow: hidden; }
-  .sect h3 { font-size: 13px; font-weight: 500; padding: 7px 12px; background: var(--pa-canvas-soft); border-bottom: 1px solid var(--pa-hairline); display: flex; justify-content: space-between; }
-  .sect h3 .cnt { color: var(--pa-mute); font-weight: 400; font-size: 12px; font-variant-numeric: tabular-nums; }
-  .sect .sql { font-family: var(--pa-mono); font-size: 11px; color: var(--pa-mute); padding: 5px 12px; background: var(--pa-canvas); border-bottom: 1px solid var(--pa-canvas-soft); word-break: break-all; }
-  .sect .err { color: var(--pa-danger); font-size: 12px; padding: 6px 12px; }
-  .sect .empty { color: var(--pa-mute); font-size: 12px; padding: 6px 12px; }
-  .tblwrap { overflow-x: auto; overflow-y: auto; max-height: 360px; }
-  .tbl { border-collapse: collapse; font-family: var(--pa-mono); font-size: 11.5px; line-height: 1.7; min-width: 100%; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  .tbl th, .tbl td { border: none; border-bottom: 1px solid var(--pa-canvas-soft); border-right: 1px solid var(--pa-canvas-soft); padding: 3px 12px; white-space: nowrap; text-align: left; }
-  .tbl thead th { position: sticky; top: 0; background: var(--pa-canvas-soft); color: var(--pa-ink-2); font-weight: 500; z-index: 1; }
-  .tbl td.no, .tbl th.no { color: var(--pa-primary-deep); font-weight: 500; }
+  .demo-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--pa-s-4); align-items: start; }
+  .sku { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-input); padding: 10px 14px; margin-bottom: 8px; background: var(--pa-canvas); }
+  .sku .name { font-weight: 600; color: var(--pa-ink); }
+  .sku .price { color: var(--pa-ink); font-variant-numeric: tabular-nums; }
+  .sku .id { color: var(--pa-ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  input[type=number] { width: 72px; }
+  /* 右栏状态卡 */
+  .stat { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--pa-hairline); }
+  .stat:last-child { border-bottom: none; }
+  .stat .k { font-size: 12px; color: var(--pa-ink-3); flex: none; }
+  .stat .v { font-size: 13px; color: var(--pa-ink); text-align: right; word-break: break-all; font-variant-numeric: tabular-nums; }
+  /* 服务落库点亮 */
+  .svc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .svc span { font-size: 11px; padding: 3px 8px; border-radius: var(--pa-r-pill); background: var(--pa-canvas-2); color: var(--pa-ink-3); transition: background .2s ease-out, color .2s ease-out; }
+  .svc span.is-on { background: var(--pa-ok-soft); color: var(--pa-ok); }
+  /* DB 视图 */
+  .tblwrap { overflow-x: auto; overflow-y: auto; max-height: 320px; }
+  .tbl { border-collapse: collapse; font-family: var(--pa-mono); font-size: 11.5px; line-height: 1.7; min-width: 100%; font-variant-numeric: tabular-nums; }
+  .tbl th, .tbl td { border: none; border-bottom: 1px solid var(--pa-hairline); padding: 4px 12px; white-space: nowrap; text-align: left; }
+  .tbl thead th { position: sticky; top: 0; background: var(--pa-canvas-2); color: var(--pa-ink-2); font-weight: 400; z-index: 1; }
+  .tbl td.no, .tbl th.no { color: var(--pa-action); }
+  .sql { font-family: var(--pa-mono); font-size: 11px; color: var(--pa-ink-3); padding: 6px 12px; background: var(--pa-ink-wash); word-break: break-all; }
+  .empty { color: var(--pa-ink-3); font-size: 12px; padding: 8px 12px; }
+  @media (max-width: 900px) {
+    .demo-grid { grid-template-columns: 1fr; }
+    .col-side { order: -1; }   /* 塌单列时状态卡移到顶部，不可消失 */
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="pa-card" style="margin-bottom:16px">
-    <h1>PaymentArch 演示控制台 <span style="font-size:12px;color:var(--pa-mute);font-weight:400">（mock-channel-web :8091 · 同源代理，无 CORS）</span></h1>
-    <div class="note">链路：下单(order) → 选渠道建支付单(payment，Feature 015) → 跳转收银台(payUrl) → 渠道回调(验签) → 履约(fulfillment) → 权益(entitlement) → 记账(ledger) → 退款(refund，并入 payment-service)。
-      状态轮询经 /proxy 透传各服务只读接口。</div>
-  </div>
+<div class="pa-main" style="padding-top:32px;padding-bottom:32px">
 
-  <div class="pa-card" style="margin-bottom:16px">
-    <h2>① 商品与下单（种子 SKU，见 demo/reset.sh）</h2>
-    <div id="skus">加载中…</div>
-    <div class="note">userId=<input id="userId" value="demo-user" style="width:120px">
-      merchantId=<input id="merchantId" value="1" style="width:64px">
-      <button class="ghost" onclick="loadSkus()" style="margin-left:8px">刷新 SKU</button></div>
-  </div>
+  <div class="pa-eyebrow">业务演示 · mock-channel-web :8091 同源代理</div>
+  <h1 style="margin-top:8px">演示控制台</h1>
+  <div class="pa-note" style="max-width:760px">下单(order) → 选渠道建支付单(payment) → 跳转收银台 → 渠道回调 → 履约(fulfillment) → 权益(entitlement) → 记账(ledger) → 退款(并入 payment-service)。右侧状态卡常驻，操作日志在底部抽屉。</div>
 
-  <div class="pa-card" style="margin-bottom:16px">
-    <h2>② 当前订单状态（每 2s 轮询）</h2>
-    <table id="orderTable"><tbody>
-      <tr><th>orderNo</th><td id="t-orderNo">—</td><th>order.status</th><td id="t-orderStatus">—</td></tr>
-      <tr><th>paymentNo</th><td id="t-paymentNo">—</td><th>payment.status</th><td id="t-paymentStatus">—</td></tr>
-      <tr><th>fulfillment</th><td id="t-fulfillment">—</td><th>entitlement</th><td id="t-entitlement">—</td></tr>
-    </tbody></table>
-    <div class="note">
-      <button class="ghost" onclick="pollOnce()">立即刷新</button>
-      <button class="ghost" onclick="stopPoll()">停止轮询</button>
-      <span id="pollHint" style="margin-left:8px;color:var(--pa-mute)"></span>
+  <div class="demo-grid" style="margin-top:32px">
+
+    <!-- ======== 左：主流程 ======== -->
+    <div class="col-main">
+      <div class="pa-steps" id="steps">
+
+        <!-- ① 下单 -->
+        <div class="pa-step is-on">
+          <div class="pa-step__rail"><div class="pa-step__dot">1</div><div class="pa-step__line"></div></div>
+          <div class="pa-step__body">
+            <h3>商品与下单</h3>
+            <div class="pa-note">种子 SKU 由 <span class="pa-mono">deployment/demo/reset.sh</span> 播种；userId / merchantId 可改。</div>
+            <div id="skus" style="margin-top:12px">加载中…</div>
+            <div class="pa-row" style="margin-top:12px">
+              <span class="pa-kv"><label>userId</label><input id="userId" value="demo-user" style="width:130px"></span>
+              <span class="pa-kv"><label>merchantId</label><input id="merchantId" value="1" style="width:72px"></span>
+              <button class="pa-btn ghost pa-btn--sm" onclick="loadSkus()">刷新 SKU</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ② 支付 -->
+        <div class="pa-step">
+          <div class="pa-step__rail"><div class="pa-step__dot">2</div><div class="pa-step__line"></div></div>
+          <div class="pa-step__body">
+            <h3>支付</h3>
+            <div class="pa-note">下单后自动以 MOCK 渠道创建支付单并打开收银台；若浏览器拦截了新窗口，用下面的链接手动进入。</div>
+            <div class="pa-row" style="margin-top:12px">
+              <a class="pa-btn ghost pa-btn--sm" id="cashierLink" href="#" target="_blank" rel="noopener" style="display:none">打开收银台 ↗</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- ③ 退款 -->
+        <div class="pa-step">
+          <div class="pa-step__rail"><div class="pa-step__dot">3</div></div>
+          <div class="pa-step__body" style="padding-bottom:0">
+            <h3>退款</h3>
+            <div class="pa-note">spec 019 · order 驱动的两层退款单：order 生成交易层 TXRF（幂等键）并调 payment 生成执行单 PMRF（双号互记）。前提：订单支付已 SUCCEEDED。</div>
+            <div class="pa-row" style="margin-top:12px">
+              <span class="pa-kv"><label>金额（元）</label><input type="number" id="refundAmount" value="50.00" step="0.01" min="0.01" style="width:100px"></span>
+              <span class="pa-kv"><label>原因</label><input type="text" id="refundReason" value="demo-partial" style="width:150px"></span>
+            </div>
+            <div class="pa-row" style="margin-top:12px">
+              <button class="pa-btn" onclick="createRefund()">发起退款</button>
+              <button class="pa-btn ghost" onclick="replayRefund()">同参重放（幂等）</button>
+              <button class="pa-btn ghost" onclick="stopRefundPoll()">停止退款轮询</button>
+            </div>
+            <div class="pa-note">防超额演示：累计退款超过可退额度时 order 前置拦截返回 409（AMOUNT_INVARIANT_VIOLATION）；渠道侧拒绝才落 REJECTED。</div>
+
+            <table class="pa-table" style="margin-top:12px">
+              <thead><tr><th>TXRF（交易层）</th><th>PMRF（执行层）</th><th>金额</th><th>状态</th><th>失败原因</th></tr></thead>
+              <tbody id="refundRows"><tr><td colspan="5" style="color:var(--pa-ink-3)">（尚无退款 —— 支付成功后发起）</td></tr></tbody>
+            </table>
+
+            <div class="pa-disc" style="margin-top:16px">
+              <button class="pa-disc__head" type="button"><span class="caret">›</span><span>退款渠道尝试（payment_attempts）</span><span class="cnt">Feature 016</span></button>
+              <div class="pa-disc__body"><div>
+                <div class="pa-note" style="padding:4px 12px 8px">调渠道后落 payment_attempts（attempt_type=REFUND），channel_reference 即真实渠道退款流水号。REJECTED 在调渠道前被拒，无尝试记录，属预期。</div>
+                <table class="pa-table">
+                  <thead><tr><th>payment_no</th><th>类型</th><th>渠道</th><th>channel_reference</th><th>状态</th></tr></thead>
+                  <tbody id="refundAttemptRows"><tr><td colspan="5" style="color:var(--pa-ink-3)">（尚无退款渠道尝试）</td></tr></tbody>
+                </table>
+              </div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ④ 全链路 DB -->
+      <div style="margin-top:32px">
+        <h2 style="font-size:21px">全链路 DB 数据</h2>
+        <div class="pa-row">
+          <span class="pa-kv"><label>orderNo</label><input type="text" id="traceKey" placeholder="下单后自动填入，或输入 orderNo" style="width:260px"></span>
+          <button class="pa-btn" onclick="traceOrder()">查询</button>
+        </div>
+        <div class="pa-note">按域分组，默认折叠；点组名展开（只读 SELECT）。</div>
+        <div id="traceBox" style="margin-top:12px"></div>
+      </div>
     </div>
-    <div class="note">跨系统关联一律用业务单号（ADR-0063）：orderNo=OR+雪花、paymentNo=PM+雪花；数值 id 仅各服务内部主键，不出服务、不上页面。</div>
-  </div>
 
-  <div class="pa-card" style="margin-bottom:16px">
-    <h2>③ 退款（spec 019 · order 驱动的两层退款单 TXRF/PMRF）</h2>
-    <div class="note">前提：当前订单支付已 SUCCEEDED。发起经 /proxy/order 透传 order-service 的 /internal/orders/refund
-      ——order 生成交易层退款单 TXRF（幂等键）并调 payment 生成执行单 PMRF（双号互记）；
-      状态轮询经 /proxy/payment 透传 GET /internal/refunds/{pmrf}。异步渠道受理为 REQUESTED/PROCESSING 并自动轮询收敛。
-      （旧入口 POST /internal/refunds 已随 spec 019 删除。）</div>
-    <div class="note">
-      金额(元)=<input type="number" id="refundAmount" value="50.00" step="0.01" min="0.01" style="width:90px">
-      原因=<input type="text" id="refundReason" value="demo-partial" style="width:130px">
-      <button onclick="createRefund()">发起退款</button>
-      <button class="ghost" onclick="replayRefund()">同参重放（幂等语义）</button>
-      <button class="ghost" onclick="stopRefundPoll()">停止退款轮询</button>
-    </div>
-    <div class="note">防超额演示（H1）：累计退款超过可退额度时 order 侧前置拦截，返回 HTTP 409（AMOUNT_INVARIANT_VIOLATION，资金约束落交易层）；
-      渠道侧拒绝才落 REJECTED 记录。</div>
-    <table id="refundTable" style="margin-top:8px"><thead>
-      <tr><th>TXRF（交易层）</th><th>PMRF（执行层）</th><th>金额</th><th>状态</th><th>失败原因</th></tr>
-    </thead><tbody id="refundRows">
-      <tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款 —— 支付成功后发起）</td></tr>
-    </tbody></table>
-    <div class="note" style="margin-top:10px">渠道尝试（Feature 016：调渠道后落 payment_attempts，attempt_type=REFUND，
-      channel_reference 即真实渠道退款流水号，对账事实以它寻址。REJECTED 在调渠道前被拒，无尝试记录，属预期）：</div>
-    <table><thead>
-      <tr><th>payment_no</th><th>类型</th><th>渠道</th><th>channel_reference</th><th>状态</th></tr>
-    </thead><tbody id="refundAttemptRows">
-      <tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款渠道尝试）</td></tr>
-    </tbody></table>
-  </div>
+    <!-- ======== 右：常驻状态 ======== -->
+    <aside class="col-side">
+      <div class="pa-sticky">
+        <div class="pa-card">
+          <h3>订单状态</h3>
+          <div style="margin-top:8px">
+            <div class="stat"><span class="k">orderNo</span><span class="v pa-mono" id="t-orderNo">—</span></div>
+            <div class="stat"><span class="k">order.status</span><span class="v" id="t-orderStatus">—</span></div>
+            <div class="stat"><span class="k">paymentNo</span><span class="v pa-mono" id="t-paymentNo">—</span></div>
+            <div class="stat"><span class="k">payment.status</span><span class="v" id="t-paymentStatus">—</span></div>
+            <div class="stat"><span class="k">fulfillment</span><span class="v" id="t-fulfillment">—</span></div>
+            <div class="stat"><span class="k">entitlement</span><span class="v" id="t-entitlement">—</span></div>
+          </div>
+          <div class="pa-row" style="margin-top:12px">
+            <button class="pa-btn ghost pa-btn--sm" onclick="pollOnce()">立即刷新</button>
+            <button class="pa-btn ghost pa-btn--sm" onclick="stopPoll()">停止轮询</button>
+            <span id="pollHint" style="font-size:12px;color:var(--pa-ink-3)"></span>
+          </div>
+        </div>
 
-  <div class="pa-card" style="margin-bottom:16px">
-    <h2>④ 全链路 DB 数据（按订单实查各系统落库）</h2>
-    <div class="note">
-      orderNo=<input type="text" id="traceKey" value="" style="width:220px" placeholder="下单后自动填入，或输入 orderNo">
-      <button onclick="traceOrder()">查询</button>
-      <span style="margin-left:8px">覆盖：订单 · 交易 · 支付/尝试 · 退款 · 履约 · 权益 · 结算 · 对账 · 账本（只读 SELECT）</span>
-    </div>
-    <div id="traceBox" class="note">（下单后自动查询，或输入 orderNo 手动查询）</div>
-  </div>
+        <div class="pa-card">
+          <h3>退款</h3>
+          <div style="margin-top:8px">
+            <div class="stat"><span class="k">最近 TXRF</span><span class="v pa-mono" id="t-txrf">—</span></div>
+            <div class="stat"><span class="k">最近 PMRF</span><span class="v pa-mono" id="t-pmrf">—</span></div>
+            <div class="stat"><span class="k">状态</span><span class="v" id="t-refundStatus">—</span></div>
+          </div>
+        </div>
 
-  <div class="pa-card" style="margin-bottom:16px"><h2>操作日志</h2><div id="log" class="pa-log" style="max-height:260px">// 日志</div></div>
+        <div class="pa-card">
+          <h3>各系统落库</h3>
+          <div class="pa-note">按全链路查询结果点亮（有行记录的域）。</div>
+          <div class="svc" id="svcLights"></div>
+        </div>
+
+        <div class="pa-card">
+          <div class="pa-note" style="margin-top:0">跨系统关联一律用业务单号（ADR-0063）：orderNo=OR+雪花、paymentNo=PM+雪花；数值 id 仅各服务内部主键，不出服务、不上页面。</div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
 </div>
+
+<div id="log"></div>
+
+<script src="/app.js"></script>
 <script>
-// SKU 列表由 /proxy/catalog/skus 动态拉取（reset 后 id 为自增 1/2/3，不硬编码）
-const log = (m) => { const el = document.getElementById('log'); el.textContent += "\n" + m; el.scrollTop = el.scrollHeight; };
+PA.setApiBase('/proxy');
+const log = PA.log;
+const esc = PA.esc;
+const api = (method, path, body, headers) => PA.api(method, path, body, headers);
+
 let pollTimer = null, currentOrderNo = null, currentPaymentNo = null;
 let refundPollTimer = null, lastRefund = null;   // 退款：轮询 + 最近一次幂等键（供同键重放）
 
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
 
-async function api(method, path, body, headers) {
-  const opt = { method, headers: headers || {}, cache: 'no-store' };
-  if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
-  const res = await fetch('/proxy' + path, opt);
-  let data = null;
-  try { data = await res.json(); } catch (e) { /* 空响应 */ }
-  return { status: res.status, data };
-}
+/* ---- 全链路 DB：9 张表按 5 个域分组（默认折叠，组头显示行数）---- */
+const DOMAINS = [
+  { name: '订单与交易', match: (s) => s.system === 'order-service' && !/refund/.test(s.table) },
+  { name: '支付',       match: (s) => s.system === 'payment-service' && !/refund/.test(s.table) },
+  { name: '退款',       match: (s) => /refund/.test(s.table) },
+  { name: '履约与权益', match: (s) => s.system === 'fulfillment-service' || s.system === 'entitlement-service' },
+  { name: '结算 · 对账 · 账本', match: (s) => ['settlement-service', 'reconciliation-service', 'ledger-service'].indexOf(s.system) >= 0 }
+];
+const SERVICE_ORDER = ['order-service', 'payment-service', 'fulfillment-service', 'entitlement-service',
+                       'settlement-service', 'reconciliation-service', 'ledger-service'];
 
+/* SKU 列表由 /proxy/catalog/skus 动态拉取（reset 后 id 为自增 1/2/3，不硬编码） */
 async function loadSkus() {
   const box = document.getElementById('skus');
   box.innerHTML = '';
@@ -129,7 +205,6 @@ async function loadSkus() {
     return;
   }
   if (r.data.length === 0) {
-    // reset 播种可能有延迟：1.5s 后自动重试一次，仍为空才提示（另提供手动刷新按钮）
     box.innerHTML = '<div class="sku">暂无 SKU，1.5s 后自动重试…</div>';
     await new Promise(ok => setTimeout(ok, 1500));
     const r2 = await api('GET', '/catalog/skus');
@@ -144,10 +219,10 @@ function renderSkus(list) {
   const box = document.getElementById('skus');
   box.innerHTML = '';
   for (const s of list) {
-    box.innerHTML += '<div class="sku"><div><div class="name">' + s.name + '</div>'
-      + '<div class="id">skuId=' + s.id + ' · ' + s.skuCode + ' · 状态 ' + s.status + '</div></div>'
-      + '<div><span class="price">' + (s.priceMinor / 100).toFixed(2) + ' ' + s.currencyCode + '</span> × '
-      + '<input type="number" id="qty-' + s.id + '" value="1" min="1"> <button onclick="placeOrder(' + s.id + ')">下单</button></div></div>';
+    box.innerHTML += '<div class="sku"><div><div class="name">' + esc(s.name) + '</div>'
+      + '<div class="id">skuId=' + esc(s.id) + ' · ' + esc(s.skuCode) + ' · 状态 ' + esc(s.status) + '</div></div>'
+      + '<div><span class="price">' + (s.priceMinor / 100).toFixed(2) + ' ' + esc(s.currencyCode) + '</span> × '
+      + '<input type="number" id="qty-' + esc(s.id) + '" value="1" min="1"> <button class="pa-btn" onclick="placeOrder(' + esc(s.id) + ')">下单</button></div></div>';
   }
 }
 
@@ -158,12 +233,11 @@ async function placeOrder(skuId) {
     merchantId: document.getElementById('merchantId').value,
     items: [{ skuId: skuId, quantity: qty }]
   };
-  // Phase 2 (012)：客户端生成 Idempotency-Key，演示同 key 幂等（并发 409 + 轮询 / 重放 200）
   const idemKey = crypto.randomUUID();
   log('>> POST /proxy/order/orders  Idempotency-Key=' + idemKey + '  ' + JSON.stringify(payload));
   const r = await api('POST', '/order/orders', payload, { 'Idempotency-Key': idemKey });
   log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
-  if (r.status !== 201) { alert('下单失败: HTTP ' + r.status + ' ' + JSON.stringify(r.data)); return; }
+  if (r.status !== 201) { PA.toast('下单失败：HTTP ' + r.status, 'bad'); return; }
   currentOrderNo = r.data.orderNo;
   renderOrder(r.data);
   traceOrder(String(r.data.orderNo));
@@ -174,13 +248,16 @@ async function placeOrder(skuId) {
   const pr = await api('POST', '/order/orders/' + encodeURIComponent(currentOrderNo) + '/payments', { channelCode: 'MOCK' });
   log('<< HTTP ' + pr.status + '  ' + JSON.stringify(pr.data));
   if (pr.status !== 201 || !pr.data || !pr.data.paymentNo) {
-    alert('创建支付单失败: HTTP ' + pr.status + ' ' + JSON.stringify(pr.data));
+    PA.toast('创建支付单失败：HTTP ' + pr.status, 'bad');
     startPoll();
     return;
   }
   currentPaymentNo = pr.data.paymentNo;
   renderPayment(pr.data);
+  PA.setStep(2);
   if (pr.data.payUrl) {
+    const link = document.getElementById('cashierLink');
+    link.href = pr.data.payUrl; link.style.display = 'inline-flex';
     log('   payUrl: ' + pr.data.payUrl);
     log('   → 打开收银台（新窗口），并开始轮询订单状态');
     window.open(pr.data.payUrl, '_blank');
@@ -193,18 +270,26 @@ async function placeOrder(skuId) {
 function renderOrder(o) {
   document.getElementById('t-orderNo').textContent = o.orderNo || '—';
   document.getElementById('t-orderStatus').textContent = o.status;
-  document.getElementById('t-orderStatus').className = 'st st-' + o.status;
+  document.getElementById('t-orderStatus').className = 'v st st-' + o.status;
   if (o.paymentNo) document.getElementById('t-paymentNo').textContent = o.paymentNo;
   if (o.paymentStatus) {
     document.getElementById('t-paymentStatus').textContent = o.paymentStatus;
-    document.getElementById('t-paymentStatus').className = 'st st-' + o.paymentStatus;
+    document.getElementById('t-paymentStatus').className = 'v st st-' + o.paymentStatus;
   }
 }
 
 function renderPayment(p) {
   document.getElementById('t-paymentNo').textContent = p.paymentNo || '—';
   document.getElementById('t-paymentStatus').textContent = p.status;
-  document.getElementById('t-paymentStatus').className = 'st st-' + p.status;
+  document.getElementById('t-paymentStatus').className = 'v st st-' + p.status;
+}
+
+function renderRefundStatus(r) {
+  if (!r) return;
+  document.getElementById('t-txrf').textContent = r.transactionRefundNo || '—';
+  document.getElementById('t-pmrf').textContent = r.refundNo || '—';
+  document.getElementById('t-refundStatus').textContent = r.status;
+  document.getElementById('t-refundStatus').className = 'v st st-' + r.status;
 }
 
 async function traceOrder(key) {
@@ -218,43 +303,64 @@ async function traceOrder(key) {
   const data = await r.json();
   if (r.status !== 200) { box.textContent = 'HTTP ' + r.status + ' ' + JSON.stringify(data); return; }
   box.innerHTML = '';
-  if (data.found === false) { box.innerHTML = '<div class="empty">orders 表无此记录：' + (data.note || q) + '</div>'; return; }
-  for (const s of (data.sections || [])) {
-    const rows = s.rows || [];
-    let html = '<div class="sect"><h3><span>' + esc(s.label || (s.system + ' · ' + s.table)) + '</span>'
-      + '<span class="cnt">' + (rows.length) + ' 行</span></h3>';
+  if (data.found === false) { box.innerHTML = '<div class="empty">orders 表无此记录：' + esc(data.note || q) + '</div>'; return; }
+
+  const sections = data.sections || [];
+  renderSvcLights(sections);
+  box.innerHTML = DOMAINS.map((d, i) => renderDomain(d, i, sections)).join('');
+  PA.bindDisclosures(box);
+}
+
+function renderDomain(d, i, sections) {
+  const list = sections.filter(d.match);
+  const rows = list.reduce((n, s) => n + (s.rows ? s.rows.length : 0), 0);
+  let html = '<div class="pa-disc"><button class="pa-disc__head" type="button">'
+    + '<span class="caret">›</span><span>' + esc(d.name) + '</span><span class="cnt">' + rows + ' 行 · ' + list.length + ' 表</span></button>'
+    + '<div class="pa-disc__body"><div>';
+  for (const s of list) {
+    const rs = s.rows || [];
+    html += '<div style="border-top:1px solid var(--pa-hairline)">';
+    html += '<div style="padding:8px 12px 4px;font-size:13px;font-weight:600">' + esc(s.label || (s.system + ' · ' + s.table)) + '</div>';
     if (s.sql) html += '<div class="sql">' + esc(s.sql) + '</div>';
-    if (s.error) html += '<div class="err">✗ ' + esc(s.error) + '</div>';
+    if (s.error) html += '<div class="empty" style="color:var(--pa-bad)">✗ ' + esc(s.error) + '</div>';
     if (s.note) html += '<div class="empty">' + esc(s.note) + '</div>';
-    if (!s.error && !s.note && rows.length === 0) html += '<div class="empty">（无记录）</div>';
-    if (rows.length > 0) {
-      // 列 = 首行全部字段 + 后续行可能多出的字段（保持出现顺序），横排 Excel 式
+    if (!s.error && !s.note && rs.length === 0) html += '<div class="empty">（无记录）</div>';
+    if (rs.length > 0) {
       const cols = [];
-      for (const row of rows) { for (const k of Object.keys(row)) { if (!cols.includes(k)) cols.push(k); } }
+      for (const row of rs) { for (const k of Object.keys(row)) { if (!cols.includes(k)) cols.push(k); } }
       const isNo = (c) => /(_no$|^reference$|^channel_reference$)/.test(c);
       const cell = (v, c) => '<td' + (isNo(c) ? ' class="no"' : '') + '>'
         + esc(v === null || v === undefined ? 'NULL' : String(v)) + '</td>';
       html += '<div class="tblwrap"><table class="tbl"><thead><tr>'
         + cols.map(c => '<th' + (isNo(c) ? ' class="no"' : '') + '>' + esc(c) + '</th>').join('')
         + '</tr></thead><tbody>'
-        + rows.map(row => '<tr>' + cols.map(c => cell(row[c], c)).join('') + '</tr>').join('')
+        + rs.map(row => '<tr>' + cols.map(c => cell(row[c], c)).join('') + '</tr>').join('')
         + '</tbody></table></div>';
     }
     html += '</div>';
-    box.innerHTML += html;
   }
+  return html + '</div></div></div>';
 }
 
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderSvcLights(sections) {
+  const box = document.getElementById('svcLights');
+  if (!box) return;
+  const on = {};
+  sections.forEach(s => { if (s.rows && s.rows.length > 0) on[s.system] = true; });
+  box.innerHTML = SERVICE_ORDER.map(sys =>
+    '<span class="' + (on[sys] ? 'is-on' : '') + '">' + esc(sys.replace('-service', '')) + '</span>').join('');
+}
 
-// ---- ③ 退款流程（spec 019 / ADR-0067：order 驱动两层退款单，经 /proxy/order 发起、/proxy/payment 轮询）----
+/* ---- ③ 退款流程（spec 019 / ADR-0067）---- */
 function resetRefunds() {
   stopRefundPoll();
   lastRefund = null;
   document.getElementById('refundRows').innerHTML =
-    '<tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款 —— 支付成功后发起）</td></tr>';
+    '<tr><td colspan="5" style="color:var(--pa-ink-3)">（尚无退款 —— 支付成功后发起）</td></tr>';
   document.getElementById('refundAttemptRows').innerHTML =
-    '<tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款渠道尝试）</td></tr>';
+    '<tr><td colspan="5" style="color:var(--pa-ink-3)">（尚无退款渠道尝试）</td></tr>';
+  ['t-txrf', 't-pmrf'].forEach(id => document.getElementById(id).textContent = '—');
+  const st = document.getElementById('t-refundStatus'); st.textContent = '—'; st.className = 'v';
 }
 
 async function loadRefundAttempts() {
@@ -265,7 +371,7 @@ async function loadRefundAttempts() {
   const rows = data.attempts || [];
   const box = document.getElementById('refundAttemptRows');
   if (rows.length === 0) {
-    box.innerHTML = '<tr><td colspan="5" style="color:var(--pa-mute)">'
+    box.innerHTML = '<tr><td colspan="5" style="color:var(--pa-ink-3)">'
       + esc(data.note || data.error || '（尚无退款渠道尝试）') + '</td></tr>';
     return;
   }
@@ -274,7 +380,7 @@ async function loadRefundAttempts() {
     + '<td>' + esc(a.attempt_type) + '</td>'
     + '<td>' + esc(a.channel_code) + '</td>'
     + '<td class="no">' + esc(a.channel_reference || 'NULL') + '</td>'
-    + '<td class="st st-' + esc(a.status) + '">' + esc(a.status) + '</td></tr>').join('');
+    + '<td><span class="st st-' + esc(a.status) + '">' + esc(a.status) + '</span></td></tr>').join('');
 }
 
 function renderRefundRow(r) {
@@ -282,19 +388,21 @@ function renderRefundRow(r) {
   if (rows.querySelector('td[colspan]')) rows.innerHTML = '';
   const id = 'rf-' + r.refundNo;            // 行按 PMRF 寻址（查询端点即以 PMRF 寻址）
   let tr = document.getElementById(id);
+  const isNew = !tr;
   if (!tr) { tr = document.createElement('tr'); tr.id = id; rows.prepend(tr); }
   const amt = (r.currencyCode || 'CNY') + ' ' + (r.amountMinor / 100).toFixed(2);
   tr.innerHTML = '<td class="no">' + esc(r.transactionRefundNo || '—') + '</td>'
     + '<td class="no">' + esc(r.refundNo) + '</td>'
     + '<td>' + esc(amt) + '</td>'
-    + '<td class="st st-' + esc(r.status) + '">' + esc(r.status) + '</td>'
+    + '<td><span class="st st-' + esc(r.status) + '">' + esc(r.status) + '</span></td>'
     + '<td>' + esc(r.failureReason || '—') + '</td>';
+  if (isNew) { tr.style.animation = 'pa-fade .24s var(--pa-ease) both'; }
 }
 
 async function createRefund() {
-  if (!currentOrderNo || !currentPaymentNo) { alert('请先下单并完成支付'); return; }
+  if (!currentOrderNo || !currentPaymentNo) { PA.toast('请先下单并完成支付', 'bad'); return; }
   const yuan = Number(document.getElementById('refundAmount').value);
-  if (!(yuan > 0)) { alert('请输入有效的退款金额'); return; }
+  if (!(yuan > 0)) { PA.toast('请输入有效的退款金额', 'bad'); return; }
   const payload = {
     orderNo: currentOrderNo, paymentNo: currentPaymentNo,
     amountMinor: Math.round(yuan * 100),
@@ -304,41 +412,48 @@ async function createRefund() {
   const r = await api('POST', '/order/internal/orders/refund', payload);
   log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
   if (r.status !== 200 || !r.data || !r.data.pmrf) {
-    alert('退款发起失败: HTTP ' + r.status + ' ' + JSON.stringify(r.data)); return;
+    if (r.status === 409) { PA.toast('防超额拦截（409）：累计退款超过可退额度，资金约束落交易层', 'bad'); }
+    else { PA.toast('退款发起失败：HTTP ' + r.status, 'bad'); }
+    return;
   }
   const refund = { refundNo: r.data.pmrf, transactionRefundNo: r.data.txrf,
     status: r.data.status, amountMinor: payload.amountMinor, currencyCode: 'CNY',
     failureReason: null, _payload: payload };
   lastRefund = refund;
   renderRefundRow(refund);
+  renderRefundStatus(refund);
+  PA.setStep(3);
   if (REFUND_TERMINAL.includes(refund.status)) {
     log('   退款终态：' + refund.status + (refund.status === 'REJECTED' ? '（渠道拒绝，资金约束落领域状态）' : ''));
   } else {
     log('   受理为 ' + refund.status + '（TXRF=' + refund.transactionRefundNo + '，PMRF=' + refund.refundNo + '），2s 轮询收敛…');
     startRefundPoll();
   }
-  traceOrder(currentOrderNo);   // 退款落库后刷新全链路 DB 视图
-  loadRefundAttempts();         // 同步刷新退款渠道尝试（payment_attempts attempt_type=REFUND）
+  traceOrder(currentOrderNo);
+  loadRefundAttempts();
 }
 
 async function replayRefund() {
-  if (!lastRefund) { alert('先发起一次退款，才有可重放的请求'); return; }
+  if (!lastRefund) { PA.toast('先发起一次退款，才有可重放的请求', 'bad'); return; }
   log('>> POST /proxy/order/internal/orders/refund（同参重放）' + JSON.stringify(lastRefund._payload));
   const r = await api('POST', '/order/internal/orders/refund', lastRefund._payload);
   log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
   if (r.status === 200 && r.data && r.data.txrf === lastRefund.transactionRefundNo) {
-    log('   ✅ 幂等回放：返回同一 TXRF=' + r.data.txrf + '（进行中退款不重复落单）');
+    log('   幂等回放：返回同一 TXRF=' + r.data.txrf + '（进行中退款不重复落单）');
+    PA.toast('幂等回放：返回同一 TXRF', 'ok');
   } else if (r.status === 200 && r.data && r.data.pmrf) {
-    log('   ℹ 原单已终态，同参重放 = 新退款请求（spec 019 语义）：新 TXRF=' + r.data.txrf + '，受可退额度约束');
+    log('   原单已终态，同参重放 = 新退款请求（spec 019 语义）：新 TXRF=' + r.data.txrf + '，受可退额度约束');
     const refund = { refundNo: r.data.pmrf, transactionRefundNo: r.data.txrf,
       status: r.data.status, amountMinor: lastRefund.amountMinor, currencyCode: 'CNY',
       failureReason: null, _payload: lastRefund._payload };
     lastRefund = refund;
     renderRefundRow(refund);
+    renderRefundStatus(refund);
     if (!REFUND_TERMINAL.includes(refund.status)) startRefundPoll();
   } else {
-    log('   ⚠ 重放被拒：HTTP ' + r.status + ' ' + JSON.stringify(r.data)
+    log('   重放被拒：HTTP ' + r.status + ' ' + JSON.stringify(r.data)
       + '（如可退额度不足 → 409 AMOUNT_INVARIANT_VIOLATION，属预期资金约束）');
+    PA.toast('重放被拒：HTTP ' + r.status + '（可退额度不足 → 409，属预期资金约束）', 'bad');
   }
   traceOrder(currentOrderNo);
   loadRefundAttempts();
@@ -351,40 +466,35 @@ async function pollRefundsOnce() {
     const r = await api('GET', '/payment/internal/refunds/' + encodeURIComponent(pmrf));
     if (r.status === 200 && r.data) {
       renderRefundRow(r.data);
+      renderRefundStatus(r.data);
       if (REFUND_TERMINAL.includes(r.data.status)) {
         log('   退款 ' + pmrf + ' → ' + r.data.status);
         stopRefundPoll();
-        loadRefundAttempts();     // 终态后补一次渠道尝试与 DB 视图（异步收敛场景落库晚于发起）
+        loadRefundAttempts();     // 终态后补一次渠道尝试与 DB 视图
         traceOrder(currentOrderNo);
       }
     }
   }
 }
-function startRefundPoll() {
-  stopRefundPoll();
-  refundPollTimer = setInterval(pollRefundsOnce, 2000);
-}
-function stopRefundPoll() {
-  if (refundPollTimer) { clearInterval(refundPollTimer); refundPollTimer = null; }
-}
+function startRefundPoll() { stopRefundPoll(); refundPollTimer = setInterval(pollRefundsOnce, 2000); }
+function stopRefundPoll() { if (refundPollTimer) { clearInterval(refundPollTimer); refundPollTimer = null; } }
 
 async function pollOnce() {
   if (!currentOrderNo) return;
   const o = await api('GET', '/order/orders/' + currentOrderNo);
   if (o.status === 200 && o.data) {
     document.getElementById('t-orderStatus').textContent = o.data.status;
-    document.getElementById('t-orderStatus').className = 'st st-' + o.data.status;
+    document.getElementById('t-orderStatus').className = 'v st st-' + o.data.status;
     if (o.data.orderNo) document.getElementById('t-orderNo').textContent = o.data.orderNo;
     const pid = o.data.paymentNo || currentPaymentNo;
     if (pid) {
       const p = await api('GET', '/payment/payments/' + pid);
       if (p.status === 200 && p.data) {
         document.getElementById('t-paymentStatus').textContent = p.data.status;
-        document.getElementById('t-paymentStatus').className = 'st st-' + p.data.status;
+        document.getElementById('t-paymentStatus').className = 'v st st-' + p.data.status;
         if (p.data.paymentNo) document.getElementById('t-paymentNo').textContent = p.data.paymentNo;
       }
     }
-    // fulfillment：数组（spec 018 按明细粒度，一单多明细 = 多条；未创建 404）；entitlement：数组
     const f = await api('GET', '/fulfillment/fulfillments/by-order/' + currentOrderNo);
     document.getElementById('t-fulfillment').textContent =
       f.status === 200 ? (Array.isArray(f.data) ? f.data.map(x => x.status).join(', ') : f.data.status)

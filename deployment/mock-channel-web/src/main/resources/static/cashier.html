@@ -3,100 +3,128 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- UI 规范：docs/design/DESIGN.md（Feature 020）——改样式前先读它；token 在 /design.css -->
+<!-- UI 规范：docs/design/DESIGN.md（Feature 024 · Apple 基底）——改样式前先读它；token 在 /design.css -->
 <link rel="stylesheet" href="/design.css">
 <title>Mock 渠道收银台 — PaymentArch 演示</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { padding: 24px; }
-  .wrap { max-width: 640px; margin: 0 auto; }
-  .hero { background: var(--pa-canvas); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-lg); overflow: hidden; margin-bottom: 16px; box-shadow: var(--pa-shadow-1); }
-  .hero .body { padding: 20px 24px; }
-  .badge { display: inline-block; font-size: 11px; background: var(--pa-primary-subdued); color: var(--pa-primary-deep); border-radius: var(--pa-r-pill); padding: 2px 10px; margin-left: 8px; vertical-align: 2px; }
-  .meta { font-size: 12px; color: var(--pa-mute); margin: 10px 0 16px; line-height: 1.8; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  .meta b { color: var(--pa-ink); font-weight: 500; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .grid button { padding: 10px; font-size: 13px; }
-  /* 操作按钮语义：实心仅留给「支付成功」主 CTA，破坏性/次级操作 ghost 化 */
-  .b-success { background: var(--pa-success); }
-  .b-success:hover { background: #116a31; }
-  .b-fail { background: var(--pa-canvas); color: var(--pa-danger); border: 1px solid var(--pa-danger); }
-  .b-fail:hover { background: var(--pa-danger-soft); }
-  .b-timeout, .b-unknown, .b-dup { background: var(--pa-canvas); color: var(--pa-ink); border: 1px solid var(--pa-hairline-input); }
-  .b-timeout:hover, .b-unknown:hover, .b-dup:hover { background: var(--pa-canvas-soft); }
-  .b-forged { background: var(--pa-canvas); color: var(--pa-danger); border: 1px dashed var(--pa-danger); }
-  .b-forged:hover { background: var(--pa-danger-soft); }
-  .note { font-size: 12px; color: var(--pa-ink-2); background: var(--pa-canvas-soft); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-md); padding: 10px 12px; margin-top: 12px; line-height: 1.7; }
-  .note b { color: var(--pa-ink); }
-  .back { font-size: 13px; color: var(--pa-primary); text-decoration: none; display: inline-block; margin-bottom: 12px; }
-  .chgrid button { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--pa-canvas); color: var(--pa-ink); border: 1px solid var(--pa-hairline-input); font-size: 12.5px; }
-  .chgrid button:hover { background: var(--pa-canvas-soft); }
-  .chgrid svg { width: 14px; height: 14px; flex: none; }
+  .cashier { max-width: 420px; margin: 40px auto 0; }
+  .merchant { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .merchant .name { font-size: 15px; font-weight: 600; }
+  .merchant .sub { font-size: 12px; color: var(--pa-ink-3); margin-top: 4px; font-variant-numeric: tabular-nums; word-break: break-all; }
+  .neutral-chip { flex: none; font-size: 11px; padding: 3px 10px; border-radius: var(--pa-r-pill); background: var(--pa-canvas-2); color: var(--pa-ink-3); }
+  .amount-row { padding: 28px 0 24px; border-bottom: 1px solid var(--pa-hairline); }
+  .pay-row { padding: 24px 0; }
+  .scenes { border-top: 1px solid var(--pa-hairline); }
+  .scenes .pa-disc__head { padding-left: 0; padding-right: 0; }
+  .scene-group { padding: 8px 0; }
+  .scene-group .gt { font-size: 12px; color: var(--pa-ink-3); padding: 4px 0; }
+  .scenes .pa-btn { width: 100%; justify-content: flex-start; }
+  .fineprint { font-size: 12px; color: var(--pa-ink-3); line-height: 1.7; padding: 16px 0 4px; }
+  .ch-seg { padding-bottom: 8px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <a class="back" href="/demo">&larr; 返回演示控制台</a>
-  <div class="hero">
-    <div class="pa-mesh">
-      <h1>Mock 渠道收银台 <span class="badge">演示 · 非真实渠道</span></h1>
-      <div style="font-size:12px;color:var(--pa-ink-2);margin-top:4px">PaymentArch · 支付基础设施演示</div>
-    </div>
-    <div class="body">
-      <div class="meta" id="meta">加载中…</div>
-      <div class="pa-amount" id="amount">—</div>
-      <div class="grid" style="margin-top:14px">
-        <button class="b-success" onclick="pay('SUCCESS')">支付成功</button>
-        <button class="b-fail" onclick="pay('FAILURE')">支付失败</button>
-        <button class="b-timeout" onclick="noCallback()">超时不回调</button>
-        <button class="b-unknown" onclick="pay('UNKNOWN')">无结论 (UNKNOWN)</button>
-        <button class="b-dup" onclick="payTwice()">重复回调 ×2</button>
-        <button class="b-forged" onclick="payForged()">伪造签名</button>
+<div class="pa-main">
+  <div class="cashier">
+    <div class="pa-card">
+      <!-- 1 商户条 -->
+      <div class="merchant">
+        <div>
+          <div class="name">PaymentArch 演示商户</div>
+          <div class="sub" id="meta">加载中…</div>
+        </div>
+        <span class="neutral-chip">演示 · 非真实渠道</span>
       </div>
-      <div class="note" id="note">
-        「超时不回调」不发送任何请求：payment 侧 30s 超时后支付转 UNKNOWN，主动查询不收敛 ——
-        这正是「不猜成败落账」要演示的正确性能力。「伪造签名」以错误密钥签名，payment 侧验签
-        失败返回 403（ADR-0052 fail-closed；需环境已配置 PAYMENT_CHANNEL_SECRET）。
+
+      <!-- 2 金额 -->
+      <div class="amount-row">
+        <div class="pa-eyebrow">应付金额</div>
+        <div class="pa-amount" id="amount" style="margin-top:8px">—</div>
       </div>
-      <div class="note" id="switch-note">
-        <b>换渠道支付（Feature 015 / INV-2）</b>：同一订单每次选渠道都会<b>新建一张支付单</b>；
-        旧支付单保留 FAILED/原状态，不参与后续处理。切换后自动跳转新支付单的收银台。
+
+      <!-- 3 支付方式（分段控件）-->
+      <div class="pay-row">
+        <div class="pa-eyebrow" style="margin-bottom:8px">支付方式</div>
+        <div class="pa-seg pa-seg--block ch-seg" id="chSeg">
+          <button type="button" data-ch="ALIPAY" onclick="switchChannel('ALIPAY')">支付宝</button>
+          <button type="button" data-ch="WECHAT" onclick="switchChannel('WECHAT')">微信</button>
+          <button type="button" data-ch="DOUYIN" onclick="switchChannel('DOUYIN')">抖音</button>
+          <button type="button" data-ch="MOCK" onclick="switchChannel('MOCK')">Mock</button>
+        </div>
+
+        <!-- 4 主 CTA：近黑胶囊（HIG：Apple Pay 按钮只有 black/white/white-outline）-->
+        <button class="pa-btn dark pa-btn--block" style="margin-top:16px;height:48px" onclick="pay('SUCCESS')">
+          确认支付 <span id="ctaAmount"></span>
+        </button>
       </div>
-      <div class="grid chgrid" style="margin-top:10px">
-        <button onclick="switchChannel('ALIPAY')"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-info)" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/></svg>换支付宝支付</button>
-        <button onclick="switchChannel('WECHAT')"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-success)" stroke-width="2" stroke-linecap="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5c-1.6 0-3.1-.4-4.4-1.2L3 20l1.2-5.1A8.5 8.5 0 1 1 21 11.5z"/></svg>换微信支付</button>
-        <button onclick="switchChannel('DOUYIN')"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-ink)" stroke-width="2" stroke-linecap="round"><path d="M9 18a4 4 0 1 0 4-4V4c.8 2.4 2.6 4 5 4"/></svg>换抖音支付</button>
-        <button onclick="switchChannel('MOCK')"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M12 12l7-4M12 12v9M12 12L5 8"/></svg>换 Mock 渠道</button>
+
+      <!-- 5 更多支付场景 -->
+      <div class="scenes">
+        <div class="pa-disc">
+          <button class="pa-disc__head" type="button">
+            <span class="caret">›</span><span>更多支付场景</span><span class="cnt">5 个</span>
+          </button>
+          <div class="pa-disc__body"><div>
+            <div class="scene-group">
+              <div class="gt">异常结果</div>
+              <div class="pa-row">
+                <button class="pa-btn ghost" onclick="pay('FAILURE')">支付失败</button>
+                <button class="pa-btn ghost" onclick="noCallback()">超时不回调</button>
+                <button class="pa-btn ghost" onclick="pay('UNKNOWN')">无结论 UNKNOWN</button>
+              </div>
+            </div>
+            <div class="scene-group">
+              <div class="gt">可靠性验证</div>
+              <div class="pa-row">
+                <button class="pa-btn ghost" onclick="payTwice()">重复回调 ×2</button>
+                <button class="pa-btn ghost" onclick="payForged()">伪造签名</button>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+
+      <!-- 6 说明 -->
+      <div class="fineprint">
+        「超时不回调」不发送任何请求：payment 30s 后转 UNKNOWN，主动查询不收敛 —— 这是「不猜成败落账」要演示的正确性能力。<br>
+        「伪造签名」以错误密钥签名，payment 验签失败返回 403（ADR-0052 fail-closed）。<br>
+        换渠道（Feature 015 / INV-2）：同一订单每次选渠道都会<b>新建一张支付单</b>，旧支付单保留原状态；切换后自动跳转新收银台。
       </div>
     </div>
   </div>
-  <div class="pa-card"><h2 style="margin-bottom:10px">操作日志</h2><div id="log" class="pa-log">// 操作日志</div></div>
 </div>
+
+<div id="log"></div>
+
+<script src="/app.js"></script>
 <script>
+const log = PA.log;
 const qs = new URLSearchParams(location.search);
 const paymentNo = qs.get('paymentNo');
 const orderNo = qs.get('orderNo');
 const amountMinor = qs.get('amountMinor');
 const currencyCode = qs.get('currencyCode') || 'CNY';
 const channelCode = qs.get('channelCode') || 'MOCK';
-const log = (m) => { const el = document.getElementById('log'); el.textContent += "\n" + m; el.scrollTop = el.scrollHeight; };
 
-function fmt(minor, cur) {
-  return (minor / 100).toFixed(2) + ' ' + cur;
-}
 const CHANNEL_NAMES = { ALIPAY: '支付宝', WECHAT: '微信支付', DOUYIN: '抖音支付', MOCK: 'Mock 渠道' };
+
 document.getElementById('meta').innerHTML =
-  'paymentNo: <b>' + (paymentNo || '缺失') + '</b> &nbsp; orderNo: <b>' + (orderNo || '—') + '</b>'
-  + '<br>当前渠道: <b>' + (CHANNEL_NAMES[channelCode] || channelCode) + '</b>（' + channelCode + '）';
-// 展示格式统一（FR-005）：¥ + 弱化币种小字；数值与逻辑不变
+  'paymentNo: <b>' + (paymentNo || '缺失') + '</b> · orderNo: <b>' + (orderNo || '—') + '</b>'
+  + '<br>当前渠道: <b>' + (CHANNEL_NAMES[channelCode] || channelCode) + '</b>';
+// 金额：display 40px/600/tnum + 弱化币种小字（DESIGN.md §3）
 document.getElementById('amount').innerHTML =
   amountMinor ? '¥' + (Number(amountMinor) / 100).toFixed(2) + ' <small>' + currencyCode + '</small>' : '（金额未随链路携带）';
+document.getElementById('ctaAmount').textContent =
+  amountMinor ? '¥' + (Number(amountMinor) / 100).toFixed(2) : '';
+// 分段控件：当前渠道高亮
+document.querySelectorAll('#chSeg button').forEach(function (b) {
+  if (b.getAttribute('data-ch') === channelCode) b.className = 'is-on';
+});
 
 async function sendCallback(status, signMode, extra) {
   const payload = Object.assign({
     paymentNo: paymentNo,
     status: status,
-    // crypto.randomUUID()：避免快速连点时 Date.now() 撞键（同毫秒重复引用）
     channelReference: 'demo-ref-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)),
     reason: null,
     amountMinor: amountMinor ? Number(amountMinor) : null,
@@ -112,19 +140,20 @@ async function sendCallback(status, signMode, extra) {
     try {
       const p = JSON.parse(data.body);
       log('   payment 状态 → ' + p.status);
+      if (p.status === 'SUCCEEDED') PA.toast('支付成功（SUCCEEDED），可返回演示控制台继续', 'ok');
     } catch (e) { /* 保留原始 body 日志 */ }
   }
+  if (res.status === 403) PA.toast('验签失败 403：业务层零触达（ADR-0052 fail-closed）', 'bad');
   return res;
 }
 
-async function pay(status) {
-  await sendCallback(status, 'VALID');
-}
+async function pay(status) { await sendCallback(status, 'VALID'); }
 function noCallback() {
   log('>> （不发送任何回调）');
   log('   预期：payment 30s 后转 UNKNOWN（payment.reliability.timeout=30s），');
   log('   随后主动查询（15s 间隔 × 5 次）仍无结论 → 停留 UNKNOWN，不履约不记账。');
   log('   回演示控制台可继续观察轮询结果。');
+  PA.toast('不发送回调：预期 30s 后转 UNKNOWN', 'ok');
 }
 async function payTwice() {
   log('== 连发两次相同回调（演示幂等吸收）==');
@@ -138,9 +167,9 @@ async function payForged() {
 }
 
 // Feature 015 / INV-2：显式换渠道 → order-service 新建一张支付单（同订单号），跳转新收银台。
-// 经 mock-channel-web 的 /proxy/order 代理转发，避免跨域（零服务改动，ADR-0048 修订版）。
 async function switchChannel(target) {
-  if (!orderNo) { log('!! 缺少 orderNo，无法换渠道'); return; }
+  if (!orderNo) { log('!! 缺少 orderNo，无法换渠道'); PA.toast('缺少 orderNo，无法换渠道', 'bad'); return; }
+  if (target === channelCode) { log('   当前已是 ' + (CHANNEL_NAMES[target] || target) + '，无需切换'); return; }
   log('== 换渠道：' + (CHANNEL_NAMES[target] || target) + ' → POST /orders/' + orderNo + '/payments ==');
   try {
     const res = await fetch('/proxy/order/orders/' + encodeURIComponent(orderNo) + '/payments', {
@@ -155,12 +184,14 @@ async function switchChannel(target) {
           + ' 渠道=' + (CHANNEL_NAMES[target] || target));
       if (data.payUrl) {
         log('   正在跳转新支付单收银台…');
+        PA.toast('已新建支付单，正在跳转…', 'ok');
         setTimeout(() => { location.href = data.payUrl; }, 800);
       } else {
         log('   （新支付单无 payUrl —— mock-cashier 未开启时请经 API 继续支付）');
       }
     } else {
       log('   换渠道失败：' + (text || res.status));
+      PA.toast('换渠道失败：HTTP ' + res.status, 'bad');
     }
   } catch (e) {
     log('!! 换渠道请求异常：' + e);
