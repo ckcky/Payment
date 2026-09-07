@@ -73,13 +73,14 @@ public final class Api {
         return post("payment", "/internal/payments/" + paymentNo + "/channel-callback", Map.of(), body);
     }
 
-    /** POST /payments/{ref}/resolve：UNKNOWN 人工收敛。 */
+    /** POST /payments/{ref}/resolve：UNKNOWN 人工收敛（管理端点，需 X-Admin-Token，F2）。 */
     public ApiResponse resolvePayment(String ref, String result, String channelReference, String reason) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("result", result);
         body.put("channelReference", channelReference);
         body.put("reason", reason);
-        return post("payment", "/payments/" + ref + "/resolve", Map.of(), body);
+        return post("payment", "/payments/" + ref + "/resolve",
+                Map.of("X-Admin-Token", "demo-admin-token"), body);
     }
 
     /** GET /payments/{ref}。 */
