@@ -62,20 +62,22 @@
   </div>
 
   <div class="pa-card" style="margin-bottom:16px">
-    <h2>③ 退款（Feature 015 · 退款域并入 payment-service）</h2>
-    <div class="note">前提：当前订单支付已 SUCCEEDED。退款经 /proxy/refund 透传 payment-service 的 /internal/refunds；
-      异步渠道下状态为 CREATED/PROCESSING 并自动轮询，同步收敛为 SUCCEEDED。</div>
+    <h2>③ 退款（spec 019 · order 驱动的两层退款单 TXRF/PMRF）</h2>
+    <div class="note">前提：当前订单支付已 SUCCEEDED。发起经 /proxy/order 透传 order-service 的 /internal/orders/refund
+      ——order 生成交易层退款单 TXRF（幂等键）并调 payment 生成执行单 PMRF（双号互记）；
+      状态轮询经 /proxy/payment 透传 GET /internal/refunds/{pmrf}。异步渠道受理为 REQUESTED/PROCESSING 并自动轮询收敛。
+      （旧入口 POST /internal/refunds 已随 spec 019 删除。）</div>
     <div class="note">
       金额(元)=<input type="number" id="refundAmount" value="50.00" step="0.01" min="0.01" style="width:90px">
       原因=<input type="text" id="refundReason" value="demo-partial" style="width:130px">
-      幂等键=<input type="text" id="refundIdemKey" style="width:230px" placeholder="留空自动生成">
       <button onclick="createRefund()">发起退款</button>
-      <button class="ghost" onclick="replayRefund()">同键幂等重放</button>
+      <button class="ghost" onclick="replayRefund()">同参重放（幂等语义）</button>
       <button class="ghost" onclick="stopRefundPoll()">停止退款轮询</button>
     </div>
-    <div class="note">防超额演示（H1）：累计退款超过已付金额时，超额部分被受理为 REJECTED 退款记录（HTTP 200 + status=REJECTED，资金约束落领域状态）。</div>
+    <div class="note">防超额演示（H1）：累计退款超过可退额度时 order 侧前置拦截，返回 HTTP 409（AMOUNT_INVARIANT_VIOLATION，资金约束落交易层）；
+      渠道侧拒绝才落 REJECTED 记录。</div>
     <table id="refundTable" style="margin-top:8px"><thead>
-      <tr><th>refundNo</th><th>金额</th><th>状态</th><th>失败原因</th><th>幂等键</th></tr>
+      <tr><th>TXRF（交易层）</th><th>PMRF（执行层）</th><th>金额</th><th>状态</th><th>失败原因</th></tr>
     </thead><tbody id="refundRows">
       <tr><td colspan="5" style="color:var(--pa-mute)">（尚无退款 —— 支付成功后发起）</td></tr>
     </tbody></table>
@@ -245,7 +247,7 @@ async function traceOrder(key) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ---- ③ 退款流程（Feature 015：/internal/refunds 并入 payment-service，经 /proxy/refund 透传）----
+// ---- ③ 退款流程（spec 019 / ADR-0067：order 驱动两层退款单，经 /proxy/order 发起、/proxy/payment 轮询）----
 function resetRefunds() {
   stopRefundPoll();
   lastRefund = null;
@@ -278,44 +280,41 @@ async function loadRefundAttempts() {
 function renderRefundRow(r) {
   const rows = document.getElementById('refundRows');
   if (rows.querySelector('td[colspan]')) rows.innerHTML = '';
-  const id = 'rf-' + r.refundNo;
+  const id = 'rf-' + r.refundNo;            // 行按 PMRF 寻址（查询端点即以 PMRF 寻址）
   let tr = document.getElementById(id);
   if (!tr) { tr = document.createElement('tr'); tr.id = id; rows.prepend(tr); }
-  const amt = r.currencyCode + ' ' + (r.amountMinor / 100).toFixed(2);
-  tr.innerHTML = '<td class="no">' + esc(r.refundNo) + '</td>'
+  const amt = (r.currencyCode || 'CNY') + ' ' + (r.amountMinor / 100).toFixed(2);
+  tr.innerHTML = '<td class="no">' + esc(r.transactionRefundNo || '—') + '</td>'
+    + '<td class="no">' + esc(r.refundNo) + '</td>'
     + '<td>' + esc(amt) + '</td>'
     + '<td class="st st-' + esc(r.status) + '">' + esc(r.status) + '</td>'
-    + '<td>' + esc(r.failureReason || '—') + '</td>'
-    + '<td style="color:#94a3b8">' + esc(r._idemKey || '') + '</td>';
+    + '<td>' + esc(r.failureReason || '—') + '</td>';
 }
 
 async function createRefund() {
   if (!currentOrderNo || !currentPaymentNo) { alert('请先下单并完成支付'); return; }
   const yuan = Number(document.getElementById('refundAmount').value);
   if (!(yuan > 0)) { alert('请输入有效的退款金额'); return; }
-  const keyIn = document.getElementById('refundIdemKey').value.trim();
-  const idemKey = keyIn || ('demo-rk-' + crypto.randomUUID());
-  if (!keyIn) document.getElementById('refundIdemKey').value = idemKey;
   const payload = {
     orderNo: currentOrderNo, paymentNo: currentPaymentNo,
-    userId: document.getElementById('userId').value || 'demo-user',
-    amountMinor: Math.round(yuan * 100), currencyCode: 'CNY',
-    reason: document.getElementById('refundReason').value || 'demo',
-    idempotencyKey: idemKey
+    amountMinor: Math.round(yuan * 100),
+    reason: document.getElementById('refundReason').value || 'demo'
   };
-  log('>> POST /proxy/refund/internal/refunds  idemKey=' + idemKey + '  ' + JSON.stringify(payload));
-  const r = await api('POST', '/refund/internal/refunds', payload);
+  log('>> POST /proxy/order/internal/orders/refund  ' + JSON.stringify(payload));
+  const r = await api('POST', '/order/internal/orders/refund', payload);
   log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
-  if (r.status !== 200 || !r.data || !r.data.refundNo) {
+  if (r.status !== 200 || !r.data || !r.data.pmrf) {
     alert('退款发起失败: HTTP ' + r.status + ' ' + JSON.stringify(r.data)); return;
   }
-  const refund = Object.assign({}, r.data, { _idemKey: idemKey });
+  const refund = { refundNo: r.data.pmrf, transactionRefundNo: r.data.txrf,
+    status: r.data.status, amountMinor: payload.amountMinor, currencyCode: 'CNY',
+    failureReason: null, _payload: payload };
   lastRefund = refund;
   renderRefundRow(refund);
   if (REFUND_TERMINAL.includes(refund.status)) {
-    log('   退款终态：' + refund.status + (refund.status === 'REJECTED' ? '（防超额/不可退款，H1 资金约束）' : ''));
+    log('   退款终态：' + refund.status + (refund.status === 'REJECTED' ? '（渠道拒绝，资金约束落领域状态）' : ''));
   } else {
-    log('   退款受理为 ' + refund.status + '，2s 轮询收敛…');
+    log('   受理为 ' + refund.status + '（TXRF=' + refund.transactionRefundNo + '，PMRF=' + refund.refundNo + '），2s 轮询收敛…');
     startRefundPoll();
   }
   traceOrder(currentOrderNo);   // 退款落库后刷新全链路 DB 视图
@@ -323,33 +322,37 @@ async function createRefund() {
 }
 
 async function replayRefund() {
-  if (!lastRefund) { alert('先发起一次退款，才有幂等键可重放'); return; }
-  log('>> POST /proxy/refund/internal/refunds（同键重放 idemKey=' + lastRefund._idemKey + '）');
-  const payload = {
-    orderNo: lastRefund.orderNo, paymentNo: lastRefund.paymentNo,
-    userId: document.getElementById('userId').value || 'demo-user',
-    amountMinor: lastRefund.amountMinor, currencyCode: lastRefund.currencyCode,
-    reason: document.getElementById('refundReason').value || 'demo',
-    idempotencyKey: lastRefund._idemKey
-  };
-  const r = await api('POST', '/refund/internal/refunds', payload);
+  if (!lastRefund) { alert('先发起一次退款，才有可重放的请求'); return; }
+  log('>> POST /proxy/order/internal/orders/refund（同参重放）' + JSON.stringify(lastRefund._payload));
+  const r = await api('POST', '/order/internal/orders/refund', lastRefund._payload);
   log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
-  if (r.status === 200 && r.data && r.data.refundNo === lastRefund.refundNo) {
-    log('   ✅ 幂等重放返回同一 refundNo=' + r.data.refundNo + '（未重复创建）');
+  if (r.status === 200 && r.data && r.data.txrf === lastRefund.transactionRefundNo) {
+    log('   ✅ 幂等回放：返回同一 TXRF=' + r.data.txrf + '（进行中退款不重复落单）');
+  } else if (r.status === 200 && r.data && r.data.pmrf) {
+    log('   ℹ 原单已终态，同参重放 = 新退款请求（spec 019 语义）：新 TXRF=' + r.data.txrf + '，受可退额度约束');
+    const refund = { refundNo: r.data.pmrf, transactionRefundNo: r.data.txrf,
+      status: r.data.status, amountMinor: lastRefund.amountMinor, currencyCode: 'CNY',
+      failureReason: null, _payload: lastRefund._payload };
+    lastRefund = refund;
+    renderRefundRow(refund);
+    if (!REFUND_TERMINAL.includes(refund.status)) startRefundPoll();
   } else {
-    log('   ⚠ 重放行为异常：HTTP ' + r.status + ' refundNo=' + (r.data && r.data.refundNo));
+    log('   ⚠ 重放被拒：HTTP ' + r.status + ' ' + JSON.stringify(r.data)
+      + '（如可退额度不足 → 409 AMOUNT_INVARIANT_VIOLATION，属预期资金约束）');
   }
+  traceOrder(currentOrderNo);
+  loadRefundAttempts();
 }
 
 async function pollRefundsOnce() {
   const rows = document.querySelectorAll('#refundRows tr[id^="rf-"]');
   for (const tr of rows) {
-    const refundNo = tr.id.slice(3);
-    const r = await api('GET', '/refund/internal/refunds/' + encodeURIComponent(refundNo));
+    const pmrf = tr.id.slice(3);
+    const r = await api('GET', '/payment/internal/refunds/' + encodeURIComponent(pmrf));
     if (r.status === 200 && r.data) {
-      renderRefundRow(Object.assign({}, r.data, { _idemKey: lastRefund && lastRefund.refundNo === refundNo ? lastRefund._idemKey : tr.cells[4].textContent }));
+      renderRefundRow(r.data);
       if (REFUND_TERMINAL.includes(r.data.status)) {
-        log('   退款 ' + refundNo + ' → ' + r.data.status);
+        log('   退款 ' + pmrf + ' → ' + r.data.status);
         stopRefundPoll();
         loadRefundAttempts();     // 终态后补一次渠道尝试与 DB 视图（异步收敛场景落库晚于发起）
         traceOrder(currentOrderNo);
