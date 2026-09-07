@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS refunds (
     id BIGINT NOT NULL AUTO_INCREMENT,
     refund_no VARCHAR(32) NOT NULL COMMENT '业务单号 PMRF+雪花（ADR-0062/0067；存量 RF 保留不改写）',
     transaction_refund_no VARCHAR(32) NULL COMMENT '上层交易退款单 TXRF（spec 019 / ADR-0067；幂等键载体）',
+    transaction_no VARCHAR(32) NULL COMMENT '所属交易单 TX（spec 019 / ADR-0067；回调通知 order 时回传）',
     idempotency_key VARCHAR(128) NOT NULL,
     order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',

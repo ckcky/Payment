@@ -20,7 +20,10 @@ import java.util.Objects;
 public class Refund {
 
     private Long id;
-    /** 业务单号（RF + 雪花，ADR-0062）。 */
+    /**
+     * 业务单号（spec 019 / ADR-0067：新建退款单一律 <b>PMRF</b>+雪花（支付层退款执行单）；
+     * 存量 RF 单号由 rehydrate 原样还原，不改写，唯一性无冲突）。
+     */
     private String refundNo;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
@@ -31,12 +34,22 @@ public class Refund {
     private final String currencyCode;
     private final String reason;
     private final String idempotencyKey;
+    /** 上层交易退款单号（TXRF，spec 019 双号互记；存量手工退款为 null）。 */
+    private final String transactionRefundNo;
+    /** 所属交易单号（TX；spec 019 回调通知 order 时回传；存量数据可为 null）。 */
+    private final String transactionNo;
     private final List<RefundItem> items;
     private RefundStatus status = RefundStatus.REQUESTED;
     private String failureReason;
 
     public Refund(String orderNo, String paymentNo, String userId, long amountMinor,
                   String currencyCode, String reason, String idempotencyKey, List<RefundItem> items) {
+        this(orderNo, paymentNo, userId, amountMinor, currencyCode, reason, idempotencyKey, items, null, null);
+    }
+
+    public Refund(String orderNo, String paymentNo, String userId, long amountMinor,
+                  String currencyCode, String reason, String idempotencyKey, List<RefundItem> items,
+                  String transactionRefundNo, String transactionNo) {
         this.orderNo = Objects.requireNonNull(orderNo, "orderNo");
         this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
         this.userId = Objects.requireNonNull(userId, "userId");
@@ -47,8 +60,10 @@ public class Refund {
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.reason = Objects.requireNonNull(reason, "reason");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+        this.transactionRefundNo = transactionRefundNo;
+        this.transactionNo = transactionNo;
         this.items = List.copyOf(items == null ? List.of() : items);
-        this.refundNo = BusinessNos.of(BusinessNoType.REFUND);
+        this.refundNo = BusinessNos.of(BusinessNoType.PAYMENT_REFUND);
     }
 
     /**
@@ -58,8 +73,18 @@ public class Refund {
                                    long amountMinor, String currencyCode, String reason,
                                    String idempotencyKey, List<RefundItem> items,
                                    RefundStatus status, String failureReason, Integer version) {
+        return rehydrate(id, refundNo, orderNo, paymentNo, userId, amountMinor, currencyCode,
+                reason, idempotencyKey, items, null, null, status, failureReason, version);
+    }
+
+    /** 持久化重建（spec 019 双号版）：带 transactionRefundNo / transactionNo。 */
+    public static Refund rehydrate(Long id, String refundNo, String orderNo, String paymentNo, String userId,
+                                   long amountMinor, String currencyCode, String reason,
+                                   String idempotencyKey, List<RefundItem> items,
+                                   String transactionRefundNo, String transactionNo,
+                                   RefundStatus status, String failureReason, Integer version) {
         Refund refund = new Refund(orderNo, paymentNo, userId, amountMinor, currencyCode,
-                reason, idempotencyKey, items);
+                reason, idempotencyKey, items, transactionRefundNo, transactionNo);
         refund.id = id;
         refund.refundNo = refundNo;
         refund.status = status;
@@ -206,6 +231,16 @@ public class Refund {
 
     public String getIdempotencyKey() {
         return idempotencyKey;
+    }
+
+    /** 上层交易退款单号（TXRF，spec 019 双号互记；存量手工退款为 null）。 */
+    public String getTransactionRefundNo() {
+        return transactionRefundNo;
+    }
+
+    /** 所属交易单号（TX；存量数据可为 null）。 */
+    public String getTransactionNo() {
+        return transactionNo;
     }
 
     public List<RefundItem> getItems() {

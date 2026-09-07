@@ -75,7 +75,16 @@ SET @sql = IF (
   'SELECT ''refunds.transaction_refund_no 已存在'' AS note');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- 2.2 refunds 加普通索引 idx_refunds_transaction_refund_no
+-- 2.2 refunds 加 transaction_no（所属交易 TX，transaction_refund_no 之后；T108 补充：
+--     退款回调通知 order 时按 RefundResultNotification 契约回传）
+SET @sql = IF (
+  (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND COLUMN_NAME = 'transaction_no') = 0,
+  'ALTER TABLE refunds ADD COLUMN transaction_no VARCHAR(32) NULL COMMENT ''所属交易单 TX（spec 019 / ADR-0067；回调通知 order 时回传）'' AFTER transaction_refund_no',
+  'SELECT ''refunds.transaction_no 已存在'' AS note');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 2.3 refunds 加普通索引 idx_refunds_transaction_refund_no
 SET @sql = IF (
   (SELECT COUNT(*) FROM information_schema.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'refunds' AND INDEX_NAME = 'idx_refunds_transaction_refund_no') = 0,

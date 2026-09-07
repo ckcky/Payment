@@ -23,8 +23,8 @@
 | [0015](0015-wip-ahead-of-roadmap.md) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置（ADR-0053） | **Accepted**（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码） | 偏离 / 处置日志：working tree 含 013-inventory-reservation / 014-seckill-and-cache 实质性实现，**超前顺序、缺 spec/ADR-0041~0046、014 的 Redis 引入未经 roadmap §7 论证闸门**；决策=保留代码（编译+测试通过，且与 011 在 order-service 纠缠不可干净拆分），spec/ADR 补写列为 TODO，待复盘收口 |
 | [0025](0025-order-payment-orchestration.md) | 支付编排职责归位（ADR-0054） | ✅ **Accepted**（2026-09-06 落地） | spec 016；Supersedes ADR-0064 §决策#4（自动退款归属） |
 | [0026](0026-accounting-audit-suspense-adjustment.md) | 会计四核对与挂账·调账闭环（ADR-0065） | ✅ **Accepted → 已实施**（2026-09-07 代码合并 master，450 测试全绿） | spec 017；新增 SUSPENSE(5) 科目（Constitution §8 变更已批准）、结算分级门禁、账实双轨、双人复核降级软提示 |
-| [0027](0027-schema-normalization-and-item-granular-fulfillment.md) | 表结构列序规范化与按订单明细粒度履约（ADR-0066） | ✅ **Accepted**（2026-09-07 拍板，代码待实施） | spec 018；列序规范（自增id→业务主键→唯一索引列，3 表豁免）、payment_attempts 加金额列、order_item_no（OI+雪花）、fulfillment 按 item 粒度、demo 中文注释 + 门户主界面 |
-| [0028](0028-order-driven-refund-two-layer-refund-order.md) | order 驱动的两层退款单模型与退款异步回调闭环（ADR-0067） | ✅ **Accepted**（2026-09-07 拍板，代码待实施） | spec 019；双层退款单 TXRF（transaction 层）/PMRF（payment 层）互记、transactions 加 payment_no/refunded_minor、两层金额校验、渠道退款异步回调 + 三路收敛、秒杀库存回补、直调入口下线；明确不做：UNKNOWN 自动收敛器 / resolve Admin Token / 部分退款次数上限 |
+| [0027](0027-schema-normalization-and-item-granular-fulfillment.md) | 表结构列序规范化与按订单明细粒度履约（ADR-0066） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地） | spec 018；列序规范（自增id→业务主键→唯一索引列，3 表豁免）、payment_attempts 加金额列、order_item_no（OI+雪花）、fulfillment 按 item 粒度、demo 中文注释 + 门户主界面 |
+| [0028](0028-order-driven-refund-two-layer-refund-order.md) | order 驱动的两层退款单模型与退款异步回调闭环（ADR-0067） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地，全量回归绿） | spec 019；双层退款单 TXRF（transaction 层）/PMRF（payment 层）互记、transactions 加 payment_no/refunded_minor、两层金额校验、渠道退款异步回调 + 三路收敛、秒杀库存回补、直调入口下线；明确不做：UNKNOWN 自动收敛器 / resolve Admin Token / 部分退款次数上限 |
 
 ## ADR 编号速查（0001–0067）
 
@@ -42,7 +42,7 @@
 | [0054](0025-order-payment-orchestration.md#adr-0054) | 支付编排职责归位：order 升为业务编排者 / payment 退回能力提供方；自动退款决策与发起归属 order transaction 层（transactionNo + paymentNo）；Supersedes ADR-0064 §决策#4（✅ Accepted，2026-09-06 落地） | 0025 |
 | [0065](0026-accounting-audit-suspense-adjustment.md#adr-0065) | 会计四核对与挂账·调账闭环：账证/账账/账实(双轨)/账表 + SUSPENSE 挂账 + 五类调账 + recheck 关批 + 结算分级门禁（✅ Accepted，2026-09-06 拍板，代码待实施） | 0026 |
 | [0066](0027-schema-normalization-and-item-granular-fulfillment.md#adr-0066) | 表结构列序规范化（自增id→业务主键→唯一索引列，3 表豁免）+ payment_attempts 金额列 + order_item_no（OI+雪花）+ 按 order_item 粒度履约 + demo 中文注释/门户主界面（✅ Accepted，2026-09-07 拍板，代码待实施） | 0027 |
-| [0067](0028-order-driven-refund-two-layer-refund-order.md#adr-0067) | order 驱动的两层退款单模型（TXRF 交易层 / PMRF 支付层互记）+ 退款异步回调闭环（三路收敛）+ 秒杀库存回补 + 直调入口下线（✅ Accepted，2026-09-07 拍板，代码待实施） | 0028 |
+| [0067](0028-order-driven-refund-two-layer-refund-order.md#adr-0067) | order 驱动的两层退款单模型（TXRF 交易层 / PMRF 支付层互记）+ 退款异步回调闭环（三路收敛）+ 秒杀库存回补 + 直调入口下线（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0028 |
 
 > 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 

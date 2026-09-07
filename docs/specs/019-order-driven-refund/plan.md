@@ -1,6 +1,6 @@
 # Plan: 019-order-driven-refund
 
-> 技术方案版。状态：✅ Accepted（2026-09-07 负责人拍板 D1~D8，见 [ADR-0067](../../adr/0028-order-driven-refund-two-layer-refund-order.md)）。代码未实施。前置：spec 018 先行落地。
+> 技术方案版。状态：✅ Accepted（2026-09-07 负责人拍板 D1~D8，见 [ADR-0067](../../adr/0028-order-driven-refund-two-layer-refund-order.md)）。代码已实施（批次 A~D，2026-09-07）。§3.3 编排归属定稿见下文。
 
 ## 1. 架构总览
 
@@ -98,9 +98,17 @@ CREATE TABLE IF NOT EXISTS transaction_refunds (
    - entitlement 撤销沿 fulfillment→entitlement 既定链（order 不直调 entitlement）。
 4. 每步失败：重试（幂等可重入）→ 指标 + 审计留痕 → 对账兜底（不回滚退款成功事实，禁 2PC，沿既有 Saga 原则）。
 
-### 3.3 编排归属（T108 实施定稿）
+### 3.3 编排归属（T108 实施定稿 ✅ 2026-09-09）
 
-原则对齐 ADR-0054（order 是业务编排者，payment 是能力提供方）：**payment 保留「渠道事实 + 记账」职责，业务下游扇出（履约终止/权益撤销/库存回补）移交 order 侧收口**；payment 是否保留原 fulfillment/entitlement 直调扇出、RefundPostProcessOrchestrator 去留，在 T108 按「最小迁移 + 不留双路径」原则定稿并回写本文件。
+原则对齐 ADR-0054（order 是业务编排者，payment 是能力提供方），T108 实施定稿如下：
+
+- **payment 保留**：渠道事实（refunds 状态机 + payment_attempts REFUND 尝试）+ 记账冲正（ledger）+ order 通知（RefundResultNotification 双号）。
+- **payment 删除**：原 refund 包对 fulfillment/entitlement 的直调扇出与 RefundPostProcessOrchestrator / RefundPostProcessAttempt 体系（「最小迁移 + 不留双路径」）——履约终止/权益撤销/秒杀回补全部移交 order 侧 `onRefundResult` 收口（T105 已实现）。`RefundPostProcessRequest/Response` DTO 与 `refund_post_process_attempts` 表随之下线（表留存量不清理）。
+- **三路收敛**：同步受理（SYNC）/ 渠道异步回调（CHANNEL_CALLBACK，`POST /internal/refunds/{refundNo}/channel-callback`，验签过滤器扩展覆盖）/ resolve 人工收敛（RESOLVE）全部收敛到新 `RefundResultProcessor`——状态机终态 → 记账冲正 → 通知 order，一条路径。
+- **payments 退款口径定稿**：payments 表**不加列、不改状态**——退款事实权威台账 = `refunds`（累计/终态/幂等键=TXRF）+ `payment_attempts`（REFUND 尝试持渠道流水）；对账经 `RefundFactsService`（PMRF + channel_reference）抽取。避免 payments.refunded_minor 与 refunds 双路径漂移；支付单保留 SUCCEEDED 事实（退款是补偿动作，不回滚原单）。
+- **受理在途语义**：mock 渠道异步受理返回 UNKNOWN（通信成功 + 业务无结论，带受理流水号），退款停待收敛态；命令响应 `RefundCommandResponse.status` 恒映射 `PROCESSING` 语义（order 侧 `accept()` 只认非 REJECTED，天然兼容）。
+- **记账幂等键**：统一 `REFUND:{PMRF}`——`"REFUND:"` 前缀由 `RefundFeignLedgerPostingGateway` 单点添加，调用方只传 PMRF（修 G5 双重前缀）。
+- **mock 渠道**：`payment.channel.refund-async`（默认 true）+ `refund-async-delay-ms`；同步模式保留可配。
 
 ## 4. 业内对比（写入 spec 依据）
 

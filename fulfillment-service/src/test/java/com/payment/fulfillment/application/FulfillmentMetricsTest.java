@@ -2,6 +2,7 @@ package com.payment.fulfillment.application;
 
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.dto.rpc.EntitlementGrantedResponse;
+import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.fulfillment.domain.Fulfillment;
 import com.payment.fulfillment.domain.FulfillmentStatus;
@@ -19,8 +20,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class FulfillmentMetricsTest {
 
-    private static final EntitlementGateway NOOP_GATEWAY =
-            request -> new EntitlementGrantedResponse(1L, "GRANTED");
+    private static final EntitlementGateway NOOP_GATEWAY = new EntitlementGateway() {
+        @Override
+        public EntitlementGrantedResponse notifyFulfillmentCompleted(FulfillmentCompletedRequest request) {
+            return new EntitlementGrantedResponse(1L, "GRANTED");
+        }
+
+        @Override
+        public com.payment.common.dto.rpc.RefundPostProcessResponse revokeOnRefund(
+                com.payment.common.dto.rpc.RefundPostProcessRequest request) {
+            return new com.payment.common.dto.rpc.RefundPostProcessResponse(request.refundNo(), "NOOP");
+        }
+    };
 
     private static PaymentSucceededRequest request() {
         return new PaymentSucceededRequest("pay-1", "order_1", "txn_1", "user_1", 1250L, "USD",

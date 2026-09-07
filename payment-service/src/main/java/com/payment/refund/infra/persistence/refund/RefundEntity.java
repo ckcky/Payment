@@ -9,8 +9,12 @@ import com.payment.common.mybatis.BaseEntity;
 @TableName("refunds")
 public class RefundEntity extends BaseEntity {
 
-    /** 业务单号（RF + 雪花，ADR-0062）。 */
+    /** 业务单号（PMRF + 雪花，ADR-0062/0067；存量 RF 保留不改写）。 */
     private String refundNo;
+    /** 上层交易退款单号（TXRF，spec 019 双号互记；存量手工退款为 null）。 */
+    private String transactionRefundNo;
+    /** 所属交易单号（TX；spec 019 回调通知 order 时回传；存量数据为 null）。 */
+    private String transactionNo;
     private String orderNo;
     private String paymentNo;
     private String userId;
@@ -30,6 +34,22 @@ public class RefundEntity extends BaseEntity {
 
     public void setRefundNo(String refundNo) {
         this.refundNo = refundNo;
+    }
+
+    public String getTransactionRefundNo() {
+        return transactionRefundNo;
+    }
+
+    public void setTransactionRefundNo(String transactionRefundNo) {
+        this.transactionRefundNo = transactionRefundNo;
+    }
+
+    public String getTransactionNo() {
+        return transactionNo;
+    }
+
+    public void setTransactionNo(String transactionNo) {
+        this.transactionNo = transactionNo;
     }
 
     public String getOrderNo() {

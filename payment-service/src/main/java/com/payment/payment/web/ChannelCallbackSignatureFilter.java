@@ -38,13 +38,27 @@ public class ChannelCallbackSignatureFilter extends OncePerRequestFilter {
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
-    /** 回调路径模式：{@code /internal/payments/{id}/channel-callback}。 */
+    /** 支付回调路径模式：{@code /internal/payments/{paymentNo}/channel-callback}。 */
     static final String CALLBACK_PATH_PATTERN = "/internal/payments/*/channel-callback";
+
+    /** 退款回调路径模式（spec 019 / D7）：{@code /internal/refunds/{refundNo}/channel-callback}。 */
+    static final String REFUND_CALLBACK_PATH_PATTERN = "/internal/refunds/*/channel-callback";
+
+    private static final String[] CALLBACK_PATH_PATTERNS =
+            {CALLBACK_PATH_PATTERN, REFUND_CALLBACK_PATH_PATTERN};
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path == null || !PATH_MATCHER.match(CALLBACK_PATH_PATTERN, path);
+        if (path == null) {
+            return true;
+        }
+        for (String pattern : CALLBACK_PATH_PATTERNS) {
+            if (PATH_MATCHER.match(pattern, path)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
