@@ -18,6 +18,10 @@ public class TransactionEntity extends BaseEntity {
     private String purpose;
     /** 交易状态机枚举名。 */
     private String status;
+    /** 生效支付单：首张成功支付（spec 019）。 */
+    private String paymentNo;
+    /** 累计已退金额（spec 019）。 */
+    private Long refundedMinor;
 
     public String getTransactionNo() {
         return transactionNo;
@@ -65,5 +69,21 @@ public class TransactionEntity extends BaseEntity {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getPaymentNo() {
+        return paymentNo;
+    }
+
+    public void setPaymentNo(String paymentNo) {
+        this.paymentNo = paymentNo;
+    }
+
+    public Long getRefundedMinor() {
+        return refundedMinor;
+    }
+
+    public void setRefundedMinor(Long refundedMinor) {
+        this.refundedMinor = refundedMinor;
     }
 }

@@ -54,7 +54,8 @@ public class MybatisTransactionRepository implements TransactionRepository {
     private Transaction toDomain(TransactionEntity entity) {
         return Transaction.rehydrate(entity.getId(), entity.getTransactionNo(), entity.getOrderNo(), entity.getAmountMinor(),
                 entity.getCurrencyCode(), entity.getPurpose(), TransactionStatus.valueOf(entity.getStatus()),
-                entity.getVersion());
+                entity.getVersion(), entity.getPaymentNo(),
+                entity.getRefundedMinor() == null ? 0L : entity.getRefundedMinor());
     }
 
     private TransactionEntity toEntity(Transaction transaction) {
@@ -66,6 +67,8 @@ public class MybatisTransactionRepository implements TransactionRepository {
         entity.setCurrencyCode(transaction.getCurrencyCode());
         entity.setPurpose(transaction.getPurpose());
         entity.setStatus(transaction.getStatus().name());
+        entity.setPaymentNo(transaction.getPaymentNo());
+        entity.setRefundedMinor(transaction.getRefundedMinor());
         entity.setVersion(transaction.getVersion());
         return entity;
     }
