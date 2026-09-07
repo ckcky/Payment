@@ -224,7 +224,8 @@ public class TransactionApplicationService {
                     "refund result must be terminal: " + notification.status());
         }
 
-        boolean firstTerminal = refundOrder.complete(terminal, notification.paymentRefundNo());
+        boolean firstTerminal = refundOrder.complete(terminal, notification.paymentRefundNo(),
+                notification.failureReason());
         transactionRefundRepository.save(refundOrder);
         if (!firstTerminal) {
             log.info("refund result replay absorbed txrf={} status={}", refundOrder.getRefundNo(), terminal);

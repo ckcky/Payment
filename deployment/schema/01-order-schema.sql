@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS transaction_refunds (
     currency_code VARCHAR(8) NOT NULL,
     status VARCHAR(32) NOT NULL COMMENT 'REQUESTED/PROCESSING/SUCCEEDED/FAILED/REJECTED',
     reason VARCHAR(255) NOT NULL,
+    failure_reason VARCHAR(255) NULL,
     idempotency_key VARCHAR(128) NOT NULL COMMENT '幂等键=TXRF（同号重试可重入回放）',
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,

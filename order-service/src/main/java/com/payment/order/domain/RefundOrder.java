@@ -35,6 +35,8 @@ public class RefundOrder {
     private final String currencyCode;
     private RefundOrderStatus status;
     private final String reason;
+    /** 渠道/收敛失败原因（终态 FAILED/REJECTED 回填，成功为 null）。 */
+    private String failureReason;
     /** 幂等键（=TXRF，uk_transaction_refunds_idempotency_key）。 */
     private String idempotencyKey;
 
@@ -83,6 +85,14 @@ public class RefundOrder {
 
     /** 渠道/收敛结果落终态：终态吸收（重复或冲突结果不回退，返回 false 表示已吸收）。 */
     public boolean complete(RefundOrderStatus terminal, String paymentRefundNo) {
+        return complete(terminal, paymentRefundNo, null);
+    }
+
+    /**
+     * 渠道/收敛结果落终态（带失败原因）：终态吸收（重复或冲突结果不回退，返回 false 表示已吸收）。
+     * 非成功终态时记录 {@code failureReason}（已在终态的重放不覆盖，幂等吸收语义）。
+     */
+    public boolean complete(RefundOrderStatus terminal, String paymentRefundNo, String failureReason) {
         if (!terminal.isTerminal()) {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "refund complete requires terminal status: " + terminal);
@@ -92,6 +102,9 @@ public class RefundOrder {
         }
         if (paymentRefundNo != null && this.paymentRefundNo == null) {
             this.paymentRefundNo = paymentRefundNo;
+        }
+        if (failureReason != null && terminal != RefundOrderStatus.SUCCEEDED) {
+            this.failureReason = failureReason;
         }
         this.status = terminal;
         return true;
@@ -148,6 +161,15 @@ public class RefundOrder {
 
     public String getReason() {
         return reason;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    /** 持久化重建专用（rehydrate 后回填），业务路径经 {@code complete} 写入。 */
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
     }
 
     public String getIdempotencyKey() {

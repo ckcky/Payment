@@ -188,6 +188,24 @@ class TransactionRefundTest {
     }
 
     @Test
+    void failedCallbackPersistsFailureReason() {
+        SuccessfulPurchaseScenarioTest.FakeCatalogClient client = clientWithSku();
+        TransactionApplicationService service = transactionLayer(client);
+        String orderNo = paidOrder(client);
+
+        RefundOrder refundOrder = service.createRefund(orderNo, null, 100L, "MANUAL");
+        service.onRefundResult(new RefundResultNotification(refundOrder.getRefundNo(),
+                refundOrder.getPaymentRefundNo(), "txn-x", orderNo, "PM-1",
+                100L, "CNY", "FAILED", "channel declined"));
+
+        RefundOrder reloaded = refundRepository.findByRefundNo(refundOrder.getRefundNo()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(RefundOrderStatus.FAILED);
+        assertThat(reloaded.getFailureReason()).isEqualTo("channel declined"); // 失败原因随终态落库
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus())
+                .isEqualTo(OrderStatus.PAID); // 退款失败订单状态不动
+    }
+
+    @Test
     void surplusRefundClosesWithoutBooking() {
         SuccessfulPurchaseScenarioTest.FakeCatalogClient client = clientWithSku();
         TransactionApplicationService service = transactionLayer(client);

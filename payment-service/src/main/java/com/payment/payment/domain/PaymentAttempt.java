@@ -106,6 +106,23 @@ public class PaymentAttempt {
     }
 
     /**
+     * 回填渠道引用（收敛回退路径，fix）：受理时渠道未返回引用（channel_reference 落 NULL）、
+     * 回调带引用来收敛时，补齐观测链。仅当引用为空且尝试行在途（PENDING/ACCEPTED/UNKNOWN）
+     * 时生效，不改变状态；终态行不回填。
+     */
+    public boolean backfillChannelReference(String channelReference) {
+        if (channelReference == null || this.channelReference != null) {
+            return false;
+        }
+        if (status != PaymentAttemptStatus.PENDING && status != PaymentAttemptStatus.ACCEPTED
+                && status != PaymentAttemptStatus.UNKNOWN) {
+            return false;
+        }
+        this.channelReference = channelReference;
+        return true;
+    }
+
+    /**
      * ACCEPTED/UNKNOWN/PENDING → SUCCEEDED；终态冲突吸收（返回 false）。
      * PENDING 可收敛：收银台路径（ADR-0048 修订版）的尝试在取得渠道引用前即可能收到
      * 权威结果（人工裁定 / 迟到回调），此时尝试语义上仍"在途"，允许直接落终态。

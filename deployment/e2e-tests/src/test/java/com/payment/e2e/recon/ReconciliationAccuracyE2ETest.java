@@ -258,9 +258,15 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
     // ---- 帮助方法 ----
 
     private String period(String tag, String uid) {
-        // period 只允许 [A-Za-z0-9._-]
-        return ("e2e-" + tag + "-" + Long.toString(System.currentTimeMillis(), 36) + "-" + uid)
+        // period 只允许 [A-Za-z0-9._-]，且受 audit_batches.period VARCHAR(32) 约束：
+        // 超长时保留可读前缀 + 内容 hash 尾巴，保证唯一性
+        String raw = ("e2e-" + tag + "-" + Long.toString(System.currentTimeMillis(), 36) + "-" + uid)
                 .replaceAll("[^A-Za-z0-9._-]", "");
+        if (raw.length() <= 32) {
+            return raw;
+        }
+        String hashTail = Long.toString(raw.hashCode() & 0xffffffffL, 36);
+        return raw.substring(0, 32 - hashTail.length() - 1) + "-" + hashTail;
     }
 
     /** 轮询审计批次结算（audit_batches.status 离开 PROCESSING/RECHECKING）。 */
