@@ -3,111 +3,160 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- UI 规范：docs/design/DESIGN.md（Feature 020）——改样式前先读它；token 在 /design.css -->
+<!-- UI 规范：docs/design/DESIGN.md（Feature 024 · Apple 基底）——改样式前先读它；token 在 /design.css -->
 <link rel="stylesheet" href="/design.css">
 <title>PaymentArch 平台门户</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { padding: 24px; }
-  .wrap { max-width: 1040px; margin: 0 auto; }
-  .sub { font-size: 12px; color: var(--pa-mute); font-weight: 400; margin-left: 8px; }
-  .note { font-size: 12px; color: var(--pa-ink-2); line-height: 1.8; margin-top: 8px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .entry { background: var(--pa-canvas); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-lg); padding: 18px 20px; box-shadow: var(--pa-shadow-1); display: flex; flex-direction: column; }
-  .entry .ico { width: 36px; height: 36px; border-radius: var(--pa-r-md); background: var(--pa-canvas-soft); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
-  .entry .ico svg { width: 18px; height: 18px; }
-  .entry a.title { font-size: 15px; font-weight: 500; color: var(--pa-ink); text-decoration: none; }
-  .entry a.title:hover { color: var(--pa-primary); }
-  .entry .desc { font-size: 12.5px; color: var(--pa-ink-2); line-height: 1.7; margin-top: 8px; flex: 1; }
-  .entry .tag { display: inline-block; margin-top: 10px; font-size: 11px; color: var(--pa-mute); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-pill); padding: 2px 8px; align-self: flex-start; font-variant-numeric: tabular-nums; }
-  .entry .off { margin-top: 8px; font-size: 11.5px; color: var(--pa-warning); background: var(--pa-warning-soft); border: 1px solid #fde68a; border-radius: var(--pa-r-sm); padding: 4px 8px; display: none; }
-  .cmd { font-family: var(--pa-mono); font-size: 12px; background: var(--pa-brand-dark); color: #cbd5e1; border-radius: var(--pa-r-md); padding: 10px 12px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; line-height: 1.6; font-variant-numeric: tabular-nums; }
-  .cmd .lbl { color: #8b93b8; }
-  .copyrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-  .copied { font-size: 11px; color: var(--pa-success); }
+  .hero-lead { font-size: 21px; font-weight: 400; color: var(--pa-ink-2); margin-top: 12px; line-height: 1.4; }
+  .hero-meta { font-size: 12px; color: var(--pa-ink-3); margin-top: 12px; }
+  .tile-title { font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+  .tile-lead { font-size: 15px; color: var(--pa-ink-2); margin-top: 8px; max-width: 640px; line-height: 1.6; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .flowchip {
+    font-size: 12px; padding: 4px 10px; border-radius: var(--pa-r-pill);
+    background: var(--pa-canvas-2); color: var(--pa-ink-2);
+  }
+  .cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; }
+  .cta .arrow { transition: transform .16s var(--pa-ease); }
+  .cta:hover .arrow { transform: translateX(4px); }
+  .entry { display: flex; flex-direction: column; height: 100%; }
+  .entry .ico { width: 40px; height: 40px; border-radius: var(--pa-r-input); background: var(--pa-canvas-2); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .entry .ico svg { width: 20px; height: 20px; }
+  .entry .title { font-size: 17px; font-weight: 600; color: var(--pa-ink); }
+  .entry .desc { font-size: 13px; color: var(--pa-ink-2); line-height: 1.7; margin-top: 8px; flex: 1; }
+  .entry .tag { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--pa-ink-3); font-variant-numeric: tabular-nums; }
+  /* 探活提示：中性（环境状态，非"警告"——语义色只给结果，DESIGN.md §2.1） */
+  .probe { margin-top: 10px; font-size: 12px; color: var(--pa-ink-2); background: var(--pa-canvas-2); border-radius: var(--pa-r-input); padding: 6px 10px; display: none; }
+  .probe.is-on { display: block; }
+  .cmd { font-family: var(--pa-mono); font-size: 12px; background: var(--pa-dark); color: #cbd5e1; border-radius: var(--pa-r-input); padding: 12px 14px; white-space: pre-wrap; word-break: break-all; line-height: 1.7; }
+  .cmd .lbl { color: #8e8e93; }
+  .copyrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .fineprint { font-size: 12px; color: var(--pa-ink-3); line-height: 1.8; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="pa-card" style="margin-bottom:16px">
-    <h1>PaymentArch 平台门户 <span class="sub">演示组件 mock-channel-web · 端口 8091</span></h1>
-    <div class="note">统一入口：演示控制台 / 对账审计控制台 / 监控栈（Grafana · Prometheus） / 压测。监控与压测目标端口若未在本机启动，下方卡片会给出提示，属预期。</div>
+
+<!-- Hero（parchment） -->
+<section class="pa-section pa-section--parchment">
+  <div class="pa-main">
+    <div class="pa-eyebrow">演示组件 · mock-channel-web :8091</div>
+    <h1 style="font-size:40px;letter-spacing:-.02em;margin-top:12px">PaymentArch</h1>
+    <div class="hero-lead">电商支付平台学习项目：9 个领域服务 + 1 个演示组件，完整走通下单 → 支付 → 履约 → 权益 → 退款 → 对账 → 结算 → 记账。</div>
+    <div class="hero-meta">merchant 8081 · catalog 8082 · order 8083 · payment 8084 · fulfillment 8086 · entitlement 8087 · reconciliation 8088 · settlement 8089 · ledger 8090 · mock-channel-web 8091</div>
   </div>
+</section>
 
-  <div class="grid">
-    <div class="entry">
-      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M12 12l7-4M12 12v9M12 12L5 8"/></svg></div>
-      <a class="title" href="/demo">演示控制台</a>
-      <div class="desc">下单 → 选渠道建支付单 → 跳转收银台 → 渠道回调 → 履约 → 权益 → 记账 → 退款，并可在 ④ 区按订单实查各系统全链路落库（只读 SELECT）。</div>
-      <span class="tag">本机 :8091 /demo</span>
+<!-- T1 业务演示（white） -->
+<section class="pa-section pa-section--white">
+  <div class="pa-main">
+    <div class="tile-title">业务演示</div>
+    <div class="tile-lead">从商品下单到支付、履约、权益发放，再到订单驱动的两层退款（TXRF / PMRF），并可逐表实查各系统落库。</div>
+    <div class="chips">
+      <span class="flowchip">下单</span><span class="flowchip">建支付单</span><span class="flowchip">收银台</span>
+      <span class="flowchip">渠道回调</span><span class="flowchip">履约</span><span class="flowchip">权益</span><span class="flowchip">退款</span>
     </div>
-
-    <div class="entry">
-      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div>
-      <a class="title" href="/audit.html">对账 / 审计控制台</a>
-      <div class="desc">会计四核对（账证 · 账账 · 账实 · 账表）· 挂账 / 调账 / 复核闭环 · 关批。MOCK 纯前端演示，LIVE 经同源代理调 reconciliation-service(:8088)。</div>
-      <span class="tag">本机 :8091 /audit.html</span>
-    </div>
-
-    <div class="entry">
-      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></div>
-      <a class="title" href="http://localhost:3000" target="_blank" rel="noopener">Grafana 监控</a>
-      <div class="desc">SRE 黄金指标看板「PaymentArch · SRE 黄金指标」。登录 admin / admin。需本机已起 Grafana（端口 3000）。</div>
-      <span class="tag">本机 :3000 · admin/admin</span>
-      <div class="off">提示：:3000 未响应 —— 本机未启动 Grafana，访问后将无法加载看板（属预期）。</div>
-    </div>
-
-    <div class="entry">
-      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-primary)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="var(--pa-primary)"/></svg></div>
-      <a class="title" href="http://localhost:9090" target="_blank" rel="noopener">Prometheus</a>
-      <div class="desc">指标抓取与 PromQL 查询。需本机已起 Prometheus（端口 9090）。</div>
-      <span class="tag">本机 :9090</span>
-      <div class="off">提示：:9090 未响应 —— 本机未启动 Prometheus，访问后将无法打开（属预期）。</div>
-    </div>
+    <a class="pa-btn cta" href="/demo">进入演示控制台 <span class="arrow">→</span></a>
   </div>
+</section>
 
-  <div class="pa-card" style="margin-top:16px">
-    <h2>压测入口</h2>
-    <div class="note">两条脚本均位于仓库 <span class="pa-mono">deployment/</span> 目录，在 Payment 仓库根目录执行：</div>
+<!-- T2 财务合规（parchment） -->
+<section class="pa-section pa-section--parchment">
+  <div class="pa-main">
+    <div class="tile-title">财务合规</div>
+    <div class="tile-lead">会计四核对只报差异、不自动修钱：差额先挂账到 SUSPENSE，查清后调账定性，重新核对验证，全清才能关批。</div>
+    <div class="chips">
+      <span class="flowchip">账证</span><span class="flowchip">账账</span><span class="flowchip">账实</span><span class="flowchip">账表</span>
+    </div>
+    <a class="pa-btn ghost cta" href="/audit.html">进入对账控制台 <span class="arrow">→</span></a>
+  </div>
+</section>
 
-    <div style="margin-top:12px">
-      <div class="cmd"><span class="lbl"># 1) Node 零依赖负载：catalog 缓存读+秒杀 / 全链路 下单→支付→退款（报告落 deployment/performance/results/）</span>
+<!-- T3 可观测（white） -->
+<section class="pa-section pa-section--white">
+  <div class="pa-main">
+    <div class="tile-title">可观测</div>
+    <div class="tile-lead" style="margin-bottom:24px">监控栈与压测脚本均运行在本机；未启动时属预期，不影响上面两个入口。</div>
+    <div class="pa-grid pa-grid--3">
+
+      <div class="entry">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-action)" stroke-width="1.5" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></div>
+        <a class="title" href="http://localhost:3000" target="_blank" rel="noopener">Grafana</a>
+        <div class="desc">SRE 黄金指标看板「PaymentArch · SRE 黄金指标」，登录 admin / admin。</div>
+        <span class="tag">本机 :3000</span>
+        <div class="probe" data-port="3000">:3000 未启动 —— 外部端口受 CORS 限制无法从本页探测，属预期。</div>
+      </div>
+
+      <div class="entry">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-action)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="var(--pa-action)"/></svg></div>
+        <a class="title" href="http://localhost:9090" target="_blank" rel="noopener">Prometheus</a>
+        <div class="desc">指标抓取与 PromQL 查询。</div>
+        <span class="tag">本机 :9090</span>
+        <div class="probe" data-port="9090">:9090 未启动 —— 外部端口受 CORS 限制无法从本页探测，属预期。</div>
+      </div>
+
+      <div class="entry">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="var(--pa-action)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-5-3-3 4-4 6 6-4 4"/><path d="M14 7l3 3"/></svg></div>
+        <div class="title">压测</div>
+        <div class="desc">零依赖负载脚本，覆盖 catalog 缓存读、秒杀与全链路下单→支付→退款。</div>
+        <span class="tag">deployment/</span>
+      </div>
+
+    </div>
+
+    <div class="pa-disc" style="margin-top:24px">
+      <button class="pa-disc__head" type="button">
+        <span class="caret">›</span><span>运维命令</span><span class="cnt">2 条</span>
+      </button>
+      <div class="pa-disc__body"><div>
+        <div style="padding:4px 12px 16px">
+          <div class="cmd"><span class="lbl"># 1) Node 零依赖负载：catalog 缓存读+秒杀 / 全链路 下单→支付→退款（报告落 deployment/performance/results/）</span>
 bash deployment/performance/run-stress.sh</div>
-      <div class="copyrow"><button onclick="copyCmd(this, 'bash deployment/performance/run-stress.sh')">复制命令</button><span class="copied" style="display:none">已复制 ✓</span></div>
-    </div>
+          <div class="copyrow"><button class="pa-btn ghost pa-btn--sm" onclick="copyCmd(this, 'bash deployment/performance/run-stress.sh')">复制命令</button></div>
 
-    <div style="margin-top:14px">
-      <div class="cmd"><span class="lbl"># 2) 起栈 + 播种秒杀 + 持续流量 + 自动开 Grafana + 压测</span>
+          <div class="cmd" style="margin-top:12px"><span class="lbl"># 2) 起栈 + 播种秒杀 + 持续流量 + 自动开 Grafana + 压测</span>
 bash deployment/demo-monitor-stress.sh</div>
-      <div class="copyrow"><button onclick="copyCmd(this, 'bash deployment/demo-monitor-stress.sh')">复制命令</button><span class="copied" style="display:none">已复制 ✓</span></div>
+          <div class="copyrow"><button class="pa-btn ghost pa-btn--sm" onclick="copyCmd(this, 'bash deployment/demo-monitor-stress.sh')">复制命令</button></div>
+
+          <div class="fineprint" style="margin-top:12px">两脚本均为本地运维用途，在 Payment 仓库根目录执行；依赖本机已就绪的演示栈与监控栈，未就绪时会自行报错提示。</div>
+        </div>
+      </div></div>
     </div>
-    <div class="note">两脚本均为本地运维用途；脚本依赖本机已就绪的演示栈与监控栈，未就绪时会自行报错提示，不影响门户其他入口。</div>
   </div>
-</div>
+</section>
+
+<!-- Footer（parchment） -->
+<section class="pa-section pa-section--parchment" style="padding:32px 0">
+  <div class="pa-main">
+    <div class="fineprint">
+      本页为演示组件（mock-channel-web :8091，不进 ArchUnit 服务边界），同源代理各服务只读接口（ADR-0048）。<br>
+      收银台 /mock 渠道为演示用途，非真实支付渠道。
+    </div>
+  </div>
+</section>
+
+<script src="/app.js"></script>
 <script>
 function copyCmd(btn, text) {
-  const done = btn.parentElement.querySelector('.copied');
-  const finish = () => { if (done) { done.style.display = 'inline'; setTimeout(() => done.style.display = 'none', 1500); } };
+  function finish() { PA.toast('命令已复制', 'ok'); }
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(finish).catch(() => fallbackCopy(text, finish));
+    navigator.clipboard.writeText(text).then(finish).catch(function () { fallbackCopy(text, finish); });
   } else {
     fallbackCopy(text, finish);
   }
 }
 function fallbackCopy(text, cb) {
-  const ta = document.createElement('textarea');
+  var ta = document.createElement('textarea');
   ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta); ta.select();
   try { document.execCommand('copy'); } catch (e) { /* 静默 */ }
   document.body.removeChild(ta); if (cb) cb();
 }
-// 端口探活：仅对同源 8091 做轻量健康探测，外部端口(:3000/:9090)因跨域 CORS 不可靠，改为静态说明
-(function probe() {
-  const off = document.querySelector('.off[data-port="8091"]');
-  if (!off) return;
-  fetch('/actuator/health', { cache: 'no-store' })
-    .then(r => { off.style.display = r.ok ? 'none' : 'block'; })
-    .catch(() => { off.style.display = 'block'; });
+/* 端口探活：外部端口(:3000/:9090)因 CORS 不可靠，仅做静态中性提示；
+   同源 8091 的健康状态由顶栏 PA 探活指示承载（修复 020 遗留的 .off[data-port] 空选择器）。 */
+(function () {
+  document.querySelectorAll('.probe[data-port]').forEach(function (p) {
+    if (p.getAttribute('data-port') === '8091') p.classList.add('is-on');
+  });
 })();
 </script>
 </body>

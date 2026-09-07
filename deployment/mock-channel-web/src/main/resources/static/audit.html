@@ -4,224 +4,232 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PaymentArch 对账控制台（会计四核对 · 挂账/调账闭环）</title>
-<!-- UI 规范：docs/design/DESIGN.md（Feature 020）——改样式前先读它；token 在 /design.css -->
+<!-- UI 规范：docs/design/DESIGN.md（Feature 024 · Apple 基底）——改样式前先读它；token 在 /design.css -->
 <link rel="stylesheet" href="/design.css">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { padding: 24px; }
-  .wrap { max-width: 1120px; margin: 0 auto; }
-  h1 { font-size: 19px; font-weight: 300; letter-spacing: -0.3px; }
-  h2 { font-size: 15px; margin-bottom: 12px; color: var(--pa-ink-2); }
-  h2 .sub { font-size: 12px; color: var(--pa-mute); font-weight: 400; margin-left: 8px; }
-  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  label { font-size: 12px; color: var(--pa-mute); }
-  button { padding: 7px 14px; }
-  button.warn { background: var(--pa-warning); }
-  button.warn:hover { background: #92400e; }
-  button.ok { background: var(--pa-success); }
-  button.ok:hover { background: #116a31; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--pa-canvas-soft); vertical-align: middle; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  thead th { background: var(--pa-canvas-soft); color: var(--pa-ink-2); font-weight: 500; white-space: nowrap; }
-  tbody tr.sel { background: var(--pa-info-soft); }
-  tbody tr.done { color: var(--pa-mute); }
-  .mono { font-family: var(--pa-mono); }
-  .note { font-size: 12px; color: var(--pa-ink-2); line-height: 1.8; margin-top: 8px; }
-  .hint { font-size: 12px; color: var(--pa-mute); }
-  .kv { display: inline-flex; gap: 6px; align-items: baseline; margin-right: 18px; }
-  .kv b { font-size: 15px; color: var(--pa-ink); }
-  .chip { display: inline-block; padding: 1px 10px; border-radius: var(--pa-r-pill); font-size: 11px; font-weight: 500; }
-  /* chip 语义色（.c-*）由 design.css 统一供给（DESIGN.md §2 映射表） */
-  #log { font-family: var(--pa-mono); font-size: 12px; background: var(--pa-brand-dark); color: #cbd5e1; border-radius: var(--pa-r-md); padding: 12px 14px; height: 200px; overflow-y: auto; white-space: pre-wrap; line-height: 1.75; font-variant-numeric: tabular-nums; }
-  #log .t { color: #8b93b8; } #log .ok { color: #4ade80; } #log .err { color: #f87171; } #log .warn { color: #fbbf24; }
-  .bar { height: 6px; background: var(--pa-hairline); border-radius: var(--pa-r-pill); overflow: hidden; margin: 8px 0 4px; }
-  .bar > i { display: block; height: 100%; width: 0; background: var(--pa-primary); transition: width .35s; }
-  .err-box { background: var(--pa-danger-soft); border: 1px solid #fecaca; color: var(--pa-danger); border-radius: var(--pa-r-md); padding: 8px 12px; font-size: 12.5px; margin-top: 8px; display: none; }
-  .ok-box { background: var(--pa-success-soft); border: 1px solid #bbf7d0; color: var(--pa-success); border-radius: var(--pa-r-md); padding: 8px 12px; font-size: 12.5px; margin-top: 8px; display: none; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .mode { float: right; font-size: 12px; }
-  .mode button { padding: 4px 10px; font-size: 12px; }
-  .mode button.on { background: var(--pa-ink); }
-  .mode button.on:hover { background: var(--pa-ink-2); }
-  .pill { font-size: 11px; color: var(--pa-mute); border: 1px solid var(--pa-hairline); border-radius: var(--pa-r-sm); padding: 2px 6px; }
-  .scroll { max-height: 330px; overflow: auto; }
-  .bal td.num { text-align: right; font-family: var(--pa-mono); }
+  .audit-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--pa-s-4); align-items: start; }
+  .kvline { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .lbl { font-size: 12px; color: var(--pa-ink-3); }
+  .guid { font-size: 12px; color: var(--pa-ink-3); }
+  .pane { display: none; }
+  .pane.is-on { display: block; }
+  .rules { font-size: 11.5px; color: var(--pa-ink-3); line-height: 1.7; margin-top: 12px; }
+  .scroll { max-height: 420px; overflow: auto; }
+  @media (max-width: 900px) { .audit-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="pa-card">
-    <h1>PaymentArch 对账控制台 <span style="font-size:12px;color:var(--pa-mute)">（会计四核对 · 挂账 / 调账 / 复核闭环 · spec 017）</span>
-      <span class="mode">模式：
-        <button id="m-mock" class="on" onclick="setMode('MOCK')">MOCK 模拟数据</button>
-        <button id="m-live" class="ghost" onclick="setMode('LIVE')">LIVE 真实 API</button>
-      </span>
-    </h1>
-    <div class="note">作用域：<b>账证</b>（业务单据 ↔ 账本分录）· <b>账账</b>（借贷平衡 / 科目勾稽 / 跨账）· <b>账实</b>（账 ↔ 渠道账单）· <b>账表</b>（账 ↔ 报表）。
-      核对只报差异、不自动修钱；差额由人工<b>挂账</b>到过渡科目 <span class="pill">SUSPENSE 待处理差错款</span>，查清后<b>调账</b>定性，再<b>重新核对</b>验证，全清才能关批。
-      <span id="modeHint"></span>
-    </div>
+
+<!-- sticky 摘要条：batchNo / status / 差异数 / 挂账 / 调账 / Σ 试算平衡 + 复核·关闭 -->
+<div class="pa-summary">
+  <div class="pa-summary__kv"><span class="pa-summary__k">batchNo</span><span class="pa-summary__v pa-mono" id="s-batchNo">—</span></div>
+  <div class="pa-summary__kv"><span class="pa-summary__k">status</span><span class="pa-summary__v" id="s-status">—</span></div>
+  <div class="pa-summary__kv"><span class="pa-summary__k">已核对</span><span class="pa-summary__v" id="s-checked">—</span></div>
+  <div class="pa-summary__kv"><span class="pa-summary__k">差异</span><span class="pa-summary__v" id="s-diff">—</span></div>
+  <div class="pa-summary__kv"><span class="pa-summary__k">挂账</span><span class="pa-summary__v" id="s-susp">¥0.00</span></div>
+  <div class="pa-summary__kv"><span class="pa-summary__k">调账</span><span class="pa-summary__v" id="s-adj">¥0.00</span></div>
+  <div class="pa-summary__kv"><span class="pa-summary__k">试算平衡 Σ</span><span class="pa-summary__v" id="s-bal">—</span></div>
+  <div class="pa-summary__spacer"></div>
+  <button class="pa-btn ghost pa-btn--sm" onclick="doRecheck()">↻ 重新核对</button>
+  <button class="pa-btn danger pa-btn--sm" onclick="doClose()">关闭批次</button>
+</div>
+
+<div class="pa-main pa-main--wide" style="padding-top:24px;padding-bottom:32px">
+
+  <div class="pa-eyebrow">财务合规 · 会计四核对 · spec 017</div>
+  <h1 style="margin-top:8px">对账控制台</h1>
+  <div class="pa-note" style="max-width:820px">
+    作用域：<b>账证</b>（业务单据 ↔ 账本分录）· <b>账账</b>（借贷平衡 / 科目勾稽 / 跨账）· <b>账实</b>（账 ↔ 渠道账单）· <b>账表</b>（账 ↔ 报表）。
+    核对只报差异、不自动修钱；差额由人工<b>挂账</b>到 <span class="pa-mono">SUSPENSE</span>，查清后<b>调账</b>定性，再<b>重新核对</b>验证，全清才能关批。
+    <span id="modeHint"></span>
   </div>
 
-  <!-- ① 触发 -->
-  <div class="pa-card">
-    <h2>① 触发对账任务<span class="sub">POST /internal/audit/batches</span></h2>
-    <div class="row">
-      <span class="kv"><label>作用域 scope</label>
-        <select id="scope">
-          <option value="ALL">ALL（四核对全跑）</option>
-          <option value="CERTIFICATE">CERTIFICATE 账证</option>
-          <option value="LEDGER">LEDGER 账账</option>
-          <option value="REAL">REAL 账实</option>
-          <option value="REPORT">REPORT 账表</option>
-        </select></span>
-      <span class="kv"><label>周期 period</label><input type="text" id="period" style="width:130px"></span>
-      <span class="kv"><label>数据源（仅 MOCK）</label>
-        <select id="dataset">
-          <option value="FAULT">全故障组（F2~F9）</option>
-          <option value="CLEAN">平账组（F1，0 差异）</option>
-        </select></span>
-      <button onclick="runAudit()">▶ 触发对账任务</button>
-      <button class="ghost" onclick="resetAll()">重置</button>
-    </div>
-    <div class="bar"><i id="prog"></i></div>
-    <div class="row" style="margin-top:6px">
-      <span class="kv">batchNo <b class="mono" id="s-batchNo">—</b></span>
-      <span class="kv">status <b id="s-status">—</b></span>
-      <span class="kv">已核对 <b id="s-checked">—</b></span>
-      <span class="kv">差异 <b id="s-diff">—</b></span>
-      <span class="kv">挂账 <b id="s-susp">¥0.00</b></span>
-      <span class="kv">调账 <b id="s-adj">¥0.00</b></span>
-    </div>
-    <div class="note" id="srcNote"></div>
-  </div>
+  <div class="audit-grid" style="margin-top:24px">
 
-  <!-- ② 执行日志 -->
-  <div class="pa-card">
-    <h2>② 执行日志<span class="sub">拉事实 → 拉分录 → 双向比对 → 科目勾稽 → 产出差异</span>
-      <button class="ghost" style="float:right;font-size:12px;padding:3px 10px" onclick="clearLog()">清空</button>
-    </h2>
-    <div id="log"></div>
-  </div>
+    <!-- ============ 主区 ============ -->
+    <div class="col-main">
 
-  <!-- ③ 差异结果 -->
-  <div class="pa-card">
-    <h2>③ 核对结果 · 差异台账<span class="sub">audit_differences</span>
-      <span style="float:right;font-size:12px;color:var(--pa-mute)">过滤：
-        <select id="fkind" onchange="renderDiffs()"><option value="">全部 kind</option></select>
-        <select id="fstatus" onchange="renderDiffs()">
-          <option value="">全部状态</option><option>PENDING</option><option>SUSPENDED</option>
-          <option>ADJUSTED</option><option>VERIFIED</option></select>
-      </span>
-    </h2>
-    <div class="scroll">
-      <table id="diffTable">
-        <thead><tr>
-          <th style="width:28px"></th><th>#</th><th>kind</th><th>severity</th><th>来源</th>
-          <th style="text-align:right">业务口径</th><th style="text-align:right">账本实算</th><th style="text-align:right">差额</th>
-          <th>状态</th><th>处置</th><th>说明</th>
-        </tr></thead>
-        <tbody id="diffBody"></tbody>
-      </table>
-    </div>
-    <div class="note" id="diffEmpty">尚未触发对账任务。</div>
-  </div>
-
-  <!-- ④⑤ 挂账 / 调账 -->
-  <div class="grid2">
-    <div class="pa-card">
-      <h2>④ 挂账<span class="sub">差异查不清时，先把差额安置到 SUSPENSE</span></h2>
-      <div id="selInfo" class="note" style="margin-bottom:10px">（在 ③ 里点一行选择差异）</div>
-      <div class="row">
-        <button class="warn" id="btnSuspend" disabled onclick="doSuspend()">挂账到 SUSPENSE</button>
-        <span class="hint">分录：账少记 → 借 客户资金 / 贷 待处理差错款；账多记 → 反向</span>
-      </div>
-      <div id="suspErr" class="err-box"></div>
-      <div id="suspOk" class="ok-box"></div>
-    </div>
-
-    <div class="pa-card">
-      <h2>⑤ 调账<span class="sub">查清后定性：补记 / 红冲 / 更正 / 转出</span></h2>
-      <div class="row">
-        <span class="kv"><label>kind</label>
-          <select id="adjKind" onchange="previewEntry()">
-            <option value="SUPPLEMENT">SUPPLEMENT 补记</option>
-            <option value="REVERSE">REVERSE 红冲</option>
-            <option value="CORRECT">CORRECT 科目更正（红蓝字）</option>
-            <option value="TRANSFER">TRANSFER 从 SUSPENSE 转出</option>
-          </select></span>
-        <span class="kv"><label>对手科目</label>
-          <select id="adjAccount" onchange="previewEntry()">
-            <option value="MERCHANT_PAYABLE">MERCHANT_PAYABLE 应付商户净额</option>
-            <option value="PLATFORM_FEE_REVENUE">PLATFORM_FEE_REVENUE 手续费收入</option>
-            <option value="CUSTOMER_CASH">CUSTOMER_CASH 客户资金</option>
-            <option value="SETTLEMENT_PAYABLE">SETTLEMENT_PAYABLE 已结算待出款</option>
-          </select></span>
-      </div>
-      <div class="row">
-        <span class="kv"><label>金额（分）</label><input type="number" id="adjAmount" style="width:110px" oninput="previewEntry()"></span>
-        <span class="kv"><label>操作人</label><input type="text" id="adjOperator" value="demo-auditor" style="width:110px"></span>
-        <span class="kv"><label>复核人</label><input type="text" id="adjReviewer" placeholder="大额必填" style="width:110px"></span>
-      </div>
-      <div class="row">
-        <span class="kv"><label>原因</label><input type="text" id="adjReason" placeholder="必填，写清依据" style="width:320px"></span>
-        <button id="btnAdjust" disabled onclick="doAdjust()">提交调账（记账）</button>
-      </div>
-      <div class="note" id="entryPreview" style="font-family:Consolas,monospace;font-size:12px;color:#334155"></div>
-      <div id="adjErr" class="err-box"></div>
-      <div id="adjOk" class="ok-box"></div>
-      <div class="note" style="font-size:11.5px;color:var(--pa-mute)">
-        硬规则：借贷必须平衡 · 累计处置 ≤ 差异金额 · 分录 append-only 不删改 ·
-        &gt;¥100 必须复核人 · 只写 audit_* 与 ledger 的 ADJUSTMENT 分录，绝不动业务单据状态。
-      </div>
-    </div>
-  </div>
-
-  <!-- ⑥ 复核与关闭 -->
-  <div class="pa-card">
-    <h2>⑥ 复核与关闭<span class="sub">recheck → close（有未处置差异时关闭 MUST 被拒 400）</span></h2>
-    <div class="row">
-      <button class="ok" onclick="doRecheck()">↻ 重新核对（recheck）</button>
-      <button class="danger" onclick="doClose()">关闭批次（close）</button>
-      <span class="hint">recheck 对已处置差异重跑比对，通过置 VERIFIED；未收口差异存在时关批被拒。</span>
-    </div>
-    <div id="closeErr" class="err-box"></div>
-    <div id="closeOk" class="ok-box"></div>
-  </div>
-
-  <!-- ⑦ 台账 -->
-  <div class="pa-card">
-    <h2>⑦ 挂账 / 调账台账 + 试算平衡<span class="sub">audit_adjustments · ledger accounts</span></h2>
-    <div class="grid2">
-      <div>
-        <div class="scroll">
-        <table class="mono" style="font-size:11.5px">
-          <thead><tr><th>adjust_no</th><th>kind</th><th>借</th><th>贷</th><th style="text-align:right">金额</th><th>posting_no</th><th>操作/复核</th></tr></thead>
-          <tbody id="adjBody"></tbody>
-        </table>
+      <!-- ① 触发（紧凑）-->
+      <div class="pa-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <h3>触发对账任务 <span class="guid">POST /internal/audit/batches</span></h3>
+          <div class="pa-seg">
+            <button type="button" id="m-mock" onclick="setMode('MOCK')">MOCK 模拟数据</button>
+            <button type="button" id="m-live" onclick="setMode('LIVE')">LIVE 真实 API</button>
+          </div>
         </div>
-        <div class="note" id="adjEmpty">暂无处置记录。</div>
+        <div class="kvline" style="margin-top:16px">
+          <span class="pa-kv"><label>作用域 scope</label>
+            <select id="scope">
+              <option value="ALL">ALL（四核对全跑）</option>
+              <option value="CERTIFICATE">CERTIFICATE 账证</option>
+              <option value="LEDGER">LEDGER 账账</option>
+              <option value="REAL">REAL 账实</option>
+              <option value="REPORT">REPORT 账表</option>
+            </select></span>
+          <span class="pa-kv"><label>周期 period</label><input type="text" id="period" style="width:140px"></span>
+          <span class="pa-kv"><label>数据源（仅 MOCK）</label>
+            <select id="dataset">
+              <option value="FAULT">全故障组（F2~F9）</option>
+              <option value="CLEAN">平账组（F1，0 差异）</option>
+            </select></span>
+        </div>
+        <div class="pa-row" style="margin-top:16px">
+          <button class="pa-btn" onclick="runAudit()">▶ 触发对账任务</button>
+          <button class="pa-btn ghost" onclick="resetAll()">重置</button>
+        </div>
+        <div class="pa-bar" style="margin-top:16px"><i id="prog"></i></div>
+        <div class="pa-note" id="srcNote"></div>
       </div>
-      <div>
-        <table class="bal">
-          <thead><tr><th>科目</th><th style="text-align:right">余额（借方为正 / 贷方为负）</th></tr></thead>
-          <tbody id="balBody"></tbody>
-        </table>
-        <div class="note" id="balCheck"></div>
-      </div>
-    </div>
-  </div>
 
-  <div class="pa-card">
-    <div class="note" style="font-size:11.5px;color:var(--pa-mute)">
-      本页为演示组件（mock-channel-web :8091/audit.html，不进 ArchUnit 服务边界）。
-      <b>MOCK 模式</b>：内置确定性 fixture（F1 平账组 / F2~F9 故障组），纯前端执行比对与处置，离线可演示；
-      <b>LIVE 模式</b>：经同源代理 <span class="mono">/proxy/recon/internal/audit/**</span> 调真实端点（spec 017 已交付）。
+      <!-- ② 差异台账（7 列 + 展开行）-->
+      <div class="pa-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <h3>差异台账 <span class="guid">audit_differences</span></h3>
+          <span class="guid">过滤：
+            <select id="fkind" onchange="renderDiffs()"><option value="">全部 kind</option></select>
+            <select id="fstatus" onchange="renderDiffs()">
+              <option value="">全部状态</option><option>PENDING</option><option>SUSPENDED</option>
+              <option>ADJUSTED</option><option>VERIFIED</option></select>
+          </span>
+        </div>
+        <div class="scroll" style="margin-top:12px">
+          <table class="pa-table">
+            <thead><tr>
+              <th style="width:52px">#</th><th>kind</th><th>severity</th>
+              <th class="num">业务口径</th><th class="num">差额</th><th>状态</th><th>处置</th>
+            </tr></thead>
+            <tbody id="diffBody"></tbody>
+          </table>
+        </div>
+        <div class="pa-note" id="diffEmpty">尚未触发对账任务。</div>
+      </div>
+
+      <!-- ⑦ 处置台账 + 试算平衡（disclosure）-->
+      <div class="pa-card">
+        <div class="pa-disc">
+          <button class="pa-disc__head" type="button">
+            <span class="caret">›</span><span>挂账 / 调账台账 + 试算平衡</span><span class="cnt">audit_adjustments · ledger</span>
+          </button>
+          <div class="pa-disc__body"><div>
+            <div class="pa-grid pa-grid--2" style="padding:8px 12px 16px">
+              <div>
+                <table class="pa-table pa-mono" style="font-size:11.5px">
+                  <thead><tr><th>adjust_no</th><th>kind</th><th>借</th><th>贷</th><th class="num">金额</th><th>posting_no</th><th>操作/复核</th></tr></thead>
+                  <tbody id="adjBody"></tbody>
+                </table>
+                <div class="pa-note" id="adjEmpty">暂无处置记录。</div>
+              </div>
+              <div>
+                <table class="pa-table">
+                  <thead><tr><th>科目</th><th class="num">余额（借正 / 贷负）</th></tr></thead>
+                  <tbody id="balBody"></tbody>
+                </table>
+                <div class="pa-note" id="balCheck"></div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="pa-card">
+        <div class="rules">
+          本页为演示组件（mock-channel-web :8091/audit.html，不进 ArchUnit 服务边界）。
+          <b>MOCK</b>：内置确定性 fixture（F1 平账组 / F2~F9 故障组），纯前端执行，离线可演示；
+          <b>LIVE</b>：经同源代理 <span class="pa-mono">/proxy/recon/internal/audit/**</span> 调真实端点（spec 017）。
+        </div>
+      </div>
     </div>
+
+    <!-- ============ 右侧处置面板 ============ -->
+    <aside class="col-side">
+      <div class="pa-sticky">
+        <div class="pa-card">
+          <h3>处置</h3>
+          <div id="selInfo" class="pa-note" style="margin-top:8px">（在左侧台账点一行选择差异）</div>
+
+          <div class="pa-seg pa-seg--block" style="margin-top:16px">
+            <button type="button" id="paneSuspendBtn" class="is-on" onclick="setPane('suspend')">挂账</button>
+            <button type="button" id="paneAdjustBtn" onclick="setPane('adjust')">调账</button>
+          </div>
+
+          <!-- 挂账 -->
+          <div class="pane is-on" id="paneSuspend">
+            <div class="pa-note">差异查不清时，先把差额安置到 SUSPENSE 过渡科目。</div>
+            <div class="pa-row" style="margin-top:12px">
+              <button class="pa-btn" id="btnSuspend" disabled onclick="doSuspend()">挂账到 SUSPENSE</button>
+            </div>
+            <div class="guid" style="margin-top:8px">分录：账少记 → 借 客户资金 / 贷 待处理差错款；账多记 → 反向</div>
+            <div id="suspErr" class="pa-inline is-bad"></div>
+            <div id="suspOk" class="pa-inline is-ok"></div>
+          </div>
+
+          <!-- 调账 -->
+          <div class="pane" id="paneAdjust">
+            <div class="pa-note">查清后定性：补记 / 红冲 / 更正 / 转出。</div>
+            <div style="margin-top:12px">
+              <span class="pa-kv" style="display:flex"><label>kind</label>
+                <select id="adjKind" onchange="previewEntry()">
+                  <option value="SUPPLEMENT">SUPPLEMENT 补记</option>
+                  <option value="REVERSE">REVERSE 红冲</option>
+                  <option value="CORRECT">CORRECT 科目更正（红蓝字）</option>
+                  <option value="TRANSFER">TRANSFER 从 SUSPENSE 转出</option>
+                </select></span>
+            </div>
+            <div style="margin-top:12px">
+              <span class="pa-kv" style="display:flex"><label>对手科目</label>
+                <select id="adjAccount" onchange="previewEntry()">
+                  <option value="MERCHANT_PAYABLE">MERCHANT_PAYABLE 应付商户净额</option>
+                  <option value="PLATFORM_FEE_REVENUE">PLATFORM_FEE_REVENUE 手续费收入</option>
+                  <option value="CUSTOMER_CASH">CUSTOMER_CASH 客户资金</option>
+                  <option value="SETTLEMENT_PAYABLE">SETTLEMENT_PAYABLE 已结算待出款</option>
+                </select></span>
+            </div>
+            <div class="pa-row" style="margin-top:12px">
+              <span class="pa-kv"><label>金额（分）</label><input type="number" id="adjAmount" style="width:110px" oninput="previewEntry()"></span>
+              <span class="pa-kv"><label>操作人</label><input type="text" id="adjOperator" value="demo-auditor" style="width:110px"></span>
+            </div>
+            <div class="pa-row" style="margin-top:12px">
+              <span class="pa-kv"><label>复核人</label><input type="text" id="adjReviewer" placeholder="大额必填" style="width:110px"></span>
+            </div>
+            <div style="margin-top:12px">
+              <span class="pa-kv" style="display:flex"><label>原因</label><input type="text" id="adjReason" placeholder="必填，写清依据" style="width:100%"></span>
+            </div>
+            <div class="pa-row" style="margin-top:12px">
+              <button class="pa-btn" id="btnAdjust" disabled onclick="doAdjust()">提交调账（记账）</button>
+            </div>
+            <div id="entryPreview" class="pa-note pa-mono" style="font-size:12px"></div>
+            <div id="adjErr" class="pa-inline is-bad"></div>
+            <div id="adjOk" class="pa-inline is-ok"></div>
+          </div>
+
+          <div class="rules">
+            硬规则：借贷必须平衡 · 累计处置 ≤ 差异金额 · 分录 append-only 不删改 · &gt;¥100 必须复核人 ·
+            只写 audit_* 与 ledger 的 ADJUSTMENT 分录，绝不动业务单据状态。
+          </div>
+        </div>
+
+        <div class="pa-card">
+          <h3>复核与关闭</h3>
+          <div class="pa-note">recheck 对已处置差异重跑比对，通过置 VERIFIED；有未收口差异时关批被拒（400）。</div>
+          <div id="closeErr" class="pa-inline is-bad"></div>
+          <div id="closeOk" class="pa-inline is-ok"></div>
+        </div>
+      </div>
+    </aside>
+
   </div>
 </div>
 
+<div id="log"></div>
+
+<script src="/app.js"></script>
 <script>
+PA.setApiBase('/proxy/recon');
+const log = PA.log;
+const esc = PA.esc;
+const fmt = PA.fmtMoney;
+
 /* ============================ 常量与状态 ============================ */
 var ACCOUNTS = ['CUSTOMER_CASH','MERCHANT_PAYABLE','PLATFORM_FEE_REVENUE','SETTLEMENT_PAYABLE','SUSPENSE'];
 var ACCOUNT_CN = {
@@ -232,9 +240,9 @@ var ACCOUNT_CN = {
 var INIT_BAL = { CUSTOMER_CASH: 35000, MERCHANT_PAYABLE: -13250, PLATFORM_FEE_REVENUE: 0,
                  SETTLEMENT_PAYABLE: -21750, SUSPENSE: 0 };
 
-var S = { mode:'MOCK', batch:null, diffs:[], adjs:[], bal:{}, sel:null, running:false, seq:0 };
+var S = { mode:'MOCK', batch:null, diffs:[], adjs:[], bal:{}, sel:null, running:false, seq:0, expanded:{} };
 
-/* ============================ MOCK fixture（与 plan §8.2 / 后端口径一致） ============================ */
+/* ============================ MOCK fixture ============================ */
 var FACTS = [
   { st:'PAYMENT', sid:'PM-AUD-0001', amount:10000 },
   { st:'PAYMENT', sid:'PM-AUD-0002', amount:25000 },
@@ -281,34 +289,33 @@ function mockDifferences(scope, dataset) {
 }
 
 /* ============================ 工具 ============================ */
-function fmt(m) { return '¥' + ((m || 0) / 100).toFixed(2); }
 function now() { var d = new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2); }
-function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 function nextNo(prefix) { S.seq++; return prefix + '-' + String(Date.now()).slice(-8) + '-' + String(S.seq).padStart(3,'0'); }
-function log(msg, cls) {
-  var box = document.getElementById('log');
-  var line = document.createElement('div');
-  line.innerHTML = '<span class="t">[' + now() + ']</span> ' + (cls ? '<span class="'+cls+'">'+esc(msg)+'</span>' : esc(msg));
-  box.appendChild(line); box.scrollTop = box.scrollHeight;
-}
-function clearLog() { document.getElementById('log').innerHTML = ''; }
+/* 内联提示：错误紧贴出错字段（非 toast） */
 function show(id, msg, isErr) {
   var el = document.getElementById(id);
   el.style.display = 'block'; el.innerHTML = msg;
-  el.className = isErr ? 'err-box' : 'ok-box';
+  el.className = 'pa-inline ' + (isErr ? 'is-bad' : 'is-ok');
   if (isErr) log('✗ ' + msg.replace(/<[^>]+>/g,''), 'err');
 }
 function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-/* ============================ 模式 ============================ */
+/* ============================ 模式 / 面板 ============================ */
 function setMode(m) {
   S.mode = m;
-  document.getElementById('m-mock').className = (m === 'MOCK' ? 'on' : 'ghost');
-  document.getElementById('m-live').className = (m === 'LIVE' ? 'on' : 'ghost');
+  document.getElementById('m-mock').className = (m === 'MOCK' ? 'is-on' : '');
+  document.getElementById('m-live').className = (m === 'LIVE' ? 'is-on' : '');
   document.getElementById('modeHint').innerHTML = m === 'MOCK'
     ? '当前：<b>MOCK</b> —— 内置 fixture，纯前端执行，离线可演示。'
-    : '当前：<b>LIVE</b> —— 经 <span class="mono">/proxy/recon</span> 调真实 /internal/audit/** 端点。';
+    : '当前：<b>LIVE</b> —— 经 <span class="pa-mono">/proxy/recon</span> 调真实 /internal/audit/** 端点。';
   document.getElementById('dataset').disabled = (m === 'LIVE');
+}
+function setPane(name) {
+  document.getElementById('paneSuspend').className = 'pane' + (name === 'suspend' ? ' is-on' : '');
+  document.getElementById('paneAdjust').className = 'pane' + (name === 'adjust' ? ' is-on' : '');
+  document.getElementById('paneSuspendBtn').className = (name === 'suspend' ? 'is-on' : '');
+  document.getElementById('paneAdjustBtn').className = (name === 'adjust' ? 'is-on' : '');
+  if (name === 'adjust') previewEntry();
 }
 
 /* ============================ ① 触发对账 ============================ */
@@ -318,7 +325,7 @@ function runAudit() {
   var scope = document.getElementById('scope').value;
   var ds = document.getElementById('dataset').value;
 
-  S.running = true; S.diffs = []; S.adjs = []; S.bal = Object.assign({}, INIT_BAL); S.sel = null;
+  S.running = true; S.diffs = []; S.adjs = []; S.bal = Object.assign({}, INIT_BAL); S.sel = null; S.expanded = {};
   S.batch = { batch_no: nextNo('AB'), period: period, scope: scope, status: 'PROCESSING', checked: 0,
               suspended: 0, adjusted: 0, started: now() };
   ['suspErr','suspOk','adjErr','adjOk','closeErr','closeOk'].forEach(hide);
@@ -350,6 +357,7 @@ function runAudit() {
     document.getElementById('prog').style.width = '100%';
     log('  · 产出差异 ' + S.diffs.length + ' 条 → batch.status=' + S.batch.status);
     log('批次执行完成（模拟）', S.diffs.length ? 'warn' : 'ok');
+    if (S.diffs.length) PA.toast('产出差异 ' + S.diffs.length + ' 条，点一行开始处置', 'ok');
     renderAll();
   })();
 }
@@ -414,7 +422,8 @@ function applySuspend(d, amt, debit, credit, postingNo, adjustNo) {
   S.adjs.push({ adjust_no: adjustNo, kind: 'SUSPEND', debit: debit, credit: credit,
                 amount: amt, posting_no: postingNo, operator: 'demo-auditor', reviewer: '' });
   log('挂账：借 ' + debit + ' / 贷 ' + credit + ' ' + fmt(amt) + ' → posting ' + postingNo, 'warn');
-  show('suspOk', '已挂账 <b>' + fmt(amt) + '</b> 到 <b>SUSPENSE 待处理差错款</b>，posting_no=<span class="mono">' + postingNo + '</span>；差异 → <b>SUSPENDED</b>。业务单据状态未做任何修改。', false);
+  show('suspOk', '已挂账 <b>' + fmt(amt) + '</b> 到 <b>SUSPENSE 待处理差错款</b>，posting_no=<span class="pa-mono">' + postingNo + '</span>；差异 → <b>SUSPENDED</b>。业务单据状态未做任何修改。', false);
+  PA.toast('已挂账 ' + fmt(amt) + ' → SUSPENSE', 'ok');
   renderAll();
 }
 
@@ -442,8 +451,8 @@ function previewEntry() {
   box.innerHTML = pairs.map(function (p) {
     return '借 ' + p.debit + '（' + ACCOUNT_CN[p.debit] + '）&nbsp; ' + fmt(amt) +
            '<br>贷 ' + p.credit + '（' + ACCOUNT_CN[p.credit] + '）&nbsp; ' + fmt(amt);
-  }).join('<br><span style="color:#94a3b8">—— 红蓝字第二组 ——</span><br>');
-  box.innerHTML += '<br><span style="color:var(--pa-success)">借贷平衡 ✓（每组分录等额）</span>';
+  }).join('<br><span style="color:var(--pa-ink-3)">—— 红蓝字第二组 ——</span><br>');
+  box.innerHTML += '<br><span style="color:var(--pa-ok)">借贷平衡 ✓（每组分录等额）</span>';
 }
 
 function doAdjust() {
@@ -484,7 +493,8 @@ function applyAdjust(d, kind, under, acct, amt, op, rv, postingNo, adjustNo) {
   S.adjs.push({ adjust_no: adjustNo, kind: kind, debit: pairs[0].debit, credit: pairs[0].credit,
                 amount: amt, posting_no: postingNo, operator: op, reviewer: rv });
   log('调账 ' + kind + ' ' + fmt(amt) + ' → posting ' + postingNo + '（' + op + (rv ? ' / 复核 ' + rv : '') + '）', 'ok');
-  show('adjOk', '调账已记账：<b>' + kind + '</b> ' + fmt(amt) + '，posting_no=<span class="mono">' + postingNo + '</span>；差异 → <b>ADJUSTED</b>。点「重新核对」验证。', false);
+  show('adjOk', '调账已记账：<b>' + kind + '</b> ' + fmt(amt) + '，posting_no=<span class="pa-mono">' + postingNo + '</span>；差异 → <b>ADJUSTED</b>。点「重新核对」验证。', false);
+  PA.toast('调账已记账：' + kind + ' ' + fmt(amt), 'ok');
   renderAll();
 }
 
@@ -510,6 +520,7 @@ function doRecheck() {
     log('recheck 完成：' + verified + ' 条差异验证通过（VERIFIED）', verified ? 'ok' : 'warn');
     renderAll();
     if (verified) show('closeOk', 'recheck：' + verified + ' 条差异已验证通过（VERIFIED）。', false);
+    if (verified) PA.toast('recheck：' + verified + ' 条已验证通过', 'ok');
   }, 600);
 }
 
@@ -536,6 +547,7 @@ function doClose() {
   var open = S.diffs.filter(function (d) { return d.status === 'PENDING' || d.status === 'SUSPENDED' || d.status === 'ADJUSTED'; });
   if (open.length) {
     log('关闭被拒：尚有 ' + open.length + ' 条未收口差异（400）', 'err');
+    PA.toast('关闭被拒（400）：尚有 ' + open.length + ' 条差异未收口 —— 差异未处置完不得关批', 'bad');
     return show('closeErr', '关闭被拒（400）：尚有 <b>' + open.length + '</b> 条差异未收口（' +
       open.map(function (d) { return '#' + d.id + ' ' + d.kind + '(' + d.status + ')'; }).join('、') +
       '）。会计纪律：差异未处置完不得关批。', true);
@@ -543,13 +555,14 @@ function doClose() {
   if (S.mode === 'LIVE') {
     api('POST', '/internal/audit/batches/' + S.batch.batch_no + '/close', { operator: 'demo-auditor' })
       .then(function (b) { S.batch.status = b.status || 'CLOSED'; log('批次关闭成功：CLOSED', 'ok'); renderAll();
-        show('closeOk', '批次 <span class="mono">' + S.batch.batch_no + '</span> 已关闭（<b>CLOSED</b>）。', false); })
+        show('closeOk', '批次 <span class="pa-mono">' + S.batch.batch_no + '</span> 已关闭（<b>CLOSED</b>）。', false); })
       .catch(function (e) { show('closeErr', 'LIVE 关闭失败：' + esc(e.message), true); });
     return;
   }
   S.batch.status = 'CLOSED';
   log('批次关闭成功：CLOSED（全部差异已收口）', 'ok');
-  show('closeOk', '批次 <span class="mono">' + S.batch.batch_no + '</span> 已关闭（<b>CLOSED</b>）：差异全部收口、SUSPENSE 已冲平、试算平衡 ✓。', false);
+  show('closeOk', '批次 <span class="pa-mono">' + S.batch.batch_no + '</span> 已关闭（<b>CLOSED</b>）：差异全部收口、SUSPENSE 已冲平、试算平衡 ✓。', false);
+  PA.toast('批次已关闭（CLOSED）', 'ok');
   renderAll();
 }
 
@@ -563,7 +576,7 @@ function refreshTrialBalance() {
     log('试算平衡：balanced=' + t.balanced + ' diff=' + JSON.stringify(t.diffByCurrency || {}),
         t.balanced ? 'ok' : 'err');
     document.getElementById('balCheck').innerHTML =
-      'LIVE 试算平衡 = <b style="color:' + (t.balanced ? 'var(--pa-success)' : 'var(--pa-danger)') + '">' + (t.balanced ? '平衡 ✓' : '不平衡 ✗') + '</b>';
+      'LIVE 试算平衡 = <b style="color:' + (t.balanced ? 'var(--pa-ok)' : 'var(--pa-bad)') + '">' + (t.balanced ? '平衡 ✓' : '不平衡 ✗') + '</b>';
   }).catch(function () { /* 静默 */ });
 }
 
@@ -572,7 +585,6 @@ function selectRow(id) {
   var d = selected();
   ['suspErr','suspOk','adjErr','adjOk'].forEach(hide);
   if (d) {
-    var under = d.expected > d.actual;
     document.getElementById('adjAmount').value = Math.max(0,
       d.kind === 'TRANSFER-LIMIT' ? d.suspended : (d.gap - d.suspended - d.adjusted));
     if (d.suspended > 0) document.getElementById('adjAmount').value = d.suspended - (d.transferred || 0);
@@ -581,14 +593,24 @@ function selectRow(id) {
       : (d.kind === 'ORPHAN_POSTING' || d.kind === 'DUPLICATE_POSTING') ? 'REVERSE' : 'CORRECT');
     document.getElementById('btnSuspend').disabled = !(d.status === 'PENDING' || d.status === 'ADJUSTED') || (d.gap - d.suspended <= 0);
     document.getElementById('btnAdjust').disabled = false;
+    // 消除隐式联动：已挂过账 → 默认切到「调账」面板
+    setPane(d.suspended > 0 ? 'adjust' : 'suspend');
   }
   renderDiffs(); previewEntry(); renderSel();
 }
 
+function toggleExpand(id) {
+  S.expanded[id] = !S.expanded[id];
+  var node = document.getElementById('ex-' + id);
+  if (node) node.className = 'pa-expand' + (S.expanded[id] ? ' is-open' : '');
+  var btn = document.getElementById('eb-' + id);
+  if (btn) btn.className = 'pa-rowbtn' + (S.expanded[id] ? ' is-open' : '');
+}
+
 function renderSel() {
   var d = selected(); var box = document.getElementById('selInfo');
-  if (!d) { box.innerHTML = '（在 ③ 里点一行选择差异）'; return; }
-  box.innerHTML = '已选差异 <b>#' + d.id + ' ' + d.kind + '</b>（' + esc(d.source_type) + '/' + esc(d.source_id) + '）' +
+  if (!d) { box.innerHTML = '（在左侧台账点一行选择差异）'; return; }
+  box.innerHTML = '已选 <b>#' + d.id + ' ' + d.kind + '</b>（' + esc(d.source_type) + '/' + esc(d.source_id) + '）' +
     '：业务口径 <b>' + fmt(d.expected) + '</b> vs 账本实算 <b>' + fmt(d.actual) + '</b>，差额 <b>' + fmt(d.gap) + '</b>' +
     '，已挂账 ' + fmt(d.suspended) + '，已调账 ' + fmt(d.adjusted) + '，状态 <b>' + d.status + '</b><br>' + esc(d.detail);
 }
@@ -598,9 +620,9 @@ function renderAll() { renderStatus(); renderDiffs(); renderAdjs(); renderBal();
 function renderStatus() {
   var b = S.batch;
   var set = function (id, v) { document.getElementById(id).innerHTML = v; };
-  if (!b) { ['s-batchNo','s-status','s-checked','s-diff','s-susp','s-adj'].forEach(function (i) { set(i, '—'); }); return; }
+  if (!b) { ['s-batchNo','s-status','s-checked','s-diff','s-susp','s-adj','s-bal'].forEach(function (i) { set(i, '—'); }); return; }
   set('s-batchNo', b.batch_no);
-  set('s-status', '<span class="chip c-' + b.status + '">' + b.status + '</span>');
+  set('s-status', '<span class="c c-' + b.status + '">' + b.status + '</span>');
   set('s-checked', b.checked);
   set('s-diff', S.diffs.length + ' 条');
   set('s-susp', fmt(b.suspended || 0));
@@ -613,38 +635,44 @@ function renderDiffs() {
   var kinds = {};
   S.diffs.forEach(function (d) { kinds[d.kind] = 1; });
   var cur = sel.value;
-  var options = '<option value="">全部 kind</option>' + Object.keys(kinds).map(function (k) {
+  sel.innerHTML = '<option value="">全部 kind</option>' + Object.keys(kinds).map(function (k) {
     return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + k + '</option>';
   }).join('');
-  sel.innerHTML = options;
   var rows = S.diffs.filter(function (d) {
     return (!sel.value || d.kind === sel.value) && (!fs || d.status === fs);
   });
-  document.getElementById('diffBody').innerHTML = rows.map(function (d) {
+  var html = '';
+  rows.forEach(function (d, idx) {
     var done = (d.status === 'VERIFIED');
-    return '<tr class="' + (S.sel === d.id ? 'sel' : '') + (done ? ' done' : '') + '" onclick="selectRow(' + d.id + ')">' +
-      '<td>' + (done ? '✅' : (d.status === 'PENDING' ? '⚠' : '•')) + '</td>' +
-      '<td>' + d.id + '</td>' +
-      '<td class="mono">' + d.kind + '</td>' +
-      '<td><span class="chip c-' + d.severity + '">' + d.severity + '</span></td>' +
-      '<td class="mono" style="font-size:11px">' + esc(d.source_type) + '/' + esc(d.source_id) + '</td>' +
-      '<td style="text-align:right" class="mono">' + fmt(d.expected) + '</td>' +
-      '<td style="text-align:right" class="mono">' + fmt(d.actual) + '</td>' +
-      '<td style="text-align:right" class="mono"><b>' + fmt(d.gap) + '</b></td>' +
-      '<td><span class="chip c-' + d.status + '">' + d.status + '</span></td>' +
-      '<td class="mono" style="font-size:11px">' + (d.suspended ? '挂' + fmt(d.suspended) + ' ' : '') + (d.adjusted ? '调' + fmt(d.adjusted) : '') + '</td>' +
-      '<td style="font-size:11.5px;color:var(--pa-mute)">' + esc(d.detail) + '</td></tr>';
-  }).join('');
-  document.getElementById('diffEmpty').style.display = rows.length ? 'none' : 'block';
-  document.getElementById('diffEmpty').innerHTML = S.batch
-    ? (S.diffs.length ? '当前过滤条件下无差异。' : '本周期无差异（账证相符）✅')
+    var open = !!S.expanded[d.id];
+    html += '<tr class="' + (S.sel === d.id ? 'is-sel' : '') + (done ? ' is-done' : '') + '" onclick="selectRow(' + d.id + ')" style="animation:pa-fade .24s var(--pa-ease) both;animation-delay:' + (idx * 30) + 'ms">' +
+      '<td><button class="pa-rowbtn' + (open ? ' is-open' : '') + '" id="eb-' + d.id + '" onclick="event.stopPropagation();toggleExpand(' + d.id + ')" title="展开详情">›</button>' + d.id + '</td>' +
+      '<td class="pa-mono">' + d.kind + '</td>' +
+      '<td><span class="c c-' + d.severity + '">' + d.severity + '</span></td>' +
+      '<td class="num pa-mono">' + fmt(d.expected) + '</td>' +
+      '<td class="num pa-mono"><b>' + fmt(d.gap) + '</b></td>' +
+      '<td><span class="c c-' + d.status + '">' + d.status + '</span></td>' +
+      '<td class="pa-mono" style="font-size:12px">' + (d.suspended ? '挂' + fmt(d.suspended) + ' ' : '') + (d.adjusted ? '调' + fmt(d.adjusted) : '') + '</td></tr>';
+    // 展开行：来源 / 账本实算 / 说明（11 列瘦身到 7 列，信息不删减）
+    html += '<tr class="' + (S.sel === d.id ? 'is-sel' : '') + '"><td colspan="7" style="padding:0;border-bottom:1px solid var(--pa-hairline)">'
+      + '<div class="pa-expand' + (open ? ' is-open' : '') + '" id="ex-' + d.id + '"><div>'
+      + '<div style="padding:8px 12px;font-size:12px;color:var(--pa-ink-2);line-height:1.8">'
+      + '来源：<span class="pa-mono">' + esc(d.source_type) + '/' + esc(d.source_id) + '</span> · '
+      + '账本实算：<span class="pa-mono">' + fmt(d.actual) + '</span><br>' + esc(d.detail)
+      + '</div></div></div></td></tr>';
+  });
+  document.getElementById('diffBody').innerHTML = html;
+  var empty = document.getElementById('diffEmpty');
+  empty.style.display = rows.length ? 'none' : 'block';
+  empty.innerHTML = S.batch
+    ? (S.diffs.length ? '当前过滤条件下无差异。' : '本周期无差异（账证相符）✓')
     : '尚未触发对账任务。';
 }
 
 function renderAdjs() {
   document.getElementById('adjBody').innerHTML = S.adjs.map(function (a) {
     return '<tr><td>' + a.adjust_no + '</td><td>' + a.kind + '</td><td>' + a.debit + '</td><td>' + a.credit + '</td>' +
-      '<td style="text-align:right">' + fmt(a.amount) + '</td><td>' + a.posting_no + '</td>' +
+      '<td class="num">' + fmt(a.amount) + '</td><td>' + a.posting_no + '</td>' +
       '<td>' + esc(a.operator) + (a.reviewer ? ' / ' + esc(a.reviewer) : '') + '</td></tr>';
   }).join('');
   document.getElementById('adjEmpty').style.display = S.adjs.length ? 'none' : 'block';
@@ -653,41 +681,41 @@ function renderAdjs() {
 function renderBal() {
   document.getElementById('balBody').innerHTML = ACCOUNTS.map(function (a) {
     var v = S.bal[a] || 0;
-    var color = v === 0 ? '#64748b' : (v > 0 ? '#0f172a' : 'var(--pa-warning)');
-    return '<tr><td class="mono">' + a + ' <span style="color:var(--pa-mute)">' + ACCOUNT_CN[a] + '</span></td>' +
+    var color = v === 0 ? 'var(--pa-ink-3)' : (v > 0 ? 'var(--pa-ink)' : 'var(--pa-warn)');
+    return '<tr><td class="pa-mono">' + a + ' <span style="color:var(--pa-ink-3)">' + ACCOUNT_CN[a] + '</span></td>' +
       '<td class="num" style="color:' + color + '">' + fmt(v) + '</td></tr>';
   }).join('');
   var sum = ACCOUNTS.reduce(function (s, a) { return s + (S.bal[a] || 0); }, 0);
-  var susp = -(S.bal.SUSPENSE || 0); // SUSPENSE 贷方余额为正展示
+  var susp = -(S.bal.SUSPENSE || 0);
   document.getElementById('balCheck').innerHTML =
-    '试算平衡 Σ(借-贷) = <b style="color:' + (sum === 0 ? 'var(--pa-success)' : 'var(--pa-danger)') + '">' + fmt(sum) + '</b> ' +
-    (sum === 0 ? '✅ 借贷恒平衡（每笔挂账/调账都是平衡分录）' : '✗ 不平衡') +
-    '<br>SUSPENSE 挂账余额 = <b style="color:' + (susp === 0 ? 'var(--pa-success)' : 'var(--pa-warning)') + '">' + fmt(susp) + '</b>' +
+    '试算平衡 Σ(借-贷) = <b style="color:' + (sum === 0 ? 'var(--pa-ok)' : 'var(--pa-bad)') + '">' + fmt(sum) + '</b> ' +
+    (sum === 0 ? '✓ 借贷恒平衡（每笔挂账/调账都是平衡分录）' : '✗ 不平衡') +
+    '<br>SUSPENSE 挂账余额 = <b style="color:' + (susp === 0 ? 'var(--pa-ok)' : 'var(--pa-warn)') + '">' + fmt(susp) + '</b>' +
     (susp === 0 ? '（无未查清挂账）' : ' —— 期末非零即代表尚有未收口的挂账，应尽快定性转出');
+  // 试算平衡是「操作是否成功」的核心反馈，必须在 sticky 摘要条常驻可见
+  var sb = document.getElementById('s-bal');
+  if (sb) {
+    sb.textContent = fmt(sum) + (sum === 0 ? ' ✓' : ' ✗');
+    sb.style.color = sum === 0 ? 'var(--pa-ok)' : 'var(--pa-bad)';
+  }
 }
 
 /* ============================ LIVE API ============================ */
 function api(method, path, body) {
-  var url = '/proxy/recon' + path;
-  var opt = { method: method, headers: { 'Content-Type': 'application/json' } };
-  if (body) opt.body = JSON.stringify(body);
-  log('LIVE ' + method + ' ' + url + (body ? ' ' + JSON.stringify(body) : ''));
-  return fetch(url, opt).then(function (r) {
-    return r.text().then(function (t) {
-      var data = null; try { data = t ? JSON.parse(t) : null; } catch (e) { data = t; }
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (t || '').slice(0, 200));
-      return data;
-    });
+  log('LIVE ' + method + ' /proxy/recon' + path + (body ? ' ' + JSON.stringify(body) : ''));
+  return PA.api(method, path, body).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (r.text || '').slice(0, 200));
+    return r.data;
   });
 }
 
 function resetAll() {
-  S.batch = null; S.diffs = []; S.adjs = []; S.bal = Object.assign({}, INIT_BAL); S.sel = null; S.running = false;
+  S.batch = null; S.diffs = []; S.adjs = []; S.bal = Object.assign({}, INIT_BAL); S.sel = null; S.running = false; S.expanded = {};
   ['suspErr','suspOk','adjErr','adjOk','closeErr','closeOk'].forEach(hide);
   document.getElementById('prog').style.width = '0%';
   document.getElementById('btnSuspend').disabled = true;
   document.getElementById('btnAdjust').disabled = true;
-  clearLog(); renderAll();
+  PA.clearLog(); renderAll();
   log('已重置。选择作用域与数据源后点「触发对账任务」。');
 }
 
@@ -700,7 +728,7 @@ function resetAll() {
     'MOCK fixture：<b>平账组 F1</b>（4 业务事实 / 4 posting，期望 0 差异）· ' +
     '<b>全故障组 F2~F9</b>（漏记账 / 孤儿分录 / 金额不符 / 重复记账 / 科目记错 / 跨账 / 账实长款 / 报表不符，共 8 条差异）。' +
     ' 单号与金额固定，每次跑出的差异完全一致，便于断言与演示。';
-  setMode('MOCK'); resetAll();
+  setMode('MOCK'); setPane('suspend'); resetAll();
 })();
 </script>
 </body>

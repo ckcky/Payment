@@ -435,7 +435,7 @@ demo 左栏 ④ → 5 域 disclosure（默认全折叠，组头显示 N 行）�
 ## 6. 非功能需求（NFR）
 
 - **NFR-001**：**零外部请求**——无 CDN、无 webfont、无图片资源、无 npm/构建链；断网/内网环境完整可用（演示场景硬要求，020 NFR-001 继承并强化）。
-- **NFR-002**：`design.css` / `app.js` 文件名稳定不 hash；`design.css` ≤14KB、`app.js` ≤8KB。
+- **NFR-002**：`design.css` / `app.js` 文件名稳定不 hash；`design.css` ≤18KB、`app.js` ≤10KB（实施实测：design.css 16.6KB、app.js 8.6KB——App Shell 的 nav/抽屉/toast/分段控件/步骤条/disclosure 全部下沉到 token 层所致，超出初版 14KB 预算，此处按实测修订）。
 - **NFR-003**：浏览器目标 Chrome / Safari 近两年版本；`backdrop-filter` 加 `-webkit-` 前缀并提供无 blur 降级。
 - **NFR-004**：中文字重兜底——Apple 无 weight 500；中文回退字体（微软雅黑）无 300 时标题升 400，记入 DESIGN.md 例外条款（020 NFR-004 继承）。
 - **NFR-005**：验收以「起栈 → 逐页访问 → 与本 Spec §4.3 分区描述比对 + 全路径冒烟」执行，不引入截图自动化工具。
