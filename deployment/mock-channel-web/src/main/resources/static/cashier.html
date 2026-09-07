@@ -23,6 +23,10 @@
   .ch-seg { padding-bottom: 8px; }
   .ch-note { font-size: 11.5px; color: var(--pa-ink-3); line-height: 1.6; margin-top: 10px; }
   .ch-note b { color: var(--pa-ink-2); font-weight: 600; }
+  /* 空状态：无 paymentNo 直接进入时给引导，而不是一片「—」 */
+  .empty-guide { padding: 16px 0 8px; text-align: center; }
+  .empty-guide p { font-size: 13px; color: var(--pa-ink-2); margin: 12px 0 18px; line-height: 1.8; }
+  .empty-guide .pa-btn { justify-content: center; }
 </style>
 </head>
 <body>
@@ -92,6 +96,13 @@
         「超时不回调」不发送任何请求：payment 30s 后转 UNKNOWN，主动查询不收敛 —— 这是「不猜成败落账」要演示的正确性能力。<br>
         「伪造签名」以错误密钥签名，payment 验签失败返回 403（ADR-0052 fail-closed）。<br>
         换渠道（Feature 015 / INV-2）：同一订单每次选渠道都会<b>新建一张支付单</b>，旧支付单保留原状态；切换后自动跳转新收银台。
+      </div>
+      <!-- 空状态：无 paymentNo 直接进入时的引导 -->
+      <div class="empty-guide" id="emptyGuide" style="display:none">
+        <div class="pa-eyebrow">收银台</div>
+        <p>本页需由一笔<b>待支付订单</b>带入（paymentNo / orderNo / 金额）。<br>
+        若你刚从控制台下单却未跳转，说明 mock 收银台开关未开启（payUrl 为空）。</p>
+        <a class="pa-btn" href="/demo">→ 去演示控制台下单</a>
       </div>
     </div>
   </div>
@@ -200,7 +211,13 @@ async function switchChannel(target) {
     log('!! 换渠道请求异常：' + e);
   }
 }
-if (!paymentNo) { log('!! 缺少 paymentNo 查询参数 —— 请从演示控制台下单后跳转。'); }
+if (!paymentNo) {
+  log('!! 缺少 paymentNo 查询参数 —— 请从演示控制台下单后跳转。');
+  // 空状态：显示进入引导，隐藏无意义的支付区
+  document.getElementById('emptyGuide').style.display = '';
+  var payRow = document.querySelector('.pay-row'); if (payRow) payRow.style.display = 'none';
+  var scenes = document.querySelector('.scenes'); if (scenes) scenes.style.display = 'none';
+}
 </script>
 </body>
 </html>
