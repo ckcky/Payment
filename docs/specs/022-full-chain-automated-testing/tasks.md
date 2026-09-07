@@ -19,17 +19,17 @@
 - [ ] **T407** `support/Await.java`：Awaitility 统一轮询（默认超时 15s 可配，**禁用 Thread.sleep**）（FR-005 / NFR-004）
 - [ ] **T408** `support/Trace.java`：`/demo/trace?orderId=` 客户端，按 section 取 `system/table/label/rows`（FR-008）
 - [ ] **T409** `support/Dump.java`：失败自动落盘 `target/e2e-dump/<case>/`（响应体 / trace 快照 / 相关表 SELECT * / invariants.log）（FR-007）
-- [ ] **T410** `run.sh` + `README.md`：检查栈就绪 → 跑测试 → 出报告；README 写清起栈、跑单条/全量、看报告与 dump（FR-001 / FR-015）
+- [x] **T410** `run.sh` + `README.md`：检查栈就绪 → 跑测试 → 出报告；README 写清起栈、跑单条/全量、看报告与 dump（FR-001 / FR-015）
 
 ## 批次 C — 断言原语库（依赖：批次 B）
 
-- [ ] **T411** `support/Invariants.java#refundNotExceedPaid`：payment 累计已退（在途按申请额保守计）≤ 实付，且与 `order.transactions.refunded_minor` 相等
-- [ ] **T412** `#businessNoChain`：OR/TR/PM/PA/TXRF/PMRF 前缀 + 雪花长度；**双号互记**（`transaction_refunds.payment_refund_no == refunds.refund_no`、`refunds.transaction_refund_no == transaction_refunds.refund_no`）；`transactions.payment_no` == 生效 `payments.payment_no`；attempt 归属与 `attempt_type='REFUND'`
-- [ ] **T413** `#ledgerBalanced`：按单 `SUM(借)==SUM(贷)` + 全局试算平衡 + append-only 检查
-- [ ] **T414** `#orderStatus` / `#entitlementRevoked` / `#fulfillmentTerminated`：订单状态一致性、权益全部非 AVAILABLE、履约逐条终止（spec 018 后按 item 多条）
-- [ ] **T415** `#reconDiffDetected` / `#settlementGated`：差异检出率 100% 且 kind/severity 分类正确；未收口差异时结算被拒
-- [ ] **T416** `#stockRestoredForSeckill` / `#idempotentReplay` / `#noOrphanRows`：秒杀回补且普通 SKU 不变；同号重放行效不变；本轮无孤儿单
-- [ ] **T417** 断言失败信息规范：必含期望值 / 实际值 / 关联业务单号 / 涉及库表（NFR-003）
+- [x] **T411** `support/Invariants.java#refundNotExceedPaid`：payment 累计已退（在途按申请额保守计）≤ 实付，且与 `order.transactions.refunded_minor` 相等
+- [x] **T412** `#businessNoChain`：OR/TR/PM/PA/TXRF/PMRF 前缀 + 雪花长度；**双号互记**（`transaction_refunds.payment_refund_no == refunds.refund_no`、`refunds.transaction_refund_no == transaction_refunds.refund_no`）；`transactions.payment_no` == 生效 `payments.payment_no`；attempt 归属与 `attempt_type='REFUND'`
+- [x] **T413** `#ledgerBalanced`：按单 `SUM(借)==SUM(贷)` + 全局试算平衡 + append-only 检查
+- [x] **T414** `#orderStatus` / `#entitlementRevoked` / `#fulfillmentTerminated`：订单状态一致性、权益全部非 AVAILABLE、履约逐条终止（spec 018 后按 item 多条）
+- [x] **T415** `#reconDiffDetected` / `#settlementGated`：差异检出率 100% 且 kind/severity 分类正确；未收口差异时结算被拒
+- [x] **T416** `#stockRestoredForSeckill` / `#idempotentReplay` / `#noOrphanRows`：秒杀回补且普通 SKU 不变；同号重放行效不变；本轮无孤儿单
+- [x] **T417** 断言失败信息规范：必含期望值 / 实际值 / 关联业务单号 / 涉及库表（NFR-003）
 
 ## 批次 D — P0 用例（依赖：批次 C）
 
@@ -42,11 +42,11 @@
 
 ## 批次 E — P1 用例（依赖：批次 D）
 
-- [ ] **T424** `reliability/IdempotencyAndCallbackE2ETest`：同 Idempotency-Key 重复下单、同 TXRF 重放、渠道回调重复 3 次（AC5.1~AC5.3）
-- [ ] **T425** 回调异常：回调丢失 → UNKNOWN → `resolve` 收敛后**后处理不丢**（记账/权益/订单状态补齐）；回调乱序不回退终态（AC5.4~AC5.5）
-- [ ] **T426** `inventory/SeckillRestockE2ETest`：秒杀 SKU 退款后库存回补，普通 SKU 不变（AC5.6）
-- [ ] **T427** 结算门禁：对账差异未处理时不允许结算（AC3.3 独立用例化）
-- [ ] **T428** `contract/InternalApiSnapshotTest`（L3）：内部 API 请求/响应 schema 快照（字段集合 + 类型），基线存 `src/test/resources/api-snapshots/*.json`（FR-011 / D3）
+- [x] **T424** `reliability/IdempotencyAndCallbackE2ETest`：同 Idempotency-Key 重复下单、同 TXRF 重放、渠道回调重复 3 次（AC5.1~AC5.3）
+- [x] **T425** 回调异常：回调丢失 → UNKNOWN → `resolve` 收敛后**后处理不丢**（记账/权益/订单状态补齐）；回调乱序不回退终态（AC5.4~AC5.5）。回调丢失经 T429 金额尾数 12 请求级触发
+- [x] **T426** `inventory/SeckillRestockE2ETest`：秒杀 SKU 退款后库存回补，普通 SKU 不变（AC5.6）。需配 `e2e.seckill.sku-id`，未配置按 Assumptions 优雅跳过（NFR-005）
+- [x] **T427** 结算门禁：对账差异未处理时不允许结算（AC3.3 独立用例化，`recon/SettlementGateE2ETest`）
+- [x] **T428** `contract/InternalApiSnapshotTest`（L3）：内部 API 请求/响应 schema 快照（字段集合 + 类型），基线存 `src/test/resources/api-snapshots/*.json`（FR-011 / D3）。基线经 `-De2e.update-snapshots=true` 首跑录制
 
 ## 批次 F — 故障注入与 CI（依赖：批次 D）
 

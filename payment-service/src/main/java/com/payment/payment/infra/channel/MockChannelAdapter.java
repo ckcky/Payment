@@ -159,6 +159,14 @@ public class MockChannelAdapter implements PaymentChannel {
     public ChannelResult charge(ChargeRequest request) {
         // Feature 015 / P5：渠道引用带渠道前缀，便于对账/演示按渠道区分（alipay-/wechat-/douyin-/mock-）
         String ref = channelPrefix(request.channelCode()) + "-ref-" + runId + "-" + refGen.incrementAndGet();
+
+        // spec 022 / T429：请求级确定性故障注入（金额尾数触发），优先于基线场景。
+        // 触发约定见 docs/specs/022 plan §5：禁止 sleep / 概率，保证 E2E 确定性可复现。
+        ChannelResult injected = requestLevelInjection(request, ref);
+        if (injected != null) {
+            return injected;
+        }
+
         return switch (scenario) {
             case SUCCESS -> ChannelResult.success(ref);
             case FAILURE -> ChannelResult.businessFailure(ref, "mock declined");
@@ -167,6 +175,25 @@ public class MockChannelAdapter implements PaymentChannel {
             case TRANSPORT_ERROR -> ChannelResult.transportFailure(
                     TransportCode.CONNECTION_ERROR, "mock connection reset");
             case BUSINESS_UNKNOWN -> ChannelResult.businessUnknown("mock channel still processing");
+        };
+    }
+
+    /**
+     * 请求级确定性触发（spec 022 / D7 / T429）：按 {@code amount_minor % 100} 尾数注入，
+     * 未命中返回 {@code null} 走基线场景：
+     * <ul>
+     *   <li>{@code 11} → 渠道超时（通信失败，内联重试后进 UNKNOWN）；</li>
+     *   <li>{@code 12} → 渠道无业务结论（回调丢失形态，支付进 UNKNOWN，等 resolve / 查询收敛）；</li>
+     *   <li>{@code 15} → 渠道明确业务拒绝（硬失败）。</li>
+     * </ul>
+     * 基线场景 {@code PAYMENT_MOCK_SCENARIO} 语义完整保留（ADR-0049）。
+     */
+    private ChannelResult requestLevelInjection(ChargeRequest request, String ref) {
+        return switch ((int) (request.amountMinor() % 100)) {
+            case 11 -> ChannelResult.timeout("e2e injected timeout: amount tail 11");
+            case 12 -> ChannelResult.businessUnknown("e2e injected inconclusive: amount tail 12 (callback lost)");
+            case 15 -> ChannelResult.businessFailure(ref, "e2e injected decline: amount tail 15");
+            default -> null;
         };
     }
 

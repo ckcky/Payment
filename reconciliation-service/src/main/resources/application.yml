@@ -45,3 +45,9 @@ management:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+
+reconciliation:
+  statement-dir: fixtures/channel-statements
+  # E2E 差异注入覆盖目录（spec 022 / T421）：存在 {dir}/{period}.csv 时优先于 classpath fixture。
+  # 目录缺省不存在 → 行为零变化；E2E 运行时向此目录落盘 {period}.csv 注入账实差异。
+  statement-dir-override: /tmp/e2e-channel-statements
