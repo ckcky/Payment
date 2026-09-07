@@ -2,6 +2,9 @@
 set -uo pipefail
 
 # 停止全部：9 个微服务 + mock-channel-web（演示组件，按 .pids 记录） + 容器（保留 MySQL 数据卷）
+# 停机语义（spec 023 / M5）：kill 发送 SIGTERM → 各服务 graceful shutdown
+# （application.yml: server.shutdown=graceful + drain 上限 30s）——在途请求
+# （支付/退款回调等）等待完成后才关闭端口，期间不接受新请求。
 # 用法：bash deployment/stop-all.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

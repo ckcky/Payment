@@ -47,7 +47,8 @@ class TransactionCallbackConflictTest {
 
     private OrderApplicationService orderLayer(SuccessfulPurchaseScenarioTest.FakeCatalogClient client) {
         return new OrderApplicationService(orderRepository, transactionRepository, client, paymentGateway,
-                new NoopBusinessMetrics(), Mockito.mock(OrderTimeoutScheduler.class), fulfillmentGateway);
+                new NoopBusinessMetrics(), Mockito.mock(OrderTimeoutScheduler.class), fulfillmentGateway,
+                new com.payment.order.application.NoopTransactionManager());
     }
 
     private TransactionApplicationService transactionLayer(SuccessfulPurchaseScenarioTest.FakeCatalogClient client) {

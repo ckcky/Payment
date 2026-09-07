@@ -22,8 +22,14 @@ spring:
       circuitbreaker:
         enabled: true
 
+  lifecycle:
+    # 优雅停机排水上限：SIGTERM 后在途请求最多等 30s（spec 023 / M5）
+    timeout-per-shutdown-phase: 30s
+
 server:
   port: 8084
+  # 优雅停机：等在途请求完成再关闭（spec 023 / M5）
+  shutdown: graceful
 
 # 出站调用参数
 payment:

@@ -10,6 +10,7 @@
 | [adr/](adr/) | 架构决策记录（ADR）及索引 | Reference + 生命周期 |
 | [guides/](guides/) | 工程规范、开发指南、AI 工作流 | Reference + How-to（怎么做） |
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
+| [operations/](operations/) | 运维手册（[runbook.md](operations/runbook.md)：启停/巡检/故障处理） | How-to |
 | [archive/audits/](archive/audits/) | 历史审计报告（已归档，标注 Status，不再作为权威事实源） | 历史留档 |
 | [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录） | Feature 生命周期产物 |
 

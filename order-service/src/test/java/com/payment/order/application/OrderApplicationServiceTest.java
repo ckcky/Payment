@@ -41,7 +41,7 @@ class OrderApplicationServiceTest {
         };
         return new OrderApplicationService(orders, transactions, catalog,
                 new StubPaymentGateway(), new NoopBusinessMetrics(), noopScheduler,
-                new RecordingFulfillmentGateway());
+                new RecordingFulfillmentGateway(), new NoopTransactionManager());
     }
 
     private String newPendingPaymentOrder(OrderApplicationService service) {
@@ -91,6 +91,23 @@ class OrderApplicationServiceTest {
                 .isEqualTo(TransactionStatus.SUCCEEDED);
         // 确认扣减：幂等键 = 预占键 + deductId=支付单号
         assertThat(catalog.confirmed).containsExactly("order:" + orderNo + ":sku:1:PM-1");
+    }
+
+    /** 回归（spec 023 / M1）：confirmStock 失败不回滚 PAID——事实不回滚，库存侧幂等键可由对账/重放收敛。 */
+    @Test
+    void confirmStockFailureDoesNotRollBackPaidFact() {
+        OrderApplicationService service = service();
+        String orderNo = newPendingPaymentOrder(service);
+        catalog.confirmFails = true;
+
+        service.onPaymentSucceeded(
+                PaymentSucceededRequest.withoutItems("PM-1", orderNo, "txn-1", "u1", 5000L, "CNY"));
+
+        Order order = service.getOrder(orderNo);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(transactions.findByOrderNo(orderNo).orElseThrow().getStatus())
+                .isEqualTo(TransactionStatus.SUCCEEDED);
+        assertThat(catalog.confirmed).isEmpty(); // 失败的 confirm 未消费幂等键，可由对账补齐
     }
 
     @Test
@@ -146,6 +163,8 @@ class OrderApplicationServiceTest {
         final List<String> confirmed = new ArrayList<>();
         final List<String> released = new ArrayList<>();
         boolean seckillAllowed = true;
+        /** 置 true 模拟 catalog 不可用：confirmStock 抛异常（spec 023 / M1 回归用）。 */
+        boolean confirmFails = false;
 
         @Override
         public SkuSnapshot getSku(Long skuId) {
@@ -159,6 +178,9 @@ class OrderApplicationServiceTest {
 
         @Override
         public void confirmStock(ConfirmStockCommand request) {
+            if (confirmFails) {
+                throw new IllegalStateException("catalog connection reset");
+            }
             confirmed.add(request.reservationId() + ":" + request.deductId());
         }
 

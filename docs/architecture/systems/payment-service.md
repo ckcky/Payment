@@ -3,8 +3,8 @@
 **服务**：payment-service（支付编排 + 渠道适配）
 **端口**：8084 | **Schema**：`payment` | **包根**：`com.payment.payment`
 
-**上游依赖**：order-service（创建支付意图）、payment-service 内 refund 包（进程内自洽，Feature 015 起金额查询 + 渠道退款不再跨服务）、reconciliation-service（读支付事实）
-**下游依赖**：order-service（支付成功回写订单/交易）、fulfillment-service（支付成功触发履约）、Channel Adapter（Mock Channel）
+**上游依赖**：order-service（创建支付意图 + 退款发起/收口，ADR-0054/0067）、reconciliation-service（读支付事实）
+**下游依赖**：order-service（支付成功回写订单/交易，业务侧唯一扇出）、ledger-service（复式记账）、Channel Adapter（Mock Channel，退款默认受理+异步回调，spec 019）
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。
 
@@ -191,7 +191,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 **错误**：`400 INVALID_ARGUMENT`（status 非法或校验失败）；`404 NOT_FOUND`。
 
-### 3.6 退款相关内部 RPC（供 refund-service）
+### 3.6 退款相关内部 RPC（退款域已并入本服务，ADR-0064；spec 019 双层退款单）
 
 `POST /internal/payments/query-amount`
 
@@ -201,9 +201,14 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 `POST /internal/payments/refund-attempt`
 
-**请求** `RefundAttemptRequest`：`{ refundNo, paymentNo, orderNo, userId, amountMinor, currencyCode, reason, idempotencyKey }`（ADR-0063 业务单号）
+**请求** `RefundAttemptRequest`：`{ refundNo(PMRF), paymentNo, orderNo, userId, amountMinor, currencyCode, reason, idempotencyKey }`（ADR-0063 业务单号）
 **响应** `RefundAttemptResponse`：`{ refundNo, status: "SUCCEEDED"|"FAILED"|"UNKNOWN", channelReference }`
-**规则**：仅 `SUCCEEDED` 支付可退款；否则 `STATE_TRANSITION_VIOLATION`。渠道 UNKNOWN 原样回传，不臆断。
+**规则**：仅 `SUCCEEDED` 支付可退款；否则 `STATE_TRANSITION_VIOLATION`。Mock 渠道默认异步受理（`payment.channel.refund-async=true`）→ 当场返回 `UNKNOWN`（已受理未定），落 REFUND 尝试行；权威结果经渠道回调收敛。
+
+`POST /internal/refunds/{refundNo}/channel-callback`（spec 019：Mock 渠道异步推送入口，HMAC 验签占位）
+
+**请求体**：`{ status: "SUCCESS|FAILURE", channelReference, reason }`
+**规则**：与进程内推送桥（`MockRefundResultBridge`）走同一收敛路径 `RefundResultProcessor`——退款状态机终态 + REFUND 尝试行收敛 + 记账冲正（幂等键 `REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。终态吸收重复/迟到冲突结果。
 
 ### 3.7 对账事实查询（供 reconciliation-service）
 
@@ -211,17 +216,13 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 **响应**：`List<PaymentFactResponse>`，每项 `{ paymentId, channelReference, amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 支付。
 
-### 3.8 出站 RPC（payment → fulfillment / order / ledger）
+### 3.8 出站 RPC（payment → order / ledger；Feign 服务名寻址，ADR-0059）
 
-**fulfillment-service**：`POST /internal/fulfillments/on-payment-succeeded`（Feign，默认 `http://localhost:8086`）
+**order-service**：`POST /internal/orders/on-payment-succeeded`（业务侧唯一扇出，ADR-0054）
 **请求** `PaymentSucceededRequest`：`{ paymentId, orderId, transactionId, userId, amountMinor, currencyCode }`
-**响应** `FulfillmentAcceptedResponse`：`{ fulfillmentId, status }`。
+**响应** 无返回体（订单侧幂等吸收；履约/库存由 order 层编排，payment 不直调 fulfillment）。
 
-**order-service**：`POST /internal/orders/on-payment-succeeded`（Feign，默认 `http://localhost:8083`）
-**请求** `PaymentSucceededRequest`（同上）
-**响应** 无返回体（订单侧幂等吸收）。
-
-**ledger-service**：`POST /internal/ledger/postings`，请求 `PostingRequest`，响应 `PostingResponse`；`GET /internal/ledger/postings?idempotencyKey=...` 用于记账幂等回查。记账请求的分录必须非空且借贷金额平衡，幂等键格式为 `PAYMENT:<payment-idempotency-key>`。
+**ledger-service**：`POST /internal/ledger/postings`，请求 `PostingRequest`，响应 `PostingResponse`；`GET /internal/ledger/postings?idempotencyKey=...` 用于记账幂等回查。记账请求的分录必须非空且借贷金额平衡，幂等键格式为 `PAYMENT:<payment-idempotency-key>`（退款冲正为 `REFUND:{PMRF}`）。
 
 ### 3.9 错误码枚举（全局，common-core `ErrorCodes`）
 
@@ -250,9 +251,9 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 4. `channel.charge(ChargeRequest)` 调 Mock Channel，返回 `ChannelResult`（SUCCESS/FAILURE/UNKNOWN）。
 5. `PaymentResultApplier.apply(payment, attempt, result)`：按结果驱动双状态机；返回 `changed`（是否真正迁移）。
 6. `save` 支付 + 尝试（本地事务）；`changed` 时 `recordTransition`（指标 + `FINANCIAL_AUDIT` 审计）。
-7. 若 `changed && SUCCESS`：`fulfillmentGateway.notifyPaymentSucceeded(...)`；**履约 RPC 失败 catch 忽略，不回滚支付成功事实**。
+7. `changed && SUCCESS`：业务侧仅通知 **order-service**（`orderGateway.notifyPaymentSucceeded`，RPC 失败 catch 忽略，不回滚支付成功事实）；履约触发由 order 层编排（ADR-0054 已实施，payment 不直调 fulfillment）。
 
-> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：目标架构下本步骤的履约直调将**移除**——payment 业务侧仅通知 order-service，履约触发由 order-service 编排（order 层执行 confirmStock + 驱动履约）；**记账（`ledgerGateway.postPaymentCapture`）保留在 payment**（属支付指令编排的一部分）。实施完成后本节随代码更新。
+> **实施记录（ADR-0054 / spec 016，已落地）**：payment 的履约直调与 catch 409 自发起退款两路扇出已移除——`PaymentResultProcessor` 只保留「记账（保留在 payment）+ 通知 order」；surplus 判定与退款发起归 order transaction 层。
 
 ### 4.2 渠道回调 / 收敛（去重与 UNKNOWN 收敛）
 
@@ -260,38 +261,37 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 1. 加载 `Payment`（不存在 `NOT_FOUND`）+ `currentAttempt`。
 2. `PaymentResultApplier.apply` 应用结果；终态冲突/重复回调返回 `false`（不触发事件）。
-3. `save` 持久化；`changed && SUCCESS` 时：完成自身支付指令编排（**记账** `ledgerGateway.postPaymentCapture`，保留在 payment），并触发一次履约 RPC 与一次订单回写 RPC（各自 try/catch 隔离，任一失败不回滚支付成功事实）；订单回写抛 409 `ORDER_NOT_PAYABLE` 时 payment 自发起自动退款（`autoRefundGateway`，现状归属，ADR-0064 #4）。
+3. `save` 持久化；`changed && SUCCESS` 时：完成自身支付指令编排（**记账** `ledgerGateway.postPaymentCapture`，保留在 payment），并通知 order-service（业务侧唯一扇出，各自 try/catch 隔离，失败不回滚支付成功事实）；surplus（重复/超额支付）的判定与自动退款发起归 order transaction 层（ADR-0054 已实施，payment 不再 catch 409 自退款）。
 4. 收敛仅对 `UNKNOWN` 生效：`resolve` 先断言 `status == UNKNOWN`，否则 `false`。
 
-> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：目标架构下「履约 RPC」与「catch 409 自发起退款」两路扇出将**移除**——业务侧仅通知 order，履约由 order 编排，surplus 判定与退款发起归 order transaction 层（`transactionNo + paymentNo`）；**记账保留在 payment**。实施完成后本节随代码更新。
+> **实施记录（ADR-0054 / spec 016，已落地）**：「履约 RPC」与「catch 409 自发起退款」两路扇出已移除——业务侧仅通知 order，履约由 order 编排，surplus 判定与退款发起归 order transaction 层；**记账保留在 payment**。
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Ch as Channel
     participant P as payment-service
-    participant F as fulfillment-service
     participant O as order-service
     Ch->>P: 回调/权威结果 (SUCCESS/FAILURE/UNKNOWN)
     P->>P: 加载 Payment + currentAttempt
     P->>P: PaymentResultApplier.apply → 双状态机迁移
     alt 真正迁移为 SUCCESS
         P->>P: 记账 ledger postPaymentCapture (保留在 payment, ADR-0054)
-        P->>F: notifyPaymentSucceeded (RPC, 幂等) [现状；ADR-0054 后移除]
-        P->>O: notifyPaymentSucceeded (RPC, 幂等) [ADR-0054 后为业务侧唯一扇出]
-        Note over O: 409 时 P 自发起退款 [现状；ADR-0054 后由 order 判定 surplus 并发起]
+        P->>O: notifyPaymentSucceeded (RPC, 幂等；业务侧唯一扇出)
+        Note over O: transaction 层判定 surplus 并发起自动退款（ADR-0054）
     else 终态冲突/重复
         P->>P: 吸收 (返回 false, 计数 payment.duplicate_callback)
     end
 ```
 
-### 4.3 退款渠道尝试（透传）
+### 4.3 退款渠道事实（受理 + 异步回调收敛，spec 019 / ADR-0067）
 
 `PaymentRefundService.refund`（[源码](../../payment-service/src/main/java/com/payment/payment/application/PaymentRefundService.java)）：
 
 1. 加载支付（`NOT_FOUND`）；断言 `SUCCEEDED`（否则 `STATE_TRANSITION_VIOLATION`）。
-2. `channel.refund(RefundRequest)` 调 Mock Channel，`ChannelResult` 映射为 `SUCCEEDED/FAILED/UNKNOWN` 字符串回传。
-3. **不迁移支付领域状态**（退款域已并入 payment-service，ADR-0064；surplus 自动退款的**发起**归 order transaction 层、payment 仅执行——ADR-0054 目标）；UNKNOWN 原样回传。
+2. `channel.refund(RefundRequest)` 调 Mock Channel：默认异步受理模式（`payment.channel.refund-async=true`）当场返回 `accepted`（受理流水号，无业务结论）；同步模式可配。落 REFUND 尝试行（`payment_attempts.attempt_type='REFUND'`，UNKNOWN/ACCEPTED 态）。
+3. **不迁移支付领域状态**（支付单保留 SUCCEEDED 事实不回滚，ADR-0054）；退款权威结果经渠道回调（进程内推送桥或 `POST /internal/refunds/{refundNo}/channel-callback`）→ `RefundResultProcessor` 统一收敛：退款状态机终态 + REFUND 尝试行收敛到 SUCCEEDED/FAILED + 成功记账冲正（`REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。
+4. 退款整体决策（发起/收口/秒杀回补/履约终止/权益撤销）归 order，payment 只提供渠道事实（ADR-0054/0067）。
 
 ---
 
