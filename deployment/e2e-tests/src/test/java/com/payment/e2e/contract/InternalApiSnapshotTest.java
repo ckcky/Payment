@@ -66,7 +66,7 @@ class InternalApiSnapshotTest extends E2eBase {
         snapshotEndpoint("payment-detail", ctx -> {
             String uid = prefix("snap");
             String orderNo = paidOrder(ctx, dbHolder.get(), uid, uid, 1, 1);
-            return API.getPayment(paymentNoOf(orderNo)).json();
+            return API.getPayment(paymentNoOf(dbHolder.get(), orderNo)).json();
         });
     }
 

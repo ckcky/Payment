@@ -1,0 +1,58 @@
+{
+  "type" : "object",
+  "fields" : {
+    "currencyCode" : {
+      "type" : "string"
+    },
+    "id" : {
+      "type" : "integer"
+    },
+    "items" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "fields" : {
+          "currencyCode" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "priceMinor" : {
+            "type" : "integer"
+          },
+          "quantity" : {
+            "type" : "integer"
+          },
+          "skuCode" : {
+            "type" : "string"
+          },
+          "skuId" : {
+            "type" : "string"
+          }
+        }
+      }
+    },
+    "merchantId" : {
+      "type" : "string"
+    },
+    "orderNo" : {
+      "type" : "string"
+    },
+    "paidMinor" : {
+      "type" : "integer"
+    },
+    "refundedMinor" : {
+      "type" : "integer"
+    },
+    "status" : {
+      "type" : "string"
+    },
+    "totalMinor" : {
+      "type" : "integer"
+    },
+    "userId" : {
+      "type" : "string"
+    }
+  }
+}

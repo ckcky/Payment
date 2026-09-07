@@ -25,7 +25,9 @@ class RefundChainE2ETest extends E2eBase {
         runCase("partial-refund-chain", ctx -> {
             String uid = prefix("prf");
             long unitPrice = 2500L;
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 2); // 总额 5000
+            // 自建指定价格 SKU（live 库预置 SKU 价格不可假设，spec 022 live 实跑修正）
+            long skuId = skuWithPrice(ctx, unitPrice);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuId, 2); // 总额 5000
 
             // 部分退款 1200
             Api.ApiResponse resp = API.refund(orderNo, null, 1200L, "e2e partial refund");
@@ -65,8 +67,9 @@ class RefundChainE2ETest extends E2eBase {
     void fullRefundChainRevokesEntitlementsAndTerminatesFulfillments() {
         runCase("full-refund-chain", ctx -> {
             String uid = prefix("frf");
-            String orderNo = paidOrder(ctx, db, uid, uid, 1, 1); // 2500
-            String paymentNo = paymentNoOf(orderNo);
+            long skuId = skuWithPrice(ctx, 2500L);
+            String orderNo = paidOrder(ctx, db, uid, uid, skuId, 1); // 2500
+            String paymentNo = paymentNoOf(db, orderNo);
 
             Api.ApiResponse resp = API.refund(orderNo, paymentNo, 2500L, "e2e full refund");
             ctx.response("refund", resp);

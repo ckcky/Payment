@@ -22,7 +22,7 @@ class BusinessNoChainE2ETest extends E2eBase {
         runCase("no-chain", ctx -> {
             String uid = prefix("num");
             String orderNo = paidOrder(ctx, db, uid, uid, 1, 1);
-            String paymentNo = paymentNoOf(orderNo);
+            String paymentNo = paymentNoOf(db, orderNo);
 
             // 全额退款 → 触发 TXRF/PMRF/REFUND attempt 全链
             var resp = API.refund(orderNo, paymentNo, 2500L, "e2e numbering");
