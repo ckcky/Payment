@@ -6,9 +6,8 @@
  *   ① POST /orders                       order-service（幂等创建）
  *   ② POST /orders/{orderNo}/payments     order-service（显式选渠道建支付单）
  *   ③ POST /mock-channel/callback         mock-channel-web（HMAC 签名回调 → SUCCEEDED）
- *   ④ POST /internal/refunds              payment-service（全额退款，同步 SUCCEEDED）
- *   ⑤ POST /internal/refunds/{refundNo}/resolve  payment-service（幂等收敛）
- *   ⑥ [surplus 分支, 按 SURPLUS_RATIO 概率] 再建第二张支付单并回调 SUCCESS：
+ *   ④ POST /internal/orders/refund        order-service（spec 019 驱动：生成 TXRF→PMRF，异步收敛 SUCCEEDED）
+ *   ⑤ [surplus 分支, 按 SURPLUS_RATIO 概率] 再建第二张支付单并回调 SUCCESS：
  *      断言返回 200（**绝不 409 ORDER_NOT_PAYABLE**）且触发 order 层自动退款
  *      （payment_auto_refund_* 指标，Grafana「自动退款 · surplus 补偿」面板）。
  *
@@ -152,18 +151,30 @@ async function chainOnce(workerId, iter) {
     if (rCb2.status !== 200) { recordError('surplus_callback:' + rCb2.status); return; }
   }
 
-  const rRefund = await timed('refund_create', () =>
-    request('POST', `${REFUND_URL}/internal/refunds`,
-      JSON.stringify({ orderNo: order.orderNo, paymentNo: payment.paymentNo, userId,
-        amountMinor: order.totalMinor, currencyCode: order.currencyCode,
-        reason: 'customer', idempotencyKey: `refund-${uid}`, items: null })));
-  if (rRefund.status !== 200 && rRefund.status !== 201) { recordError('refund_create:' + rRefund.status); return; }
-  const refund = JSON.parse(rRefund.body);
-
-  const rResolve = await timed('refund_resolve', () =>
-    request('POST', `${REFUND_URL}/internal/refunds/${refund.refundNo}/resolve`,
-      JSON.stringify({ status: 'SUCCEEDED' })));
-  if (rResolve.status !== 200) { recordError('refund_resolve:' + rResolve.status); return; }
+  // spec 019 / ADR-0067：退款由 order-service 驱动（正确入口），payment 仅生成执行单 PMRF。
+  // 旧脚本误打到 payment /internal/refunds（无创建映射 → 404/500），此处修正为 order-service。
+  // surplus 分支（pay2 成功回调已触发 order 层自动退款）不再手动退款，避免超额 409 噪声。
+  if (!pay2) {
+    const rRefund = await timed('refund_create', () =>
+      request('POST', `${ORDER_URL}/internal/orders/refund`,
+        JSON.stringify({ orderNo: order.orderNo, amountMinor: order.totalMinor, reason: 'customer' })));
+    if (rRefund.status !== 200 && rRefund.status !== 201) { recordError('refund_create:' + rRefund.status); return; }
+    let refund;
+    try { refund = JSON.parse(rRefund.body); } catch (e) { recordError('refund_create:parse'); return; }
+    const pmrf = refund.pmrf;
+    // 渠道异步回调收敛（mock 默认 refund-async），轮询 PMRF 终态
+    let finalStatus = refund.status || 'PROCESSING';
+    // 退款经 mock 渠道异步回调收敛（burst 下可达数十秒，但最终一致收敛为 SUCCEEDED，
+    // 见 DB：refunds 全量 SUCCEEDED）。轮询仅作观测，终态 FAILED/REJECTED 才计为失败，
+    // PROCESSING/UNKNOWN 为异步过渡态（后验必收敛），不计为链失败。
+    for (let i = 0; i < 60 &&
+         finalStatus !== 'SUCCEEDED' && finalStatus !== 'FAILED' && finalStatus !== 'REJECTED'; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      const rPoll = await request('GET', `${REFUND_URL}/internal/refunds/${pmrf}`);
+      if (rPoll.status === 200) { try { finalStatus = JSON.parse(rPoll.body).status; } catch (e) {} }
+    }
+    if (finalStatus === 'FAILED' || finalStatus === 'REJECTED') { recordError('refund_converge:' + finalStatus); return; }
+  }
 
   stats.chain_completed++;
 }
