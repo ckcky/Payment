@@ -13,6 +13,7 @@ import com.payment.common.dto.rpc.RefundCommandResponse;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
+import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
@@ -22,6 +23,7 @@ import com.payment.refund.application.RefundResultProcessor;
 import com.payment.refund.domain.Refund;
 import com.payment.refund.domain.RefundStatus;
 import com.payment.refund.infra.client.LocalPaymentRefundGateway;
+import com.payment.refund.infra.client.LocalRefundAttemptSettlementGateway;
 import com.payment.refund.infra.InMemoryRefundRepository;
 import com.payment.refund.support.RefundTestStack;
 import org.junit.jupiter.api.Test;
@@ -55,6 +57,7 @@ class PaymentAutoRefundServiceTest {
                 channel, metrics, new StructuredAuditLogger());
         RefundResultProcessor processor = new RefundResultProcessor(
                 refunds, refundFakes.order, refundFakes.ledger,
+                new LocalRefundAttemptSettlementGateway(new RefundAttemptSettlementService(paymentAttempts)),
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
         RefundApplicationService refundApplicationService = new RefundApplicationService(
                 refunds, new LocalPaymentRefundGateway(paymentRefundService), processor,
@@ -144,6 +147,7 @@ class PaymentAutoRefundServiceTest {
                 channel, metrics, new StructuredAuditLogger());
         RefundResultProcessor processor = new RefundResultProcessor(
                 refunds, refundFakes.order, refundFakes.ledger,
+                new LocalRefundAttemptSettlementGateway(new RefundAttemptSettlementService(paymentAttempts)),
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
         PaymentAutoRefundService service = new PaymentAutoRefundService(payments,
                 new RefundApplicationService(refunds, new LocalPaymentRefundGateway(paymentRefundService),
@@ -171,5 +175,12 @@ class PaymentAutoRefundServiceTest {
         assertThat(refundFakes.order.refundNotifications).hasSize(1);
         assertThat(refundFakes.order.refundNotifications.get(0).transactionRefundNo()).isEqualTo("TXRF-AR-1");
         assertThat(refundFakes.order.refundNotifications.get(0).paymentRefundNo()).isEqualTo(response.refundNo());
+        // fix：异步受理落 UNKNOWN 的 REFUND 尝试行，随回调权威结果收敛 SUCCEEDED（不再永久滞留 UNKNOWN）
+        PaymentAttempt refundAttempt = paymentAttempts.findByPaymentNo(payment.getPaymentNo()).stream()
+                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType()))
+                .reduce((first, second) -> second)
+                .orElseThrow();
+        assertThat(refundAttempt.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(refundAttempt.getChannelReference()).startsWith("mock-refund-ref-");
     }
 }

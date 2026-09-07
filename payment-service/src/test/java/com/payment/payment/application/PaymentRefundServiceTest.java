@@ -105,4 +105,6 @@ class PaymentRefundServiceTest {
                 .extracting(e -> ((BizException) e).getCode())
                 .isEqualTo(ErrorCodes.STATE_TRANSITION_VIOLATION);
     }
+
+    // 退款尝试收敛（fix）的单元测试见 RefundAttemptSettlementServiceTest。
 }

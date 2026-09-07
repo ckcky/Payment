@@ -10,6 +10,8 @@ import com.payment.common.dto.rpc.RefundResultNotification;
 import com.payment.payment.application.OrderGateway;
 import com.payment.payment.domain.Payment;
 import com.payment.refund.application.LedgerPostingGateway;
+import com.payment.payment.application.channel.ChannelResult;
+import com.payment.refund.application.RefundAttemptSettlementGateway;
 import com.payment.refund.application.PaymentRefundGateway;
 import com.payment.refund.application.RefundApplicationService;
 import com.payment.refund.application.RefundResultProcessor;
@@ -32,9 +34,10 @@ public final class RefundTestStack {
     public final RecordingPaymentRefundGateway payment = new RecordingPaymentRefundGateway();
     public final RecordingLedgerGateway ledger = new RecordingLedgerGateway();
     public final RecordingOrderGateway order = new RecordingOrderGateway();
+    public final RecordingAttemptSettlementGateway attemptSettlement = new RecordingAttemptSettlementGateway();
 
     public RefundResultProcessor resultProcessor() {
-        return new RefundResultProcessor(refunds, order, ledger,
+        return new RefundResultProcessor(refunds, order, ledger, attemptSettlement,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
@@ -93,6 +96,18 @@ public final class RefundTestStack {
                 throw new IllegalStateException("order notify RPC failed");
             }
             refundNotifications.add(notification);
+        }
+    }
+
+    /** 记录式退款尝试收敛 fake：验证「权威终态 → REFUND 尝试行收敛」被触发（fix）。 */
+    public static final class RecordingAttemptSettlementGateway implements RefundAttemptSettlementGateway {
+
+        public record Call(String paymentNo, String channelReference, ChannelResult.Status status) {}
+        public final List<Call> calls = new ArrayList<>();
+
+        @Override
+        public void convergeToTerminal(String paymentNo, String channelReference, ChannelResult outcome) {
+            calls.add(new Call(paymentNo, channelReference, outcome.status()));
         }
     }
 
