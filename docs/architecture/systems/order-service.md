@@ -185,25 +185,31 @@ PENDING --cancel--> CANCELLED
 
 | 目标 | 路径 | 请求/响应 |
 |---|---|---|
-| catalog-service | `GET /skus/{id}`（Feign，默认 `http://localhost:8082`） | 响应 `CatalogSkuDto` → `SkuSnapshot` |
-| payment-service | `POST /payments`（Feign，默认 `http://localhost:8084`） | `CreatePaymentRequest` → `CreatePaymentResponse` |
+| catalog-service | `GET /skus/{id}`、`POST /internal/stock/*`（Feign，服务名寻址，ADR-0059） | 响应 `CatalogSkuDto` → `SkuSnapshot` |
+| payment-service | `POST /payments`（Feign，服务名寻址，ADR-0059） | `CreatePaymentRequest` → `CreatePaymentResponse` |
 
 ---
 
 ## 4. 关键流程链路剖析
 
-### 4.1 创建订单（含 SKU 校验 + 支付意图）
+### 4.1 创建订单（两步式：建单与建支付单分离，spec 015 / 016）
 
 `OrderController.createOrder` → `OrderApplicationService.createOrder`（[源码](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
 
 1. 断言 `lines` 非空（`INVALID_ARGUMENT`）。
-2. 逐行 `catalogClient.getSku(skuId)`（Feign → catalog-service）：`!sellable` 抛 `CONFLICT`；首行确定币种，后续混币抛 `INVALID_ARGUMENT`；构造 `OrderItem`（价格快照）。
-3. `new Order(userId, merchantId, currencyCode, items)`：总额 = `Σ Math.addExact(subtotalMinor)`。
-4. `orderRepository.save(order)` → `new Transaction(orderNo, totalMinor, currencyCode, "PURCHASE")` → `transactionRepository.save(transaction)`。
-5. `order.confirm()`（PENDING_CONFIRMATION → PENDING_PAYMENT）→ `save`。
-6. `paymentGateway.createPayment(CreatePaymentRequest(...))`：同步 RPC 创建支付意图（CreatePaymentRequest 携 orderNo/transactionNo，ADR-0063）。
-7. `transaction.start()`（PENDING → PROCESSING）+ `order.recordPayment(paymentNo)`：交易进入处理中、订单记录下游支付业务单号。
-8. 返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo, paymentStatus, payUrl)`。
+2. 逐行秒杀快速准入：`catalogClient.trySeckillDeduct(skuId, qty)`（Redis Lua 原子预扣；未播种 SKU `bypassed` 放行；配额不足抛 `CONFLICT`）。仅**真实扣减**（非 bypass）的行登记回滚清单——避免失败回滚凭空造出配额键（014 踩坑记录）。
+3. 逐行 `catalogClient.getSku(skuId)`（Feign → catalog-service）：`!sellable` 抛 `CONFLICT`；首行确定币种，后续混币抛 `INVALID_ARGUMENT`；构造 `OrderItem`（价格快照）。
+4. `orderRepository.save(order)` → `new Transaction(orderNo, totalMinor, currencyCode, "PURCHASE")` → `transactionRepository.save(transaction)`（1:1，`PENDING`）。
+5. 逐行 `catalogClient.reserveStock`（幂等键 `reservationId = order:{orderNo}:sku:{skuId}`，ADR-0063）→ `order.confirm()`（PENDING_CONFIRMATION → PENDING_PAYMENT）→ `save` → 登记订单超时时间轮（Redis ZSet，014）。
+6. 任一步失败：释放已预占库存 + `rollbackSeckill`（仅真实扣减行）+ 订单 `cancel()`，异常原样上抛（防库存泄漏）。
+7. **返回 `CreateOrderResult(orderNo, transactionNo, status, totalMinor, currencyCode, paymentNo=null, paymentStatus=null, payUrl=null)`** —— 下单**不建支付单**（Feature 015，INV-2 前提：同一订单可多次支付尝试）。
+
+**第二步：显式选渠道建支付单** `POST /orders/{orderNo}/payments`（带 `channelCode`）→ `OrderApplicationService.createPaymentForOrder`：
+
+1. 校验订单 `PENDING_PAYMENT`（否则 `STATE_TRANSITION_VIOLATION`）。
+2. `paymentGateway.createPayment(CreatePaymentRequest(orderNo/transactionNo/totalMinor/currencyCode/channelCode))`（幂等键由 payment-service 服务端生成，ADR-0064）。
+3. 交易 `PENDING → start()`（PROCESSING，仅首次）；`order.recordPayment(paymentNo)` 记录最新尝试支付单。
+4. 返回 `CreatePaymentResponse(paymentNo, status, payUrl)`。
 
 ```mermaid
 sequenceDiagram
@@ -211,37 +217,49 @@ sequenceDiagram
     participant U as 调用方
     participant O as order-service
     participant Cat as catalog-service
-    participant P as payment-service
-    U->>O: POST /orders
+    Note over U,Cat: 第一步：POST /orders（仅建单，不碰支付）
+    U->>O: POST /orders (Idempotency-Key)
+    O->>Cat: trySeckillDeduct (Lua 预扣，未播种 bypass)
     O->>Cat: GET /skus/{id} (校验可售 + 取价格快照)
-    Cat-->>O: SkuSnapshot (sellable, priceMinor, currencyCode)
     O->>O: 构造 OrderItem 快照 + 计算总额 (Math.addExact)
-    O->>O: save Order + save Transaction (1:1) + confirm (本地事务)
+    O->>O: save Order + save Transaction (1:1, PENDING)
+    O->>Cat: reserveStock ×N (幂等键 order:{orderNo}:sku:{skuId})
+    O->>O: confirm() → PENDING_PAYMENT + 登记超时时间轮
+    O-->>U: CreateOrderResponse (paymentNo=null, payUrl=null)
+    Note over U,Cat: 第二步：POST /orders/{orderNo}/payments（显式选渠道）
+    U->>O: POST /orders/{orderNo}/payments (channelCode)
     O->>P: POST /payments (CreatePaymentRequest: orderNo/transactionNo)
     P-->>O: CreatePaymentResponse (paymentNo, status, payUrl)
-    O-->>U: CreateOrderResponse
+    O->>O: transaction.start() (仅首次) + order.recordPayment(paymentNo)
+    O-->>U: CreatePaymentResponse
 ```
 
-### 4.2 支付成功回调回写（Feature 002）
+### 4.2 支付成功回调回写（transaction 层判定 → order 层收口，ADR-0054 已实施）
 
-`OrderPaymentRpcController.onPaymentSucceeded` → `OrderApplicationService.onPaymentSucceeded`（[源码](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
+`OrderPaymentRpcController.onPaymentSucceeded` → `TransactionApplicationService.onPaymentSucceeded`（surplus 判定）→ `OrderApplicationService.onPaymentSucceeded`（[源码](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
 
-1. `findById(orderId)`；不存在 `NOT_FOUND`。
-2. `order.markPaid(request.paymentNo())`：`PENDING_PAYMENT → PAID`（记录 paymentNo、`paidMinor = totalMinor`）；已 `PAID` 返回 `false`（幂等重复回调吸收）。
-3. `changed` 时 `save`；`transactionRepository.findByOrderId` → `succeed()`（`PROCESSING → SUCCEEDED`，`PENDING` 时先 `start()`）。
-4. 事务边界：`onPaymentSucceeded` 标 `@Transactional`（订单 + 交易在同一本地事务原子提交）。
-
-> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：目标架构下本流程扩展为——新增 **transaction 层**（`TransactionApplicationService`）接收通知并判定「正常到账 / surplus」：正常 → **委派 order 层**执行 markPaid + transaction.succeed() + confirmStock 并**驱动履约**（`FulfillmentGateway.notifyPaymentSucceeded`，`fulfillment → entitlement` 链保留）；surplus → 以 `transactionNo + paymentNo` 经 `PaymentGateway.refund(...)` 发起自动退款（不再向 payment 抛 409）。**confirmStock 与履约驱动属 order 层，不在 transaction 层**。实施完成后本节随代码更新。
+1. **transaction 层判定**：订单已 `PAID` 且回调支付单不同 → surplus（重复/超额支付），以 `transactionNo + paymentNo` 经 `PaymentGateway.refund` 发起自动退款（不抛 409）；正常到账 → 委派 order 层。
+2. **order 层 DB 段（事务内，spec 023 / M1 收窄后仅含本地写）**：`order.markPaid(paymentNo)`（PENDING_PAYMENT → PAID，幂等重复回调吸收）→ `save`；`transaction.succeed()`（`PENDING` 时先 `start()`）→ `recordEffectivePayment(paymentNo)`（spec 019）→ `save`。
+3. **事务外出站（spec 023 / M1）**：`confirmStock`（幂等键 `deductId = paymentNo`，ADR-0063）——失败仅 WARN + `order.stock_confirm_failed` 指标，**不回滚 PAID**（事实不回滚，ADR-0054；confirm 幂等可由对账/重放收敛）；履约驱动 `fulfillmentGateway.notifyPaymentSucceeded`（spec 018：以本库 order_items 富化明细）——失败 catch 吞掉，不回滚。
+4. 契约违规快速失败：绕过 transaction 层的直接调用（surplus 未判定）→ `INTERNAL_ERROR`。
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant P as payment-service
-    participant O as order-service
-    P->>O: POST /internal/orders/on-payment-succeeded (PaymentSucceededRequest)
-    O->>O: findByOrderNo + markPaid(paymentNo) (PENDING_PAYMENT → PAID, 幂等)
-    O->>O: Transaction.succeed() (PROCESSING → SUCCEEDED, 本地事务)
+    participant T as transaction 层
+    participant O as order 层
+    participant Cat as catalog-service
+    participant F as fulfillment-service
+    P->>T: POST /internal/orders/on-payment-succeeded
+    T->>T: 判定正常到账 / surplus（surplus → 自动退款，不走本图）
+    T->>O: 委派 onPaymentSucceeded
+    O->>O: [事务] markPaid(PENDING_PAYMENT → PAID) + transaction.succeed + recordEffectivePayment
+    O->>Cat: confirmStock ×N（事务外；失败 → WARN + 指标，不回滚）
+    O->>F: notifyPaymentSucceeded（事务外；失败 → 吞掉，不回滚）
 ```
+
+> **历史标注（已实施）**：ADR-0054 的 transaction 层拆分与「surplus 自动退款」已随 spec 016 落地；事务收窄（出站 RPC 移出事务）由 spec 023 完成。本节描述与代码同步。
 
 ---
 

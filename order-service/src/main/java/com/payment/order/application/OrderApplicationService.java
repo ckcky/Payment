@@ -17,8 +17,11 @@ import com.payment.order.domain.TransactionRepository;
 import com.payment.order.domain.TransactionStatus;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 订单应用服务（T036）：订单创建、SKU RPC 校验、价格快照，Order 1:1 Transaction，
@@ -31,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OrderApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderApplicationService.class);
     private static final String MODULE = "order";
 
     private final OrderRepository orderRepository;
@@ -40,6 +44,11 @@ public class OrderApplicationService {
     private final BusinessMetrics metrics;
     private final OrderTimeoutScheduler timeoutScheduler;
     private final FulfillmentGateway fulfillmentGateway;
+    /**
+     * 编程式事务（spec 023 / M1 事务收窄，模式同 catalog {@code StockApplicationService}）：
+     * 仅包裹本地 DB 段（markPaid + transaction 落库），出站 Feign 一律在事务提交后执行。
+     */
+    private final TransactionTemplate tx;
 
     public OrderApplicationService(OrderRepository orderRepository,
                                    TransactionRepository transactionRepository,
@@ -47,7 +56,8 @@ public class OrderApplicationService {
                                    PaymentGateway paymentGateway,
                                    BusinessMetrics metrics,
                                    OrderTimeoutScheduler timeoutScheduler,
-                                   FulfillmentGateway fulfillmentGateway) {
+                                   FulfillmentGateway fulfillmentGateway,
+                                   PlatformTransactionManager transactionManager) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.catalogClient = catalogClient;
@@ -55,6 +65,7 @@ public class OrderApplicationService {
         this.metrics = metrics;
         this.timeoutScheduler = timeoutScheduler;
         this.fulfillmentGateway = fulfillmentGateway;
+        this.tx = new TransactionTemplate(transactionManager);
     }
 
     public CreateOrderResult createOrder(String userId, String merchantId, List<OrderLine> lines, String reservationKey) {
@@ -203,14 +214,48 @@ public class OrderApplicationService {
      * <b>MUST NOT</b> 被 payment-service 直接调用——surplus 的自动退款发起在 transaction 层，
      * 本层不感知退款通道。对非 PENDING_PAYMENT 状态抛 {@code INTERNAL_ERROR} 快速失败，
      * 不再以 {@code ORDER_NOT_PAYABLE} 交回 payment 静默吞掉。</p>
+     *
+     * <p><b>事务边界（spec 023 / M1 收窄）</b>：仅本地 DB 段
+     * （markPaid + transaction 落库，见 {@link #markPaidAndTransaction}）在事务内；
+     * {@code confirmStock} 与履约驱动全部移到事务提交后——修复前 Feign 调用位于
+     * {@code @Transactional} 内，存在「持行锁等网络 IO」与「本地回滚 vs catalog
+     * 已提交分裂」两类隐患。confirm 失败不回滚 PAID（事实不回滚，ADR-0054）：
+     * 幂等键 paymentNo 可安全重放，补 {@code order.stock_confirm_failed} 指标供告警/对账定位。</p>
      */
-    @Transactional
     public void onPaymentSucceeded(PaymentSucceededRequest request) {
+        Order order = tx.execute(status -> markPaidAndTransaction(request));
+        if (order == null) {
+            return; // 幂等重复回调：同一支付单的重复通知整体吸收（confirm/履约均已做过，不重放）
+        }
+
+        // 支付成功：确认扣减库存（幂等键 paymentNo，ADR-0063）。事务外执行（spec 023 / M1）。
+        confirmStockQuietly(order, request);
+
+        // Feature 016 / FR-003：order 层驱动履约（confirmStock 与履约驱动属 order 层，
+        // 由 transaction 层判定「正常到账」后委派至此）；权益经既有 fulfillment → entitlement 链授予。
+        // 履约 RPC 失败不回滚订单成功事实（catch 吞掉 + 重试/对账兜底，语义与迁移前一致）。
+        try {
+            // spec 018 / ADR-0066：以本库 order_items 为单一事实源富化明细（含 orderItemNo），
+            // 转发 fulfillment 逐明细建履约，绝不信任上游 request.items() 的快照。
+            fulfillmentGateway.notifyPaymentSucceeded(enrichWithItems(request, order));
+        } catch (RuntimeException ignored) {
+            // 履约失败不得回滚 PAID（跨服务一致性由幂等 + 后续对账收敛）
+        }
+    }
+
+    /**
+     * 本地 DB 段（事务内）：契约校验 + {@code order.markPaid} + {@code transaction.succeed}
+     * + 生效支付单回填。出站 RPC 禁止进入本方法（spec 023 / M1）。
+     *
+     * @return 本次实际发生 PAID 迁移的订单聚合（供事务外 confirm/履约消费明细）；
+     *         <b>幂等重复回调返回 {@code null}</b>（调用方整体吸收，不重放出站 RPC）
+     */
+    private Order markPaidAndTransaction(PaymentSucceededRequest request) {
         Order order = orderRepository.findByOrderNo(request.orderNo())
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "order not found: " + request.orderNo()));
         if (order.getStatus() == OrderStatus.PAID) {
             if (request.paymentNo().equals(order.getPaymentNo())) {
-                return; // 幂等重复回调：同一支付单的重复通知，吸收（库存也已确认过）
+                return null; // 幂等重复回调：同一支付单的重复通知，吸收（库存/履约均已确认过）
             }
             // Feature 016 / ADR-0054：surplus（重复 / 超额支付）的判定与自动退款发起已上移到
             // transaction 层，本层 MUST NOT 再对 payment 抛 ORDER_NOT_PAYABLE——payment 侧的
@@ -229,9 +274,9 @@ public class OrderApplicationService {
         }
         boolean changed = order.markPaid(request.paymentNo());
         if (!changed) {
-            return; // 理论不可达（PAID 已前置吸收），防御保留
+            return null; // 理论不可达（PAID 已前置吸收），防御保留
         }
-        orderRepository.save(order);
+        order = orderRepository.save(order);
 
         Transaction transaction = transactionRepository.findByOrderNo(request.orderNo())
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
@@ -244,23 +289,24 @@ public class OrderApplicationService {
         // transaction 层 surplusRefund 路径，不会进入本方法，天然不覆盖此列）
         transaction.recordEffectivePayment(request.paymentNo());
         transactionRepository.save(transaction);
+        return order;
+    }
 
-        // 支付成功：确认扣减库存（幂等键 paymentNo，ADR-0063）
+    /**
+     * 确认扣减库存（事务外，spec 023 / M1）：失败仅告警 + 指标留痕，不回滚 PAID——
+     * confirm 幂等（deductId=paymentNo，ADR-0063），可由对账/人工重放安全收敛。
+     */
+    private void confirmStockQuietly(Order order, PaymentSucceededRequest request) {
         for (OrderItem item : order.getItems()) {
-            catalogClient.confirmStock(new ConfirmStockCommand(
-                    reservationId(order.getOrderNo(), item.getSkuId()),
-                    Long.parseLong(item.getSkuId()), item.getQuantity(), request.paymentNo()));
-        }
-
-        // Feature 016 / FR-003：order 层驱动履约（confirmStock 与履约驱动属 order 层，
-        // 由 transaction 层判定「正常到账」后委派至此）；权益经既有 fulfillment → entitlement 链授予。
-        // 履约 RPC 失败不回滚订单成功事实（catch 吞掉 + 重试/对账兜底，语义与迁移前一致）。
-        try {
-            // spec 018 / ADR-0066：以本库 order_items 为单一事实源富化明细（含 orderItemNo），
-            // 转发 fulfillment 逐明细建履约，绝不信任上游 request.items() 的快照。
-            fulfillmentGateway.notifyPaymentSucceeded(enrichWithItems(request, order));
-        } catch (RuntimeException ignored) {
-            // 履约失败不得回滚 PAID（跨服务一致性由幂等 + 后续对账收敛）
+            try {
+                catalogClient.confirmStock(new ConfirmStockCommand(
+                        reservationId(order.getOrderNo(), item.getSkuId()),
+                        Long.parseLong(item.getSkuId()), item.getQuantity(), request.paymentNo()));
+            } catch (RuntimeException ex) {
+                metrics.counter("order.stock_confirm_failed", 1.0, "module", MODULE);
+                log.warn("库存确认失败（事实不回滚，对账兜底）orderNo={} skuId={} reason={}",
+                        order.getOrderNo(), item.getSkuId(), ex.getMessage());
+            }
         }
     }
 
