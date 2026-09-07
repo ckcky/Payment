@@ -87,14 +87,17 @@ class InternalApiSnapshotTest extends E2eBase {
             // ORPHAN 注入造一条差异，取第一条 schema
             String uid = prefix("snap");
             dbHolder.get().execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type,"
-                    + " source_id, status, currency, created_at, version) VALUES ('LPe2e-snap-" + uid + "',"
+                    + " source_id, status, currency, created_at, updated_at, version) VALUES ('LPe2e-snap-" + uid + "',"
                     + " 'e2e-snap-key-" + uid + "', 'PAYMENT', 'e2e-snap-" + uid + "',"
-                    + " 'POSTED', 'CNY', NOW(), 1)");
+                    + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
             long pid = ((Number) dbHolder.get().scalar("ledger",
                     "SELECT id FROM postings WHERE posting_no='LPe2e-snap-" + uid + "'")).longValue();
             dbHolder.get().execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
                     + " amount_minor, currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                    + ", 1, 'DEBIT', 5, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-snap-" + uid + "', NOW())");
+                    + ", 3, 'DEBIT', 5, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-snap-" + uid + "', NOW())");
+            dbHolder.get().execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
+                    + " amount_minor, currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
+                    + ", 3, 'CREDIT', 5, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-snap-" + uid + "', NOW())");
             try {
                 String period = "e2e-snap-" + Long.toString(System.currentTimeMillis(), 36);
                 Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e-snap");

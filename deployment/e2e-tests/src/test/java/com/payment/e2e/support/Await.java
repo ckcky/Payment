@@ -24,9 +24,9 @@ public final class Await {
                 .until(condition);
     }
 
-    /** 便捷重载：直接传 BooleanSupplier。 */
+    /** 便捷重载：直接传 BooleanSupplier（显式转 Callable，避免与自身重载形成无限递归）。 */
     public static void until(String description, BooleanSupplier supplier) {
-        until(description, supplier::getAsBoolean);
+        until(description, (Callable<Boolean>) supplier::getAsBoolean);
     }
 
     /** 轮询至动作执行不再抛异常（用于「等状态可查询」类收敛）。 */

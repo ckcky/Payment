@@ -182,13 +182,31 @@ public class OrderApplicationService {
                 null, // 幂等键由 payment-service 服务端生成（Feature 015）
                 channelCode);
         CreatePaymentResponse payment = paymentGateway.createPayment(request);
-        if (transaction.getStatus() == TransactionStatus.PENDING) {
-            transaction.start();
-            transactionRepository.save(transaction);
+        // spec 022 live 实跑发现（内联同步扣款路径）：payment 的成功回调可能先于本方法返回——
+        // 回调已把 order 推到 PAID、transaction 推到 SUCCEEDED（版本号已递增），本方法若用
+        // 进入方法时加载的旧聚合做 start()/recordPayment 落库，必然乐观锁冲突（409）。
+        // 因此回写一律以库内最新状态为基线，并对并发回调窗口内的乐观锁冲突做有限重试。
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                Order freshOrder = findOrder(ref);
+                freshOrder.recordPayment(payment.paymentNo());
+                orderRepository.save(freshOrder);
+
+                Transaction freshTx = transactionRepository.findByOrderNo(order.getOrderNo())
+                        .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                                "transaction not found for order: " + order.getOrderNo()));
+                if (freshTx.getStatus() == TransactionStatus.PENDING) {
+                    freshTx.start();
+                    transactionRepository.save(freshTx);
+                }
+                break;
+            } catch (BizException e) {
+                // 仅乐观锁冲突重试（回调与本方法并发写同一行）；其余业务异常原样上抛
+                if (!ErrorCodes.CONFLICT.equals(e.getCode()) || attempt == 3) {
+                    throw e;
+                }
+            }
         }
-        // 记录最新尝试的支付单号（主支付单语义在成功回调时由 markPaid 确认）
-        order.recordPayment(payment.paymentNo());
-        orderRepository.save(order);
         return payment;
     }
 

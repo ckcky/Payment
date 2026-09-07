@@ -21,16 +21,19 @@ class SettlementGateE2ETest extends E2eBase {
         runCase("settlement-gate", ctx -> {
             String uid = prefix("gate");
 
-            // 1) 先建一笔有差异的审计批：注入 ORPHAN 分录但不还原
+            // 1) 先建一笔有差异的审计批：注入平衡的孤儿 posting（不还原，门禁验证后再清理）
             db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                    + " status, currency, created_at, version) VALUES ('LPe2e-gate-" + uid + "',"
+                    + " status, currency, created_at, updated_at, version) VALUES ('LPe2e-gate-" + uid + "',"
                     + " 'e2e-gate-key-" + uid + "', 'PAYMENT', 'e2e-gate-" + uid + "',"
-                    + " 'POSTED', 'CNY', NOW(), 1)");
+                    + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
             long pid = ((Number) db.scalar("ledger",
                     "SELECT id FROM postings WHERE posting_no='LPe2e-gate-" + uid + "'")).longValue();
             db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
                     + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                    + ", 1, 'DEBIT', 66, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-gate-" + uid + "', NOW())");
+                    + ", 3, 'DEBIT', 66, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-gate-" + uid + "', NOW())");
+            db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
+                    + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
+                    + ", 3, 'CREDIT', 66, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-gate-" + uid + "', NOW())");
             try {
                 String period = "e2e-gate-" + Long.toString(System.currentTimeMillis(), 36);
                 Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e");
@@ -52,8 +55,17 @@ class SettlementGateE2ETest extends E2eBase {
                                 batchNo, closed.status(), closed.body())
                         .isBetween(400, 499);
 
-                // 3) 同期结算建批被门禁拒绝（AC3.3）
-                Api.ApiResponse settlement = API.settlementCreateBatch(uid, period, "e2e");
+                // 3) 同期结算建批被门禁拒绝（AC3.3）——门禁在商户校验之后，
+                //    需真实可结算商户（settlement.createBatch 以 Long 解析商户号）
+                Api.ApiResponse merchant = API.createMerchant("e2e-" + uid, "e2e merchant", "e2e-acct-" + uid);
+                ctx.response("createMerchant", merchant);
+                assertThat(merchant.is2xx()).as("注册商户").isTrue();
+                long merchantId = merchant.json().path("id").asLong();
+                Api.ApiResponse approved = API.approveMerchant(merchantId);
+                ctx.response("approveMerchant", approved);
+                assertThat(approved.is2xx()).as("审核通过（ACTIVE + 可结算）").isTrue();
+
+                Api.ApiResponse settlement = API.settlementCreateBatch(String.valueOf(merchantId), period, "e2e");
                 ctx.response("settlementCreateBatch", settlement);
                 assertThat(settlement.status())
                         .as("存在未收口差异时结算必须被拒 [period=%s]，期望 4xx 实际 %d: %s",

@@ -171,6 +171,22 @@ public final class Api {
         return get("reconciliation", "/internal/audit/settlement-gate?period=" + period);
     }
 
+    // ---- 商户（merchant，结算门禁用真实可结算商户）----
+
+    /** POST /merchants：注册（PENDING_REVIEW）。 */
+    public ApiResponse createMerchant(String code, String name, String settlementAccountRef) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("code", code);
+        body.put("name", name);
+        body.put("settlementAccountRef", settlementAccountRef);
+        return post("merchant", "/merchants", Map.of(), body);
+    }
+
+    /** POST /merchants/{id}/approve：审核通过（ACTIVE + settlementEligible）。 */
+    public ApiResponse approveMerchant(long id) {
+        return post("merchant", "/merchants/" + id + "/approve", Map.of(), Map.of());
+    }
+
     // ---- 结算（settlement）----
 
     /** POST /internal/settlements/batches：建结算批（受对账门禁约束）。 */
