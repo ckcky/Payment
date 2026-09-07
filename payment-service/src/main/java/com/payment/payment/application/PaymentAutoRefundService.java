@@ -10,6 +10,7 @@ import com.payment.payment.domain.PaymentRepository;
 import com.payment.refund.application.CreateRefundCommand;
 import com.payment.refund.application.RefundApplicationService;
 import com.payment.refund.domain.Refund;
+import com.payment.refund.domain.RefundStatus;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +26,10 @@ import org.springframework.stereotype.Service;
  * ②落退款渠道尝试记录（{@code PaymentRefundService}）→ ③调外部渠道三态收敛。</p>
  *
  * <ul>
- *   <li>退款幂等键 {@code autorefund:{transactionNo}:{paymentNo}}（FR-005）：同一
- *       (transactionNo, paymentNo) 重复触发幂等吸收；</li>
+ *   <li>退款幂等键 {@code transactionRefundNo}（TXRF，spec 019 / ADR-0067 两层单号：
+ *       同一 TXRF 重复触发幂等吸收、可重入回放，替代旧 {@code autorefund:{txn}:{pm}} 复合键）；</li>
+ *   <li>支付层执行单号 PMRF 由退款域自生成（双号互记：响应回填 order 侧
+ *       {@code transaction_refunds.payment_refund_no}）；</li>
  *   <li>同步重试 3 次、指数退避 200ms 起（200/400/800ms），全部失败 →
  *       {@code payment.auto_refund_failed} 指标 + ERROR 日志转人工（对账兜底）；</li>
  *   <li>支付单保留 SUCCEEDED 事实不回滚（钱确实收下过，退款是补偿动作）。</li>
@@ -67,7 +70,7 @@ public class PaymentAutoRefundService {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "payment not refundable in status " + payment.getStatus());
         }
-        String idempotencyKey = "autorefund:" + command.transactionNo() + ":" + command.paymentNo();
+        String idempotencyKey = command.transactionRefundNo();
         RuntimeException last = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
@@ -75,13 +78,20 @@ public class PaymentAutoRefundService {
                         new CreateRefundCommand(
                                 command.orderNo(), command.paymentNo(), command.userId(),
                                 command.amountMinor(), command.currencyCode(),
-                                "AUTO_REFUND:SURPLUS", idempotencyKey, List.of(),
-                                command.transactionNo()));
+                                "ORDER_REFUND",
+                                idempotencyKey, List.of(),
+                                command.transactionNo(), command.transactionRefundNo()));
                 metrics.counter("payment.auto_refund_succeeded", 1.0, "module", MODULE);
                 log.warn("自动退款命令执行完成 transactionNo={} paymentNo={} orderNo={} refundNo={} status={}",
                         command.transactionNo(), command.paymentNo(), command.orderNo(),
                         refund.getRefundNo(), refund.getStatus());
-                return new RefundCommandResponse(refund.getRefundNo(), refund.getStatus().name());
+                // 受理在途（PROCESSING/UNKNOWN）对 order 一律呈现 PROCESSING 语义（spec 019 plan §3.1）：
+                // 渠道受理未终局，退款单停 PROCESSING，终态经渠道回调 + RefundResultNotification 收口。
+                String responseStatus = (refund.getStatus() == RefundStatus.UNKNOWN
+                        || refund.getStatus() == RefundStatus.PROCESSING)
+                        ? "PROCESSING"
+                        : refund.getStatus().name();
+                return new RefundCommandResponse(refund.getRefundNo(), responseStatus);
             } catch (RuntimeException ex) {
                 last = ex;
                 if (attempt < MAX_ATTEMPTS) {

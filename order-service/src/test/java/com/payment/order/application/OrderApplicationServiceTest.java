@@ -203,5 +203,11 @@ class OrderApplicationServiceTest {
             succeededRequests.add(request);
             return new com.payment.common.dto.rpc.FulfillmentAcceptedResponse(1L, "PROCESSING");
         }
+
+        @Override
+        public com.payment.common.dto.rpc.RefundFulfillmentResponse onRefund(
+                com.payment.common.dto.rpc.RefundFulfillmentRequest request) {
+            throw new UnsupportedOperationException("not expected in this test");
+        }
     }
 }

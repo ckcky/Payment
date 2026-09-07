@@ -11,7 +11,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 退款申请编排测试（US2）：成功/重复幂等/超退款拒绝/未知结果/币种不匹配。
+ * 退款申请编排测试（US2 / spec 019 T107）：成功/重复幂等/超退款拒绝/未知结果/币种不匹配/
+ * PMRF 单号生成/幂等键=TXRF/三路收敛。
  */
 class RefundApplicationServiceTest {
 
@@ -23,12 +24,39 @@ class RefundApplicationServiceTest {
     }
 
     @Test
-    void successfulFullRefundFiresAttemptAndPostProcessOnce() {
+    void successfulFullRefundFiresAttemptLedgerOnce() {
         Refund refund = stack.appService().createRefund(cmd());
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
         assertThat(stack.payment.attemptRequests).hasSize(1);
-        assertThat(stack.entitlement.postProcessRequests).hasSize(1);
+        assertThat(stack.ledger.postingKeys).hasSize(1);
+    }
+
+    @Test
+    void newRefundGeneratesPmrfNumber() {
+        // spec 019 / T107：新建退款单一律 PMRF（支付层退款执行单），存量 RF 不再新增
+        Refund refund = stack.appService().createRefund(cmd());
+        assertThat(refund.getRefundNo()).startsWith("PMRF");
+    }
+
+    @Test
+    void idempotencyKeyUsesTransactionRefundNoAndReplays() {
+        // spec 019 / T107：幂等键 = transaction_refund_no（TXRF），同号重试回放同一执行单
+        RefundApplicationService service = stack.appService();
+        CreateRefundCommand first = new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L,
+                "CNY", "customer", "ignored-legacy-key", List.of(), "TX-1", "TXRF-1");
+
+        Refund created = service.createRefund(first);
+        assertThat(created.getIdempotencyKey()).isEqualTo("TXRF-1");
+        assertThat(created.getTransactionRefundNo()).isEqualTo("TXRF-1");
+        assertThat(created.getTransactionNo()).isEqualTo("TX-1");
+
+        // 同 TXRF 重试（即使 legacy 幂等键字段不同）→ 回放同一执行单
+        CreateRefundCommand retry = new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L,
+                "CNY", "customer", "another-legacy-key", List.of(), "TX-1", "TXRF-1");
+        Refund replayed = service.createRefund(retry);
+        assertThat(replayed.getId()).isEqualTo(created.getId());
+        assertThat(stack.payment.attemptRequests).hasSize(1);
     }
 
     @Test
@@ -54,13 +82,13 @@ class RefundApplicationServiceTest {
     }
 
     @Test
-    void unknownAttemptEndsUnknownWithoutPostProcess() {
+    void unknownAttemptEndsUnknownWithoutLedger() {
         stack.payment.attemptStatus = "UNKNOWN";
 
         Refund refund = stack.appService().createRefund(cmd());
 
         assertThat(refund.getStatus()).isEqualTo(RefundStatus.UNKNOWN);
-        assertThat(stack.entitlement.postProcessRequests).isEmpty();
+        assertThat(stack.ledger.postingKeys).isEmpty();
     }
 
     @Test

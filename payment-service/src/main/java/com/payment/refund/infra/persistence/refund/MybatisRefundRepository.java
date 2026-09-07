@@ -124,6 +124,7 @@ public class MybatisRefundRepository implements RefundRepository {
         return Refund.rehydrate(entity.getId(), entity.getRefundNo(), entity.getOrderNo(), entity.getPaymentNo(),
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
                 entity.getReason(), entity.getIdempotencyKey(), loadItems(entity.getRefundNo()),
+                entity.getTransactionRefundNo(), entity.getTransactionNo(),
                 RefundStatus.valueOf(entity.getStatus()), entity.getFailureReason(), entity.getVersion());
     }
 
@@ -131,6 +132,8 @@ public class MybatisRefundRepository implements RefundRepository {
         RefundEntity entity = new RefundEntity();
         entity.setId(refund.getId());
         entity.setRefundNo(refund.getRefundNo());
+        entity.setTransactionRefundNo(refund.getTransactionRefundNo());
+        entity.setTransactionNo(refund.getTransactionNo());
         entity.setOrderNo(refund.getOrderNo());
         entity.setPaymentNo(refund.getPaymentNo());
         entity.setUserId(refund.getUserId());

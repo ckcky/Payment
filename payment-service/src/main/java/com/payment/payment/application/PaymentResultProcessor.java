@@ -2,12 +2,16 @@ package com.payment.payment.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -24,21 +28,26 @@ import org.springframework.stereotype.Component;
 @Component
 public class PaymentResultProcessor {
 
+    private static final Logger log = LoggerFactory.getLogger(PaymentResultProcessor.class);
+
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository attemptRepository;
     private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
+    private final BusinessMetrics metrics;
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
     public PaymentResultProcessor(PaymentRepository paymentRepository,
                                   PaymentAttemptRepository attemptRepository,
                                   OrderGateway orderGateway,
-                                  LedgerPostingGateway ledgerGateway) {
+                                  LedgerPostingGateway ledgerGateway,
+                                  BusinessMetrics metrics) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
+        this.metrics = metrics;
     }
 
     /** 兼容构造：不接账本时使用空记账网关（测试/账本未接入场景）。 */
@@ -47,7 +56,16 @@ public class PaymentResultProcessor {
                                   OrderGateway orderGateway) {
         this(paymentRepository, attemptRepository, orderGateway,
                 (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
-                });
+                },
+                new NoopBusinessMetrics());
+    }
+
+    /** 兼容构造：显式指定记账网关（测试场景），指标用空实现。 */
+    public PaymentResultProcessor(PaymentRepository paymentRepository,
+                                  PaymentAttemptRepository attemptRepository,
+                                  OrderGateway orderGateway,
+                                  LedgerPostingGateway ledgerGateway) {
+        this(paymentRepository, attemptRepository, orderGateway, ledgerGateway, new NoopBusinessMetrics());
     }
 
     /** 返回支付是否真正发生了状态迁移（据此决定是否已触发订单通知与记账）。 */
@@ -64,9 +82,13 @@ public class PaymentResultProcessor {
             PaymentSucceededRequest request = PaymentResultApplier.toSucceededRequest(payment);
             try {
                 orderGateway.notifyPaymentSucceeded(request);
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException ex) {
                 // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）；
                 // Feature 016：order 不再抛 409——surplus 判定与自动退款发起归 order transaction 层。
+                // T109：不再静默吞异常——WARN + 指标留痕，供监控告警与对账兜底。
+                log.warn("支付成功通知 order 失败（事实不回滚，对账兜底）paymentNo={} orderNo={} reason={}",
+                        payment.getPaymentNo(), payment.getOrderNo(), ex.getMessage());
+                metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；记账属 payment 层支付指令编排，
             // 保留在 payment 内（ADR-0054）。记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009）。

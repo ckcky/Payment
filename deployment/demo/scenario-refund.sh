@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# demo/scenario-refund.sh —— 退款演示：成功支付 → 退款（累计不超限 + 幂等重放）
-# 前置：服务已启动；payment-service 以默认 mock-scenario=SUCCESS 运行（bash demo/restart-payment.sh SUCCESS）
-# 断言：支付 SUCCEEDED → 退款 CREATED → 同一幂等键重放返回同一退款（不重复）→ 超额退款被 409 拒（H1 防超额）
+# demo/scenario-refund.sh —— 退款演示（spec 019 / ADR-0067 order 驱动两层退款单）
+# 链路：POST /internal/orders/refund 生成 TXRF → payment 生成 PMRF 执行单 →
+#       mock 渠道受理 + 异步回调 → payment 收敛（记账冲正 + 通知 order）→ order 收口
+# 前置：服务已启动；payment-service 以默认 mock-scenario=SUCCESS + refund-async 运行
+# 断言：支付 SUCCEEDED → 双号互记（TXRF/PMRF）→ 同 TXRF 重放幂等 → 超退被 REJECTED →
+#       异步回调收敛退款终态
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,33 +44,65 @@ if [ "$PAY_STATUS" = "PROCESSING" ]; then
 fi
 assert_eq "$PAY_STATUS" "SUCCEEDED" "支付 → SUCCEEDED"
 
-# 幂等键动态生成：idempotency_key 全局唯一（uk_refunds_idempotency_key），
-# 写死的键跨运行会命中重放、污染后续断言（无 reset 直跑复现过）
-IDEM_BASE="rk-$(date +%s)-$$"
-echo "==> ③ 发起退款（¥50.00，幂等键 $IDEM_BASE-1）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"$IDEM_BASE-1\"}"
-assert_status 200 "退款创建"
-jget "d['refundNo']"; REFUND_NO="$VALUE"
+echo "==> ③ order 发起退款（¥50.00，两层退款单 TXRF/PMRF 双号互记）"
+http POST "$ORDER_URL/internal/orders/refund" "{\"orderNo\":\"$ORDER_NO\",\"amountMinor\":5000,\"reason\":\"demo-partial\"}"
+assert_status 200 "退款受理"
+jget "d['txrf']"; TXRF="$VALUE"
+jget "d['pmrf']"; PMRF="$VALUE"
 jget "d['status']"; REFUND_STATUS="$VALUE"
-# 退款创建后状态取决于渠道形态：同步收敛为 SUCCEEDED；异步渠道为 CREATED（待回调/确认）。二者均合法。
+[ -n "$TXRF" ] || fail "退款响应缺失 txrf（交易层退款单）"
+[ -n "$PMRF" ] || fail "退款响应缺失 pmrf（支付层退款执行单）"
+info "txrf=$TXRF pmrf=$PMRF status=$REFUND_STATUS"
+# 受理态：同步收敛 SUCCEEDED 或异步受理 PROCESSING 均合法（mock 默认异步）
 case "$REFUND_STATUS" in
-  CREATED|SUCCEEDED) info "PASS: 退款创建（状态 ${REFUND_STATUS}）" ;;
-  *) fail "退款创建: 非预期状态 [$REFUND_STATUS]" ;;
+  PROCESSING|SUCCEEDED) info "PASS: 退款单受理（状态 ${REFUND_STATUS}）" ;;
+  *) fail "退款受理: 非预期状态 [$REFUND_STATUS]" ;;
 esac
-info "refundNo=$REFUND_NO"
 
-echo "==> ④ 同一幂等键重放 → 返回同一退款（不重复创建）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":5000,\"currencyCode\":\"CNY\",\"reason\":\"demo-partial\",\"idempotencyKey\":\"$IDEM_BASE-1\"}"
-assert_status 200 "幂等重放受理"
-jget "d['refundNo']"; REFUND_NO2="$VALUE"
-assert_eq "$REFUND_NO2" "$REFUND_NO" "幂等重放返回同一退款单号（不重复）"
+echo "==> ④ 等待渠道异步回调收敛第一笔退款终态（mock 默认 refund-async，延迟约 1s）"
+FINAL_STATUS="PROCESSING"
+for i in $(seq 1 30); do
+  http GET "$PAYMENT_URL/internal/refunds/$PMRF" || true
+  jget "d['status']"; FINAL_STATUS="$VALUE"
+  case "$FINAL_STATUS" in
+    SUCCEEDED|FAILED|UNKNOWN) break ;;
+  esac
+  sleep 0.2
+done
+assert_eq "$FINAL_STATUS" "SUCCEEDED" "异步回调收敛 → 退款 SUCCEEDED（PMRF=${PMRF}）"
+jget "d['transactionRefundNo']"; PMSIDE_TXRF="$VALUE"
+assert_eq "$PMSIDE_TXRF" "$TXRF" "payment 侧 refunds.transaction_refund_no == TXRF（双号互记）"
 
-echo "==> ⑤ 超额退款被拒（累计 5000+6000=11000 > 已付 9900，触发 H1 防超额）"
-http POST "$REFUND_URL/internal/refunds" "{\"orderNo\":\"$ORDER_NO\",\"paymentNo\":\"$PAYMENT_NO\",\"userId\":\"demo-user\",\"amountMinor\":6000,\"currencyCode\":\"CNY\",\"reason\":\"demo-over\",\"idempotencyKey\":\"$IDEM_BASE-2\"}"
-# 现网契约：超额不回 409，而是受理为 REJECTED 退款记录（HTTP 200 + status=REJECTED，资金约束落领域状态）
-assert_status 200 "超额退款受理"
-jget "d['status']"; REJ_STATUS="$VALUE"
-assert_eq "$REJ_STATUS" "REJECTED" "超额退款 → REJECTED（H1 防超额）"
+echo "==> ⑤ 已收敛后再提交同额请求 → 第二笔为「新退款单」而非回放；4900 剩余可退中 2000 合法"
+# 说明：渠道回调已收敛（SUCCEEDED），同额重提交不是「同 TXRF 重试」（REQUESTED/PROCESSING 才回放），
+# 而是合法的第二笔部分退款（微信式多次部分退）；同额 5000 会因剩余可退 4900 被拒（409）。
+http POST "$ORDER_URL/internal/orders/refund" "{\"orderNo\":\"$ORDER_NO\",\"amountMinor\":2000,\"reason\":\"demo-second\"}"
+assert_status 200 "第二笔部分退款受理"
+jget "d['txrf']"; TXRF2="$VALUE"
+jget "d['pmrf']"; PMRF2="$VALUE"
+[ "$TXRF2" != "$TXRF" ] || fail "第二笔退款不应复用第一笔 TXRF"
+info "second txrf=$TXRF2 pmrf=$PMRF2"
+
+echo "==> ⑥ 超额退款被 order 侧前置校验拦截（5000+2000+3000=10000 > 已付 9900，H1 防超额）"
+http POST "$ORDER_URL/internal/orders/refund" "{\"orderNo\":\"$ORDER_NO\",\"amountMinor\":3000,\"reason\":\"demo-over\"}"
+assert_status 409 "超额退款 → 409 AMOUNT_INVARIANT_VIOLATION（refundable=2900）"
+
+echo "==> ⑦ 等第二笔收敛 + 终态核对（订单 PARTIALLY_REFUNDED、TXRF 追踪段可见）"
+for i in $(seq 1 30); do
+  http GET "$PAYMENT_URL/internal/refunds/$PMRF2" || true
+  jget "d['status']"; FINAL2="$VALUE"
+  case "$FINAL2" in
+    SUCCEEDED|FAILED|UNKNOWN) break ;;
+  esac
+  sleep 0.2
+done
+assert_eq "$FINAL2" "SUCCEEDED" "第二笔退款收敛 SUCCEEDED（PMRF=${PMRF2}）"
+http GET "$ORDER_URL/orders/$ORDER_NO"
+jget "d['status']"; ORDER_STATUS="$VALUE"
+assert_eq "$ORDER_STATUS" "PARTIALLY_REFUNDED" "订单状态 → PARTIALLY_REFUNDED（7000/9900 已退）"
+http GET "$DEMO_URL/demo/trace?orderId=$ORDER_NO"
+jget "any(s['table']=='transaction_refunds' and s['rows'] for s in d['sections'])"; HAS_TXRF_ROWS="$VALUE"
+assert_eq "$HAS_TXRF_ROWS" "True" "demo 追踪含 transaction_refunds（TXRF）段落且有数据"
 
 echo ""
 info "scenario-refund 全部断言通过 ✅"

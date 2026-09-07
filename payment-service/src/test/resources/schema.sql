@@ -56,6 +56,8 @@ DROP TABLE IF EXISTS refunds;
 CREATE TABLE refunds (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     refund_no VARCHAR(32) NOT NULL,
+    transaction_refund_no VARCHAR(32) NULL,
+    transaction_no VARCHAR(32) NULL,
     idempotency_key VARCHAR(128) NOT NULL,
     order_no VARCHAR(64) NOT NULL,
     payment_no VARCHAR(32) NOT NULL,

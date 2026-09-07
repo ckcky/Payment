@@ -2,7 +2,7 @@
 
 # ADR-0067: order 驱动的两层退款单模型与退款异步回调闭环（spec 019 立项）
 
-- 状态：✅ **Accepted**（2026-09-07 负责人拍板 D1~D8；**代码未实施**，任务见 [spec 019 tasks](../specs/019-order-driven-refund/tasks.md)）
+- 状态：✅ **Accepted → Implemented**（2026-09-07 负责人拍板 D1~D8；代码已实施，全量回归 BUILD SUCCESS，任务见 [spec 019 tasks](../specs/019-order-driven-refund/tasks.md)）
 - 关联：ADR-0054（支付编排职责归位，本 ADR 为其在退款方向的落地）、ADR-0062（业务单号体系，扩展 TXRF/PMRF 前缀）、ADR-0063（跨服务按业务单号关联）、ADR-0064（一交易多支付单 / 退款域并入 payment）、spec 018（前置：order_item_no / 列序规范 / 按 item 履约）、spec 019（[spec](../specs/019-order-driven-refund/spec.md) / [plan](../specs/019-order-driven-refund/plan.md)）
 - 需求源头：负责人 2026-09-07 退款链路评审——提出「order → transaction → payment → attempts → 渠道」发起链与「payment（attempts/payment 状态+账务）→ order（transaction 状态/订单状态/秒杀回补/履约终止）」回调链；追问「transaction 不记录 paymentNo？」「多次退款总金额校验在哪」「退款单号怎么记录，对比业内」；最终拍板单号前缀 TXRF/PMRF。
 

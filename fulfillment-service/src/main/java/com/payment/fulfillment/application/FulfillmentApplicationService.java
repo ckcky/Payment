@@ -7,9 +7,12 @@ import com.payment.common.dto.rpc.FulfillmentCompletedRequest;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.common.dto.rpc.RefundFulfillmentRequest;
 import com.payment.common.dto.rpc.RefundFulfillmentResponse;
+import com.payment.common.dto.rpc.RefundPostProcessRequest;
 import com.payment.fulfillment.domain.Fulfillment;
 import com.payment.fulfillment.domain.FulfillmentRepository;
 import com.payment.fulfillment.domain.FulfillmentStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -26,6 +29,7 @@ import java.util.List;
 @Service
 public class FulfillmentApplicationService {
 
+    private static final Logger log = LoggerFactory.getLogger(FulfillmentApplicationService.class);
     private static final String MODULE = "fulfillment";
 
     private final FulfillmentRepository repository;
@@ -96,6 +100,10 @@ public class FulfillmentApplicationService {
      * <p>spec 018 / AC3.4：一单多明细 = 多条履约，遍历取消全部 PENDING；任一条取消成功返回
      * CANCELLED；全部不可撤销（PROCESSING/DELIVERED/已取消等）返回 SKIPPED（可解释、非错误）；
      * 找不到履约也返回 SKIPPED。已交付履约的回收不在本 Feature。</p>
+     *
+     * <p>spec 019 / ADR-0067：履约与权益是同一条授予链的两端——本方法在撤 PENDING 履约后，
+     * 沿「fulfillment → entitlement」既定链触发权益撤销（幂等 REVOKED/NOOP）。
+     * 权益撤销失败不反写履约取消事实（对账兜底），留 WARN + 指标。</p>
      */
     public RefundFulfillmentResponse onRefund(RefundFulfillmentRequest request) {
         List<Fulfillment> fulfillments = repository.findByOrderNo(request.orderNo());
@@ -110,6 +118,16 @@ public class FulfillmentApplicationService {
                 metrics.counter("fulfillment.refund_cancelled", 1.0, "module", MODULE);
                 anyCancelled = true;
             }
+        }
+        // 权益撤销（幂等）：只要订单存在权益即触发（含 DELIVERED 履约已授予的权益）
+        try {
+            entitlementGateway.revokeOnRefund(new RefundPostProcessRequest(
+                    request.refundNo(), request.paymentNo(), request.orderNo(),
+                    request.userId(), request.reason()));
+        } catch (RuntimeException ex) {
+            metrics.counter("fulfillment.entitlement_revoke_failed", 1.0, "module", MODULE);
+            log.warn("entitlement revocation failed (reconciliation fallback) orderNo={} refundNo={} reason={}",
+                    request.orderNo(), request.refundNo(), ex.getMessage());
         }
         return new RefundFulfillmentResponse(request.refundNo(), anyCancelled ? "CANCELLED" : "SKIPPED");
     }

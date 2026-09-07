@@ -24,6 +24,10 @@ public class Transaction {
     private final String currencyCode;
     private final String purpose;
     private TransactionStatus status = TransactionStatus.PENDING;
+    /** 生效支付单：首张成功支付（spec 019 / ADR-0067；surplus 被退单不覆盖此列）。 */
+    private String paymentNo;
+    /** 累计已退金额（spec 019 / ADR-0067）：SUCCEEDED 退款回调累加，按 TXRF 幂等。 */
+    private long refundedMinor = 0L;
 
     public Transaction(String orderNo, long amountMinor, String currencyCode, String purpose) {
         this.orderNo = Objects.requireNonNull(orderNo, "orderNo");
@@ -38,12 +42,15 @@ public class Transaction {
 
     /** 持久化重建：还原交易聚合及其历史状态，绕过创建期状态机（不改变业务规则）。 */
     public static Transaction rehydrate(Long id, String transactionNo, String orderId, long amountMinor, String currencyCode,
-                                        String purpose, TransactionStatus status, Integer version) {
+                                        String purpose, TransactionStatus status, Integer version,
+                                        String paymentNo, long refundedMinor) {
         Transaction t = new Transaction(orderId, amountMinor, currencyCode, purpose);
         t.id = id;
         t.transactionNo = transactionNo;
         t.status = status;
         t.version = version;
+        t.paymentNo = paymentNo;
+        t.refundedMinor = refundedMinor;
         return t;
     }
 
@@ -72,6 +79,26 @@ public class Transaction {
     public void cancel() {
         requireStatus(TransactionStatus.PENDING, "cancel");
         this.status = TransactionStatus.CANCELLED;
+    }
+
+    /**
+     * 记录生效支付单（spec 019）：仅首张成功支付写入（null 时写入），重复/surplus 通知不覆盖。
+     * @return true 表示本次写入生效。
+     */
+    public boolean recordEffectivePayment(String paymentNo) {
+        if (this.paymentNo != null) {
+            return false;
+        }
+        this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
+        return true;
+    }
+
+    /** 累加已退金额（spec 019）：按 TXRF 幂等由调用方保证（仅 SUCCEEDED 首次迁移时调用）。 */
+    public void accumulateRefund(long amountMinor) {
+        if (amountMinor <= 0) {
+            throw BizException.of(ErrorCodes.AMOUNT_INVARIANT_VIOLATION, "refund amount must be > 0");
+        }
+        this.refundedMinor = Math.addExact(this.refundedMinor, amountMinor);
     }
 
     private boolean transitionToSucceeded() {
@@ -146,5 +173,13 @@ public class Transaction {
 
     public TransactionStatus getStatus() {
         return status;
+    }
+
+    public String getPaymentNo() {
+        return paymentNo;
+    }
+
+    public long getRefundedMinor() {
+        return refundedMinor;
     }
 }
