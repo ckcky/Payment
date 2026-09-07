@@ -28,8 +28,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties(MockCashierProperties.class)
 public class WebConfig implements WebMvcConfigurer {
 
-    /** 渠道回调的 Servlet 前缀匹配模式（具体路径由过滤器内部再判定）。 */
+    /** 渠道回调的 Servlet 前缀匹配模式（具体路径由过滤器内部再判定；含支付与退款两条回调链）。 */
     static final String CHANNEL_CALLBACK_PREFIX = "/internal/payments/*";
+
+    /** 退款渠道回调的 Servlet 前缀匹配模式（spec 019 / D7）。 */
+    static final String REFUND_CALLBACK_PREFIX = "/internal/refunds/*";
 
     private final ResolveAuthorizationInterceptor resolveInterceptor;
     private final InternalServiceAuthInterceptor internalAuthInterceptor;
@@ -49,6 +52,7 @@ public class WebConfig implements WebMvcConfigurer {
         FilterRegistrationBean<ChannelCallbackSignatureFilter> registration =
                 new FilterRegistrationBean<>(new ChannelCallbackSignatureFilter());
         registration.addUrlPatterns(CHANNEL_CALLBACK_PREFIX);
+        registration.addUrlPatterns(REFUND_CALLBACK_PREFIX);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }
@@ -59,6 +63,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/payments/*/resolve");
         registry.addInterceptor(internalAuthInterceptor)
                 .addPathPatterns("/internal/**")
-                .excludePathPatterns(ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN);
+                .excludePathPatterns(ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN)
+                .excludePathPatterns(ChannelCallbackSignatureFilter.REFUND_CALLBACK_PATH_PATTERN);
     }
 }

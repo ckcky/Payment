@@ -126,6 +126,18 @@ public class Order {
         this.refundedMinor = newRefunded;
     }
 
+    /**
+     * 退款收口（spec 019 / ADR-0067）：二次校验超退 + 金额累加 + 状态推进。
+     * 可退前置状态：PAID / FULFILLING / COMPLETED / PARTIALLY_REFUNDED；
+     * 退满（refunded ≥ paid）→ REFUNDED，否则 PARTIALLY_REFUNDED。
+     */
+    public void applyRefund(long amountMinor) {
+        requireAnyStatus("refund", OrderStatus.PAID, OrderStatus.FULFILLING,
+                OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED);
+        recordRefund(amountMinor);
+        this.status = (refundedMinor >= paidMinor) ? OrderStatus.REFUNDED : OrderStatus.PARTIALLY_REFUNDED;
+    }
+
     /** 可退款金额 = 已支付 - 已退款。 */
     public long getRefundableMinor() {
         return Math.subtractExact(paidMinor, refundedMinor);

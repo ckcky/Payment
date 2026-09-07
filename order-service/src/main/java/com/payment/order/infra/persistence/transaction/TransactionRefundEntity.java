@@ -1,32 +1,29 @@
-package com.payment.refund.infra.persistence.refund;
+package com.payment.order.infra.persistence.transaction;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.payment.common.mybatis.BaseEntity;
 
 /**
- * 退款持久化实体（PO）：仅承载 refunds 表列，领域规则在 {@code domain.Refund}，映射由仓储完成。
+ * 交易层退款单持久化实体（PO，spec 019 / ADR-0067）：承载 transaction_refunds 表列，
+ * 状态机逻辑在 {@code domain.RefundOrder}。
  */
-@TableName("refunds")
-public class RefundEntity extends BaseEntity {
+@TableName("transaction_refunds")
+public class TransactionRefundEntity extends BaseEntity {
 
-    /** 业务单号（PMRF + 雪花，ADR-0062/0067；存量 RF 保留不改写）。 */
+    /** 交易层退款单号（TXRF + 雪花），业务主键 + 幂等键。 */
     private String refundNo;
-    /** 上层交易退款单号（TXRF，spec 019 双号互记；存量手工退款为 null）。 */
-    private String transactionRefundNo;
-    /** 所属交易单号（TX；spec 019 回调通知 order 时回传；存量数据为 null）。 */
+    /** 支付层退款执行单号（PMRF），payment 响应回填。 */
+    private String paymentRefundNo;
     private String transactionNo;
     private String orderNo;
     private String paymentNo;
     private String userId;
-    /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
     private String currencyCode;
-    private String reason;
-    /** 幂等键：数据库唯一约束兜底，杜绝并发重复退款。 */
-    private String idempotencyKey;
-    /** 退款状态机枚举名（状态机逻辑在领域层，持久化只存枚举名）。 */
     private String status;
-    private String failureReason;
+    private String reason;
+    /** 幂等键 = TXRF。 */
+    private String idempotencyKey;
 
     public String getRefundNo() {
         return refundNo;
@@ -36,12 +33,12 @@ public class RefundEntity extends BaseEntity {
         this.refundNo = refundNo;
     }
 
-    public String getTransactionRefundNo() {
-        return transactionRefundNo;
+    public String getPaymentRefundNo() {
+        return paymentRefundNo;
     }
 
-    public void setTransactionRefundNo(String transactionRefundNo) {
-        this.transactionRefundNo = transactionRefundNo;
+    public void setPaymentRefundNo(String paymentRefundNo) {
+        this.paymentRefundNo = paymentRefundNo;
     }
 
     public String getTransactionNo() {
@@ -92,6 +89,14 @@ public class RefundEntity extends BaseEntity {
         this.currencyCode = currencyCode;
     }
 
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
     public String getReason() {
         return reason;
     }
@@ -106,21 +111,5 @@ public class RefundEntity extends BaseEntity {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public String getFailureReason() {
-        return failureReason;
-    }
-
-    public void setFailureReason(String failureReason) {
-        this.failureReason = failureReason;
     }
 }

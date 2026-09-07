@@ -9,6 +9,7 @@ import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.common.dto.rpc.RefundCommandRequest;
 import com.payment.common.dto.rpc.RefundCommandResponse;
+import com.payment.common.dto.rpc.RefundFulfillmentRequest;
 import com.payment.order.application.FulfillmentGateway;
 import com.payment.order.application.OrderApplicationService;
 import com.payment.order.application.OrderLine;
@@ -19,6 +20,7 @@ import com.payment.order.application.TransactionApplicationService;
 import com.payment.order.domain.Order;
 import com.payment.order.domain.OrderStatus;
 import com.payment.order.infra.InMemoryOrderRepository;
+import com.payment.order.infra.InMemoryTransactionRefundRepository;
 import com.payment.order.infra.InMemoryTransactionRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,8 +51,9 @@ class TransactionCallbackConflictTest {
     }
 
     private TransactionApplicationService transactionLayer(SuccessfulPurchaseScenarioTest.FakeCatalogClient client) {
-        return new TransactionApplicationService(orderRepository, orderLayer(client),
-                paymentGateway, new NoopBusinessMetrics(), new StructuredAuditLogger());
+        return new TransactionApplicationService(orderRepository, transactionRepository,
+                new InMemoryTransactionRefundRepository(), orderLayer(client), paymentGateway,
+                fulfillmentGateway, client, new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
     private SuccessfulPurchaseScenarioTest.FakeCatalogClient clientWithSku() {
@@ -93,7 +96,9 @@ class TransactionCallbackConflictTest {
         assertThat(paymentGateway.refundRequests).hasSize(1);
         RefundCommandRequest refund = paymentGateway.refundRequests.get(0);
         assertThat(refund.paymentNo()).isEqualTo("PM-2");
-        assertThat(refund.transactionNo()).isEqualTo("txn-x"); // FR-005：以 transactionNo + paymentNo 发起
+        // FR-005：以 transactionNo + paymentNo 发起；spec 019：TXRF 交易层单号先行
+        assertThat(refund.transactionNo()).startsWith("TX");
+        assertThat(refund.transactionRefundNo()).startsWith("TXRF");
         assertThat(fulfillmentGateway.succeededRequests).hasSize(1); // surplus 不驱动第二次履约
     }
 
@@ -144,7 +149,8 @@ class TransactionCallbackConflictTest {
         @Override
         public RefundCommandResponse refund(RefundCommandRequest request) {
             refundRequests.add(request);
-            return new RefundCommandResponse("RF-STUB", "SUCCEEDED");
+            // spec 019：受理返回 PMRF + PROCESSING，终态走 on-refund-result 回调
+            return new RefundCommandResponse("PMRF-STUB-" + request.transactionRefundNo(), "PROCESSING");
         }
     }
 
@@ -152,12 +158,20 @@ class TransactionCallbackConflictTest {
     private static final class RecordingFulfillmentGateway implements FulfillmentGateway {
 
         final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();
+        final List<RefundFulfillmentRequest> refundRequests = new ArrayList<>();
 
         @Override
         public com.payment.common.dto.rpc.FulfillmentAcceptedResponse notifyPaymentSucceeded(
                 PaymentSucceededRequest request) {
             succeededRequests.add(request);
             return new com.payment.common.dto.rpc.FulfillmentAcceptedResponse(1L, "PROCESSING");
+        }
+
+        @Override
+        public com.payment.common.dto.rpc.RefundFulfillmentResponse onRefund(
+                RefundFulfillmentRequest request) {
+            refundRequests.add(request);
+            return new com.payment.common.dto.rpc.RefundFulfillmentResponse(request.refundNo(), "CANCELLED");
         }
     }
 }

@@ -6,44 +6,40 @@ import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
-import com.payment.common.dto.rpc.RefundFulfillmentRequest;
-import com.payment.common.dto.rpc.RefundFulfillmentResponse;
-import com.payment.common.dto.rpc.RefundPostProcessRequest;
-import com.payment.common.dto.rpc.RefundPostProcessResponse;
-import com.payment.refund.application.EntitlementGateway;
-import com.payment.refund.application.FulfillmentGateway;
+import com.payment.common.dto.rpc.RefundResultNotification;
+import com.payment.payment.application.OrderGateway;
+import com.payment.payment.domain.Payment;
 import com.payment.refund.application.LedgerPostingGateway;
 import com.payment.refund.application.PaymentRefundGateway;
 import com.payment.refund.application.RefundApplicationService;
-import com.payment.refund.application.RefundPostProcessOrchestrator;
-import com.payment.refund.domain.RefundPostProcessAttempt;
-import com.payment.refund.domain.RefundPostProcessAttemptRepository;
+import com.payment.refund.application.RefundResultProcessor;
 import com.payment.refund.infra.InMemoryRefundRepository;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 退款服务测试栈：内存仓储 + 记录式 payment/entitlement/fulfillment/ledger RPC fake
- * + 真实应用服务与后处理编排。
+ * 退款服务测试栈（spec 019 T108 重构）：内存仓储 + 记录式 payment/ledger/order RPC fake
+ * + 真实应用服务与 {@link RefundResultProcessor} 三路收敛编排。
+ *
+ * <p>spec 019 变更：原 fulfillment/entitlement 直调扇出与后处理编排器（RefundPostProcessOrchestrator）
+ * 已删除——业务下游扇出移交 order 侧收口（ADR-0067），本栈以 {@link RecordingOrderGateway}
+ * 验证「退款终态 → 通知 order（TXRF+PMRF 双号）」。</p>
  */
 public final class RefundTestStack {
 
     public final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
     public final RecordingPaymentRefundGateway payment = new RecordingPaymentRefundGateway();
-    public final RecordingEntitlementGateway entitlement = new RecordingEntitlementGateway();
-    public final RecordingFulfillmentGateway fulfillment = new RecordingFulfillmentGateway();
     public final RecordingLedgerGateway ledger = new RecordingLedgerGateway();
-    public final InMemoryRefundPostProcessAttemptRepository attempts =
-            new InMemoryRefundPostProcessAttemptRepository();
+    public final RecordingOrderGateway order = new RecordingOrderGateway();
+
+    public RefundResultProcessor resultProcessor() {
+        return new RefundResultProcessor(refunds, order, ledger,
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
+    }
 
     public RefundApplicationService appService() {
-        RefundPostProcessOrchestrator orchestrator = new RefundPostProcessOrchestrator(
-                fulfillment, entitlement, ledger, attempts, new NoopBusinessMetrics(), new StructuredAuditLogger());
-        return new RefundApplicationService(refunds, payment, orchestrator,
+        return new RefundApplicationService(refunds, payment, resultProcessor(),
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
@@ -67,35 +63,6 @@ public final class RefundTestStack {
         }
     }
 
-    /** 记录 notifyRefundPostProcess 调用并返回固定后处理响应。 */
-    public static final class RecordingEntitlementGateway implements EntitlementGateway {
-
-        public final List<RefundPostProcessRequest> postProcessRequests = new ArrayList<>();
-        /** 置为 true 模拟后处理 RPC 抛错（验证不因后处理失败回滚退款成功）。 */
-        public boolean failPostProcess = false;
-
-        @Override
-        public RefundPostProcessResponse notifyRefundPostProcess(RefundPostProcessRequest request) {
-            postProcessRequests.add(request);
-            if (failPostProcess) {
-                throw new IllegalStateException("post-process RPC failed");
-            }
-            return new RefundPostProcessResponse(request.refundNo(), "REVOKED");
-        }
-    }
-
-    /** 记录 notifyRefund 调用并返回固定撤销响应（CANCELLED）。 */
-    public static final class RecordingFulfillmentGateway implements FulfillmentGateway {
-
-        public final List<RefundFulfillmentRequest> refundRequests = new ArrayList<>();
-
-        @Override
-        public RefundFulfillmentResponse notifyRefund(RefundFulfillmentRequest request) {
-            refundRequests.add(request);
-            return new RefundFulfillmentResponse(request.refundNo(), "CANCELLED");
-        }
-    }
-
     /** 记录 postRefundCapture 调用（不真正触达账本）。 */
     public static final class RecordingLedgerGateway implements LedgerPostingGateway {
 
@@ -107,24 +74,33 @@ public final class RefundTestStack {
         }
     }
 
-    /** 内存版后处理尝试仓储（仅测试用）。 */
-    public static final class InMemoryRefundPostProcessAttemptRepository
-            implements RefundPostProcessAttemptRepository {
+    /** 记录 order 通知调用（支付成功 + 退款终态，TXRF+PMRF 双号）。 */
+    public static final class RecordingOrderGateway implements OrderGateway {
 
-        private final Map<String, List<RefundPostProcessAttempt>> byRefund = new ConcurrentHashMap<>();
-        private final AtomicLong idGen = new AtomicLong();
+        public final List<RefundResultNotification> refundNotifications = new ArrayList<>();
+        public int paymentSucceededCalls;
+        /** 置为 true 模拟通知 order RPC 抛错（验证不因通知失败回滚退款终态事实）。 */
+        public boolean failRefundNotify = false;
 
         @Override
-        public void save(RefundPostProcessAttempt attempt) {
-            if (attempt.getId() == null) {
-                attempt.setId(idGen.incrementAndGet());
+        public void notifyPaymentSucceeded(com.payment.common.dto.rpc.PaymentSucceededRequest request) {
+            paymentSucceededCalls++;
+        }
+
+        @Override
+        public void notifyRefundResult(RefundResultNotification notification) {
+            if (failRefundNotify) {
+                throw new IllegalStateException("order notify RPC failed");
             }
-            byRefund.computeIfAbsent(attempt.getRefundNo(), k -> new ArrayList<>()).add(attempt);
+            refundNotifications.add(notification);
         }
+    }
 
-        @Override
-        public List<RefundPostProcessAttempt> findByRefundNo(String refundNo) {
-            return byRefund.getOrDefault(refundNo, List.of());
-        }
+    /** 便捷：构造一笔成功支付事实（供 RefundFactsService 等测试使用）。 */
+    public static Payment payment(String paymentNo) {
+        Payment payment = new Payment("TXN-" + paymentNo, "order-1", "user-1", 1000L, "CNY", "idem-" + paymentNo);
+        payment.start(1L);
+        payment.succeed();
+        return payment;
     }
 }

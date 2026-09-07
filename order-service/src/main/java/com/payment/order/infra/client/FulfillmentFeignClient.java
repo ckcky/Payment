@@ -2,6 +2,8 @@ package com.payment.order.infra.client;
 
 import com.payment.common.dto.rpc.FulfillmentAcceptedResponse;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
+import com.payment.common.dto.rpc.RefundFulfillmentRequest;
+import com.payment.common.dto.rpc.RefundFulfillmentResponse;
 import com.payment.order.application.FulfillmentGateway;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,4 +19,9 @@ public interface FulfillmentFeignClient extends FulfillmentGateway {
     @PostMapping("/internal/fulfillments/on-payment-succeeded")
     @Override
     FulfillmentAcceptedResponse notifyPaymentSucceeded(@RequestBody PaymentSucceededRequest request);
+
+    /** spec 019 / ADR-0067：退款收口 → 履约终止（下游按 item 撤全部 PENDING）。 */
+    @PostMapping("/internal/fulfillments/on-refund")
+    @Override
+    RefundFulfillmentResponse onRefund(@RequestBody RefundFulfillmentRequest request);
 }

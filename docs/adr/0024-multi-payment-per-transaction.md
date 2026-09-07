@@ -56,3 +56,5 @@
 ## 后续演进
 
 > **Superseded by ADR-0054**（2026-09-06，`docs/adr/0025-order-payment-orchestration.md`）：本 ADR **第 4 条**（order 返回 409 `ORDER_NOT_PAYABLE` → payment 捕获后自发起自动退款）已被 ADR-0054 取代——自动退款的**决策与发起**归属 order-service 的 transaction 层（以 `transactionNo + paymentNo` 发起），payment-service 退回能力提供方。其余条款（一交易多支付单、退款域并入 payment-service、三渠道 mock）**保持不变**。
+
+> **二次演进（Superseded 补充，2026-09-07）**：ADR-0067 / spec 019（`docs/adr/0028-order-driven-refund-two-layer-refund-order.md`）进一步取代了 spec 016 遗留的自动退款执行机制——surplus 退款改由 order transaction 层以**两层退款单**驱动（TXRF → PMRF，幂等键=TXRF），废弃 `autorefund:{transactionNo}:{paymentNo}` 字符串幂等键；payment 侧不再自造退款幂等键，统一以 TXRF 回放同一执行单。**自动退款决策演进链：ADR-0064 §4（payment 自闭环）→ ADR-0054（决策/发起归 order）→ ADR-0067（两层退款单 + TXRF 幂等键，终态）。**

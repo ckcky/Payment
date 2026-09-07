@@ -126,6 +126,13 @@ class FulfillmentApplicationServiceTest {
             implements EntitlementGateway {
 
         @Override
+        public com.payment.common.dto.rpc.RefundPostProcessResponse revokeOnRefund(
+                com.payment.common.dto.rpc.RefundPostProcessRequest request) {
+            return new com.payment.common.dto.rpc.RefundPostProcessResponse(request.refundNo(), "NOOP");
+        }
+
+
+        @Override
         public EntitlementGrantedResponse notifyFulfillmentCompleted(FulfillmentCompletedRequest request) {
             requests.add(request);
             return new EntitlementGrantedResponse(1L, "GRANTED");

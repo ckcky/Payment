@@ -81,6 +81,12 @@ class SuccessfulPurchaseScenarioTest {
             succeededRequests.add(request);
             return new com.payment.common.dto.rpc.FulfillmentAcceptedResponse(1L, "PROCESSING");
         }
+
+        @Override
+        public com.payment.common.dto.rpc.RefundFulfillmentResponse onRefund(
+                com.payment.common.dto.rpc.RefundFulfillmentRequest request) {
+            throw new UnsupportedOperationException("scenario fake: refund not expected");
+        }
     }
 
     /**
@@ -102,6 +108,10 @@ class SuccessfulPurchaseScenarioTest {
 
         void seedSeckill(Long skuId, long total) {
             seckillStock.put(skuId, total);
+        }
+
+        long seckillRemaining(Long skuId) {
+            return seckillStock.getOrDefault(skuId, 0L);
         }
 
         long available(Long skuId) {

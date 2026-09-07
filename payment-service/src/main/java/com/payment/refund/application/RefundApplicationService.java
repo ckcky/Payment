@@ -8,6 +8,7 @@ import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
+import com.payment.payment.application.channel.ChannelResult;
 import com.payment.refund.domain.Refund;
 import com.payment.refund.domain.RefundDecision;
 import com.payment.refund.domain.RefundPolicy;
@@ -20,14 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 
 /**
- * 退款申请编排（US2）：幂等受理、资格校验、渠道退款尝试、结果收敛与成功后处理。
+ * 退款申请编排（US2 / spec 019 T107）：幂等受理、资格校验、渠道退款尝试、结果收敛。
+ *
+ * <p><b>双层单号（ADR-0067）</b>：order 侧以 TXRF 发起退款命令，本服务生成支付层执行单
+ * <b>PMRF</b> 落 {@code refunds}；<b>幂等键 = transaction_refund_no</b>（同 TXRF 重试回放同一
+ * 执行单，可重入——微信 out_refund_no 模式语义，载体从商户单号变为上层单号）。</p>
  *
  * <p>幂等键由数据库唯一约束兜底（{@link #insertNew} 捕获重复键回放），重复请求返回首次结果，
  * 不重复发起渠道退款。同一支付下的受理以悲观锁 {@code refund_intake_locks} 串行化，
  * 防止并发读累计退款金额 + 写入之间竞态导致超退款（H1）。资格不通过与超退款在本地落为
- * REJECTED 且同样登记幂等。UNKNOWN 结果仅登记事实，交由 {@link RefundRpcCallbackService}
- * 依据权威结果收敛，绝不臆断成败。确认退款后的履约/权益/记账后处理由
- * {@link RefundPostProcessOrchestrator} 统一编排（ADR-0017 / ADR-0018）。</p>
+ * REJECTED 且同样登记幂等。渠道结果三态经 {@link RefundResultProcessor} 统一收敛——
+ * 同步终态当场后处理；受理在途（UNKNOWN）待渠道回调 / resolve 收敛，绝不臆断成败。</p>
  */
 @Service
 public class RefundApplicationService {
@@ -36,25 +40,30 @@ public class RefundApplicationService {
 
     private final RefundRepository refundRepository;
     private final PaymentRefundGateway paymentRefundGateway;
-    private final RefundPostProcessOrchestrator postProcessOrchestrator;
+    private final RefundResultProcessor resultProcessor;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
     public RefundApplicationService(RefundRepository refundRepository,
                                     PaymentRefundGateway paymentRefundGateway,
-                                    RefundPostProcessOrchestrator postProcessOrchestrator,
+                                    RefundResultProcessor resultProcessor,
                                     BusinessMetrics metrics,
                                     StructuredAuditLogger auditLogger) {
         this.refundRepository = refundRepository;
         this.paymentRefundGateway = paymentRefundGateway;
-        this.postProcessOrchestrator = postProcessOrchestrator;
+        this.resultProcessor = resultProcessor;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
 
     @Transactional
     public Refund createRefund(CreateRefundCommand cmd) {
-        Optional<Refund> existing = refundRepository.findByIdempotencyKey(cmd.idempotencyKey());
+        // spec 019：幂等键 = transaction_refund_no（TXRF）；存量无交易上下文路径保留原幂等键。
+        String idempotencyKey = cmd.transactionRefundNo() != null
+                ? cmd.transactionRefundNo()
+                : cmd.idempotencyKey();
+
+        Optional<Refund> existing = refundRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             metrics.counter("refund.duplicate", 1.0, "module", MODULE);
             return existing.get();
@@ -67,7 +76,7 @@ public class RefundApplicationService {
                 new PaymentAmountQueryRequest(cmd.paymentNo()));
 
         if (!paid.status().equals("SUCCEEDED")) {
-            Refund refund = newRefund(cmd);
+            Refund refund = newRefund(cmd, idempotencyKey);
             refund.reject("payment not in refundable state: " + paid.status());
             metrics.counter("refund.rejected", 1.0, "module", MODULE);
             return insertNew(refund);
@@ -83,7 +92,7 @@ public class RefundApplicationService {
         RefundDecision decision = RefundPolicy.decide(cmd.amountMinor(), cmd.currencyCode(),
                 paid.paidAmountMinor(), paid.currencyCode(), cumul);
 
-        Refund refund = newRefund(cmd);
+        Refund refund = newRefund(cmd, idempotencyKey);
 
         if (!decision.isApproved()) {
             refund.reject(decision.reason());
@@ -94,29 +103,22 @@ public class RefundApplicationService {
         refund = insertNew(refund);
         refund.process();
 
-        // ADR-0063：出站 RPC 用业务单号 refundNo，数值主键不出服务边界。
+        // ADR-0063：出站 RPC 用业务单号 refundNo（PMRF），数值主键不出服务边界。
         RefundAttemptResponse attempt = paymentRefundGateway.attemptRefund(
                 new RefundAttemptRequest(refund.getRefundNo(), cmd.transactionNo(), cmd.paymentNo(),
                         cmd.orderNo(), cmd.userId(), cmd.amountMinor(), cmd.currencyCode(),
-                        cmd.reason(), cmd.idempotencyKey()));
+                        cmd.reason(), idempotencyKey));
 
-        // 渠道结果只有三态：成功/失败/未知。ADR-0016 已否决（部分退款不做），
-        // 渠道回传金额不再参与状态推导，SUCCEEDED 一律按全额成功收敛。
-        switch (attempt.status()) {
-            case "SUCCEEDED" -> refund.succeed();
-            case "FAILED" -> refund.fail("channel refund failed");
-            default -> refund.markUnknown("channel refund unknown");
-        }
-
-        refundRepository.save(refund);
-        recordFinalTransition(refund, RefundStatus.PROCESSING);
-
-        // 确认退款成功后统一编排后处理：履约撤销 → 权益吊销 → 记账。
-        // 任一目标失败不回滚退款成功事实（Saga），由编排器落尝试记录、递增指标、写审计。
-        if (refund.getStatus() == RefundStatus.SUCCEEDED
-                || refund.getStatus() == RefundStatus.PARTIALLY_SUCCEEDED) {
-            postProcessOrchestrator.process(refund);
-        }
+        // 渠道结果三态统一经 RefundResultProcessor 收敛（T108：同步受理 / 异步回调 / resolve 一条路径）。
+        // 异步受理模式渠道返回「已受理未终局」= UNKNOWN，退款停在待收敛态，等回调 / resolve 推进。
+        RefundStatus before = refund.getStatus();
+        ChannelResult outcome = switch (attempt.status()) {
+            case "SUCCEEDED" -> ChannelResult.success(attempt.channelReference());
+            case "FAILED" -> ChannelResult.businessFailure(attempt.channelReference(), "channel refund failed");
+            default -> ChannelResult.businessUnknown("channel refund unknown / accepted in-flight");
+        };
+        refund = resultProcessor.apply(refund, outcome, RefundResultProcessor.Source.SYNC);
+        auditAcceptance(refund, before);
 
         return refund;
     }
@@ -126,11 +128,19 @@ public class RefundApplicationService {
         return requireRefund(refundNo);
     }
 
-    private Refund newRefund(CreateRefundCommand cmd) {
+    private Refund newRefund(CreateRefundCommand cmd, String idempotencyKey) {
         Refund refund = new Refund(cmd.orderNo(), cmd.paymentNo(), cmd.userId(), cmd.amountMinor(),
-                cmd.currencyCode(), cmd.reason(), cmd.idempotencyKey(), cmd.items());
+                cmd.currencyCode(), cmd.reason(), idempotencyKey, cmd.items(),
+                cmd.transactionRefundNo(), cmd.transactionNo());
         metrics.counter("refund.initiated", 1.0, "module", MODULE);
         return refund;
+    }
+
+    /** 受理审计（发起事实，与终态审计区分；fire-and-forget）。 */
+    private void auditAcceptance(Refund refund, RefundStatus fromStatus) {
+        auditLogger.audit("refund.attempted", refund.getIdempotencyKey(), refund.getAmountMinor(),
+                refund.getCurrencyCode(), fromStatus.name(), refund.getStatus().name(), "refund",
+                String.valueOf(refund.getId()));
     }
 
     /** 参与「累计退款」金额统计的状态：成功/部分成功/处理中/未知（均占用可退款额度）。 */
@@ -139,25 +149,6 @@ public class RefundApplicationService {
                 || status == RefundStatus.PARTIALLY_SUCCEEDED
                 || status == RefundStatus.PROCESSING
                 || status == RefundStatus.UNKNOWN;
-    }
-
-    /** 渠道退款尝试后的最终状态：记录业务指标与资金审计（fire-and-forget，不改变控制流）。 */
-    private void recordFinalTransition(Refund refund, RefundStatus fromStatus) {
-        String action = null;
-        if (refund.getStatus() == RefundStatus.SUCCEEDED) {
-            action = "refund.succeeded";
-        } else if (refund.getStatus() == RefundStatus.FAILED) {
-            action = "refund.failed";
-        } else if (refund.getStatus() == RefundStatus.UNKNOWN) {
-            action = "refund.unknown";
-        }
-        if (action == null) {
-            return;
-        }
-        metrics.counter(action, 1.0, "module", MODULE);
-        auditLogger.audit(action, refund.getIdempotencyKey(), refund.getAmountMinor(),
-                refund.getCurrencyCode(), fromStatus.name(), refund.getStatus().name(), "refund",
-                String.valueOf(refund.getId()));
     }
 
     private Refund requireRefund(String refundNo) {

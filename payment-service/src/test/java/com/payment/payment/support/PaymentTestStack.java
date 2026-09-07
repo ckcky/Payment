@@ -61,10 +61,17 @@ public final class PaymentTestStack {
     public static final class RecordingOrderGateway implements OrderGateway {
 
         public final List<PaymentSucceededRequest> succeededRequests = new ArrayList<>();
+        public final List<com.payment.common.dto.rpc.RefundResultNotification> refundNotifications =
+                new ArrayList<>();
 
         @Override
         public void notifyPaymentSucceeded(PaymentSucceededRequest request) {
             succeededRequests.add(request);
+        }
+
+        @Override
+        public void notifyRefundResult(com.payment.common.dto.rpc.RefundResultNotification notification) {
+            refundNotifications.add(notification);
         }
     }
 }

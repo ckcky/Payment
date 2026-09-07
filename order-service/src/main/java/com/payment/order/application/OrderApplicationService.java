@@ -240,6 +240,9 @@ public class OrderApplicationService {
             transaction.start();
         }
         transaction.succeed();
+        // spec 019 / ADR-0067：生效支付单 = 首张成功支付（null 时写入；surplus 被退单走
+        // transaction 层 surplusRefund 路径，不会进入本方法，天然不覆盖此列）
+        transaction.recordEffectivePayment(request.paymentNo());
         transactionRepository.save(transaction);
 
         // 支付成功：确认扣减库存（幂等键 paymentNo，ADR-0063）

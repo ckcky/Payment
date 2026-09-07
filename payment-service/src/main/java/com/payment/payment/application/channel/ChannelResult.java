@@ -57,6 +57,14 @@ public record ChannelResult(Status status, String channelReference, String reaso
         return of(TransportCode.SUCCESS, BusinessCode.UNKNOWN, null, reason);
     }
 
+    /**
+     * 渠道受理（spec 019 / D7）：退款请求已被渠道接受、结果待异步回调推送。
+     * 语义 = 通信成功 + 业务无结论（UNKNOWN，带渠道受理流水号），调用方据此保持待收敛态。
+     */
+    public static ChannelResult accepted(String channelReference, String reason) {
+        return of(TransportCode.SUCCESS, BusinessCode.UNKNOWN, channelReference, reason);
+    }
+
     /** 通信失败（含超时）→ 可重试（ADR-0012）；重试耗尽后保持本结果的 UNKNOWN 语义。 */
     public static ChannelResult transportFailure(TransportCode transportCode, String reason) {
         if (transportCode == TransportCode.SUCCESS) {

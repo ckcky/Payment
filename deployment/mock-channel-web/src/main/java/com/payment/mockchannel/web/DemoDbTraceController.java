@@ -85,6 +85,11 @@ public class DemoDbTraceController {
         query(sections, "order-service", "transactions",
                 "SELECT * FROM `order`.transactions WHERE order_no = ?", new Object[]{orderNo}, "交易单");
 
+        // ②-b 交易退款单（spec 019 / ADR-0067 双层退款：TXRF 是 order 驱动的上层退款单，
+        //     payment_refund_no 列存 payment 侧 PMRF，受理成功后回填）
+        query(sections, "order-service", "transaction_refunds",
+                "SELECT * FROM `order`.transaction_refunds WHERE order_no = ?", new Object[]{orderNo}, "交易退款单（TXRF）");
+
         // ③ 支付单（order_no 关联）+ 尝试记录（payment_no 关联），收集渠道引用供结算/对账反查
         List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
                 "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo}, "支付单");

@@ -18,6 +18,26 @@
 
 ---
 
+## [2026-09-07] spec 019：order 驱动的两层退款单（TXRF/PMRF）+ 渠道退款异步回调闭环
+
+**范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0028-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/019-order-driven-refund/tasks.md)。
+
+### 核心变更
+- **两层退款单**：order 库新增 `transaction_refunds`（TXRF+雪花，幂等键=TXRF 可重入）；payment 库 `refunds.refund_no` 改自生成 PMRF+雪花（存量 RF 保留），加 `transaction_refund_no` 双向互记。
+- **transactions 补资金口径**：加 `payment_no`（生效支付单，首张成功写入不覆盖）+ `refunded_minor`（累加已退）；`OrderStatus` 补 `PARTIALLY_REFUNDED`/`REFUNDED`。
+- **退款异步回调闭环**：Mock 渠道退款改「受理 + 延迟推送」异步模式；payment 新增渠道退款回调端点（HMAC 验签防重放）；`RefundResultProcessor` 三路收敛（同步受理 / 渠道回调 / 人工 resolve）到同一编排；收敛后通知 order（`/internal/orders/on-refund-result`，双号 TXRF+PMRF）。
+- **编排归属收口（ADR-0054 延伸）**：业务下游扇出（履约终止 / 权益撤销 / 秒杀回补）归 order 侧；payment 侧删除 `RefundPostProcessOrchestrator` 及 fulfillment/entitlement 直调；权益撤销沿 fulfillment → entitlement 既定链（fulfillment `onRefund` 触发）。
+- **下线与修复**：删除 `POST /internal/refunds` 创建入口（resolve 保留）；记账幂等键统一 `REFUND:{PMRF}`（修双重前缀）；`PaymentResultProcessor` 订单通知失败不再静默吞（WARN + 指标）。
+- **演示**：mock-channel-web 增加退款回调推送代理（`/mock-channel/refund-callback`）与 TXRF 追踪段；`scenario-refund.sh` 改调 order 入口。
+- **迁移**：`019-order-driven-refund.sql`（幂等，已在本地 MySQL 重放验证）。
+
+### 明确不做（负责人拍板）
+- 退款 UNKNOWN 自动收敛器（回调丢失靠 resolve 兜底）；resolve 端点 Admin Token 鉴权；部分退款次数上限。
+
+### 回归
+- payment-service 135/135、order-service 61/61、fulfillment 21/21 全绿；全仓 `mvn -o clean install -fae` BUILD SUCCESS。
+
+
 ## [2026-09-07] spec 018：表结构列序规范化 + payment_attempts 金额留痕 + 按 order_item 粒度履约
 
 **范围**：全项目 22 张表列序规范化 + 履约粒度升级 + 演示可观测性。决策见 [ADR-0066](docs/adr/0027-schema-normalization-and-item-granular-fulfillment.md)，实施记录见 [spec 018](docs/specs/018-schema-normalization-item-fulfillment/spec.md)。

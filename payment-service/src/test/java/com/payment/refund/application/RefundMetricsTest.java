@@ -5,6 +5,7 @@ import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.refund.domain.Refund;
 import com.payment.refund.domain.RefundStatus;
+import com.payment.payment.application.OrderGateway;
 import com.payment.refund.infra.InMemoryRefundRepository;
 import com.payment.refund.support.RefundTestStack;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -22,22 +23,16 @@ class RefundMetricsTest {
     private final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
     private final RefundTestStack.RecordingPaymentRefundGateway payment =
             new RefundTestStack.RecordingPaymentRefundGateway();
-    private final RefundTestStack.RecordingEntitlementGateway entitlement =
-            new RefundTestStack.RecordingEntitlementGateway();
-    private final RefundTestStack.RecordingFulfillmentGateway fulfillment =
-            new RefundTestStack.RecordingFulfillmentGateway();
     private final RefundTestStack.RecordingLedgerGateway ledger =
             new RefundTestStack.RecordingLedgerGateway();
-    private final RefundTestStack.InMemoryRefundPostProcessAttemptRepository attempts =
-            new RefundTestStack.InMemoryRefundPostProcessAttemptRepository();
+    private final OrderGateway order = new RefundTestStack.RecordingOrderGateway();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final BusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
     private final StructuredAuditLogger audit = new StructuredAuditLogger();
 
     private RefundApplicationService appService() {
-        RefundPostProcessOrchestrator orchestrator = new RefundPostProcessOrchestrator(
-                fulfillment, entitlement, ledger, attempts, metrics, audit);
-        return new RefundApplicationService(refunds, payment, orchestrator, metrics, audit);
+        RefundResultProcessor processor = new RefundResultProcessor(refunds, order, ledger, metrics, audit);
+        return new RefundApplicationService(refunds, payment, processor, metrics, audit);
     }
 
     private CreateRefundCommand cmd() {
