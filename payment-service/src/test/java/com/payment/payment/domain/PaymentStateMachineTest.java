@@ -138,6 +138,19 @@ class PaymentStateMachineTest {
         assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
     }
 
+    /** 回归（fix）：UNKNOWN 阶段的占位文案不得残留到 SUCCEEDED 尝试行。 */
+    @Test
+    void attemptSucceedClearsStaleFailureReason() {
+        PaymentAttempt a = attempt();
+        a.markUnknown("mock refund accepted, awaiting async callback");
+        assertThat(a.getFailureReason())
+                .isEqualTo("mock refund accepted, awaiting async callback");
+
+        assertThat(a.succeed()).isTrue();
+        assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(a.getFailureReason()).isNull();
+    }
+
     @Test
     void attemptLateFailAfterSuccessIsAbsorbed() {
         PaymentAttempt a = attempt();
