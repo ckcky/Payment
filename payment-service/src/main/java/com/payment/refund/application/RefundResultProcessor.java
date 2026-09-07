@@ -20,6 +20,9 @@ import org.springframework.stereotype.Component;
  * <ol>
  *   <li><b>refunds 状态机终态</b>：终态吸收冲突/重复结果（{@code succeed()/fail()} 返回 false
  *       即为重放，幂等吸收）；</li>
+ *   <li><b>payment_attempts REFUND 尝试行收敛</b>：权威终态（SUCCESS/FAILURE）同步到 payment 域
+ *       对应尝试行（按渠道流水号精确匹配，resolve 无引用回退最近未收敛行）——异步受理落 UNKNOWN
+ *       的尝试行不再永久滞留（fix）；失败仅 WARN，不影响退款事实；</li>
  *   <li><b>payments 退款口径</b>：定稿为<b>不动 payments 状态/不加列</b>——退款事实权威台账 =
  *       {@code refunds}（累计/终态/幂等）+ {@code payment_attempts}（REFUND 尝试持渠道流水），
  *       对账经 {@code RefundFactsService} 抽取；避免 payments.refunded_minor 与 refunds 双路径漂移
@@ -52,17 +55,20 @@ public class RefundResultProcessor {
     private final RefundRepository refundRepository;
     private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
+    private final RefundAttemptSettlementGateway attemptSettlementGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
     public RefundResultProcessor(RefundRepository refundRepository,
                                  OrderGateway orderGateway,
                                  LedgerPostingGateway ledgerGateway,
+                                 RefundAttemptSettlementGateway attemptSettlementGateway,
                                  BusinessMetrics metrics,
                                  StructuredAuditLogger auditLogger) {
         this.refundRepository = refundRepository;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
+        this.attemptSettlementGateway = attemptSettlementGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
@@ -88,6 +94,19 @@ public class RefundResultProcessor {
         }
         refundRepository.save(refund);
         recordFinalTransition(refund, fromStatus, source);
+
+        // 退款尝试同步收敛（fix：UNKNOWN 落库的 REFUND 尝试行随权威结果收敛终态；
+        // SYNC 终态路径在此被终态吸收，异步/resolve 路径在此完成 UNKNOWN → 终态的补齐）。
+        if (outcome.status() != ChannelResult.Status.UNKNOWN) {
+            try {
+                attemptSettlementGateway.convergeToTerminal(
+                        refund.getPaymentNo(), outcome.channelReference(), outcome);
+            } catch (RuntimeException ex) {
+                // 尝试行收敛失败不影响退款事实与下游（观测数据，非资金路径）
+                log.warn("退款尝试收敛失败（不影响退款事实）refundNo={} paymentNo={} reason={}",
+                        refund.getRefundNo(), refund.getPaymentNo(), ex.getMessage());
+            }
+        }
 
         if (refund.getStatus() == RefundStatus.SUCCEEDED) {
             postLedger(refund);

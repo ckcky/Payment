@@ -31,7 +31,8 @@ class RefundMetricsTest {
     private final StructuredAuditLogger audit = new StructuredAuditLogger();
 
     private RefundApplicationService appService() {
-        RefundResultProcessor processor = new RefundResultProcessor(refunds, order, ledger, metrics, audit);
+        RefundResultProcessor processor = new RefundResultProcessor(refunds, order, ledger,
+                (p, r, o) -> { }, metrics, audit);
         return new RefundApplicationService(refunds, payment, processor, metrics, audit);
     }
 
