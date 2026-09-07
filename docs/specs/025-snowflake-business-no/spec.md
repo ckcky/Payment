@@ -1,4 +1,4 @@
-# Spec: 015-snowflake-business-no
+# Spec: 025-snowflake-business-no
 
 - 版本: v1
 - 日期: 2026-09-04

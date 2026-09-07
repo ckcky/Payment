@@ -28,14 +28,15 @@
 -- =============================================================================
 
 -- ---- F1：支付事实（payment 库）----
+-- 注：018 迁移后 payment_attempts.amount_minor / currency_code 为 NOT NULL，注入须显式赋值（否则 1364）。
 INSERT INTO payment.payment_attempts
-    (payment_no, channel_code, attempt_type, requested_at, responded_at, channel_reference, status,
+    (payment_no, channel_code, attempt_type, amount_minor, currency_code, requested_at, responded_at, channel_reference, status,
      created_at, updated_at, created_by, updated_by, version)
 VALUES
-    ('PM-AUD-0001', 'MOCK', 'PAYMENT', NOW(), NOW(), 'CH-AUD-0001', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1),
-    ('PM-AUD-0002', 'MOCK', 'PAYMENT', NOW(), NOW(), 'CH-AUD-0002', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1),
-    ('PM-AUD-0003', 'MOCK', 'PAYMENT', NOW(), NOW(), 'CH-AUD-0003', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1)
-ON DUPLICATE KEY UPDATE channel_reference = VALUES(channel_reference);
+    ('PM-AUD-0001', 'MOCK', 'PAYMENT', 10000, 'CNY', NOW(), NOW(), 'CH-AUD-0001', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1),
+    ('PM-AUD-0002', 'MOCK', 'PAYMENT', 25000, 'CNY', NOW(), NOW(), 'CH-AUD-0002', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1),
+    ('PM-AUD-0003', 'MOCK', 'PAYMENT', 8000, 'CNY', NOW(), NOW(), 'CH-AUD-0003', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1)
+ON DUPLICATE KEY UPDATE channel_reference = VALUES(channel_reference), amount_minor = VALUES(amount_minor), currency_code = VALUES(currency_code);
 
 INSERT INTO payment.payments
     (payment_no, transaction_id, order_no, user_id, amount_minor, currency_code, idempotency_key,
@@ -55,11 +56,11 @@ ON DUPLICATE KEY UPDATE payment_no = payment.payments.payment_no;
 
 -- ---- F1：退款事实（RF-AUD-0001，冲 PM-AUD-0001）----
 INSERT INTO payment.payment_attempts
-    (payment_no, channel_code, attempt_type, requested_at, responded_at, channel_reference, status,
+    (payment_no, channel_code, attempt_type, amount_minor, currency_code, requested_at, responded_at, channel_reference, status,
      created_at, updated_at, created_by, updated_by, version)
 VALUES
-    ('PM-AUD-0001', 'MOCK', 'REFUND', NOW(), NOW(), 'CH-RF-0001', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1)
-ON DUPLICATE KEY UPDATE channel_reference = VALUES(channel_reference);
+    ('PM-AUD-0001', 'MOCK', 'REFUND', 3000, 'CNY', NOW(), NOW(), 'CH-RF-0001', 'SUCCEEDED', NOW(), NOW(), 'audit-fixture', 'audit-fixture', 1)
+ON DUPLICATE KEY UPDATE channel_reference = VALUES(channel_reference), amount_minor = VALUES(amount_minor), currency_code = VALUES(currency_code);
 
 INSERT INTO payment.refunds
     (refund_no, order_no, payment_no, user_id, amount_minor, currency_code, reason, idempotency_key,
