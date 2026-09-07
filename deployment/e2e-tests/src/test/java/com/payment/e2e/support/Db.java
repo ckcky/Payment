@@ -68,6 +68,9 @@ public final class Db implements AutoCloseable {
         Connection conn = connections.get(schema);
         if (conn == null || conn.isClosed()) {
             conn = DriverManager.getConnection(Env.jdbcUrl(schema), Env.dbUser(), Env.dbPassword());
+            // 强制自动提交：故障注入的写操作必须立即对其他连接（recon→ledger 审计读）可见，
+            // 显式声明以防驱动/连接复用路径上的非自动提交状态残留
+            conn.setAutoCommit(true);
             connections.put(schema, conn);
         }
         return conn;

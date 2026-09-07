@@ -47,8 +47,29 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         faults.add(new Fault(
                 "MISSING_POSTING",
                 () -> {
-                    db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
-                    db.execute("ledger", "DELETE FROM postings WHERE id IN (" + postingIds + ")");
+                    // 备份必须非空：paidOrder 已等 posting 落定，空备份 → IN (NULL) 静默失效
+                    assertThat(postingBackup)
+                            .as("MISSING_POSTING 注入前置：posting 备份非空 [payment=%s]", paymentNo)
+                            .isNotEmpty();
+                    int delEntries = db.execute("ledger",
+                            "DELETE FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
+                    int delPostings = db.execute("ledger",
+                            "DELETE FROM postings WHERE id IN (" + postingIds + ")");
+                    assertThat(delPostings)
+                            .as("MISSING_POSTING 注入自验证（posting 删除行数）[ids=%s]", postingIds)
+                            .isGreaterThan(0);
+                    assertThat(delEntries).as("分录删除行数 [ids=%s]", postingIds).isGreaterThan(0);
+                    // 审计读路径收敛：删除必须经 ledger HTTP 读路径（与 recon 审计同一链路）
+                    // 可见后才建批——防池化连接旧快照类幽灵读（DB 已提交但审计读旧视图）
+                    Await.until("审计读路径可见删除 [payment=" + paymentNo + "]", () -> {
+                        Api.ApiResponse all = API.get("ledger", "/internal/ledger/postings/all");
+                        for (JsonNode posting : all.json()) {
+                            if (paymentNo.equals(posting.path("sourceId").asText())) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    });
                 },
                 () -> {
                     insertRows("ledger", "postings", postingBackup);
@@ -225,6 +246,16 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
             String postingIds = joinIds(postingBackup, "id");
             db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
             db.execute("ledger", "DELETE FROM postings WHERE id IN (" + postingIds + ")");
+            // 审计读路径收敛（同 fault matrix）：建批前经 ledger HTTP 读路径确认删除可见
+            Await.until("审计读路径可见删除 [payment=" + paymentNo + "]", () -> {
+                Api.ApiResponse all = API.get("ledger", "/internal/ledger/postings/all");
+                for (JsonNode posting : all.json()) {
+                    if (paymentNo.equals(posting.path("sourceId").asText())) {
+                        return false;
+                    }
+                }
+                return true;
+            });
             try {
                 String period = period("suspend", uid);
                 Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e");
@@ -234,23 +265,51 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                 JsonNode diffs = API.auditDifferences(batchNo).json();
                 assertThat(containsKind(diffs, "MISSING_POSTING")).isTrue();
 
-                // 逐条挂账（仅可挂账 kind；ACCOUNT_RECON_BREAK 等勾稽类不可挂账，属告警口径）
+                // 闭环处置链（FR-014~FR-018）：挂账（资金缺口安置到 SUSPENSE 过渡科目）
+                // → TRANSFER 转出到 MERCHANT_PAYABLE（查清归属）
+                // → recheck（勾稽差异随账实一致自动收口）→ close 放行。
+                // 注：删除 posting 必然连带 MERCHANT_PAYABLE 勾稽差异（A2 口径），
+                // 仅挂账不转出时该差异无法收口（挂账不触碰应付商户科目）。
                 for (JsonNode diff : diffs) {
                     if ("PENDING".equals(diff.path("status").asText())
-                            && isSuspendable(diff.path("kind").asText())) {
-                        Api.ApiResponse susp = API.auditSuspend(batchNo, diff.path("id").asLong(),
+                            && "MISSING_POSTING".equals(diff.path("kind").asText())) {
+                        long diffId = diff.path("id").asLong();
+                        long amount = diff.path("expectedAmountMinor").asLong()
+                                - diff.path("actualAmountMinor").asLong();
+                        Api.ApiResponse susp = API.auditSuspend(batchNo, diffId,
                                 "e2e-operator", "e2e suspend");
-                        ctx.response("suspend-" + diff.path("id").asLong(), susp);
-                        assertThat(susp.is2xx()).as("挂账 [diff=%s]", diff.path("id")).isTrue();
+                        ctx.response("suspend-" + diffId, susp);
+                        assertThat(susp.is2xx()).as("挂账 [diff=%s]", diffId).isTrue();
+                        Api.ApiResponse transfer = API.auditAdjust(batchNo, diffId, "TRANSFER", amount,
+                                "MERCHANT_PAYABLE", "e2e-operator", "e2e-reviewer", "e2e transfer to payable");
+                        ctx.response("transfer-" + diffId, transfer);
+                        assertThat(transfer.is2xx())
+                                .as("SUSPENSE 转出到 MERCHANT_PAYABLE [diff=%s]，实际 %d: %s",
+                                        diffId, transfer.status(), transfer.body())
+                                .isTrue();
                     }
                 }
 
-                // 未收口（PENDING）差异存在时 close 必须被拒（AC3.3 / 结算门禁语义）
-                // （本批差异已全部挂账 → close 放行；门禁由 SettlementGateE2ETest 独立验证）
+                // 显式 recheck（FR-017）：全批重算——勾稽差异在账实一致后置 VERIFIED
+                Api.ApiResponse rechecked = API.auditRecheck(batchNo);
+                ctx.response("recheck", rechecked);
+                assertThat(rechecked.is2xx()).as("recheck [batch=%s]", batchNo).isTrue();
+                JsonNode after = API.auditDifferences(batchNo).json();
+                List<String> unclosed = new ArrayList<>();
+                for (JsonNode d : after) {
+                    if (!"VERIFIED".equals(d.path("status").asText())) {
+                        unclosed.add(d.path("kind").asText() + "/" + d.path("status").asText());
+                    }
+                }
+                assertThat(unclosed)
+                        .as("全批收口 [batch=%s]，未收口=%s", batchNo, unclosed)
+                        .isEmpty();
+
                 Api.ApiResponse closed = API.auditClose(batchNo, "e2e-operator");
                 ctx.response("close", closed);
                 assertThat(closed.is2xx())
-                        .as("全部挂账后 close 放行 [batch=%s]，实际 %d: %s", batchNo, closed.status(), closed.body())
+                        .as("挂账+转出+recheck 后 close 放行 [batch=%s]，实际 %d: %s",
+                                batchNo, closed.status(), closed.body())
                         .isTrue();
             } finally {
                 // 还原分录（挂账产生的 SUSPENSE 台账留痕属审计事实，不回滚）
@@ -321,14 +380,6 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         return backup.stream().filter(r -> direction.equals(r.get("direction")))
                 .map(r -> String.valueOf(r.get("id"))).findFirst()
                 .orElseThrow(() -> new AssertionError("no " + direction + " entry in backup"));
-    }
-
-    /** 可挂账差异 kind（处置域支持 SUSPEND 的账实差异；勾稽告警类不可挂账）。 */
-    private boolean isSuspendable(String kind) {
-        return "MISSING_POSTING".equals(kind) || "ORPHAN_POSTING".equals(kind)
-                || "DUPLICATE_POSTING".equals(kind) || "AMOUNT_MISMATCH".equals(kind)
-                || "CURRENCY_MISMATCH".equals(kind) || "DIRECTION_MISMATCH".equals(kind)
-                || "BALANCE_BREAK".equals(kind) || "LEDGER_VS_STATEMENT_BREAK".equals(kind);
     }
 
     private String joinIds(List<Map<String, Object>> rows, String col) {
