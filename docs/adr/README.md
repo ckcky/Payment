@@ -26,8 +26,9 @@
 | [0027](0027-schema-normalization-and-item-granular-fulfillment.md) | 表结构列序规范化与按订单明细粒度履约（ADR-0066） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地） | spec 018；列序规范（自增id→业务主键→唯一索引列，3 表豁免）、payment_attempts 加金额列、order_item_no（OI+雪花）、fulfillment 按 item 粒度、demo 中文注释 + 门户主界面 |
 | [0028](0028-order-driven-refund-two-layer-refund-order.md) | order 驱动的两层退款单模型与退款异步回调闭环（ADR-0067） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地，全量回归绿） | spec 019；双层退款单 TXRF（transaction 层）/PMRF（payment 层）互记、transactions 加 payment_no/refunded_minor、两层金额校验、渠道退款异步回调 + 三路收敛、秒杀库存回补、直调入口下线；明确不做：UNKNOWN 自动收敛器 / resolve Admin Token / 部分退款次数上限 |
 | [0029](0029-unified-access-logging.md) | 统一访问日志：结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 传播修复（ADR-0068） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地） | spec 021；Filter+ContentCaching 实现、结束时一条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断、/actuator 排除、可开关）、脱敏只留桩（SensitiveBodyMasker 透传）、logback springProperty 注入服务名、MdcTaskDecorator + 4 Scheduler 补 traceId、tail-logs.sh/trace-grep.sh；明确不做：真脱敏实现 / Loki 集中采集（后续期）/ AOP 方法级日志 |
+| [0030](0030-end-to-end-automated-testing.md) | 全链路自动化测试体系：独立 E2E 模块 + 分层门禁 + 不变量断言（ADR-0069） | ✅ **Accepted → 待实施**（2026-09-07 拍板，本次仅文档） | spec 022；新建 `deployment/e2e-tests`（JUnit5+Awaitility+JDBC，黑盒）、默认复用本地栈（ci profile 才 Testcontainers）、不引 SCC/Pact 改做 API 快照、PR 快跑 + nightly E2E；行级断言复用 `/demo/trace`、聚合不变量直连 MySQL、对账差异复用 audit F1~F9(LIVE)；硬约束：禁断言回调验签 / 对账必走 LIVE / 对账拆两套断言；明确不做：SCC-Pact / 改造或退役演示脚本 / k6-Gatling / PR 跑 E2E |
 
-## ADR 编号速查（0001–0068）
+## ADR 编号速查（0001–0069）
 
 | [0054](0016-core-payment-correctness.md#adr-0054) | 核心支付正确性约束（确认性纪录） | 0016 |
 | [0055](0017-entry-and-infra-decisions.md#adr-0055) | 支付意图幂等键由 order-service 生成 | 0017 |
@@ -45,6 +46,7 @@
 | [0066](0027-schema-normalization-and-item-granular-fulfillment.md#adr-0066) | 表结构列序规范化（自增id→业务主键→唯一索引列，3 表豁免）+ payment_attempts 金额列 + order_item_no（OI+雪花）+ 按 order_item 粒度履约 + demo 中文注释/门户主界面（✅ Accepted，2026-09-07 拍板，代码待实施） | 0027 |
 | [0067](0028-order-driven-refund-two-layer-refund-order.md#adr-0067) | order 驱动的两层退款单模型（TXRF 交易层 / PMRF 支付层互记）+ 退款异步回调闭环（三路收敛）+ 秒杀库存回补 + 直调入口下线（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0028 |
 | [0068](0029-unified-access-logging.md#adr-0068) | 统一访问日志：结束时单条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断）+ 固定格式含服务名（springProperty 注入）+ 脱敏留桩（SensitiveBodyMasker）+ 异步 MDC 传播修复（MdcTaskDecorator + 4 Scheduler）+ 日志查看脚本（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0029 |
+| [0069](0030-end-to-end-automated-testing.md#adr-0069) | 全链路自动化测试体系：新建 `deployment/e2e-tests` 独立模块（黑盒 HTTP+JDBC）+ 测试钻石分层（L1 单元/L2 单服务集成/L3 API 快照/L4 E2E/L5 对账与故障注入）+ 默认复用本地栈（ci profile 用 Testcontainers）+ 不引 SCC/Pact + PR 快跑 / nightly 全量 + Invariants 断言原语库 + 确定性故障注入 + 测试有效性反证（✅ Accepted → 待实施，2026-09-07 拍板） | 0030 |
 
 > 决策 #2 落地：保留 15 个聚合文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 
@@ -107,7 +109,7 @@
 ## 编号规则
 
 - 编号**只增不改、不复用**；一个 ADR 文档可容纳同一 Feature 的多条决策标签（如 0006 含 0016~0018 与 0047）。
-- **下一可用编号：ADR-0069**（ADR-0068 已用于「021 统一访问日志」，见 `0029-unified-access-logging.md`）。
+- **下一可用编号：ADR-0070**（ADR-0069 已用于「022 全链路自动化测试体系」，见 `0030-end-to-end-automated-testing.md`）。
 - ⚠️ **编号冲突备案（2026-09-06）**：`0016-core-payment-correctness.md` 与 `0025-order-payment-orchestration.md` **同时使用了 ADR-0054**（前者为确认性纪录「核心支付正确性约束」，后者为 016 编排职责归位）。速查表两行并存，引用时以「文件名 + 标题」消歧；后续如重排编号需全库同步引用（spec 016 / CLAUDE.md / systems 文档多处引用 0025 的 ADR-0054，改动成本高，暂保持现状）。
 - ✅ **ADR-0038~0046 号段已全部落文（无空号）**，均收录于 `0014-next-stage-decisions.md`：
   - **0038**（演示形态）→ **Superseded by ADR-0048**（议题由 0048 处理，结论一致：做 `mock-channel-web` 收银台组件）；
