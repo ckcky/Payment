@@ -59,9 +59,9 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                 "ORPHAN_POSTING",
                 () -> {
                     db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                            + " status, currency, created_at, version) VALUES ('LPe2e-orphan-" + uid + "',"
+                            + " status, currency, created_at, updated_at, version) VALUES ('LPe2e-orphan-" + uid + "',"
                             + " 'e2e-orphan-key-" + uid + "', 'PAYMENT', 'e2e-orphan-" + uid + "',"
-                            + " 'POSTED', 'CNY', NOW(), 1)");
+                            + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
                     long pid = ((Number) db.scalar("ledger",
                             "SELECT id FROM postings WHERE posting_no='LPe2e-orphan-" + uid + "'")).longValue();
                     db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
@@ -104,15 +104,18 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         faults.add(new Fault(
                 "DUPLICATE_POSTING",
                 () -> {
+                    // 两步式：先复制 posting 行拿到新 id，再显式回填复制分录
+                    // （子查询内层 posting_no 会解析到自身，永远匹配不上，不能一步 SELECT 回填）
                     db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                            + " status, currency, created_at, version) SELECT CONCAT(posting_no, '-dup-" + uid + "'),"
+                            + " status, currency, created_at, updated_at, version) SELECT CONCAT(posting_no, '-dup-" + uid + "'),"
                             + " CONCAT(idempotency_key, '-dup-" + uid + "'), source_type, source_id, status, currency,"
-                            + " NOW(), 1 FROM postings WHERE id IN (" + postingIds + ")");
+                            + " NOW(), NOW(), 1 FROM postings WHERE id IN (" + postingIds + ")");
+                    long dupPid = ((Number) db.scalar("ledger",
+                            "SELECT id FROM postings WHERE posting_no LIKE '%-dup-" + uid + "' LIMIT 1")).longValue();
                     db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
                             + " currency, entry_type, source_type, source_id, created_at)"
-                            + " SELECT (SELECT id FROM postings WHERE posting_no = CONCAT(posting_no, '-dup-" + uid
-                            + "')), account_id, direction, amount_minor, currency, entry_type, source_type,"
-                            + " source_id, NOW() FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
+                            + " SELECT " + dupPid + ", account_id, direction, amount_minor, currency, entry_type,"
+                            + " source_type, source_id, NOW() FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
                 },
                 () -> {
                     db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN"
@@ -123,19 +126,14 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         faults.add(new Fault(
                 "BALANCE_BREAK",
                 () -> {
-                    db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                            + " status, currency, created_at, version) VALUES ('LPe2e-unbal-" + uid + "',"
-                            + " 'e2e-unbal-key-" + uid + "', 'PAYMENT', 'e2e-unbal-" + uid + "',"
-                            + " 'POSTED', 'CNY', NOW(), 1)");
-                    long pid = ((Number) db.scalar("ledger",
-                            "SELECT id FROM postings WHERE posting_no='LPe2e-unbal-" + uid + "'")).longValue();
+                    // posting 级平衡在读路径强制（Posting.rehydrate），不可读的失衡分录会让 facts read 400。
+                    // 全局失衡用「游离分录」（挂不存在的 posting_id）：allPostings 可读，balance() 按币种差额非 0
                     db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                            + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                            + ", 1, 'DEBIT', 77, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-unbal-" + uid + "', NOW())");
+                            + " currency, entry_type, source_type, source_id, created_at) VALUES (999999999,"
+                            + " 1, 'DEBIT', 77, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-unbal-" + uid + "', NOW())");
                 },
                 () -> {
                     db.execute("ledger", "DELETE FROM ledger_entries WHERE source_id='e2e-unbal-" + uid + "'");
-                    db.execute("ledger", "DELETE FROM postings WHERE posting_no='LPe2e-unbal-" + uid + "'");
                 },
                 "BALANCE_BREAK"));
         faults.add(new Fault(

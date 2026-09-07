@@ -110,6 +110,52 @@ class OrderApplicationServiceTest {
         assertThat(catalog.confirmed).isEmpty(); // 失败的 confirm 未消费幂等键，可由对账补齐
     }
 
+    /**
+     * 回归（spec 022 live 实跑 / fix inline-payment-create-race）：内联同步扣款路径下，
+     * payment 的成功回调先于 {@code createPaymentForOrder} 返回（PAID + transaction SUCCEEDED
+     * 已落库），本地回写必须以库内最新状态为基线——修复前用旧聚合 start()/recordPayment
+     * 必然乐观锁冲突 409。
+     */
+    @Test
+    void inlineChargeCallbackDoesNotConflictWithLocalWriteBack() {
+        OrderApplicationService[] holder = new OrderApplicationService[1];
+        OrderTimeoutScheduler noopScheduler = new OrderTimeoutScheduler(
+                null, orders, catalog, new OrderTimeoutProperties(), new NoopBusinessMetrics()) {
+            @Override
+            public void schedule(Long orderId) {
+                // no-op
+            }
+        };
+        PaymentGateway inlineGateway = new PaymentGateway() {
+            @Override
+            public CreatePaymentResponse createPayment(CreatePaymentRequest request) {
+                // 模拟 payment 内联同步扣款：返回前已完成对 order 的成功回调
+                holder[0].onPaymentSucceeded(PaymentSucceededRequest.withoutItems(
+                        "PM-inline", request.orderNo(), "TR-inline", "u1", 5000L, "CNY"));
+                return new CreatePaymentResponse("PM-inline", "SUCCEEDED");
+            }
+
+            @Override
+            public com.payment.common.dto.rpc.RefundCommandResponse refund(
+                    com.payment.common.dto.rpc.RefundCommandRequest request) {
+                throw new UnsupportedOperationException("not expected in this test");
+            }
+        };
+        OrderApplicationService service = new OrderApplicationService(orders, transactions, catalog,
+                inlineGateway, new NoopBusinessMetrics(), noopScheduler,
+                new RecordingFulfillmentGateway(), new NoopTransactionManager());
+        holder[0] = service;
+        String orderNo = newPendingPaymentOrder(service);
+
+        CreatePaymentResponse resp = service.createPaymentForOrder(orderNo, "ALIPAY");
+
+        assertThat(resp.paymentNo()).isEqualTo("PM-inline");
+        assertThat(service.getOrder(orderNo).getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(service.getOrder(orderNo).getPaymentNo()).isEqualTo("PM-inline");
+        assertThat(transactions.findByOrderNo(orderNo).orElseThrow().getStatus())
+                .isEqualTo(TransactionStatus.SUCCEEDED);
+    }
+
     @Test
     void duplicateSuccessCallbackIsAbsorbedWithoutDoubleConfirm() {
         OrderApplicationService service = service();
