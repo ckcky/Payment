@@ -21,6 +21,8 @@
   .scenes .pa-btn { width: 100%; justify-content: flex-start; }
   .fineprint { font-size: 12px; color: var(--pa-ink-3); line-height: 1.7; padding: 16px 0 4px; }
   .ch-seg { padding-bottom: 8px; }
+  .ch-note { font-size: 11.5px; color: var(--pa-ink-3); line-height: 1.6; margin-top: 10px; }
+  .ch-note b { color: var(--pa-ink-2); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -42,15 +44,16 @@
         <div class="pa-amount" id="amount" style="margin-top:8px">—</div>
       </div>
 
-      <!-- 3 支付方式（分段控件）-->
+        <!-- 3 支付方式（分段控件）-->
       <div class="pay-row">
-        <div class="pa-eyebrow" style="margin-bottom:8px">支付方式</div>
+        <div class="pa-eyebrow" style="margin-bottom:8px">支付方式（切换渠道）</div>
         <div class="pa-seg pa-seg--block ch-seg" id="chSeg">
           <button type="button" data-ch="ALIPAY" onclick="switchChannel('ALIPAY')">支付宝</button>
           <button type="button" data-ch="WECHAT" onclick="switchChannel('WECHAT')">微信</button>
           <button type="button" data-ch="DOUYIN" onclick="switchChannel('DOUYIN')">抖音</button>
           <button type="button" data-ch="MOCK" onclick="switchChannel('MOCK')">Mock</button>
         </div>
+        <div class="ch-note">切换渠道 = 为该订单<b>新建一张支付单</b>（旧支付单保留原状态），随后自动跳转新收银台。</div>
 
         <!-- 4 主 CTA：近黑胶囊（HIG：Apple Pay 按钮只有 black/white/white-outline）-->
         <button class="pa-btn dark pa-btn--block" style="margin-top:16px;height:48px" onclick="pay('SUCCESS')">
@@ -60,9 +63,9 @@
 
       <!-- 5 更多支付场景 -->
       <div class="scenes">
-        <div class="pa-disc">
+        <div class="pa-disc is-open">
           <button class="pa-disc__head" type="button">
-            <span class="caret">›</span><span>更多支付场景</span><span class="cnt">5 个</span>
+            <span class="caret">›</span><span>更多支付场景</span><span class="cnt">5 项</span>
           </button>
           <div class="pa-disc__body"><div>
             <div class="scene-group">
