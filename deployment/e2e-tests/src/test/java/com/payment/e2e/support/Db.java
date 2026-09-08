@@ -1,15 +1,22 @@
 package com.payment.e2e.support;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 多 schema JDBC 探针（spec 022 / T406，FR-004）：
@@ -17,6 +24,8 @@ import java.util.Map;
  * catalog/merchant）注册独立连接，供聚合不变量断言与故障注入（测试环境 DB 直改）。
  */
 public final class Db implements AutoCloseable {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final Map<String, Connection> connections = new LinkedHashMap<>();
 
@@ -52,15 +61,34 @@ public final class Db implements AutoCloseable {
         return rows.get(0).values().iterator().next();
     }
 
-    /** 写操作（UPDATE/INSERT/DELETE）——仅用于故障注入（测试环境 DB 直改，plan §5）。 */
+    /**
+     * 写操作（UPDATE/INSERT/DELETE/DDL）——仅用于故障注入（测试环境 DB 直改，plan §5）。
+     *
+     * <p>经 mock-channel-web 的 /demo/db-exec 代执行：测试 JVM 发出的 JDBC 写在本机沙箱
+     * 环境下被间歇性吞掉（语句未达 MySQL 却返回成功，v9l/v9o general_log 实证——同连接
+     * SELECT 正常、独立 JVM 的 DELETE 正常、测试 JVM 的 DELETE/UPDATE 丢失），而服务进程
+     * 的写通道全程可靠；注入写的关键要求是「确定落库」，故统一走服务端代执行。</p>
+     */
     public int execute(String schema, String sql) {
         try {
-            Connection conn = connection(schema);
-            try (Statement st = conn.createStatement()) {
-                return st.executeUpdate(sql);
+            String body = MAPPER.writeValueAsString(java.util.Map.of("schema", schema, "sql", sql));
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(Env.serviceUrl("mock") + "/demo/db-exec"))
+                    .timeout(Duration.ofSeconds(15))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            HttpResponse<String> resp = HttpClient.newHttpClient()
+                    .send(request, HttpResponse.BodyHandlers.ofString());
+            com.fasterxml.jackson.databind.JsonNode json = MAPPER.readTree(resp.body());
+            if (resp.statusCode() != 200 || json.hasNonNull("error")) {
+                throw new IllegalStateException("db-exec failed [" + schema + "] " + sql
+                        + ": HTTP " + resp.statusCode() + " " + resp.body());
             }
-        } catch (SQLException e) {
-            throw new IllegalStateException("DB execute failed [" + schema + "] " + sql + ": " + e.getMessage(), e);
+            return json.path("affected").asInt(-1);
+        } catch (java.io.IOException | InterruptedException e) {
+            throw new IllegalStateException("db-exec io failed [" + schema + "] " + sql
+                    + ": " + e.getMessage(), e);
         }
     }
 

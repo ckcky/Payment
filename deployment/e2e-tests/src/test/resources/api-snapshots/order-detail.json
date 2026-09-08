@@ -42,6 +42,9 @@
     "paidMinor" : {
       "type" : "integer"
     },
+    "paymentNo" : {
+      "type" : "string"
+    },
     "refundedMinor" : {
       "type" : "integer"
     },
