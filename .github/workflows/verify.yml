@@ -16,4 +16,74 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Verify (compile + test)
+        # L1 单元 / L2 单服务集成 / ArchUnit（architecture-tests 独立模块在 reactor 内）
         run: ./mvnw -B verify
+
+  # spec 022 T430 / FR-014 / D4：PR 快层追加 L3 API schema 快照（分钟级）。
+  # 快照测试需要 live 栈（paidOrder 串全链），故起与 e2e.yml 相同的最小环境、
+  # 只跑 InternalApiSnapshotTest 一个类——契约漂移在 PR 即红，不等 nightly。
+  # D4 边界：PR 不跑完整 E2E（10 JVM 全链路过重），仅此一个契约类。
+  contract-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Start MySQL
+        run: |
+          sudo apt-get update -qq || true
+          sudo systemctl start mysql || true
+          sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`order\`;CREATE DATABASE IF NOT EXISTS payment;CREATE DATABASE IF NOT EXISTS fulfillment;CREATE DATABASE IF NOT EXISTS entitlement;CREATE DATABASE IF NOT EXISTS ledger;CREATE DATABASE IF NOT EXISTS settlement;CREATE DATABASE IF NOT EXISTS reconciliation;CREATE DATABASE IF NOT EXISTS catalog;CREATE DATABASE IF NOT EXISTS merchant;"
+          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';FLUSH PRIVILEGES;"
+
+      - name: Start Nacos (standalone)
+        run: |
+          docker run -d --name nacos -e MODE=standalone -e NACOS_AUTH_ENABLE=false \
+            -p 8848:8848 nacos/nacos-server:v2.3.2
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8848/nacos/ && break || sleep 2
+          done
+
+      - name: Package (skip tests)
+        run: ./mvnw -B -DskipTests package
+
+      - name: Start 9 services + mock-channel-web
+        env:
+          # e2e 的 paidOrder 依赖渠道内联同步 charge；mock-cashier 默认 true（演示优先），CI 显式关闭
+          PAYMENT_MOCK_CASHIER_ENABLED: "false"
+        run: |
+          mkdir -p logs
+          for jar in deployment/output/jars/*.jar; do
+            name=$(basename "$jar" .jar)
+            nohup java -jar "$jar" > "logs/${name}.log" 2>&1 &
+            echo "started ${name}"
+          done
+          for i in $(seq 1 90); do
+            ok=1
+            for p in 8081 8082 8083 8084 8086 8087 8088 8089 8090 8091; do
+              code=$(curl -s --noproxy '*' -o /dev/null -w "%{http_code}" -m 2 "http://localhost:${p}/actuator/health" || true)
+              [ "$code" = "200" ] || ok=0
+            done
+            [ "$ok" = "1" ] && echo "all services healthy" && break
+            sleep 2
+          done
+          [ "$ok" = "1" ] || { tail -50 logs/*.log; exit 1; }
+
+      - name: Run L3 API snapshot contract tests
+        run: ./mvnw -B -pl deployment/e2e-tests test -De2e.env=ci -Dtest='InternalApiSnapshotTest' -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Upload surefire reports & failure dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-snapshot-reports
+          path: |
+            deployment/e2e-tests/target/surefire-reports/
+            deployment/e2e-tests/target/e2e-dump/
+          retention-days: 7
