@@ -46,9 +46,12 @@ payment:
     auth-enabled: true
     admin-token: ${PAYMENT_ADMIN_TOKEN:}
   # Mock 收银台（ADR-0048 修订版）：enabled=true 时 createPayment 跳过渠道内联调用，
-  # Payment 停留 PROCESSING 等收银台回调，响应附 payUrl。默认 false，既有行为零变化。
+  # Payment 停留 PROCESSING 等收银台回调，响应附 payUrl。默认 true（演示优先：任何方式
+  # 手动起 payment-service 都能拿到收银台，不再依赖启动时带环境变量）；e2e / CI 等
+  # 自动化场景依赖内联同步 charge 路径，必须显式设 PAYMENT_MOCK_CASHIER_ENABLED=false
+  # （run-e2e-*.sh 与 .github/workflows/e2e.yml 已显式声明）。
   mock-cashier:
-    enabled: ${PAYMENT_MOCK_CASHIER_ENABLED:false}
+    enabled: ${PAYMENT_MOCK_CASHIER_ENABLED:true}
     base-url: ${PAYMENT_MOCK_CASHIER_BASE_URL:http://localhost:8091}
   # 渠道回调验签（ADR-0025：本期为空实现（占位），回调一律放行；接入真实渠道时再实现 verifySignature）
   # 支付可靠性（Feature 003 / ADR-0003~0005、ADR-0012~0015）
