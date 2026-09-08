@@ -526,6 +526,12 @@ async function pollOnce() {
     document.getElementById('t-orderStatus').textContent = o.data.status;
     document.getElementById('t-orderStatus').className = 'v st st-' + o.data.status;
     if (o.data.orderNo) document.getElementById('t-orderNo').textContent = o.data.orderNo;
+    // 生效支付单跟随订单：换渠道重付后订单会指向新支付单（旧 UNKNOWN 单保留原状态），
+    // 页面记忆必须同步前移，否则显示与退款都会落在已弃单的旧支付单上
+    if (o.data.paymentNo && o.data.paymentNo !== currentPaymentNo) {
+      log('   生效支付单变更: ' + (currentPaymentNo || '—') + ' → ' + o.data.paymentNo);
+      currentPaymentNo = o.data.paymentNo;
+    }
     const pid = o.data.paymentNo || currentPaymentNo;
     if (pid) {
       const p = await api('GET', '/payment/payments/' + pid);

@@ -103,7 +103,14 @@ class InternalApiSnapshotTest extends E2eBase {
                 Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e-snap");
                 String batchNo = batch.json().path("batchNo").asText();
                 JsonNode diffs = API.auditDifferences(batchNo).json();
-                return diffs.size() > 0 ? diffs.get(0) : MAPPER.createObjectNode();
+                // 按注入 sourceId 精确取样：批内差异按 id 排序且含其他来源（历史数据/并发流量），
+                // 取 get(0) 会把别条差异的 schema 当基线（reference 等可空字段类型随数据漂移）
+                for (JsonNode d : diffs) {
+                    if (("e2e-snap-" + uid).equals(d.path("sourceId").asText())) {
+                        return d;
+                    }
+                }
+                throw new IllegalStateException("注入的 ORPHAN 差异未检出 [batch=" + batchNo + "]");
             } finally {
                 dbHolder.get().execute("ledger",
                         "DELETE FROM ledger_entries WHERE source_id='e2e-snap-" + uid + "'");
