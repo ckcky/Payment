@@ -38,27 +38,33 @@ public class CsvChannelStatementLoader implements ChannelStatementLoader {
 
     private static final Logger log = LoggerFactory.getLogger(CsvChannelStatementLoader.class);
     private static final Pattern PERIOD_PATTERN = Pattern.compile("[A-Za-z0-9._-]+");
-    private static final String DEFAULT_FIXTURE = "sample.csv";
 
     private final String dir;
+    /** 周期 fixture 未命中时的回退默认账单文件（spec 006 T018：外置为配置键，默认 sample.csv）。 */
+    private final String defaultFile;
     /** E2E 差异注入覆盖目录（spec 022 / T421；默认空 = 关闭，生产行为零变化）。 */
     private final String overrideDir;
     private final BusinessMetrics metrics;
 
     public CsvChannelStatementLoader(@Value("${reconciliation.statement-dir:fixtures/channel-statements}")
                                      String statementDir,
+                                     @Value("${reconciliation.statement.default-file:sample.csv}")
+                                     String defaultFile,
                                      @Value("${reconciliation.statement-dir-override:}") String overrideDir,
                                      BusinessMetrics metrics) {
         this.dir = statementDir.endsWith("/") ? statementDir : statementDir + "/";
+        this.defaultFile = (defaultFile == null || defaultFile.isBlank()) ? "sample.csv" : defaultFile.trim();
         this.overrideDir = overrideDir == null ? "" : overrideDir.trim();
         this.metrics = metrics;
     }
 
     @Override
     public ChannelStatementLoadResult load(String period) {
-        if (period == null || !PERIOD_PATTERN.matcher(period).matches()) {
+        // 路径穿越防护（spec 006 T011 / FR-018）：禁目录分隔符，也禁 ".."（即便不含分隔符，
+        // 仍可能在未来拼接逻辑里被解释成上级目录，提前拒掉）。
+        if (period == null || !PERIOD_PATTERN.matcher(period).matches() || period.contains("..")) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
-                    "period must match [A-Za-z0-9._-]: " + period);
+                    "period must match [A-Za-z0-9._-] and must not contain '..': " + period);
         }
 
         // spec 022 / T421：E2E 覆盖目录优先（文件存在才生效）
@@ -80,7 +86,7 @@ public class CsvChannelStatementLoader implements ChannelStatementLoader {
         }
 
         // 显式回退：周期 fixture 未命中 → 默认 sample.csv，留痕但不静默。
-        String defaultLocator = dir + DEFAULT_FIXTURE;
+        String defaultLocator = dir + defaultFile;
         ClassPathResource defaultResource = new ClassPathResource(defaultLocator);
         if (!defaultResource.exists()) {
             throw BizException.of(ErrorCodes.INTERNAL_ERROR,

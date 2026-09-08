@@ -93,6 +93,12 @@ public class ReconciliationApplicationService {
             metrics.counter("reconciliation.difference", 1, "module", "reconciliation",
                     "type", difference.getType().name());
         }
+        // 差异金额口径（spec 006 T040 / N2）：双侧取差额，单侧缺失取该侧金额。
+        long differenceAmount = batch.differenceAmountMinor();
+        if (differenceAmount > 0) {
+            metrics.counter("reconciliation.difference_amount_minor", differenceAmount,
+                    "module", "reconciliation", "period", period);
+        }
         return batch;
     }
 

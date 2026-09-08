@@ -10,7 +10,7 @@ import com.payment.reconciliation.domain.ReconciliationBatch;
  * 携带关闭溯源（closedBy/closedAt）与账单来源溯源（statementSource，ADR-0019/0020）。
  */
 public record ReconciliationBatchResponse(Long id, String batchNo, String period, String source, String status,
-                                          int matchCount, int differenceCount,
+                                          int matchCount, int differenceCount, int unresolvedDifferenceCount,
                                           String closedBy, String closedAt, String statementSource) {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -33,6 +33,8 @@ public record ReconciliationBatchResponse(Long id, String batchNo, String period
                 batch.getStatus().name(),
                 batch.getMatches().size(),
                 batch.getDifferences().size(),
+                // 与 settlementSummary 同源：均取自 batch.unresolvedDifferenceCount()（INV-12）
+                (int) batch.unresolvedDifferenceCount(),
                 batch.getClosedBy(),
                 batch.getClosedAt(),
                 sourceJson);

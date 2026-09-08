@@ -102,4 +102,66 @@ class ReconciliationBatchStateMachineTest {
         batch.finish(List.of(), List.of());
         assertThatThrownBy(batch::beginProcessing).isInstanceOf(BizException.class);
     }
+
+    // ---- spec 006 T020 补齐：关闭门禁与幂等 ----
+
+    @Test
+    void closeIsIdempotentOnClosed() {
+        ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
+        batch.start();
+        batch.finish(List.of(), List.of());
+
+        batch.close("ops", "2026-08-31T00:00:00Z");
+        batch.close("ops-2", "2026-08-31T01:00:00Z");
+
+        assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
+        // 幂等空操作：不覆盖首次收口记录
+        assertThat(batch.getClosedBy()).isEqualTo("ops");
+        assertThat(batch.getClosedAt()).isEqualTo("2026-08-31T00:00:00Z");
+    }
+
+    /**
+     * HAS_DIFFERENCE 直接 close 必被拒。门禁顺序：先查「尚有未处理差异」，再查状态合法性——
+     * HAS_DIFFERENCE 语义上必有未处理差异，因此落在 {@code UNRESOLVED_DIFFERENCES} 上，
+     * 这不是缺陷而是更精确的失败原因（告诉运营「还差几条」而不是「状态不对」）。
+     */
+    @Test
+    void closeDirectlyFromHasDifferenceIsIllegal() {
+        ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
+        batch.start();
+        batch.finish(List.of(), List.of(channelOnly()));
+
+        assertThatThrownBy(() -> batch.close("ops", "2026-08-31T00:00:00Z"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("unresolved differences");
+        assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.HAS_DIFFERENCE);
+    }
+
+    @Test
+    void closeWithUnresolvedDifferencesReportsUnresolvedErrorCode() {
+        ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
+        batch.start();
+        batch.finish(List.of(), List.of(channelOnly()));
+        batch.beginProcessing();
+
+        assertThatThrownBy(() -> batch.close("ops", "2026-08-31T00:00:00Z"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("unresolved differences");
+        assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.PROCESSING);
+    }
+
+    @Test
+    void closeAfterAllResolvedRecordsOperatorAndTime() {
+        ReconciliationBatch batch = new ReconciliationBatch("2026-08", "mock-channel");
+        batch.start();
+        batch.finish(List.of(), List.of(channelOnly()));
+        batch.beginProcessing();
+        batch.getDifferences().get(0).resolve("matched manually", "ops", "2026-08-31T09:00:00Z");
+
+        batch.close("ops-closer", "2026-08-31T10:00:00Z");
+
+        assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
+        assertThat(batch.getClosedBy()).isEqualTo("ops-closer");
+        assertThat(batch.getClosedAt()).isEqualTo("2026-08-31T10:00:00Z");
+    }
 }

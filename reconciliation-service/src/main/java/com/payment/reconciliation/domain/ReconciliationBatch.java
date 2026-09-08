@@ -116,6 +116,29 @@ public class ReconciliationBatch {
         return differences.stream().filter(d -> !d.isResolved()).count();
     }
 
+    /**
+     * 差异金额合计（分，data-model.md §2.2 / spec 006 T006、T040）：
+     * 双侧金额都在 ⇒ 取差额绝对值；仅单侧存在 ⇒ 取该侧金额（缺失侧视为 0）。
+     *
+     * <p>口径与 {@code reconciliation.difference_amount_minor} 指标同源，供资金运营一眼看出
+     * 本批差异的资金规模。</p>
+     */
+    public long differenceAmountMinor() {
+        long total = 0L;
+        for (Difference difference : differences) {
+            Long platform = difference.getPlatformAmountMinor();
+            Long channel = difference.getChannelAmountMinor();
+            if (platform != null && channel != null) {
+                total += Math.abs(platform - channel);
+            } else if (platform != null) {
+                total += platform;
+            } else if (channel != null) {
+                total += channel;
+            }
+        }
+        return total;
+    }
+
     private void requireStatus(ReconciliationStatus expected, String op) {
         if (this.status != expected) {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,

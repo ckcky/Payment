@@ -48,6 +48,16 @@ mybatis-plus:
 
 reconciliation:
   statement-dir: fixtures/channel-statements
+  # 周期 fixture 未命中时的回退默认账单（spec 006 T018）
+  statement:
+    default-file: sample.csv
   # E2E 差异注入覆盖目录（spec 022 / T421）：存在 {dir}/{period}.csv 时优先于 classpath fixture。
   # 目录缺省不存在 → 行为零变化；E2E 运行时向此目录落盘 {period}.csv 注入账实差异。
   statement-dir-override: /tmp/e2e-channel-statements
+
+# 事实读取 RPC（payment / refund facts）显式超时（spec 006 T035 / ADR-0021）：
+# 由 FactsClientConfig 局部绑定到两个 facts 客户端，不影响其他 Feign 客户端。
+services:
+  payment:
+    connect-timeout-ms: 1000
+    read-timeout-ms: 3000

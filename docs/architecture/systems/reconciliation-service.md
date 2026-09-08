@@ -329,8 +329,15 @@ mybatis-plus:
 |---|---|---|---|
 | `reconciliation.run` | counter | module=reconciliation | 执行对账批次 |
 | `reconciliation.difference` | counter | module=reconciliation, type=差异类型 | 对账产出差异（按 AMOUNT_MISMATCH/STATUS_MISMATCH/PLATFORM_ONLY/CHANNEL_ONLY） |
+| `reconciliation.difference_amount_minor` | counter（金额累加） | module=reconciliation, period=周期 | 差异金额合计（分）：双侧都有取差额绝对值，仅单侧存在取该侧金额；无差异时不发指标（spec 006 T040） |
+| `reconciliation.statement_fallback` | counter | module=reconciliation, period=周期 | 周期账单 fixture 未命中、回退默认 `sample.csv`（**绝不静默**，ADR-0020） |
+| `reconciliation.fact_read_failed` | counter | module=reconciliation, target=payment\|refund | 事实读取失败（失败不入批，可安全重跑） |
+| `reconciliation.difference_resolved` | counter | module=reconciliation | 差异被处理（含处理依据） |
+| `reconciliation.batch_closed` | counter | module=reconciliation | 批次收口为 `CLOSED` |
 
-**资金审计 / 关联字段**：对账为只读、不落资金账，沿用 `traceId`（`TraceContext`）跨服务传播；差异处理记录 `resolutionNote` 作为人工跟进依据，满足 roadmap Phase 6 验收「原始事实不被静默改写」。
+**资金审计 / 关联字段**：对账为只读、不落资金账，沿用 `traceId`（`TraceContext`）跨服务传播；差异处理与批次关闭各写一条 `FINANCIAL_AUDIT`（含 traceId / 前后状态 / 实体 ID，不回显处理说明正文）。差异处理记录 `resolutionNote` 作为人工跟进依据，满足 roadmap Phase 6 验收「原始事实不被静默改写」。
+
+**出站 RPC 弹性（ADR-0021）**：payment / refund facts 客户端经 `FactsClientConfig` 局部绑定——超时 `services.payment.connect-timeout-ms=1000` / `read-timeout-ms=3000`，重试 3 次（退避 1s/2s/4s，仅幂等只读 GET）。**错误解码器对 408/429/5xx 抛 `feign.RetryableException`**（Feign 只对它触发重试），重试耗尽后由 `FeignPaymentFactsClient`/`FeignRefundFactsClient` 归一化为 `INTERNAL_ERROR`；其余 4xx 直接归一化，不重试。
 
 ## 7. 审计四核对 + 挂账调账闭环（spec 017 / ADR-0065，2026-09-07 落地）
 
