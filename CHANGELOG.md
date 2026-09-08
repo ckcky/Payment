@@ -6,6 +6,18 @@
 
 ---
 
+## [2026-09-08] spec 022 收尾 + 023 live 验证：测试有效性实测、PR 契约门禁、运维验证闭环
+
+**范围**：spec 022 批次 G 收尾（T433/T434/T435/T436）+ spec 023 剩余项（T5/T14/T16/T17/T18），全部 live 栈实测。详见各自 tasks.md 附注。
+
+- **T433 测试有效性实测（SC-002/SC-003）**：临时注入缺陷后还原（未入库）——①旁路 order 可退余额校验 + payment 累计校验 → 超退用例红 2/3（断言含订单号金额，dump 落盘）；附带发现仅去 payment 侧校验仍绿，409 闸在 order 侧（防御纵深）；②`RefundOrder` 不回填 `payment_refund_no` → 单号链用例红（双号互记断裂）。
+- **T434 全量回归**：`./mvnw -B verify` BUILD SUCCESS；E2E 全量 22/23 绿 + 1 skip，唯一红（对账矩阵 MISSING 检出）经 general_log / 访问日志 / 无沙箱复跑三重实证为本机透明代理吞写伪影，CI 通道为准（`Db.execute` 已走 `/demo/db-exec` 代执行 + 落库回读，b6af115）。
+- **T430 PR 契约门禁**：`verify.yml` 新增 `contract-snapshot` job（最小栈仅跑 L3 API 快照），ArchUnit 随 reactor verify 生效——契约漂移 PR 即红，不等 nightly。
+- **023 live 验证**：Prometheus targets 无 `job="refund"`；`scenario-happy-path.sh` 全断言通过；SIGTERM 优雅停机日志完整（Commencing → complete，端口释放）；`start-all.sh` Nacos 超时改 exit（d40602d）。
+- **T436 评估结论**：`demo/run-all.sh`（现场演示编排）与 E2E 模块（无头回归门禁）受众与生命周期不同，不合并。
+
+---
+
 ## [2026-09-07] spec 022：全链路自动化测试体系（代码落地，ADR-0069）
 
 **范围**：新建黑盒 `deployment/e2e-tests` Maven 模块（不依赖业务模块），承载「退款正常 / 超退拦截 / 对账准确 / 单号记对」四类全链路验证；决策与验收见 [spec 022](docs/specs/022-full-chain-automated-testing/spec.md)。**live 实跑验证待办**（T433/T434，`bash deployment/e2e-tests/run.sh`）。

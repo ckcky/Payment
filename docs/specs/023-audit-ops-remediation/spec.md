@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Accepted → 待实施
+**Status**: ✅ **Implemented**（2026-09-08 全部收尾：T5/T14 live 实测通过——Prometheus 无 job="refund"、happy path 全断言过、graceful shutdown 完整；T16/T17/T18 随 d40602d 落地/核实）
 
 **Input**: 2026-09-07 两份审计报告（`.workbuddy/reports/2026-09-07-comprehensive-audit.md` 与 `docs/archive/audits/2026-09-07-技术审计报告-audit.md`）经负责人逐项裁决后的**中性工程遗留项**。
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Accepted → **Implemented（代码落地，live 实跑验证待办）**（2026-09-07 批次 B~F 代码完成：e2e-tests 模块 + 断言原语 + P0/P1 用例 + 请求级 mock 注入 + CI；T433 缺陷注入验证 / T434 live 全量回归需起 live 栈后执行，见 [tasks.md](tasks.md) 未勾项；决策依据 [ADR-0069](../../adr/0030-end-to-end-automated-testing.md)）
+**Status**: ✅ **Implemented**（2026-09-07 批次 B~F 代码落地：e2e-tests 模块 + 断言原语 + P0/P1 用例 + 请求级 mock 注入 + CI；2026-09-08 批次 G 收尾完成：T433 缺陷注入验证 SC-002/SC-003 实测变红且 dump 可定位、T434 全量回归 verify 全绿 + E2E 22/23（唯一红为本机环境伪影，CI 为准）、T430 verify.yml PR 追加 L3 快照、T436 run-all.sh 评估维持现状；决策依据 [ADR-0069](../../adr/0030-end-to-end-automated-testing.md)）
 
 **Input**: 负责人 2026-09-07 测试体系讨论（原文归纳）：
 
