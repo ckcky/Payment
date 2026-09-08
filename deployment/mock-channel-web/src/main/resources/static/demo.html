@@ -69,9 +69,9 @@
           <div class="pa-step__rail"><div class="pa-step__dot">2</div><div class="pa-step__line"></div></div>
           <div class="pa-step__body">
             <h3>支付</h3>
-            <div class="pa-note">下单后自动以 MOCK 渠道创建支付单并打开收银台；若浏览器拦截了新窗口，用下面的链接手动进入。</div>
+            <div class="pa-note">下单后自动以 MOCK 渠道创建支付单并打开收银台；若浏览器拦截了新窗口，用下面的按钮手动进入（推荐）。</div>
             <div class="pa-row" style="margin-top:12px">
-              <a class="pa-btn ghost pa-btn--sm" id="cashierLink" href="#" target="_blank" rel="noopener" style="display:none">打开收银台 ↗</a>
+              <a class="pa-btn" id="cashierLink" href="#" target="_blank" rel="noopener" style="display:none">→ 去收银台支付 ↗</a>
             </div>
           </div>
         </div>
@@ -194,7 +194,12 @@ const DOMAINS = [
 const SERVICE_ORDER = ['order-service', 'payment-service', 'fulfillment-service', 'entitlement-service',
                        'settlement-service', 'reconciliation-service', 'ledger-service'];
 
-/* SKU 列表由 /proxy/catalog/skus 动态拉取（reset 后 id 为自增 1/2/3，不硬编码） */
+/* SKU 列表由 /proxy/catalog/skus 动态拉取（reset 后 id 为自增 1/2/3，不硬编码）。
+   e2e 测试每次运行会动态造 SKU（E2eBase，skuCode 前缀 e2e-），演示页一律过滤不展示。 */
+function isDemoSku(s) {
+  return s && !/^e2e-/.test(String(s.skuCode || '')) && s.name !== 'e2e sku';
+}
+
 async function loadSkus() {
   const box = document.getElementById('skus');
   box.innerHTML = '';
@@ -204,26 +209,54 @@ async function loadSkus() {
     box.innerHTML = '<div class="sku">SKU 列表不可用（HTTP ' + r.status + '）—— 请先执行 demo/reset.sh</div>';
     return;
   }
-  if (r.data.length === 0) {
-    box.innerHTML = '<div class="sku">暂无 SKU，1.5s 后自动重试…</div>';
+  const demoList = r.data.filter(isDemoSku);
+  if (demoList.length === 0) {
+    box.innerHTML = '<div class="sku">暂无演示 SKU，1.5s 后自动重试…</div>';
     await new Promise(ok => setTimeout(ok, 1500));
     const r2 = await api('GET', '/catalog/skus');
-    if (r2.status === 200 && Array.isArray(r2.data) && r2.data.length > 0) { renderSkus(r2.data); return; }
-    box.innerHTML = '<div class="sku">暂无 SKU —— 请先执行 demo/reset.sh，或点「刷新 SKU」重试</div>';
+    const demo2 = (r2.status === 200 && Array.isArray(r2.data) ? r2.data : []).filter(isDemoSku);
+    if (demo2.length > 0) { renderSkus(demo2); return; }
+    box.innerHTML = '<div class="sku">暂无演示 SKU —— 请先执行 demo/reset.sh，或点「刷新 SKU」重试</div>';
     return;
   }
-  renderSkus(r.data);
+  renderSkus(demoList);
 }
 
 function renderSkus(list) {
   const box = document.getElementById('skus');
   box.innerHTML = '';
+  const ids = [];
   for (const s of list) {
+    ids.push(s.id);
     box.innerHTML += '<div class="sku"><div><div class="name">' + esc(s.name) + '</div>'
-      + '<div class="id">skuId=' + esc(s.id) + ' · ' + esc(s.skuCode) + ' · 状态 ' + esc(s.status) + '</div></div>'
+      + '<div class="id">skuId=' + esc(s.id) + ' · ' + esc(s.skuCode) + ' · 状态 ' + esc(s.status) + '<span id="stock-' + esc(s.id) + '" style="color:var(--pa-ink-3)"></span></div></div>'
       + '<div><span class="price">' + (s.priceMinor / 100).toFixed(2) + ' ' + esc(s.currencyCode) + '</span> × '
       + '<input type="number" id="qty-' + esc(s.id) + '" value="1" min="1"> <button class="pa-btn" onclick="placeOrder(' + esc(s.id) + ')">下单</button></div></div>';
   }
+  loadStocks(ids);
+}
+
+/* 库存余量：/demo/stock 只读直查 catalog.stock（available/total）。仅辅助展示，失败静默。 */
+async function loadStocks(ids) {
+  if (!ids || !ids.length) return;
+  try {
+    const res = await fetch('/demo/stock?skuIds=' + ids.join(','));
+    if (!res.ok) return;
+    const data = await res.json();
+    const map = {};
+    (data.stocks || []).forEach(function (row) { map[row.sku_id] = row; });
+    ids.forEach(function (id) {
+      const el = document.getElementById('stock-' + id);
+      if (!el) return;
+      const row = map[id];
+      if (!row) { el.textContent = ''; return; }
+      if (Number(row.available) <= 0) {
+        el.innerHTML = ' · <b style="color:var(--pa-bad)">库存 0/' + row.total + '（已售罄，可执行 demo/reset.sh 重置）</b>';
+      } else {
+        el.textContent = ' · 库存 ' + row.available + '/' + row.total;
+      }
+    });
+  } catch (e) { /* 静默 */ }
 }
 
 async function placeOrder(skuId) {
@@ -255,14 +288,21 @@ async function placeOrder(skuId) {
   currentPaymentNo = pr.data.paymentNo;
   renderPayment(pr.data);
   PA.setStep(2);
+  const link = document.getElementById('cashierLink');
   if (pr.data.payUrl) {
-    const link = document.getElementById('cashierLink');
     link.href = pr.data.payUrl; link.style.display = 'inline-flex';
+    link.textContent = '→ 去收银台支付 ↗';
     log('   payUrl: ' + pr.data.payUrl);
-    log('   → 打开收银台（新窗口），并开始轮询订单状态');
+    log('   → 点上方蓝色「去收银台支付」继续（若新窗口被浏览器拦截，以页内按钮为准）');
     window.open(pr.data.payUrl, '_blank');
+  } else if (pr.data.status === 'SUCCEEDED') {
+    // mock-cashier 未开启（PAYMENT_MOCK_CASHIER_ENABLED=false）→ 渠道内联同步 charge，直接成功，无收银台环节
+    link.style.display = 'none';
+    log('   （支付单无 payUrl 且已直接 SUCCEEDED —— mock 收银台未开启，走渠道内联同步 charge 路径，无收银台环节）');
+    PA.toast('已同步支付成功（收银台未开启：需以 PAYMENT_MOCK_CASHIER_ENABLED=true 启动 payment-service）', 'warn', 6000);
   } else {
-    log('   （支付单无 payUrl：mock-cashier 未开启，属同步 charge 路径）');
+    link.style.display = 'none';
+    log('   （支付单无 payUrl，status=' + pr.data.status + ' —— 异常，请查 payment-service 日志）');
   }
   startPoll();
 }
@@ -486,6 +526,12 @@ async function pollOnce() {
     document.getElementById('t-orderStatus').textContent = o.data.status;
     document.getElementById('t-orderStatus').className = 'v st st-' + o.data.status;
     if (o.data.orderNo) document.getElementById('t-orderNo').textContent = o.data.orderNo;
+    // 生效支付单跟随订单：换渠道重付后订单会指向新支付单（旧 UNKNOWN 单保留原状态），
+    // 页面记忆必须同步前移，否则显示与退款都会落在已弃单的旧支付单上
+    if (o.data.paymentNo && o.data.paymentNo !== currentPaymentNo) {
+      log('   生效支付单变更: ' + (currentPaymentNo || '—') + ' → ' + o.data.paymentNo);
+      currentPaymentNo = o.data.paymentNo;
+    }
     const pid = o.data.paymentNo || currentPaymentNo;
     if (pid) {
       const p = await api('GET', '/payment/payments/' + pid);

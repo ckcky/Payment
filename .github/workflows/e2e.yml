@@ -42,6 +42,10 @@ jobs:
         run: ./mvnw -B -DskipTests package
 
       - name: Start 9 services + mock-channel-web
+        env:
+          # e2e 的 paidOrder 依赖渠道内联同步 charge（建支付单即 SUCCEEDED，无收银台环节）；
+          # mock-cashier 默认已翻为 true（演示优先），CI 必须显式关闭（fix/024-mock-cashier-default-on）
+          PAYMENT_MOCK_CASHIER_ENABLED: "false"
         run: |
           mkdir -p logs
           for jar in deployment/output/jars/*.jar; do

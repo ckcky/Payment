@@ -76,7 +76,8 @@ if [ -z "${PAYMENT_ADMIN_TOKEN:-}" ]; then
   export PAYMENT_ADMIN_TOKEN="demo-admin-token"
   echo "    已设置默认演示令牌 PAYMENT_ADMIN_TOKEN（可用环境变量覆盖）"
 fi
-# mock-cashier 开启：支付创建走"收银台跳转"路径（payUrl），默认关闭不影响既有行为
+# mock-cashier 开启：支付创建走"收银台跳转"路径（payUrl）；默认值已翻为 true（演示优先），
+# 此处显式 export 仅作兜底（e2e 场景用 PAYMENT_MOCK_CASHIER_ENABLED=false 显式关闭）
 export PAYMENT_MOCK_CASHIER_ENABLED="${PAYMENT_MOCK_CASHIER_ENABLED:-true}"
 
 SERVICES=(

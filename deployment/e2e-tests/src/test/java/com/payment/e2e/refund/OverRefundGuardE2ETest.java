@@ -56,6 +56,14 @@ class OverRefundGuardE2ETest extends E2eBase {
             assertThat(r1.is2xx()).as("第一笔 3000 应受理 [order=%s]", orderNo).isTrue();
             awaitRefundStatus(r1.json().path("pmrf").asText(), "SUCCEEDED");
 
+            // 订单侧可退额度收口与支付侧 SUCCEEDED 非同一事务边界：等 refunded_minor
+            // 收敛后再发起第二笔，否则受理侧校验读到过期余额（受理 200 → 渠道终局拒绝）
+            Await.until("订单侧已退金额收敛 [order=" + orderNo + "]", () -> {
+                Object refunded = db.scalar("order",
+                        "SELECT refunded_minor FROM orders WHERE order_no='" + orderNo + "'");
+                return refunded != null && ((Number) refunded).longValue() >= 3000L;
+            });
+
             Api.ApiResponse r2 = API.refund(orderNo, null, 2001L, "e2e cum #2"); // 3000+2001 > 5000
             ctx.response("refund-2", r2);
             assertThat(r2.status())
