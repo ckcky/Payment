@@ -112,4 +112,39 @@ class ReconciliationApplicationServiceTest {
         assertThat(batch.getStatementSource()).isNotNull();
         assertThat(batch.getStatementSource().fallbackUsed()).isFalse();
     }
+
+    /**
+     * 按周期区分（spec 006 T012 / FR-001）：不同周期读到不同账单 ⇒ 产出不同差异集合；
+     * 这是「周期 fixture 真生效」的编排层证据（loader 层见 {@code CsvChannelStatementLoaderTest}）。
+     */
+    @Test
+    void differentPeriodsProduceDifferentDifferenceSets() {
+        InMemoryReconciliationRepository repo = new InMemoryReconciliationRepository();
+        ChannelStatementLoader byPeriod = period -> {
+            if ("2026-08-31".equals(period)) {
+                return new ChannelStatementLoadResult(List.of(
+                        new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
+                        new ChannelStatement("ch-aug-extra", 700L, "CNY", "SUCCEEDED")),
+                        ChannelStatementSource.fixture("fixtures/channel-statements/2026-08-31.csv", 2, false));
+            }
+            return new ChannelStatementLoadResult(List.of(
+                    new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
+                    new ChannelStatement("ch-sep-extra", 1500L, "CNY", "SUCCEEDED")),
+                    ChannelStatementSource.fixture("fixtures/channel-statements/2026-09-30.csv", 2, false));
+        };
+        ReconciliationApplicationService service = new ReconciliationApplicationService(
+                repo,
+                () -> List.of(new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
+                () -> List.of(),
+                byPeriod,
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
+
+        ReconciliationBatch aug = service.runReconciliation("2026-08-31");
+        ReconciliationBatch sep = service.runReconciliation("2026-09-30");
+
+        assertThat(aug.getDifferences()).extracting("reference").containsExactly("ch-aug-extra");
+        assertThat(sep.getDifferences()).extracting("reference").containsExactly("ch-sep-extra");
+        assertThat(aug.getId()).isNotEqualTo(sep.getId());
+        assertThat(aug.getStatementSource().locator()).isNotEqualTo(sep.getStatementSource().locator());
+    }
 }

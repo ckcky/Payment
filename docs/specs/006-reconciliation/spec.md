@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-29
 
-**Status**: Draft（设计决策见 `docs/adr/0007-reconciliation-decisions.md`，ADR-0019~0021 待负责人决策）
+**Status**: ✅ **Implemented**（2026-09-09 收口：ADR-0019~0021 均 Accepted（2026-08-30 裁决）；实现早已落地，本轮补齐真缺口 + 测试债 + 文档，验收 23/24 项通过，见 [acceptance.md](acceptance.md) 与 [tasks.md](tasks.md)）
 
 **Input**: 用户描述：为 Roadmap Phase 6 · Reconciliation 建立 Spec Kit 产物。本 Feature **不是从零构建**——`reconciliation-service`（端口 8088，Schema `reconciliation`）核心比对链路已实现，本 Spec 是**缺口补齐 / 收口**型 Spec。
 

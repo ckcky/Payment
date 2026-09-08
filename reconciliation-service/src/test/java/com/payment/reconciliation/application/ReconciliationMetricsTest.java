@@ -52,4 +52,56 @@ class ReconciliationMetricsTest {
         assertThat(registry.get("reconciliation.difference").tag("type", DifferenceType.CHANNEL_ONLY.name())
                 .counter().count()).isEqualTo(2.0);
     }
+
+    /**
+     * 差异金额口径（spec 006 T037/T040 / N2）：单侧缺失取该侧金额。
+     * 本场景 2 条 CHANNEL_ONLY（999 + 998）⇒ 1997 分。
+     */
+    @Test
+    void recordsDifferenceAmountMinor() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
+
+        PaymentFactsClient payments = () -> List.of(
+                new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
+        RefundFactsClient refunds = () -> List.of();
+        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(List.of(
+                new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
+                new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"),
+                new ChannelStatement("channel-extra-2", 998L, "CNY", "SUCCEEDED")),
+                new ChannelStatementSource("FIXTURE", "inline", 3, false));
+
+        ReconciliationApplicationService service = new ReconciliationApplicationService(
+                new InMemoryReconciliationRepository(), payments, refunds, loader, metrics,
+                new StructuredAuditLogger());
+
+        ReconciliationBatch batch = service.runReconciliation("2026-08");
+
+        assertThat(batch.differenceAmountMinor()).isEqualTo(999L + 998L);
+        assertThat(registry.get("reconciliation.difference_amount_minor")
+                .tag("period", "2026-08")
+                .counter().count()).isEqualTo(1997.0);
+    }
+
+    /** 无差异 ⇒ 不产出金额指标（避免 0 值噪声淹没真实告警）。 */
+    @Test
+    void differenceAmountMinorIsAbsentWhenNoDifferences() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
+
+        ReconciliationApplicationService service = new ReconciliationApplicationService(
+                new InMemoryReconciliationRepository(),
+                () -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
+                () -> List.of(),
+                period -> new ChannelStatementLoadResult(
+                        List.of(new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED")),
+                        ChannelStatementSource.fixture("inline", 1, false)),
+                metrics,
+                new StructuredAuditLogger());
+
+        ReconciliationBatch batch = service.runReconciliation("2026-08");
+
+        assertThat(batch.differenceAmountMinor()).isZero();
+        assertThat(registry.find("reconciliation.difference_amount_minor").counter()).isNull();
+    }
 }

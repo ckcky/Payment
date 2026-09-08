@@ -2,6 +2,7 @@ package com.payment.reconciliation.api;
 
 import com.payment.reconciliation.application.ReconciliationApplicationService;
 import com.payment.reconciliation.domain.ReconciliationBatch;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,7 +46,7 @@ public class ReconciliationController {
 
     @PostMapping("/batches/{id}/differences/resolve")
     public DifferenceResponse resolveDifference(@PathVariable Long id,
-                                                @RequestBody ResolveDifferenceRequest request) {
+                                                @Valid @RequestBody ResolveDifferenceRequest request) {
         return DifferenceResponse.from(applicationService.resolveDifference(
                 id, request.reference(), request.resolutionNote(), request.resolvedBy(), request.resolvedAt()));
     }
