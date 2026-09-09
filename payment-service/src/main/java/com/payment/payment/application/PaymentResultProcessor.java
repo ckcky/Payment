@@ -4,6 +4,7 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
@@ -35,6 +36,7 @@ public class PaymentResultProcessor {
     private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
     private final BusinessMetrics metrics;
+    private final StructuredAuditLogger auditLogger;
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
@@ -43,11 +45,23 @@ public class PaymentResultProcessor {
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics) {
+        this(paymentRepository, attemptRepository, orderGateway, ledgerGateway, metrics,
+                new StructuredAuditLogger());
+    }
+
+    /** 显式指定审计器（测试场景可捕获 FINANCIAL_AUDIT；生产走默认构造）。 */
+    public PaymentResultProcessor(PaymentRepository paymentRepository,
+                                  PaymentAttemptRepository attemptRepository,
+                                  OrderGateway orderGateway,
+                                  LedgerPostingGateway ledgerGateway,
+                                  BusinessMetrics metrics,
+                                  StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
         this.metrics = metrics;
+        this.auditLogger = auditLogger;
     }
 
     /** 兼容构造：不接账本时使用空记账网关（测试/账本未接入场景）。 */
@@ -89,6 +103,17 @@ public class PaymentResultProcessor {
                 log.warn("支付成功通知 order 失败（事实不回滚，对账兜底）paymentNo={} orderNo={} reason={}",
                         payment.getPaymentNo(), payment.getOrderNo(), ex.getMessage());
                 metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
+                // spec 002 / T024：「订单非法前态拒绝」是资金风险信号——钱已收、订单侧不认，
+                // 仅靠通用指标会被淹没在 RPC 抖动里，故单独审计留痕 + 专用指标，供人工介入与对账兜底。
+                if (isIllegalOrderState(ex)) {
+                    auditLogger.audit("payment.order_illegal_state_rejected", payment.getPaymentNo(),
+                            payment.getAmountMinor(), payment.getCurrencyCode(),
+                            payment.getStatus().name(), "ORDER_REJECTED",
+                            "payment", payment.getPaymentNo());
+                    metrics.counter("payment.order_illegal_state_rejected", 1.0, "module", "payment");
+                    log.warn("订单非法前态拒绝：支付已成功但订单侧拒绝接收 paymentNo={} orderNo={} code={}",
+                            payment.getPaymentNo(), payment.getOrderNo(), ((BizException) ex).getCode());
+                }
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；记账属 payment 层支付指令编排，
             // 保留在 payment 内（ADR-0054）。记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009）。
@@ -98,5 +123,15 @@ public class PaymentResultProcessor {
                     payment.getAmountMinor(), 0L, payment.getCurrencyCode());
         }
         return changed;
+    }
+
+    /** 订单侧「非法前态拒绝」的语义码：订单不在可支付状态（如已支付 / 已关闭）。 */
+    private static boolean isIllegalOrderState(Throwable ex) {
+        if (!(ex instanceof BizException biz)) {
+            return false;
+        }
+        String code = biz.getCode();
+        return ErrorCodes.STATE_TRANSITION_VIOLATION.equals(code)
+                || ErrorCodes.ORDER_NOT_PAYABLE.equals(code);
     }
 }

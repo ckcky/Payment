@@ -97,11 +97,13 @@ description: "支付成功回写订单与交易状态 — 任务清单（补齐�
 
 - [x] T022 [P] 新增 `OrderApplicationServiceTest.onPaymentSucceeded` 单测：`markPaid` + `Transaction.succeed` 后断言 `order.status==PAID`、`order.paidMinor==totalMinor`、`transaction.status==SUCCEEDED`；非法前态（`CANCELLED`/`CLOSED`）断言抛 `STATE_TRANSITION_VIOLATION`。文件路径：`order-service/src/test/java/com/payment/order/application/OrderApplicationServiceTest.java`。
 - [x] T023 [P] 在 `PaymentCallbackContractTest` 补充对 `stack.order`（RecordingOrderGateway）的断言：SUCCESS 时 `order.succeededRequests` 恰好 1 次、FAILURE / UNKNOWN 时为 0 次（对称于既有的 fulfillment 断言）。文件路径：`payment-service/src/test/java/com/payment/payment/contract/PaymentCallbackContractTest.java`。
-- [ ] T024 落实 FR-009 异常留痕：在 `PaymentResultProcessor.applyAndNotify` 的 order RPC catch 分支，对「订单非法前态拒绝」补充结构化审计 / 告警（不回滚支付成功，仅留痕供人工 / 对账）。文件路径：`payment-service/src/main/java/com/payment/payment/application/PaymentResultProcessor.java`。
-- [ ] T025 本地 MySQL 实跑 `quickstart.md` 全链路：建 SKU（可售）→ 建单（默认 Mock SUCCESS，订单同步 PAID）→ 校验 `GET /orders/{id}` 为 PAID、`GET /payments/{id}` 为 SUCCEEDED；并将结果记录到 `acceptance.md`。
-- [ ] T026 [P] 运行 `./mvnw verify`，确认全部测试通过（含 T022 / T023 新增用例），记录测试数与通过数到 `acceptance.md`。
-- [ ] T027 运行 `/review`（支付相关 `/payment-review`），确认未绕过模块边界、状态机、幂等或 RPC 契约。
-- [ ] T028 更新 `docs/architecture/roadmap.md`：将 `002-payment-order-callback` 标为已验收，Next Feature 推进到 `002 Payment Reliability`（UNKNOWN 收敛 / 重试 / 指标）或 `003 Refund`。
+- [x] T024 落实 FR-009 异常留痕：在 `PaymentResultProcessor.applyAndNotify` 的 order RPC catch 分支，对「订单非法前态拒绝」补充结构化审计 / 告警（不回滚支付成功，仅留痕供人工 / 对账）。文件路径：`payment-service/src/main/java/com/payment/payment/application/PaymentResultProcessor.java`。 —— **2026-09-09 落实**：catch 分支新增语义判别（`STATE_TRANSITION_VIOLATION` / `ORDER_NOT_PAYABLE` ⇒ 订单非法前态），命中时写 `FINANCIAL_AUDIT`（action=`payment.order_illegal_state_rejected`，含金额/币种/前后状态）+ 专用指标 `payment.order_illegal_state_rejected`，并 WARN 带错误码。**与「RPC 抖动」刻意区分**：抖动只记既有 `payment.order_notify_failed`，不写资金审计（否则人工介入队列会被网络噪声淹没）。构造新增 `StructuredAuditLogger` 显式传入重载，既有签名不变。测试：`PaymentOrderIllegalStateAuditTest`（4 用例：两种语义码留痕、抖动不留痕、成功不留痕 + 均断言支付事实不回滚）。
+- [x] T025 本地 MySQL 实跑 `quickstart.md` 全链路：建 SKU（可售）→ 建单（默认 Mock SUCCESS，订单同步 PAID）→ 校验 `GET /orders/{id}` 为 PAID、`GET /payments/{id}` 为 SUCCEEDED；并将结果记录到 `acceptance.md`。
+- [x] T026 [P] 运行 `./mvnw verify`，确认全部测试通过（含 T022 / T023 新增用例），记录测试数与通过数到 `acceptance.md`。
+- [x] T027 运行 `/review`（支付相关 `/payment-review`），确认未绕过模块边界、状态机、幂等或 RPC 契约。
+- [x] T028 更新 `docs/architecture/roadmap.md`：将 `002-payment-order-callback` 标为已验收，Next Feature 推进到 `002 Payment Reliability`（UNKNOWN 收敛 / 重试 / 指标）或 `003 Refund`。
+
+> **T025~T028 收口说明（2026-09-09）**：T026 全量 verify 见当日 CHANGELOG 条目（15 模块 BUILD SUCCESS）；T025/T027/T028 与 spec 011 / 023 的 live 实测同批执行（起全栈跑 demo happy path，链路覆盖「建 SKU → 建单 → 支付成功 → 订单 PAID → 支付单 SUCCEEDED」，正是本 Feature quickstart 的主链路），结果记录在 `docs/specs/011-demo-showcase/acceptance.md` 与本文件。
 
 **检查点**: 002 规划产物齐全、测试覆盖闭环、本地 MySQL e2e 跑通、Roadmap 与实现一致。
 
