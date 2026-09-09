@@ -1,28 +1,78 @@
 # 业务告警规则（Constitution Observability / engineering-standards §7）
 #
-# 只告业务异常，不告基础设施：支付 UNKNOWN 堆积、退款失败、对账差异。
+# 只告业务异常，不告基础设施：支付 UNKNOWN 堆积、重试/查询耗尽、退款失败、对账差异。
 # 指标名对应 Micrometer 计数器（点号→下划线，计数器加 _total 后缀）。
+#
+# ⚠️ 指标名必须与代码里 metrics.counter/timer 的键严格对应，否则规则永远不触发（死规则）。
+#    2026-09-09 修正：原 PaymentUnknownBacklog 用 payment_unknown_total（代码中不存在）、
+#    RefundFailure 用 refund_failed_total（代码中不存在）——两条规则自上线起从未触发过。
+#    现按 payment-service 实际埋点对齐，并补上 spec 003 / US5 / T021 要求的重试耗尽告警。
+#    变更埋点时须同步本文件（对照命令见 docs/operations/runbook.md）。
 
 groups:
   - name: payment-arch-business
     rules:
+      # UNKNOWN 堆积：payment.unknown.duration 是 timer（收敛耗时），不能用于计数存量；
+      # 以超时判定计数 payment.timeout 作为「新增 UNKNOWN」的代理指标（每笔转 UNKNOWN 前必先超时）。
       - alert: PaymentUnknownBacklog
-        expr: increase(payment_unknown_total{module="payment"}[5m]) > 0
+        expr: increase(payment_timeout_total{module="payment"}[5m]) > 0
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "支付状态 UNKNOWN 堆积"
-          description: "过去 5 分钟新增 {{ $value }} 笔 UNKNOWN 支付，需查询/对账/人工收敛。"
+          description: "过去 5 分钟新增 {{ $value }} 笔超时转 UNKNOWN 的支付，需查询/对账/人工收敛。"
 
-      - alert: RefundFailure
-        expr: increase(refund_failed_total{module="refund"}[5m]) > 0
+      # spec 003 / US5 / T021：重试耗尽（PaymentRetryService 达上限后转主动查询收敛）
+      - alert: PaymentRetryExhausted
+        expr: increase(payment_retry_exhausted_total{module="payment"}[5m]) > 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "退款失败"
-          description: "过去 5 分钟新增 {{ $value }} 笔退款失败，需追踪处理。"
+          summary: "支付重试耗尽"
+          description: "过去 5 分钟有 {{ $value }} 笔支付重试达上限，已转主动查询收敛；持续出现说明渠道不稳定。"
+
+      # spec 003 / US5：主动查询也耗尽 ⇒ 只能靠对账/人工收敛兜底，风险高于重试耗尽
+      - alert: PaymentQueryExhausted
+        expr: increase(payment_query_exhausted_total{module="payment"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "渠道主动查询耗尽"
+          description: "过去 5 分钟有 {{ $value }} 笔支付连主动查询也达上限，状态无法自动收敛，需人工介入。"
+
+      # 订单侧以「非法前态」拒收但支付已成功（spec 002 / T024）：钱已收、订单不认账，属资金风险
+      - alert: PaymentOrderIllegalStateRejected
+        expr: increase(payment_order_illegal_state_rejected_total{module="payment"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "订单非法前态拒绝（支付已成功）"
+          description: "过去 5 分钟有 {{ $value }} 笔支付成功但订单侧拒收，需人工核对（已写 FINANCIAL_AUDIT）。"
+
+      # 退款失败：代码无 refund.failed 埋点，实际失败信号为 rejected（业务拒绝）
+      # + order_notify_failed / ledger_posting_failed（下游联动失败）
+      - alert: RefundFailure
+        expr: increase(refund_rejected_total{module="refund"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "退款被拒"
+          description: "过去 5 分钟新增 {{ $value }} 笔退款被业务规则拒绝，需确认是否为超退/状态非法。"
+
+      - alert: RefundDownstreamFailure
+        expr: increase(refund_order_notify_failed_total{module="refund"}[5m]) > 0
+            or increase(refund_ledger_posting_failed_total{module="refund"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "退款下游联动失败"
+          description: "退款已确认但通知订单/记账失败，退款事实不回滚，需人工补单（对账兜底）。"
 
       - alert: ReconciliationDifference
         expr: reconciliation_difference_total{module="reconciliation"} > 0

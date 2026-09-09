@@ -1151,6 +1151,94 @@
         "overrides": []
       },
       "description": "Feature 016（ADR-0054）：order transaction 层判定 surplus 后发起的自动退款命令执行结果"
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "业务告警 · 资金风险信号",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 61
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 102,
+      "type": "timeseries",
+      "title": "业务异常计数 · 5m 增量（对应 payment-alerts.yml 告警规则）",
+      "description": "各条曲线与 deployment/prometheus/rules/payment-alerts.yml 的告警表达式一一对应。指标名取自代码埋点（Micrometer 计数器点号→下划线 + _total 后缀），变更埋点时须同步本面板与告警规则。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
+      "targets": [
+        {
+          "expr": "increase(payment_timeout_total[5m])",
+          "refId": "A",
+          "legendFormat": "UNKNOWN 新增（超时判定）"
+        },
+        {
+          "expr": "increase(payment_retry_exhausted_total[5m])",
+          "refId": "B",
+          "legendFormat": "重试耗尽"
+        },
+        {
+          "expr": "increase(payment_query_exhausted_total[5m])",
+          "refId": "C",
+          "legendFormat": "主动查询耗尽"
+        },
+        {
+          "expr": "increase(payment_order_illegal_state_rejected_total[5m])",
+          "refId": "D",
+          "legendFormat": "订单非法前态拒绝（款已收）"
+        },
+        {
+          "expr": "increase(refund_rejected_total[5m])",
+          "refId": "E",
+          "legendFormat": "退款被拒"
+        },
+        {
+          "expr": "increase(reconciliation_difference_total[5m])",
+          "refId": "F",
+          "legendFormat": "对账差异"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "spanNulls": true
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "max",
+            "last"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ],
   "templating": {
