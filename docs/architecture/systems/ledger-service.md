@@ -153,3 +153,20 @@ Database-per-Service：账本服务自有 `ledger` 库（单机开发由 docker-
 - **ADR-0018**：refund → ledger 冲正记账，同取舍。
 - **ADR-0054**（确认性）：回调与资金约束（含账本强一致要求）见 `docs/adr/0016-core-payment-correctness.md`。
 - **功能需求标签（代码中标注）**：FR-001/002（Posting 聚合根与平衡门禁）、FR-003（分录不可变）、FR-004（幂等回查）、FR-005（仅内部端点）、FR-006/010（支付成功记账）、FR-007（全局平衡校验）、FR-008（来源追溯）、FR-011（资金审计）。
+
+---
+
+## 9. 验收覆盖（2026-09-09 回检）
+
+| 测试类 | 覆盖的验收点 | 备注 |
+| --- | --- | --- |
+| `LedgerPostingServiceTest` | SC-001（支付记账平衡、幂等吸收、不平衡拒绝） | 含「支付→退款→结算」串联后的全局平衡 |
+| `RefundPostingTest` | SC-002（退款冲正） | 2026-09-09 新增：方向与支付相反、来源可溯源、重复不二次冲减 |
+| `SettlementPostingTest` | SC-003（结算结转） | 2026-09-09 新增：应付→结算应付，重复不二次贷记 |
+| `BalanceCheckerTest` | SC-004（全局借贷平衡） | 各记账用例末尾追加全局平衡断言 |
+| `SourceTraceabilityTest` | SC-005（来源追溯） | 与新测试内的 `findEntriesBySource` 断言互补 |
+| `LedgerIdempotencyTest` | FR-004（幂等回查） | 并发撞 `uk_postings_idempotency_key` 用确定性仓储桩模拟 |
+
+**已知缺口**：无 Testcontainers 集成测试。领域/应用层走 `InMemoryLedgerRepository`，
+真库并发（乐观锁 / 唯一键冲突）未由自动化覆盖，靠 `uk_postings_idempotency_key` 兜底。
+与 spec 006 T023 属同类缺口，待引入 Testcontainers-MySQL 后一并补齐。

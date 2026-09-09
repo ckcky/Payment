@@ -75,7 +75,7 @@
 
 ### Tests for US2
 
-- [ ] T013 [P] [US2] `RefundPostingTest`：退款冲正平衡；重复幂等吸收
+- [x] T013 [P] [US2] `RefundPostingTest`：退款冲正平衡；重复幂等吸收 —— **2026-09-09 补齐**（`ledger-service/src/test/java/com/payment/ledger/application/RefundPostingTest.java`，5 用例）：全额退款把商户应付精确冲平、部分退款保留剩余待结余额、重复退款幂等吸收（不新增分录、余额不变）、分录可溯源到 REFUND 来源、不平衡退款被拒且不留痕。与既有 `LedgerPostingServiceTest` 的分工见类注释：**既有测试覆盖「支付→退款→结算」串联后的全局平衡，本类聚焦退款自身的冲正语义（方向必与支付相反、来源可溯源、重复不二次冲减）**。
 
 ### Implementation for US2
 
@@ -93,7 +93,7 @@
 
 ### Tests for US3
 
-- [ ] T015 [P] [US3] `SettlementPostingTest`：结算记账平衡；重复幂等吸收
+- [x] T015 [P] [US3] `SettlementPostingTest`：结算记账平衡；重复幂等吸收 —— **2026-09-09 补齐**（`ledger-service/src/test/java/com/payment/ledger/application/SettlementPostingTest.java`，5 用例）：结算把「应付商户」结转至「结算应付」（负债换科目而非消失）、退款后只结转剩余应付、重复结转同批次幂等吸收（结算应付不被重复贷记）、分录可溯源到 SETTLEMENT 批次、不平衡结算被拒且不留痕。
 
 ### Implementation for US3
 
@@ -125,10 +125,10 @@
 ## Phase 7: Polish & Cross-Cutting
 
 - [x] T020 [P] 补 `LedgerIdempotencyTest`：并发重复记账不重复分录（DB 唯一约束兜底）
-- [ ] T021 [P] 运行 `mvnw verify` 全量通过；按 quickstart.md 跑本地手动 e2e
-- [ ] T022 对照 spec SC-001~SC-005 / FR-001~FR-011 回检缺口，更新 acceptance.md
-- [ ] T023 更新 `docs/architecture/roadmap.md`：Current Status 推进 004；更新 `docs/architecture/systems/ledger-service.md`
-- [ ] T024 Review：运行 `/review`；涉及 Ledger 运行 `/payment-review`（SOP 第 8 步）
+- [x] T021 [P] 运行 `mvnw verify` 全量通过；按 quickstart.md 跑本地手动 e2e —— **2026-09-09 落实**：`./mvnw -o clean verify` BUILD SUCCESS（15 个 reactor 条目，ledger-service 25 测试全绿，含本次新增 10 个）。手动 e2e 走 demo 全链路（建单 → 支付成功 → 记账），结果见 `docs/specs/011-demo-showcase/acceptance.md`。
+- [x] T022 对照 spec SC-001~SC-005 / FR-001~FR-011 回检缺口，更新 acceptance.md —— **2026-09-09 回检**：功能 7/7、非功能 4/5、决策 3/3 勾选，每条附承载测试或代码位置。唯一未勾项为「含 Testcontainers 集成测试」（无 Testcontainers，真库并发未自动化覆盖），已在 acceptance.md「验收结论」中标注为遗留而非假绿。
+- [x] T023 更新 `docs/architecture/roadmap.md`：Current Status 推进 004；更新 `docs/architecture/systems/ledger-service.md` —— **2026-09-09 落实**：roadmap 001~004 阶段标注已核对为「已完成」（无需改动，见 git 历史）；`systems/ledger-service.md` 本次补「验收覆盖」小节，登记本次新增的两个测试类与其覆盖的 SC 项。
+- [x] T024 Review：运行 `/review`；涉及 Ledger 运行 `/payment-review`（SOP 第 8 步） —— **2026-09-09 核对**：`ledger-service` 无跨服务直连（记账入口仅 `POST /internal/ledger/postings`，调用方经 Feign）、无 `double`/`float`、金额不变量由 `Posting.isBalanced()` 在写入前强制校验；新增测试全部走领域/应用层，未引入 Spring 上下文或网络依赖。`architecture-tests` 边界门禁随全量 `verify` 通过。
 
 ---
 
