@@ -52,7 +52,6 @@ bash deployment/demo/run-all.sh
 
 ## 从哪里开始
 
-- 面试项目介绍：[docs/INTERVIEW.md](docs/INTERVIEW.md)（做了什么 / 完成了什么 / 难点 / 亮点 / 演示脚本 / 高频追问）
 - 文档导航：[docs/README.md](docs/README.md)
 - 开发流程：[docs/guides/development-guide.md](docs/guides/development-guide.md)
 - 项目宪法：[.specify/memory/constitution.md](.specify/memory/constitution.md)
