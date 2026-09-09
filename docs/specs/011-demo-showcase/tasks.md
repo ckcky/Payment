@@ -44,13 +44,13 @@
 - [x] **T031** 根 `pom.xml` 增加 `mock-channel-web` 模块
 - [x] **T032** `deployment/start-all.sh`：加入 `mock-channel-web`(8091) 与 `ledger-service`(8090)，默认 export `PAYMENT_CHANNEL_SECRET` 演示密钥
 - [x] **T033** `deployment/stop-all.sh` / `prometheus/prometheus.yml`：纳入 8091 观测
-- [ ] **T034** `bash -n demo/*.sh` 语法检查（本地执行一次）
-- [ ] **T035** 全栈实测：启动 `deployment/start-all.sh` → `bash demo/run-all.sh` 全场景断言通过（需本机 MySQL + 9 服务）
-- [ ] **T036** `mvn -o clean verify -fae` 全量 BUILD SUCCESS（含 `architecture-tests` 边界门禁，确认未误纳 `mock-channel-web`）
-- [ ] **T037** 同步 `docs/architecture/roadmap.md`（Current Status / Next Feature）
-- [ ] **T038** 同步 `docs/operations/runbook.md`（新增 8091 组件 + demo 章节）
-- [ ] **T039** 编写 `acceptance.md` 记录实测结果
-- [ ] **T040** Conventional Commits 提交并合并到 `master`
+- [x] **T034** `bash -n demo/*.sh` 语法检查（本地执行一次）—— **2026-09-09 落实**：`deployment/demo/` 下 17 个脚本逐一 `bash -n`，全部 OK（含本批次修复的 `scenario-refund.sh` / `restart-payment.sh`）。
+- [x] **T035** 全栈实测：启动 `deployment/start-all.sh` → `bash demo/run-all.sh` 全场景断言通过（需本机 MySQL + 9 服务）—— **2026-09-09 实跑通过**：容器组（MySQL/Nacos/Prometheus/Grafana/Loki/Promtail/Redis）+ 10 个进程全绿，`run-all.sh` **96 条断言、0 失败**，5 个场景（主链 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环）全部 ✅。实跑中暴露并修复三处脚本缺陷：① 退款轮询把 `UNKNOWN` 当终态提前 break；② `restart-payment.sh` 的 `netstat -ano` 在 macOS 上静默退出；③ `lsof` 未限 `-sTCP:LISTEN` 连带 kill 调用方服务 + 端口被环境变量抢占。详见 `acceptance.md` §4。
+- [x] **T036** `mvn -o clean verify -fae` 全量 BUILD SUCCESS（含 `architecture-tests` 边界门禁，确认未误纳 `mock-channel-web`）—— **2026-09-09 落实**：`./mvnw -o clean verify` BUILD SUCCESS，15 个 reactor 条目全过（`e2e-tests` 为 live 栈默认跳过）；`architecture-tests` 的 `SERVICE`S 常量不含 `mock-channel-web`，边界门禁确认未误纳。
+- [x] **T037** 同步 `docs/architecture/roadmap.md`（Current Status / Next Feature）—— **2026-09-09 落实**：011 段落标注已核对同步，全栈实跑结论写入 `acceptance.md` 并由 roadmap 指向。
+- [x] **T038** 同步 `docs/operations/runbook.md`（新增 8091 组件 + demo 章节）—— **2026-09-09 落实**：§9 已含 8091 组件与 demo 脚本说明；本次修正其中「本环境不可用（Docker/MySQL）」的过时表述，并登记实跑暴露的脚本缺陷与规避方式。
+- [x] **T039** 编写 `acceptance.md` 记录实测结果 —— **2026-09-09 落实**：§4 从「本环境未执行」改写为实跑通过（场景表 + 断言数 + 关键实体号），§6 结论同步。
+- [x] **T040** Conventional Commits 提交并合并到 `master` —— **2026-09-09 落实**：脚本修复三条 `fix(demo):` 经 `feature/011-demo-closeout` 以 `--no-ff` 合入 master；文档回填随 `docs:` 提交。
 
 ## 备注
 

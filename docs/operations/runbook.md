@@ -167,6 +167,10 @@ docker exec payment-prometheus promtool check rules /tmp/check.yml
 - **组件**：`mock-channel-web`（端口 8091），演示用，**非生产服务**，不进服务边界（见 §1）。
 - **能力**：① 收银台页（点支付后跳转，模拟渠道收银台，可触发 SUCCESS/FAILURE/UNKNOWN 等结果回传）；② 渠道回调转发（`/mock-channel/callback` 把结果回传 payment，支持 `signMode=VALID/FORGED/NONE`）；③ 演示控制台（按钮触发各场景）；④ 同源代理 `/proxy/{service}/**` 解决浏览器跨域。
 - **⚠️ 验签占位（ADR-0025 / ADR-0052 ⛔ Not Implemented）**：payment 的 `ChannelCallbackSignatureFilter#verifySignature` 恒放行。因此演示控制台的「伪造签名（FORGED）」按钮**点下去也会被 payment 放行**，不会 403。**本环境无法演示「伪造签名被拒」**——接入真实验签（实现 `verifySignature` + 补 ADR-0052）后才能演示。
-- **脚本**：`demo/` 提供 `run-all.sh` 串联四场景（happy-path / unknown / refund / reconciliation）与 `seed.sh` / `restart-payment.sh` / `start-stack.sh` / `stop-stack.sh`。脚本按真实 API 契约编写、断言失败即非零退出；**全栈实跑需 Docker + MySQL**（本环境不可用，见 `docs/specs/011-demo-showcase/acceptance.md` §4）。详细前置与断言表见 `demo/README.md`。
+- **脚本**：`demo/` 提供 `run-all.sh` 串联五场景（happy-path / refund / unknown / reconciliation / audit）与 `seed.sh` / `restart-payment.sh` / `start-stack.sh` / `stop-stack.sh`。脚本按真实 API 契约编写、断言失败即非零退出。详细前置与断言表见 `demo/README.md`。
+- **✅ 全栈实跑已通过（2026-09-09）**：容器组 + 10 进程全绿，`run-all.sh` 96 条断言 0 失败（详见 `docs/specs/011-demo-showcase/acceptance.md` §4）。实跑踩过的三个坑，复现时先确认已规避：
+  1. **JDK 版本**：`spring-boot:run` 需用 JDK 21+（本机默认 `java` 可能是 11，会报 `UnsupportedClassVersionError`）。启动前显式 `export JAVA_HOME=<JDK26 路径>`。
+  2. **端口被环境变量抢占**：若环境里存在 `SERVER_PORT` / `PORT`，Spring 的环境变量优先级高于 `application.yml`，服务会被拉到错误端口（实测三个服务被拉到 60956 而启动失败）。`restart-payment.sh` 已显式传 `--server.port`；手工启动时同样显式指定。
+  3. **只杀监听进程**：按端口 kill 时必须限定监听态（macOS：`lsof -ti tcp:<port> -sTCP:LISTEN`），否则会连带杀掉持有出站连接的调用方服务（实测一次重启干掉 9 个进程）。
 - **配置**：payment 的 `payment.channel.mock-scenario`（ADR-0049）决定 Mock 渠道默认结果（`SUCCESS`/`FAILURE`/`BUSINESS_UNKNOWN`/`TIMEOUT` 等），构造期注入、坏值 FAIL FAST，运行时切换需重启 payment（见 `demo/restart-payment.sh`）。
 - **013/014 库存与秒杀（Redis 依赖）**：catalog `Stock` 三段式库存 + order `OrderTimeoutScheduler`（Redis ZSet 时间轮）+ 014 的 Redis 缓存 / 秒杀预扣 / 限流均已落地（spec/ADR 见 `docs/specs/013-*` / `014-*` 与 `docs/adr/0014-next-stage-decisions.md`）。**需 Redis 可用**：Redis 不可用时超时取消降级（仅记日志跳过）、秒杀预扣 fail-closed 拒绝保护库存。

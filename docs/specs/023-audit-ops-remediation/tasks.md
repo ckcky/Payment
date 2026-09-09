@@ -26,7 +26,7 @@
 ## 收尾
 
 - [x] T13 `./mvnw verify` 15 模块全绿（2026-09-08 00:08 实测）
-- [ ] T14 demo happy path 实跑一轮 + 优雅停机演示（live 栈实测项：需 start-all.sh 全栈就绪后执行）
+- [x] T14 demo happy path 实跑一轮 + 优雅停机演示（live 栈实测项：需 start-all.sh 全栈就绪后执行）—— **2026-09-09 实跑通过**：容器组（MySQL/Nacos/Prometheus/Grafana/Loki/Promtail/Redis）+ 10 进程全绿，`deployment/demo/run-all.sh` **96 条断言、0 失败**（主链 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环五个场景全 ✅）。优雅停机实测（对演示组件 8091 发 SIGTERM）：`Commencing graceful shutdown. Waiting for active requests to complete` → `Graceful shutdown complete` → Hikari 连接池 `Shutdown completed`，进程 **2s 内退出**，完整闭环。实跑中另发现并修复三处 demo 脚本缺陷（退款轮询把 UNKNOWN 当终态、`restart-payment.sh` 的 `netstat -ano` macOS 静默退出、`lsof` 未限 `-sTCP:LISTEN` 连带误杀），详见 `docs/specs/011-demo-showcase/acceptance.md` §4。
 - [x] T15 CHANGELOG + feature 分支 `--no-ff` 合并 master + 推送
 
 ## 顺手项（不阻塞验收，做到即勾）
