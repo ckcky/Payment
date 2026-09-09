@@ -60,12 +60,16 @@ case "$REFUND_STATUS" in
 esac
 
 echo "==> ④ 等待渠道异步回调收敛第一笔退款终态（mock 默认 refund-async，延迟约 1s）"
+# UNKNOWN 不是终态：退款提交渠道后先落 UNKNOWN（failureReason="channel refund unknown /
+# accepted in-flight"），由异步回调推成 SUCCEEDED/FAILED。把 UNKNOWN 当退出条件会在回调
+# 到达前就断言（2026-09-09 实测：07.951 断言拿到 UNKNOWN，08.172 才收敛成功）。
+# 故只以 SUCCEEDED/FAILED 作为退出条件；真收敛不了时轮询跑满 6s 后断言失败，正是期望行为。
 FINAL_STATUS="PROCESSING"
 for i in $(seq 1 30); do
   http GET "$PAYMENT_URL/internal/refunds/$PMRF" || true
   jget "d['status']"; FINAL_STATUS="$VALUE"
   case "$FINAL_STATUS" in
-    SUCCEEDED|FAILED|UNKNOWN) break ;;
+    SUCCEEDED|FAILED) break ;;
   esac
   sleep 0.2
 done
@@ -88,11 +92,12 @@ http POST "$ORDER_URL/internal/orders/refund" "{\"orderNo\":\"$ORDER_NO\",\"amou
 assert_status 409 "超额退款 → 409 AMOUNT_INVARIANT_VIOLATION（refundable=2900）"
 
 echo "==> ⑦ 等第二笔收敛 + 终态核对（订单 PARTIALLY_REFUNDED、TXRF 追踪段可见）"
+# 同 ④：UNKNOWN 是「渠道在途」中间态，不能作为轮询退出条件。
 for i in $(seq 1 30); do
   http GET "$PAYMENT_URL/internal/refunds/$PMRF2" || true
   jget "d['status']"; FINAL2="$VALUE"
   case "$FINAL2" in
-    SUCCEEDED|FAILED|UNKNOWN) break ;;
+    SUCCEEDED|FAILED) break ;;
   esac
   sleep 0.2
 done
