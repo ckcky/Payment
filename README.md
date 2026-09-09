@@ -52,6 +52,7 @@ bash deployment/demo/run-all.sh
 
 ## 从哪里开始
 
+- 面试项目介绍：[docs/INTERVIEW.md](docs/INTERVIEW.md)（做了什么 / 完成了什么 / 难点 / 亮点 / 演示脚本 / 高频追问）
 - 文档导航：[docs/README.md](docs/README.md)
 - 开发流程：[docs/guides/development-guide.md](docs/guides/development-guide.md)
 - 项目宪法：[.specify/memory/constitution.md](.specify/memory/constitution.md)
@@ -64,5 +65,5 @@ bash deployment/demo/run-all.sh
 ## 当前边界（重要）
 
 - Payment / Refund / Settlement 的资金变动**经 `ledger-service`（8090）复式记账**（ADR-0011/0018/0023）**，存在可追溯账务事实；仅出款/银行对接仍 mock。
-- 跨服务一致性用 Feign（同步）+ 事务性 Outbox（异步，无 MQ）；Database-per-Service；集成测试用 Testcontainers。
+- 跨服务一致性用 Feign（同步）+ 编排器顺序扇出/逐步重试/落库留痕（**无 MQ、无 Outbox**，见 ADR-0031 与 `CommonCoreAutoConfiguration` 注释）；Database-per-Service；集成测试用 H2（MySQL 兼容模式，未引入 Testcontainers）。
 - 任何真实资金路径必须先经 Ledger 建立可追溯账务事实（见宪法 §2.2）。
