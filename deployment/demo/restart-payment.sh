@@ -17,8 +17,17 @@ unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
 # ---- 终止现有 payment-service ----
 # 以【端口】为准而非 .pids 文件：.pids 会随多次重启堆积陈旧条目，且 Git Bash 的 kill
 # 对其它 shell 会话启动的 Windows 进程通常无效，必须 taskkill 按 Windows PID 兜底。
+#
+# 平台分支：macOS 的 netstat 不支持 -o（BSD 版），-ano 会直接报错；配合本文件顶部的
+# `set -euo pipefail`，netstet 的非 0 退出码会让整个管道返回非 0，进而令
+# `PIDS="$(port_pids)"` 触发 set -e 静默退出（2026-09-09 实测：run-all.sh 在退款场景
+# 之后无任何输出直接 EXIT=1，就是这个原因）。故 macOS 走 lsof，并统一 `|| true` 兜底。
 port_pids() {
-  netstat -ano 2>/dev/null | awk '/LISTENING/ && $2 ~ /:'"$PORT"'$/ {print $NF}' | sort -u
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti tcp:"$PORT" 2>/dev/null | sort -u || true
+  else
+    netstat -ano 2>/dev/null | awk '/LISTENING/ && $2 ~ /:'"$PORT"'$/ {print $NF}' | sort -u || true
+  fi
 }
 
 PIDS="$(port_pids)"
