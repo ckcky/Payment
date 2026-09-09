@@ -22,9 +22,12 @@ unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
 # `set -euo pipefail`，netstet 的非 0 退出码会让整个管道返回非 0，进而令
 # `PIDS="$(port_pids)"` 触发 set -e 静默退出（2026-09-09 实测：run-all.sh 在退款场景
 # 之后无任何输出直接 EXIT=1，就是这个原因）。故 macOS 走 lsof，并统一 `|| true` 兜底。
+# 只取【监听】该端口的进程。`lsof -ti tcp:$PORT` 不带 -sTCP:LISTEN 会把所有与 8084
+# 有 TCP 关联的进程都返回——包括 order / reconciliation 等调用方持有的出站连接，
+# 届时下面的 kill 会连带杀掉无辜服务（2026-09-09 实测：一次重启干掉了 9 个进程）。
 port_pids() {
   if command -v lsof >/dev/null 2>&1; then
-    lsof -ti tcp:"$PORT" 2>/dev/null | sort -u || true
+    lsof -ti tcp:"$PORT" -sTCP:LISTEN 2>/dev/null | sort -u || true
   else
     netstat -ano 2>/dev/null | awk '/LISTENING/ && $2 ~ /:'"$PORT"'$/ {print $NF}' | sort -u || true
   fi
