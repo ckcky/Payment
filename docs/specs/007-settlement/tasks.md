@@ -4,7 +4,7 @@
 
 **Prerequisites**: spec.md ✅、plan.md ✅、data-model.md ✅
 
-**Current Progress（2026-08-29）**: 文档先行阶段已完成。ADR-0022~0023 状态 **Proposed**，待负责人确认；按用户约定「先按最简单实现开发、生成 ADR 供决策」，**代码已全部落地且 `mvn test` 全量通过**。本文件任务清单已据实勾选：实现类（T002~T008、T014~T019、T024~T027、T032~T038）与覆盖等价行为的测试（合并入 `SettlementApplicationServiceTest` / `SettlementMetricsTest`）均标记完成；T001（ADR 状态改为 Accepted）、T013/T031（Testcontainers 集成）、T039（并发撞键测试）、T040（弹性回归）、T045（`/review`）为负责人决策或待补测试，保留未勾选。
+**Current Progress（2026-08-29）**: 文档先行阶段已完成。ADR-0022~0023 状态 **Proposed**，待负责人确认；按用户约定「先按最简单实现开发、生成 ADR 供决策」，**代码已全部落地且 `mvn test` 全量通过**。本文件任务清单已据实勾选：实现类（T002~T008、T014~T019、T024~T027、T032~T038）与覆盖等价行为的测试（合并入 `SettlementApplicationServiceTest` / `SettlementMetricsTest`）均标记完成；T001（ADR 状态改为 Accepted）、T013/T031（Testcontainers 集成）、T039（并发撞键测试）、T045（`/review`）为负责人决策或待补测试，保留未勾选；T040（弹性回归）已于 2026-09-09 落地 `OutboundResilienceTest`（7 用例全绿，含超时生效 / 只读 GET 有限重试 / 写操作绝不重试）。
 
 **Tests**: 本 Feature 资金正确性敏感，按 Constitution §VII 与 spec FR-023，**MUST** 包含测试任务（已内联到各 US 阶段，合并入 `application/SettlementApplicationServiceTest` 与 `application/SettlementMetricsTest`）。
 
@@ -128,7 +128,7 @@
 ## Phase 6: Polish & Cross-Cutting
 
 - [ ] T039 [P] 补 `SettlementIdempotencyConcurrencyTest`：并发建批撞 `uk_settlement_batches_merchant_period` / `uk_settlement_batches_idempotency_key` 回查返回首次批次（待补）
-- [ ] T040 [P] 出站弹性回归：注入延迟断言超时生效；注入瞬时 500 断言只读 GET 有限重试（≤3、1s/2s/4s）且**不**对写操作重试（待补）
+- [x] T040 [P] 出站弹性回归：注入延迟断言超时生效；注入瞬时 500 断言只读 GET 有限重试（≤3、1s/2s/4s）且**不**对写操作重试（新增 `OutboundResilienceTest`，7 用例全绿）
 - [x] T041 [P] 运行 `mvn test` 全量通过（settlement-service 31 tests 全过；全量 reactor 进行中）
 - [x] T042 [P] 静态检视：金额路径无 `float`/`double`（全 `long` 分）；无跨服务 SQL；无银行/渠道出款调用（FR-020/FR-021）
 - [x] T043 对照 spec SC-001~SC-010 / FR-001~FR-024 回检缺口，更新 `acceptance.md`

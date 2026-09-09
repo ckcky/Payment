@@ -6,6 +6,7 @@ import com.payment.settlement.application.ReconciliationClient;
 import com.payment.settlement.application.ReconciliationSummary;
 import com.payment.settlement.application.SettlementFact;
 import feign.FeignException;
+import feign.RetryableException;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -33,6 +34,11 @@ public class FeignReconciliationClient implements ReconciliationClient {
             return new ReconciliationSummary(dto.period(), facts, dto.unresolvedDifferenceCount());
         } catch (FeignException.NotFound e) {
             throw BizException.of(ErrorCodes.NOT_FOUND, "reconciliation not found for period: " + period);
+        } catch (RetryableException e) {
+            // 有限重试已耗尽（SettlementFeignConfig 对 408/429/5xx 抛 RetryableException）：
+            // 归一化为 INTERNAL_ERROR，不外泄基础设施细节。
+            throw BizException.of(ErrorCodes.INTERNAL_ERROR,
+                    "reconciliation rpc unavailable after retry: period=" + period);
         }
     }
 }

@@ -5,6 +5,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.settlement.application.MerchantClient;
 import com.payment.settlement.application.MerchantView;
 import feign.FeignException;
+import feign.RetryableException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -26,6 +27,11 @@ public class FeignMerchantClient implements MerchantClient {
             return new MerchantView(dto.id(), dto.status(), dto.settlementEligible());
         } catch (FeignException.NotFound e) {
             throw BizException.of(ErrorCodes.NOT_FOUND, "merchant not found: " + merchantId);
+        } catch (RetryableException e) {
+            // 有限重试已耗尽（SettlementFeignConfig 对 408/429/5xx 抛 RetryableException）：
+            // 归一化为 INTERNAL_ERROR，不外泄基础设施细节。
+            throw BizException.of(ErrorCodes.INTERNAL_ERROR,
+                    "merchant rpc unavailable after retry: merchantId=" + merchantId);
         }
     }
 }

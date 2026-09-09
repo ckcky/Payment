@@ -45,7 +45,7 @@
 ## 非功能验收
 
 - [ ] 金额全程 `long` 最小货币单位，金额路径 0 处 `float`/`double`（FR-004 / INV-1 / SC-010）
-- [ ] 出站 RPC（merchant / reconciliation / ledger）显式超时（connect 1s / read 3s）；仅对幂等只读 GET 有限重试（≤ 3 次 / 1s-2s-4s）；写操作（记账 POST）0 重试（FR-019 / N4 / SC-009）
+- [x] 出站 RPC（merchant / reconciliation / ledger）显式超时（connect 1s / read 3s）；仅对幂等只读 GET 有限重试（≤ 3 次 / 1s-2s-4s）；写操作（记账 POST）0 重试（FR-019 / N4 / SC-009）—— 由 `SettlementFeignConfig`/`LedgerFeignConfig` 配置 + `OutboundResilienceTest` 7 用例回归验证
 - [ ] 未引入 MQ / 2PC/XA / Resilience4j（FR-019）
 - [ ] Database-per-service：仅读写 `settlement` Schema，0 处跨服务 SQL（FR-021）
 - [ ] 状态迁移全部经 `SettlementBatch` 集中方法，0 处散落 `setStatus`；并发更新由乐观锁拦截（`CONFLICT`）（FR-013 / INV-10 / SC-006）
