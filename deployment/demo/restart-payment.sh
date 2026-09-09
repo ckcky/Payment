@@ -59,8 +59,12 @@ if [ -f "$JAR" ]; then
 else
   # 注意：spring-boot:run 默认 fork 独立 JVM，直接 -D<prop> 留在 Maven 进程里传不进去，
   # 必须经 spring-boot.run.jvmArguments 注入（ADR-0049 场景为构造期注入）。
+  # --server.port 显式写死为 $PORT：启动环境若存在 SERVER_PORT / PORT 之类的变量，
+  # Spring 的环境变量优先级高于 application.yml，实测会把服务起在错误端口上
+  # （2026-09-09：三个服务被拉到 60956 而启动失败）。本脚本只管 8084，显式指定最稳。
   nohup $MAVEN_CMD -pl payment-service spring-boot:run \
     -Dspring-boot.run.jvmArguments="-Dpayment.channel.mock-scenario=$SCENARIO" \
+    -Dspring-boot.run.arguments="--server.port=$PORT" \
     > "$ROOT_DIR/deployment/logs/payment-service.log" 2>&1 &
 fi
 echo "$! payment-service" >> "$PID_FILE"
