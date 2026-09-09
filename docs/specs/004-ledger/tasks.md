@@ -29,7 +29,7 @@
 
 **Purpose**: 确认决策与骨架
 
-- [ ] T001 [P] 负责人确认 ADR-0008~0011（Constitution §8 人类决策边界），更新 `docs/adr/0004-ledger-design-decisions.md` 状态为 Accepted
+- [x] T001 [P] 负责人确认 ADR-0008~0011（Constitution §8 人类决策边界），更新 `docs/adr/0004-ledger-design-decisions.md` 状态为 Accepted —— **核实（2026-09-09）**：该文件顶部已载「**2026-08-29 负责人裁决**：ADR-0008~0011 **全部 Accepted**，其中 ADR-0010 改为『金额只用分』」，各条目状态均标注 Accepted；`roadmap.md` 亦登记 `004-ledger（前置实现，ADR-0008~0011 Accepted）`。本项此前仅因勾选滞后未回填。
 - [x] T002 [P] 新建 `ledger-service` 模块（pom.xml 继承父 POM；端口 8090；依赖 common-core/common-dto/MyBatis-Plus/OpenFeign/Micrometer）；`LedgerApplication` 启动类 + 上下文测试
 - [x] T003 [P] 编写 `deployment/schema/09-ledger-schema.sql`（`accounts`/`postings`/`ledger_entries` 三表 + 唯一约束 + 索引，见 data-model.md §2~§7）；接入 Flyway/Compose 应用机制（若已落地）
 

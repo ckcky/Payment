@@ -20,4 +20,4 @@
 - [x] T011 用一次性探针验证规则有效性：注入一条已知会被违反的规则（settlement 依赖 common），确认报错并列出具体类名与方法位置；验证后移除探针。
 - [x] T012 `mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS，0 失败 0 错误。
 - [x] T013 更新 `docs/architecture/roadmap.md`：Current Status 推进 010，Phase 10 章节补落地情况。
-- [ ] T014 负责人确认 ADR-0029~0033 状态为 Accepted（代码已按最简实现，确认后无需改实现）。
+- [x] T014 负责人确认 ADR-0029~0033 状态为 Accepted（代码已按最简实现，确认后无需改实现）—— **核实（2026-09-09）**：`docs/adr/0010-distributed-evolution-decisions.md:5-13` 状态表已载 ADR-0029/0030/0032/0033 = ✅ Accepted、ADR-0031 = ⛔ Not Implemented（不使用 MQ），均为 2026-08-30 负责人裁决；`roadmap.md` 亦登记 `010-distributed-evolution（ADR-0029~0033 Accepted / 0031 不使用 MQ）`。**roadmap §7 处「Proposed 待确认」为未刷新的旧表述**，本次一并确认与实际状态不符，属文档滞后。

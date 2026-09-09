@@ -474,7 +474,7 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 - 服务独立扩缩容、发布和故障隔离。
 - 云部署路径评估。
 
-**落地情况（2026-08-30）**：前置条件为「至少一个真实业务瓶颈或隔离需求 + 负责人确认」，当前两者皆无，因此 `010-distributed-evolution` 的**最简实现是「不拆服务，先立门禁」**——产物见 `docs/specs/010-distributed-evolution/`，决策见 `docs/adr/0010-distributed-evolution-decisions.md`（ADR-0029~0033，Proposed 待确认）：
+**落地情况（2026-08-30，状态 2026-09-09 核对）**：前置条件为「至少一个真实业务瓶颈或隔离需求 + 负责人确认」，因此 `010-distributed-evolution` 的**最简实现是「不拆服务，先立门禁」**——产物见 `docs/specs/010-distributed-evolution/`，决策见 `docs/adr/0010-distributed-evolution-decisions.md`（**ADR-0029~0033 已于 2026-08-30 由负责人裁决：0029/0030/0032/0033 Accepted，0031 ⛔ Not Implemented（不使用 MQ）**；本行原先残留的「Proposed 待确认」为未刷新的旧表述，2026-09-09 已订正）：
 
 | Phase 10 范围 | 落地形态 |
 | --- | --- |

@@ -29,7 +29,7 @@
 
 **Purpose**: 确认决策与数据基础
 
-- [ ] T001 负责人确认 ADR-0022（调整项持久化 / 方向语义 / 登记门禁 / 死代码 `Adjustment.java` 处置）与 ADR-0023（闸门纵深防御 / settlement→ledger 记账归属与时机），更新 `docs/adr/0008-settlement-decisions.md` 状态为 Accepted（Constitution §8.3/§8.4/§8.8）。**代码已按最简单实现落地，确认后无需改实现。**
+- [x] T001 负责人确认 ADR-0022（调整项持久化 / 方向语义 / 登记门禁 / 死代码 `Adjustment.java` 处置）与 ADR-0023（闸门纵深防御 / settlement→ledger 记账归属与时机），更新 `docs/adr/0008-settlement-decisions.md` 状态为 Accepted（Constitution §8.3/§8.4/§8.8）。**代码已按最简单实现落地，确认后无需改实现。** —— **核实（2026-09-09）**：ADR-0022 状态 **Accepted**（2026-09-03 收口，附落地验证表）、ADR-0023 状态 **Accepted**（见 `docs/adr/0008-settlement-decisions.md:12` / `:102`）；`roadmap.md` 登记 `007-settlement（ADR-0022~0023，按最简单实现落地）`。本项此前仅因勾选滞后未回填。
 - [x] T002 [P] 修改 `deployment/schema/08-settlement-schema.sql`：新增 `settlement_adjustments` 表（含 `uk_settlement_adjustments_idem`、`idx_settlement_adjustments_scope`）；接入 Flyway/Compose 机制（若已落地）
 - [x] T003 [P] 修改 `deployment/schema/08-settlement-schema.sql`：`settlement_batches` 新增 `fact_count` / `source_period` 两列（非破坏性 `ALTER ... ADD COLUMN`）
 
