@@ -39,13 +39,18 @@ docker compose -f deployment/docker-compose.yml up -d
 echo "==> [1b] 等待 Nacos (8848) 就绪（ADR-0059：注册中心）..."
 # 注意：Nacos 3.x 已移除 /nacos/actuator/health（返回 404），2.x 的就绪探针不再适用。
 # 改用 naming 模块的 operator/metrics，就绪时返回 {"status":"UP"}。
+# 超时必须 exit 而非 break（spec 023 T16）：Nacos 是所有 @FeignClient 的硬依赖（ADR-0059），
+# 未就绪就继续会让后续服务全部起在 Connection refused 上——那是假成功，比失败更难排查。
+NACOS_READY=0
 for i in $(seq 1 45); do
   if curl -fsS "http://127.0.0.1:8848/nacos/v1/ns/operator/metrics" 2>/dev/null | grep -q UP; then
     echo "    Nacos 已就绪"
+    NACOS_READY=1
     break
   fi
   sleep 2
 done
+[ "$NACOS_READY" = "1" ] || { echo "✗ Nacos 90s 内未就绪，中止启动（先查 docker compose ps / 容器日志）" >&2; exit 1; }
 
 echo "==> [2/3] 全量 clean 构建（首次较慢；PAYMENT_SKIP_BUILD=1 可跳过）"
 # 必须 clean：target 里可能残留 VS Code JDT 写入的半成品 class（外层类在、内部类缺失），

@@ -8,7 +8,7 @@
 - [x] T2 核对并修正 Grafana dashboard JSON 的 `job="refund"` 引用（如有）——结论：无引用，无需改
 - [x] T3 9 服务 `application.yml` 加 `server.shutdown: graceful` + `timeout-per-shutdown-phase: 30s`
 - [x] T4 `deployment/stop-all.sh` 注释补停机语义
-- [ ] T5 验证：compose 重启后 Prometheus 无 `job="refund"`；`stop-all.sh` 日志出现 graceful shutdown 完成且无被掐断的在途请求报错
+- [x] T5 验证：compose 重启后 Prometheus 无 `job="refund"`（2026-09-08 live 实测：targets API 10 个 active job 无 refund、无 dropped）；`stop-all.sh` 日志出现 graceful shutdown 完成且无被掐断的在途请求报错（2026-09-08 实测 SIGTERM payment：`Commencing graceful shutdown` → `Graceful shutdown complete`，端口释放无残留）
 
 ## 批次 B：onPaymentSucceeded 事务收窄
 
@@ -31,6 +31,6 @@
 
 ## 顺手项（不阻塞验收，做到即勾）
 
-- [ ] T16 `start-all.sh` Nacos 等待超时 break 改 exit（假成功修复）
-- [ ] T17 根目录 580MB 旧 tar.gz 及 `deployment/output/jars` 旧版本产物清理（VERSION=1.0.0 对齐）
-- [ ] T18 死代码 `InMemoryIdempotencyRegistry`（注册但零使用）移除或注释说明用途
+- [x] T16 `start-all.sh` Nacos 等待超时 break 改 exit（假成功修复；d40602d）
+- [x] T17 根目录 580MB 旧 tar.gz 及 `deployment/output/jars` 旧版本产物清理（VERSION=1.0.0 对齐；2026-09-08 核实：全仓无 tar.gz 残留、VERSION=1.0.0 就位）
+- [x] T18 死代码 `InMemoryIdempotencyRegistry`（注册但零使用）移除或注释说明用途（d40602d：javadoc 补「业务主链路零引用，保留作 SPI 开箱默认值与测试基座」）
