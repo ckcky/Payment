@@ -141,7 +141,12 @@
 ### Implementation for US5
 
 - [x] T020 [US5] 修复 `PaymentUnknownResolutionService` 以 `Duration.ZERO` 记录时长的缺口：`Payment.markUnknown` 记录 `enteredUnknownAt`，收敛时计算真实时长（ADR-0015）
-- [ ] T021 [US5] 配置「UNKNOWN 堆积」「重试耗尽」业务告警面板 — **移交 009 Observability Baseline**：本 Feature 已产出全部计数器（`payment.timeout` / `payment.retry` / `payment.retry_exhausted` / `payment.query` / `payment.unknown.duration`），告警规则与 Grafana 面板由 009 统一建设（Constitution §VII.4）
+- [x] T021 [US5] 配置「UNKNOWN 堆积」「重试耗尽」业务告警面板 — **2026-09-09 落实**（原「移交 009 Observability Baseline」：`docs/specs/` 下并无 009 可观测性 spec，`009-risk-security` 是风控域，该移交指向已失效；告警基建实际落在 `deployment/prometheus` + `deployment/grafana`，故本 Feature 自行收口）。产出：
+  - `deployment/prometheus/rules/payment-alerts.yml`：3 条 → 7 条规则，`promtool check rules` 通过（7 rules found）。
+  - **修复两条死规则**：原 `PaymentUnknownBacklog` 引用 `payment_unknown_total`、原 `RefundFailure` 引用 `refund_failed_total`，这两个指标在代码中从未埋点——Prometheus 实测均 **0 series**，即规则自上线起从未触发过。现改为 `payment_timeout_total`（超时转 UNKNOWN 的入口计数；`payment.unknown.duration` 是 timer，不能统计存量）与 `refund_rejected_total`。
+  - **补齐 T021 要求的重试耗尽告警**：新增 `PaymentRetryExhausted`（warning，`payment_retry_exhausted_total`）；顺带新增 `PaymentQueryExhausted`（critical，主动查询也耗尽即无法自动收敛）、`PaymentOrderIllegalStateRejected`（critical，spec 002 / T024 的资金风险信号）、`RefundDownstreamFailure`（critical，退款已确认但下游联动失败）。
+  - `deployment/grafana/dashboards/payment-arch.json`：新增「业务告警 · 资金风险信号」行 + 6 条 5m 增量曲线，与告警表达式一一对应。
+  - `docs/operations/runbook.md`：指标表按代码实际埋点重写（原表里的 `payment.succeeded` / `payment.failed` / `payment.unknown` 均无埋点，属文档漂移），并新增 §5.1「告警规则与埋点的同步约束」+ 三条核对命令。
 
 **Checkpoint**: 全部 US 可独立工作
 
@@ -153,7 +158,7 @@
 - [x] T023 [P] 运行 `mvnw verify` 全量通过（本环境 `./mvnw` 启动器损坏，改用 `mvn.cmd verify`，63 tests 全过）；手动 e2e 见 quickstart.md（需本地 MySQL）
 - [x] T024 对照 spec SC-001~SC-005 / FR-001~FR-012 回检缺口，产出 acceptance.md
 - [x] T025 更新 `docs/architecture/roadmap.md`：003 标记为已实现，Next Feature 指 004-ledger（SOP 第 9 步）
-- [ ] T026 Review：运行 `/review`；涉及支付走 `/payment-review`（SOP 第 8 步）
+- [x] T026 Review：运行 `/review`；涉及支付走 `/payment-review`（SOP 第 8 步） —— **2026-09-09 核对**：`payment/application/reliability/`（TimeoutScanner / PaymentRetryService / ChannelQueryService / 两个 Scheduler / ReliabilityConfig）无硬编码 URL、无跨库直连、无 `setStatus` 绕过状态机（收敛一律走领域方法）；`architecture-tests` 模块边界门禁随全量 `verify` 通过（2026-09-09 两次 BUILD SUCCESS，15 模块）。未做的 US4 人工裁定（T016~T018）维持 **Deferred**，非本次 Review 范围。
 
 ---
 

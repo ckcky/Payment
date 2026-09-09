@@ -84,13 +84,48 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 
 | 指标 | 含义 | 关注点 |
 | --- | --- | --- |
-| `payment.succeeded` / `payment.failed` / `payment.unknown` | 支付终态分布 | `unknown` 持续升高说明渠道不稳定，需人工收敛 |
+| `payment.initiated` | 支付单创建 | 与订单创建量对比，突降说明下单链路异常 |
+| `payment.timeout` | 超时判定（超时后转 UNKNOWN） | 持续升高说明渠道不稳定，需人工收敛 |
+| `payment.retry` / `payment.retry_exhausted` | 重试 / 重试达上限 | `retry_exhausted` 出现即转主动查询，持续出现说明渠道不可用 |
+| `payment.query` / `payment.query_exhausted` | 渠道主动查询 / 查询达上限 | `query_exhausted` 出现 = 无法自动收敛，必须人工介入 |
+| `payment.unknown.duration`（timer） | UNKNOWN 收敛耗时 | 只反映「已收敛的那些」的耗时，**不能**用于统计 UNKNOWN 存量 |
 | `payment.duplicate` / `payment.duplicate_callback` | 幂等命中 | 突增可能是上游重试风暴 |
+| `payment.order_notify_failed` | 通知订单失败（多为 RPC 抖动） | 事实不回滚，由对账兜底 |
+| `payment.order_illegal_state_rejected` | 支付成功但订单以非法前态拒收 | **资金风险信号**：款已收、订单不认账，需人工核对（已写 `FINANCIAL_AUDIT`） |
+| `refund.rejected` | 退款被业务规则拒绝 | 突增需确认是否超退/状态非法 |
+| `refund.order_notify_failed` / `refund.ledger_posting_failed` | 退款下游联动失败 | 退款事实不回滚，需人工补单 |
+| `ledger.posting_failed` | 记账失败 | 出现后资金事实与账本不一致，需补记账 |
+| `reconciliation.difference` | 对账差异（按 type 分） | 非 0 即需人工核对原始事实 |
+| ~~`payment.succeeded` / `payment.failed` / `payment.unknown`~~ | ~~支付终态分布~~ | ⛔ **无此埋点**（2026-09-09 核对）：终态分布请查库或 `payment.initiated` 与超时/重试计数推导 |
 | ~~`payment.callback_signature_rejected`~~ | ~~渠道回调验签被拒~~ | ⛔ **已移除**：验签为空实现（ADR-0025），回调一律放行，无此埋点 |
 | ~~`payment.risk_triggered`~~ | ~~最小风控命中~~ | ⛔ **已移除**：风控不做（ADR-0028），类已删除 |
 | ~~`payment.internal_auth_rejected`~~ | ~~内部端点鉴权被拒~~ | ⛔ **已移除**：鉴权为空实现（ADR-0024），无此埋点 |
-| `ledger.posting_failed` | 记账失败 | 出现后资金事实与账本不一致，需补记账 |
 | `FINANCIAL_AUDIT` 日志 | 资金动作审计（独立 logger） | 支付/退款/结算/记账各一条，含 traceId |
+
+### 5.1 告警规则与埋点的同步约束
+
+业务告警定义在 `deployment/prometheus/rules/payment-alerts.yml`，Grafana 面板见
+`deployment/grafana/dashboards/payment-arch.json`（「业务告警 · 资金风险信号」行）。
+
+**告警表达式引用的是 Micrometer 指标名（点号→下划线、计数器加 `_total`）。若表达式里的指标
+在代码中不存在，规则永远不会触发，且不会有任何报错**——2026-09-09 实测：旧规则引用的
+`payment_unknown_total`、`refund_failed_total` 在 Prometheus 里均为 0 series，属于上线起从未触发过的死规则。
+
+因此变更埋点时**必须**同步三处：代码 `metrics.counter/timer` 键 → 告警规则 → Grafana 面板。
+核对方式（需全栈运行）：
+
+```bash
+# 1) 代码里实际埋了哪些指标
+grep -rhoE 'metrics\.[a-z]+\("[a-z_.]+"' <service>/src/main/java | sed 's/.*("//;s/"//' | sort -u
+
+# 2) Prometheus 里这些指标是否真的有 series（无 series 可能是从未触发，也可能是名字写错）
+curl -s --noproxy '*' --data-urlencode 'query=payment_timeout_total' \
+  http://127.0.0.1:9090/api/v1/query | python3 -c "import sys,json;print(len(json.load(sys.stdin)['data']['result']))"
+
+# 3) 规则文件语法（把待校验文件拷进 prometheus 容器再用 promtool）
+docker cp deployment/prometheus/rules/payment-alerts.yml payment-prometheus:/tmp/check.yml
+docker exec payment-prometheus promtool check rules /tmp/check.yml
+```
 
 ## 6. 常见故障与处置
 
