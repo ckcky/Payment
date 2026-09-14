@@ -6,6 +6,30 @@
 
 ---
 
+## [2026-09-15] spec 026：本地全栈容器化（双模式 · Compose 而非 K8s）
+
+**范围**：spec 026 立项 + P1/P2/P3/P6 落地（P4 可观测适配、P5 演示脚本模式分支、P7 验证矩阵待网络恢复后执行）。
+详见 [docs/specs/026-containerized-local-stack/](docs/specs/026-containerized-local-stack/)，决策见 **ADR-0070**
+
+- **Supersedes ADR-0057「服务未容器化」**：原决策理由「学习项目，容器化非当前目标」被推翻——
+  宿主 JDK 版本绑架启动（`RunMojo` 需 Java 17+，本机默认 java 11 → `UnsupportedClassVersionError`）
+  与宿主进程生命周期脆弱（任务回收致 payment 8084=000、压测数据作废）两个真实痛点证明其价值。
+- **双轨并存（D2）**：新增容器模式 `deployment/start-container.sh`，保留宿主模式 `deployment/start-all.sh`；
+  两者端口契约一致（8081–8091）故**互斥**，由 `deployment/lib-mode-guard.sh` 提供双向守卫（已实测拦截生效）。
+- **宿主打 jar，镜像只 COPY（D3）**：`deployment/docker/Dockerfile` 一份参数化通用镜像服务 10 个模块，
+  复用父 POM 已产出的 `deployment/output/jars/*.jar`，镜像内不跑 Maven（避免 3 个 common 模块被重编译 10 次）。
+  基础镜像 `eclipse-temurin:21-jre-jammy`。
+- **配置适配不改源码（D4）**：compose `environment` 覆盖硬编码的 `127.0.0.1`（Nacos `nacos:8848`、
+  MySQL `mysql:3306`、Redis `redis`、mock-channel-web 的 `/proxy` 目标改容器服务名），业务源码零变更。
+- **compose 增加 `pay-arch` 网络与 profiles**：`infra`（7 中间件）/ `full`（+10 应用）；
+  应用 `depends_on nacos: condition: service_healthy`，避免 Connection refused 假成功。
+- **已知未完成项**：P4（Prometheus/Promtail 双模适配）、P5（`restart-payment.sh` 容器分支）、
+  P7（验证矩阵）——镜像构建需拉取 `eclipse-temurin:21-jre-jammy`，当前沙箱**无法访问 Docker Hub**
+  （经代理/不经代理均 HTTP 000），故运行时验证未执行；代码与配置均已就绪，网络恢复后可直接跑
+  `bash deployment/start-container.sh`。
+
+---
+
 ## [2026-09-08] spec 022 收尾 + 023 live 验证：测试有效性实测、PR 契约门禁、运维验证闭环
 
 **范围**：spec 022 批次 G 收尾（T433/T434/T435/T436）+ spec 023 剩余项（T5/T14/T16/T17/T18），全部 live 栈实测。详见各自 tasks.md 附注。

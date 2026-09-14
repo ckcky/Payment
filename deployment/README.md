@@ -92,16 +92,62 @@ docker compose -f deployment/docker-compose.yml down -v
 
 ## 一键启动 / 停止（推荐）
 
-项目提供两个脚本（Windows 在 **Git Bash** 里跑，macOS/Linux 直接跑）：
+项目提供**两种运行模式**（spec 026 / ADR-0070），二者对外都使用 8081–8091，**端口互斥、二选一**：
+启动脚本内置**双向模式守卫**，检测到另一侧在跑会直接中止并提示，不会静默抢占端口。
+
+| 模式 | 启动 | 应用跑在哪 | 适用场景 |
+|---|---|---|---|
+| **容器模式** | `bash deployment/start-container.sh` | Docker 容器（10 个） | 环境可复现、不依赖本机 JDK/Maven 版本 |
+| **宿主模式** | `bash deployment/start-all.sh` | 宿主 JVM 进程（`./mvnw spring-boot:run`） | IDE 断点调试、改代码热重启 |
+
+停止（两种模式都停，保留 MySQL 数据卷）：
 
 ```sh
-bash deployment/start-all.sh   # 起 MySQL/Prometheus/Grafana + 10 个微服务（+ `mock-channel-web` 演示收银台），日志落 deployment/logs/
-bash deployment/stop-all.sh    # 停全部微服务 + 容器（保留 MySQL 数据卷）
+bash deployment/stop-all.sh
 ```
 
-`start-all.sh` 依次做三件事：`docker compose up -d`（基础设施）→ `./mvnw -q install -DskipTests`（首次构建，后续可跳过）→ 后台启动 10 个服务（+ `mock-channel-web` 演示收银台，共 11 个进程），每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
+只构建镜像不启动（调试镜像时有用）：
+
+```sh
+bash deployment/build-images.sh
+```
+
+### 容器模式
+
+`start-container.sh` 依次做：模式守卫 → 校验 10 个 fat jar 齐全 → `./mvnw clean install -DskipTests`
+（`PAYMENT_SKIP_BUILD=1` 可跳过）→ `docker compose --profile full build` → `--profile full up -d`
+→ 等待 10 个服务 `/actuator/health` 全部 200（超时即 exit 1，不做假成功）。
+
+应用镜像由 `deployment/docker/Dockerfile` 生成（**一份通用 Dockerfile 服务 10 个模块**）：
+采用「宿主打 jar，镜像只 COPY」策略（ADR-0070 D3）——fat jar 由父 POM repackage 到
+`deployment/output/jars/`，镜像内**不执行 Maven 构建**（否则 10 个服务会把 3 个 common 模块重复编译 10 次）。
+基础镜像 `eclipse-temurin:21-jre-jammy`（对应 `<java.version>21</java.version>`）。
+
+> 前提：镜像构建需要能访问 Docker Hub 拉取基础镜像。若网络不可达，`docker compose build` 会在
+> `FROM` 阶段报 `failed to resolve source metadata`——此时可先用宿主模式。
+
+### 宿主模式
+
+`start-all.sh` 依次做：模式守卫 → `docker compose up -d`（仅中间件）→ `./mvnw -q install -DskipTests`
+（首次构建，后续可跳过）→ 后台启动 10 个服务（+ `mock-channel-web` 演示收银台，共 11 个进程），
+每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
 
 > 前提：已安装并**启动 Docker Desktop**（Windows/macOS）或 docker 引擎（Linux），且 `docker` 在 PATH 上。首次 `install` 较慢属正常。
+> 另需 **JDK 17+**（`spring-boot-maven-plugin` 的 `RunMojo` 要求 class version 61；本机默认是 java 11 时需
+> `export JAVA_HOME=/Users/feizhai/Library/Java/JavaVirtualMachines/openjdk-26.0.1/Contents/Home`）。
+> 容器模式无此约束——这正是引入容器模式的原因之一。
+
+### Compose profiles
+
+| profile | 起什么 | 对应模式 |
+|---|---|---|
+| `infra` | 7 个中间件（mysql / redis / nacos / prometheus / grafana / loki / promtail） | 宿主模式 |
+| `full` | 7 个中间件 + 10 个应用 | 容器模式 |
+
+```sh
+docker compose -f deployment/docker-compose.yml --profile infra up -d   # 只起中间件
+docker compose -f deployment/docker-compose.yml --profile full  up -d   # 全栈
+```
 
 
 > **Redis 依赖（2026-09-03 补充）**：`014-seckill-and-cache` 已引入 Redis 7（端口 6379），由 `docker-compose.yml` 一并拉起。用途边界见 `docs/adr/0014-next-stage-decisions.md`（ADR-0044/0045）：仅入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，**非数据源**；秒杀预扣 fail-closed，其余 fail-open。

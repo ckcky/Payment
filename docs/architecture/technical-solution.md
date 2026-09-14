@@ -528,9 +528,25 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 
 - 服务是**独立进程、独立端口、独立部署单元**；单机只是多个进程跑在同一台服务器，不改变服务边界。
 - `gateway` 本 MVP **不创建、不部署**；`ledger-service`（8090）已按 `004-ledger` 前置创建并纳入部署。
-- 服务当前**未容器化**（无 Dockerfile），以宿主进程运行；只有 MySQL / Prometheus / Grafana 由 `docker compose` 承载，Prometheus 经 `host.docker.internal` 回抓宿主端口的 `/actuator/prometheus`。
-- 每个服务暴露 Swagger UI、`/actuator/health`、`/actuator/prometheus`；`deployment/start-all.sh` / `stop-all.sh` 一键起停，日志落 `deployment/logs/<service>.log`（详见 [deployment/README.md](../../deployment/README.md)）。
-- **演进路径**：本地多服务 → Docker Compose → 单机部署 → CI/CD → 可观测增强 → 有证据的部分服务独立数据库迁移（Roadmap Phase 10）。
+- **双模式运行（spec 026 / ADR-0070，替代了 ADR-0057「服务未容器化」）**：
+
+  | 模式 | 入口 | 应用形态 | 说明 |
+  |---|---|---|---|
+  | 容器模式 | `deployment/start-container.sh` | 10 个 Docker 容器 | 镜像由 `deployment/docker/Dockerfile` 生成（宿主打 jar，镜像只 COPY） |
+  | 宿主模式 | `deployment/start-all.sh` | 宿主 JVM 进程（`./mvnw spring-boot:run`） | IDE 断点调试、改码热重启 |
+
+  两种模式**对外端口完全一致（8081–8091）**，因此**互斥、二选一**，由 `deployment/lib-mode-guard.sh`
+  提供双向守卫（冲突即中止，不静默抢占）。e2e / 压测 / 演示脚本在两种模式下均无需改动。
+  容器模式不依赖宿主 JDK 版本——这正是引入它的原因（`RunMojo` 要求 Java 17+，宿主默认 java 11 会报
+  `UnsupportedClassVersionError`）。
+- 基础设施（MySQL / Redis / Nacos / Prometheus / Grafana / Loki / Promtail）由 `docker compose` 承载，
+  两种模式共用同一份 compose（`--profile infra` 只起中间件，`--profile full` 起全栈）。
+- 每个服务暴露 Swagger UI、`/actuator/health`、`/actuator/prometheus`；`deployment/stop-all.sh` 双模感知一键停止，
+  宿主模式日志落 `deployment/logs/<service>.log`，容器模式写同一挂载卷供 Promtail 采集（详见 [deployment/README.md](../../deployment/README.md)）。
+- **配置适配不改源码**：容器内 `127.0.0.1` 指向容器自身，故由 compose `environment` 覆盖 Nacos / MySQL / Redis
+  地址（Spring Boot 环境变量优先级高于 `application.yml`），业务源码零变更（ADR-0070 D4）。
+- **明确不做 K8s**：单机学习项目，K8s 的调度/自愈/扩缩收益为零而认知成本为正（ADR-0070 D1）。
+- **演进路径**：本地多服务 → **Docker Compose（已达成）** → 单机部署 → CI/CD → 可观测增强 → 有证据的部分服务独立数据库迁移（Roadmap Phase 10）。
 
 > 各服务的**运行态配置**（环境变量、启动依赖顺序、端口）见 [systems/](systems/) 下对应文档（要素 6），与本节「物理机部署」区分。
 

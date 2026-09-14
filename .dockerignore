@@ -1,0 +1,35 @@
+# 构建上下文排除项（spec 026 / FR-012）
+#
+# 本文件位于**仓库根**——因为构建上下文是仓库根（fat jar 位于 deployment/output/jars/，
+# 不在 deployment/docker/ 下），而 .dockerignore 只在上下文根生效。
+# 必须显式排除产物目录、日志、VCS 元数据，避免把 GB 级的 target/ 与 .git/ 送进构建上下文。
+#
+# 允许进入上下文的只有：deployment/output/jars/*.jar、deployment/docker/Dockerfile
+
+# VCS 与 AI 工作区
+.git
+.gitignore
+.workbuddy
+.github
+
+# 构建产物（**但保留 deployment/output/jars**，fat jar 在这里）
+**/target
+!deployment/output/jars
+deployment/output/jars/*.jar.md5
+deployment/output/**/*.txt
+
+# 日志与运行时产物
+deployment/logs
+*.log
+logs
+
+# 依赖目录
+node_modules
+
+# 文档与规格（镜像不需要）
+docs
+*.md
+
+# 测试与大文件
+deployment/performance/results
+deployment/e2e-tests

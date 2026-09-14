@@ -1,11 +1,17 @@
-# Commerce & Payment Platform MVP — 单机启动入口
+# Commerce & Payment Platform MVP — 本地启动入口（双模式，spec 026 / ADR-0070）
+#
+# 两种运行模式，**端口互斥，二选一**（两种模式对外都暴露 8081–8091，同时跑会 bind 失败）：
+#
+#   ① 容器模式（本文件核心）：10 个应用 + 7 个中间件全部容器化
+#        bash deployment/start-container.sh          # 推荐入口（含前置校验与模式守卫）
+#        docker compose --profile full up -d         # 等价直接调用
+#
+#   ② 宿主模式（保留，ADR-0070 D2 双轨并存）：仅中间件容器化，应用以 ./mvnw 起宿主进程
+#        bash deployment/start-all.sh                # 含模式守卫，检测到容器模式在跑会中止
+#      本文件用 --profile infra 只起中间件，对应宿主模式所需依赖。
 #
 # 运行依赖：MySQL 8（业务库）+ Redis 7（下单入口幂等防重，ADR-0039/0040/0044）。
 # Redis 为非数据源（fail-open），不可用时降级为不防重、记 order_idempotency_degraded_total。
-# 各微服务镜像与编排在 Dockerfile 就绪后补齐；
-# 当前本地运行以 `./mvnw` 直接启动各服务，服务端口（8081–8089）：
-#   merchant 8081 / catalog 8082 / order 8083 / payment 8084（含退款 API，Feature 015 后 refund 不再独立部署）
-#   fulfillment 8086 / entitlement 8087 / reconciliation 8088 / settlement 8089
 #
 # Database-per-Service：生产/集成测试每个服务独立数据库；本地单机开发为降低门槛，
 # 用同一个 MySQL 实例承载多个逻辑库（每个服务一个 schema），仍保持服务间不共享表。
@@ -13,8 +19,16 @@
 # initdb 目录仅含 01-create-databases.sql：首次 `up -d` 时只创建 8 个空数据库
 # （对应 9 个服务，其中 merchant 无独立数据库），不创建任何业务表；表结构由后续
 # 各服务自己的 migration 负责。完整业务表 DDL 参考见 schema/（不挂载、不自动执行）。
+#
+# 配置适配策略（ADR-0070 D4）：应用 `application.yml` 里硬编码的是 127.0.0.1，
+# 容器内 127.0.0.1 指向容器自身。此处用 compose environment 覆盖为容器服务名，
+# Spring Boot 环境变量优先级高于 yml，故**业务源码零变更**。
 
 services:
+  # ==========================================================================
+  # 一、基础设施（两种模式共用）
+  # ==========================================================================
+
   mysql:
     image: mysql:8.0
     container_name: payment-mysql
@@ -30,9 +44,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - pay-arch
 
   # 可观测：Prometheus 抓取各服务 /actuator/prometheus；Grafana 呈现业务指标看板。
-  # 服务以宿主进程运行（非容器），抓取目标用 host.docker.internal 访问宿主。
+  # 容器模式下抓取目标是 compose 服务名（见 prometheus/prometheus.yml）；
+  # 宿主模式下目标是 host.docker.internal（服务在宿主机）。
   redis:
     image: redis:7
     container_name: payment-redis
@@ -43,6 +60,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - pay-arch
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -53,9 +72,12 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro
     extra_hosts:
+      # 宿主模式下 Prometheus 抓取宿主进程需经此名访问宿主，两种模式都保留。
       - "host.docker.internal:host-gateway"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
+    networks:
+      - pay-arch
 
   grafana:
     image: grafana/grafana:11.3.0
@@ -71,10 +93,13 @@ services:
     depends_on:
       - prometheus
       - loki
+    networks:
+      - pay-arch
 
-  # 日志聚合（ADR-0059 后可观测性补全）：Promtail 采集宿主 deployment/logs/*.log 推送 Loki，
+  # 日志聚合（ADR-0059 后可观测性补全）：Promtail 采集日志推送 Loki，
   # Grafana 以 Loki 数据源在 Explore 中按 service/level 过滤查询。
-  # 注意：服务以宿主进程运行，日志文件由 start-all.sh 重定向到 deployment/logs/。
+  # **两种模式共用同一日志卷 ./logs**（容器模式应用日志写挂载卷，宿主模式由 start-all.sh 重定向），
+  # 因此 promtail-config.yml 的采集路径无需随模式切换（ADR-0070 D5）。
   loki:
     image: grafana/loki:3.4.2
     container_name: payment-loki
@@ -84,6 +109,8 @@ services:
       - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
       - loki-data:/loki
     command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - pay-arch
 
   promtail:
     image: grafana/promtail:3.4.2
@@ -94,9 +121,12 @@ services:
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki
+    networks:
+      - pay-arch
 
   # ADR-0059：Nacos 服务发现（注册中心）。单机/Compose 学习环境用 standalone 模式，关闭鉴权以降低本地摩擦。
-  # 各微服务启动后向 127.0.0.1:8848 注册，Feign 调用经服务发现解析服务名（不再硬编码 url）。
+  # 容器模式：各服务经内容器服务名 nacos:8848 注册，Feign 调用经服务发现解析（不再硬编码 url）。
+  # 宿主模式：各服务经 127.0.0.1:8848 注册（9848/9849 gRPC 端口已映射到宿主）。
   nacos:
     image: nacos/nacos-server:v3.0.3
     container_name: payment-nacos
@@ -108,7 +138,7 @@ services:
       NACOS_AUTH_IDENTITY_KEY: "nacos"
       NACOS_AUTH_IDENTITY_VALUE: "nacos"
     ports:
-      # 8848：HTTP API / 控制台（宿主与各服务的 nacos.discovery.server-addr 指向此端口）
+      # 8848：HTTP API / 控制台（宿主模式各服务的 nacos.discovery.server-addr 指向此端口）
       # 9848/9849：Nacos 2.x+ 客户端 gRPC 端口（主端口 +1000 / +1001）。宿主进程运行的
       #   微服务在 8848 完成注册协商后会改走 gRPC；缺这两个映射时客户端报
       #   "ErrCode:-401, ErrMsg:Client not connected, current status:STARTING"，服务启动失败。
@@ -120,6 +150,326 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    networks:
+      - pay-arch
+
+  # ==========================================================================
+  # 二、应用服务（仅容器模式，--profile full）
+  #
+  # 统一约定：
+  #   - 端口对外映射与宿主模式**完全一致**（8081–8091），使 e2e / 压测 / demo 脚本零改动；
+  #     8085 已随退款域并入 payment-service 退役（ADR-0064），不复用。
+  #   - depends_on nacos 的 healthcheck：Nacos 是所有 @FeignClient 的硬依赖（ADR-0059），
+  #     只依赖启动顺序会造成「服务起来了但跨服务调用全 Connection refused」的假成功。
+  #   - environment 覆盖硬编码的 127.0.0.1（ADR-0070 D4），业务源码零变更。
+  #   - 日志写挂载卷 ./logs，与 Promtail 采集路径对齐。
+  # ==========================================================================
+
+  merchant-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/merchant-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8081
+    image: paymentarch/merchant-service:local
+    container_name: payment-merchant-service
+    profiles: ["full"]
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  catalog-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/catalog-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8082
+    image: paymentarch/catalog-service:local
+    container_name: payment-catalog-service
+    profiles: ["full"]
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/catalog?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  order-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/order-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8083
+    image: paymentarch/order-service:local
+    container_name: payment-order-service
+    profiles: ["full"]
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/order?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  payment-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/payment-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8084
+    image: paymentarch/payment-service:local
+    container_name: payment-payment-service
+    profiles: ["full"]
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      # 支付相关演示开关（取值与宿主模式 start-all.sh 对齐）：
+      #   PAYMENT_MOCK_CASHIER_ENABLED=true  支付走「收银台跳转」路径（payUrl），演示优先
+      #   PAYMENT_MOCK_CASHIER_BASE_URL      收银台地址，容器内 localhost 不可达 → 指向 mock-channel-web 容器
+      #   PAYMENT_ADMIN_TOKEN                /payments/{id}/resolve 人工收敛端点的管理令牌（UNKNOWN 演示用）
+      #   PAYMENT_CHANNEL_SECRET             与 mock-channel-web 同源签名密钥
+      #   PAYMENT_CHANNEL_MOCK_SCENARIO     渠道模拟场景（SUCCESS / BUSINESS_UNKNOWN 等，ADR-0049 构造期注入），
+      #                                      demo 的 UNKNOWN 权威收敛场景靠它切换（FR-009）。
+      #                                      真实键为 payment.channel.mock-scenario（**注意在 channel 层**）。
+      PAYMENT_MOCK_CASHIER_ENABLED: "true"
+      PAYMENT_MOCK_CASHIER_BASE_URL: http://mock-channel-web:8091
+      PAYMENT_ADMIN_TOKEN: demo-admin-token
+      PAYMENT_CHANNEL_SECRET: demo-channel-secret-2026
+      PAYMENT_CHANNEL_MOCK_SCENARIO: ${PAYMENT_CHANNEL_MOCK_SCENARIO:-SUCCESS}
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  fulfillment-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/fulfillment-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8086
+    image: paymentarch/fulfillment-service:local
+    container_name: payment-fulfillment-service
+    profiles: ["full"]
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fulfillment?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  entitlement-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/entitlement-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8087
+    image: paymentarch/entitlement-service:local
+    container_name: payment-entitlement-service
+    profiles: ["full"]
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/entitlement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  reconciliation-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/reconciliation-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8088
+    image: paymentarch/reconciliation-service:local
+    container_name: payment-reconciliation-service
+    profiles: ["full"]
+    ports:
+      - "8088:8088"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reconciliation?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  settlement-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/settlement-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8089
+    image: paymentarch/settlement-service:local
+    container_name: payment-settlement-service
+    profiles: ["full"]
+    ports:
+      - "8089:8089"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/settlement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  ledger-service:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/ledger-service-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8090
+    image: paymentarch/ledger-service:local
+    container_name: payment-ledger-service
+    profiles: ["full"]
+    ports:
+      - "8090:8090"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ledger?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+  # 演示组件（ADR-0048 修订版），非领域服务。
+  # 关键：mock-channel.services.* 在 application.yml 里硬编码为 localhost:8081~8090，
+  # 而它作为**同源代理**由浏览器调用，容器化后必须指向容器服务名，否则 /proxy/** 全部 502。
+  # 环境变量键名由 Spring relaxed binding 映射到 mock-channel.services.<name>。
+  # 注意：这里的代理目标是**容器间**地址，与浏览器访问无关（浏览器仍走宿主 8091）。
+  mock-channel-web:
+    build:
+      context: ..
+      dockerfile: deployment/docker/Dockerfile
+      args:
+        JAR_FILE: deployment/output/jars/mock-channel-web-0.1.0-SNAPSHOT.jar
+        SERVICE_PORT: 8091
+    image: paymentarch/mock-channel-web:local
+    container_name: payment-mock-channel-web
+    profiles: ["full"]
+    ports:
+      - "8091:8091"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: root
+      PAYMENT_CHANNEL_SECRET: demo-channel-secret-2026
+      MOCK_CHANNEL_SERVICES_MERCHANT: http://merchant-service:8081
+      MOCK_CHANNEL_SERVICES_CATALOG: http://catalog-service:8082
+      MOCK_CHANNEL_SERVICES_ORDER: http://order-service:8083
+      MOCK_CHANNEL_SERVICES_PAYMENT: http://payment-service:8084
+      MOCK_CHANNEL_SERVICES_REFUND: http://payment-service:8084
+      MOCK_CHANNEL_SERVICES_FULFILLMENT: http://fulfillment-service:8086
+      MOCK_CHANNEL_SERVICES_ENTITLEMENT: http://entitlement-service:8087
+      MOCK_CHANNEL_SERVICES_RECON: http://reconciliation-service:8088
+      MOCK_CHANNEL_SERVICES_SETTLEMENT: http://settlement-service:8089
+      MOCK_CHANNEL_SERVICES_LEDGER: http://ledger-service:8090
+    volumes:
+      - ./logs:/var/log/payment-arch
+    depends_on:
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
+networks:
+  pay-arch:
+    driver: bridge
 
 volumes:
   mysql-data:

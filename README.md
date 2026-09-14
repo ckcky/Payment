@@ -35,9 +35,22 @@ Spring Cloud 微服务（见 [docs/adr/0001](docs/adr/0001-adopt-spring-cloud-mi
 mvnw.cmd verify
 ```
 
-**本地运行**：各服务用 `./mvnw -pl <service> spring-boot:run` 启动（端口见各服务 `application.yml`，8081–8090（另 `mock-channel-web` 演示收银台 8091））。
+**本地运行（两种模式，二选一）**：项目支持**宿主模式**与**容器模式**，两者对外都使用 8081–8090（另 `mock-channel-web` 演示收银台 8091），**端口互斥、不能同时运行**（spec 026 / ADR-0070）。
 
-**Docker Compose**（最小依赖 MySQL）：`docker compose -f deployment/docker-compose.yml up -d`
+| 模式 | 启动 | 适用场景 |
+|---|---|---|
+| 容器模式（推荐） | `bash deployment/start-container.sh` | 不想被本机 JDK/Maven 版本影响；要环境可复现 |
+| 宿主模式 | `bash deployment/start-all.sh` | IDE 断点调试、改代码热重启 |
+
+两种模式共用同一批 fat jar（构建产物输出到 `deployment/output/jars/`）与同一套端口契约，
+因此 e2e / 压测 / 演示脚本在两种模式下都无需改动。启动脚本内置**双向模式守卫**：
+检测到另一侧在跑会直接中止并提示，不会静默抢占端口。
+
+停止（两种模式都停，保留数据卷）：`bash deployment/stop-all.sh`
+
+> ⚠️ 早期文档中的「Docker 基础设施 + 本机 Java 服务，不是全量服务容器化」已过时：
+> spec 026 / **ADR-0070** 引入了全栈容器模式（并 Supersede 了 **ADR-0057「服务未容器化」**），
+> 宿主模式作为调试路径保留。
 
 **一键演示入口**：
 
@@ -45,10 +58,6 @@ mvnw.cmd verify
 bash deployment/demo/start-demo.sh
 bash deployment/demo/run-all.sh
 ```
-
-说明：本轮新增决策明确采用“Docker 基础设施 + 本机 Java 服务”的启动方式。
-保留底层 `docker compose` 命令作为排查入口，但日常使用统一走 `start-demo.sh` / `start-stack.sh`。
-不是“全量服务容器化”；本机仍负责启动各 Java 微服务与 mock 收银台。
 
 ## 从哪里开始
 
