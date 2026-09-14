@@ -52,21 +52,21 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `SettlementBatch` | [domain/SettlementBatch.java](../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementBatch.java) | 商户某周期结算事实（收入/退款/调整/净额）与生命周期；不发起真实打款 |
-| 值对象 | `SettlementItem` | [domain/SettlementItem.java](../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementItem.java) | 单条财务事实明细（PAYMENT/REFUND/ADJUSTMENT），随聚合 1:N 读写 |
-| 聚合根 | `SettlementAdjustment` | [domain/SettlementAdjustment.java](../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementAdjustment.java) | 调整项（ADR-0022）：`amountMinor > 0` + `AdjustmentDirection` + `reason`/`operator` 非空；`ACTIVE`/`REVOKED` 状态；先于批次登记 |
-| 枚举 | `AdjustmentDirection` | [domain/AdjustmentDirection.java](../../settlement-service/src/main/java/com/payment/settlement/domain/AdjustmentDirection.java) | `CREDIT`（补差，增净额）/ `DEBIT`（扣款，减净额） |
-| 值对象（废弃） | `Adjustment` | [domain/Adjustment.java](../../settlement-service/src/main/java/com/payment/settlement/domain/Adjustment.java) | **`@Deprecated`**（since=007-settlement），全项目零引用；保留指向上方 `SettlementAdjustment`，本 Feature 不删除 |
-| 值对象 | `EligibilityDecision` | [domain/EligibilityDecision.java](../../settlement-service/src/main/java/com/payment/settlement/domain/EligibilityDecision.java) | 资格判定结果（eligible + reason） |
-| 工厂/函数 | `SettlementEligibility` | [domain/SettlementEligibility.java](../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementEligibility.java) | 纯函数式资格判定（无副作用） |
-| 值对象 | `SettlementFact` | [application/SettlementFact.java](../../settlement-service/src/main/java/com/payment/settlement/application/SettlementFact.java) | 对账确认事实（本地端口值对象） |
-| 值对象 | `ReconciliationSummary` | [application/ReconciliationSummary.java](../../settlement-service/src/main/java/com/payment/settlement/application/ReconciliationSummary.java) | 周期汇总（facts + unresolvedDifferenceCount） |
-| 值对象 | `MerchantView` | [application/MerchantView.java](../../settlement-service/src/main/java/com/payment/settlement/application/MerchantView.java) | 商户视图（id/status/settlementEligible） |
-| 纯函数闸门 | `ConfirmedFactGate` | [application/ConfirmedFactGate.java](../../settlement-service/src/main/java/com/payment/settlement/application/ConfirmedFactGate.java) | 逐条校验事实合法性，产出 `GateResult(passed, reason)` |
-| 出站端口 | `SettlementRepository` | [domain/SettlementRepository.java](../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementRepository.java) | 领域仓储边界（不依赖持久化实现）；含 `listBatches(merchantId, period)` |
-| 出站端口 | `SettlementAdjustmentRepository` | [domain/SettlementAdjustmentRepository.java](../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementAdjustmentRepository.java) | `findByIdempotencyKey` / `findActiveByMerchantAndPeriod` / `save` |
-| 出站端口 | `MerchantClient` / `ReconciliationClient` | [application/](../../settlement-service/src/main/java/com/payment/settlement/application/) | 出站 RPC 端口（Feign 实现，测试 fake） |
-| 出站端口 | `LedgerPostingGateway` | [application/LedgerPostingGateway.java](../../settlement-service/src/main/java/com/payment/settlement/application/LedgerPostingGateway.java) | 结算 → ledger 记账端口（Feign 实现 `FeignLedgerPostingGateway`） |
+| 聚合根 | `SettlementBatch` | [domain/SettlementBatch.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementBatch.java) | 商户某周期结算事实（收入/退款/调整/净额）与生命周期；不发起真实打款 |
+| 值对象 | `SettlementItem` | [domain/SettlementItem.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementItem.java) | 单条财务事实明细（PAYMENT/REFUND/ADJUSTMENT），随聚合 1:N 读写 |
+| 聚合根 | `SettlementAdjustment` | [domain/SettlementAdjustment.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementAdjustment.java) | 调整项（ADR-0022）：`amountMinor > 0` + `AdjustmentDirection` + `reason`/`operator` 非空；`ACTIVE`/`REVOKED` 状态；先于批次登记 |
+| 枚举 | `AdjustmentDirection` | [domain/AdjustmentDirection.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/AdjustmentDirection.java) | `CREDIT`（补差，增净额）/ `DEBIT`（扣款，减净额） |
+| 值对象（废弃） | `Adjustment` | [domain/Adjustment.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/Adjustment.java) | **`@Deprecated`**（since=007-settlement），全项目零引用；保留指向上方 `SettlementAdjustment`，本 Feature 不删除 |
+| 值对象 | `EligibilityDecision` | [domain/EligibilityDecision.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/EligibilityDecision.java) | 资格判定结果（eligible + reason） |
+| 工厂/函数 | `SettlementEligibility` | [domain/SettlementEligibility.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementEligibility.java) | 纯函数式资格判定（无副作用） |
+| 值对象 | `SettlementFact` | [application/SettlementFact.java](../../../settlement-service/src/main/java/com/payment/settlement/application/SettlementFact.java) | 对账确认事实（本地端口值对象） |
+| 值对象 | `ReconciliationSummary` | [application/ReconciliationSummary.java](../../../settlement-service/src/main/java/com/payment/settlement/application/ReconciliationSummary.java) | 周期汇总（facts + unresolvedDifferenceCount） |
+| 值对象 | `MerchantView` | [application/MerchantView.java](../../../settlement-service/src/main/java/com/payment/settlement/application/MerchantView.java) | 商户视图（id/status/settlementEligible） |
+| 纯函数闸门 | `ConfirmedFactGate` | [application/ConfirmedFactGate.java](../../../settlement-service/src/main/java/com/payment/settlement/application/ConfirmedFactGate.java) | 逐条校验事实合法性，产出 `GateResult(passed, reason)` |
+| 出站端口 | `SettlementRepository` | [domain/SettlementRepository.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementRepository.java) | 领域仓储边界（不依赖持久化实现）；含 `listBatches(merchantId, period)` |
+| 出站端口 | `SettlementAdjustmentRepository` | [domain/SettlementAdjustmentRepository.java](../../../settlement-service/src/main/java/com/payment/settlement/domain/SettlementAdjustmentRepository.java) | `findByIdempotencyKey` / `findActiveByMerchantAndPeriod` / `save` |
+| 出站端口 | `MerchantClient` / `ReconciliationClient` | [application/](../../../settlement-service/src/main/java/com/payment/settlement/application/) | 出站 RPC 端口（Feign 实现，测试 fake） |
+| 出站端口 | `LedgerPostingGateway` | [application/LedgerPostingGateway.java](../../../settlement-service/src/main/java/com/payment/settlement/application/LedgerPostingGateway.java) | 结算 → ledger 记账端口（Feign 实现 `FeignLedgerPostingGateway`） |
 
 **基数关系**：`SettlementBatch (1) ─ (N) SettlementItem`；`SettlementAdjustment` 独立聚合根，先于批次登记，建批时按 `(merchant, period, ACTIVE)` 汇总进净额与明细。
 
@@ -89,7 +89,7 @@ PENDING --calculate--> CALCULATING --markReady--> READY --execute--> EXECUTING
 
 ### 2.3 表结构与索引策略
 
-来源：[deployment/schema/08-settlement-schema.sql](../../deployment/schema/08-settlement-schema.sql)（权威 DDL）。
+来源：[deployment/schema/08-settlement-schema.sql](../../../deployment/schema/08-settlement-schema.sql)（权威 DDL）。
 
 **`settlement_batches`**
 
@@ -153,7 +153,7 @@ PENDING --calculate--> CALCULATING --markReady--> READY --execute--> EXECUTING
 
 ### 3.1 创建结算批次（内部 RPC）
 
-`POST /internal/settlements/batches` → `200`（[SettlementController](../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）
+`POST /internal/settlements/batches` → `200`（[SettlementController](../../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）
 
 **请求** `CreateSettlementBatchRequest`：`{ merchantId: String, period: String, idempotencyKey: String }`
 
@@ -168,7 +168,7 @@ PENDING --calculate--> CALCULATING --markReady--> READY --execute--> EXECUTING
 
 ### 3.3 按商户+周期列出批次
 
-`GET /internal/settlements/batches?merchantId=&period=` → `200`（[SettlementController](../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）。
+`GET /internal/settlements/batches?merchantId=&period=` → `200`（[SettlementController](../../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）。
 **响应**：`SettlementBatchResponse[]`（按 merchantId/period 过滤，二者均可为空表示全部）。
 
 ### 3.4 收敛未知批次
@@ -183,7 +183,7 @@ PENDING --calculate--> CALCULATING --markReady--> READY --execute--> EXECUTING
 
 ### 3.5 登记调整项
 
-`POST /internal/settlements/adjustments` → `200`（[SettlementController](../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）。
+`POST /internal/settlements/adjustments` → `200`（[SettlementController](../../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）。
 
 **请求** `RegisterAdjustmentRequest`：`{ merchantId, period, idempotencyKey, amountMinor, direction, currencyCode, reason, operator }`。
 
@@ -193,7 +193,7 @@ PENDING --calculate--> CALCULATING --markReady--> READY --execute--> EXECUTING
 
 ### 3.6 关闭批次
 
-`POST /internal/settlements/batches/{id}/close` → `200`（[SettlementController](../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）。
+`POST /internal/settlements/batches/{id}/close` → `200`（[SettlementController](../../../settlement-service/src/main/java/com/payment/settlement/api/SettlementController.java)）。
 
 **请求** `CloseBatchRequest`：`{ operator: String }`。
 
@@ -344,7 +344,7 @@ sequenceDiagram
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../settlement-service/src/main/resources/application.yml)
+来源：[application.yml](../../../settlement-service/src/main/resources/application.yml)
 
 ```yaml
 spring:

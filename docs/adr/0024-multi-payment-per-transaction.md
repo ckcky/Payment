@@ -1,3 +1,5 @@
+<a id="adr-0064"></a>
+
 # ADR-0064: 一交易多支付单（Feature 015）——支付单与订单解耦、退款域并入 payment-service
 
 - 状态：✅ Accepted（2026-09-04）

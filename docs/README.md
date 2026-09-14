@@ -8,7 +8,7 @@
 |---|---|---|
 | [architecture/](architecture/) | 总体技术方案、每服务系统设计（[systems/](architecture/systems/)）、模块结构、Roadmap | Explanation（是什么/为什么） |
 | [adr/](adr/) | 架构决策记录（ADR）及索引 | Reference + 生命周期 |
-| [guides/](guides/) | 工程规范、开发指南、AI 工作流 | Reference + How-to（怎么做） |
+| [guides/](guides/) | 三规范：AI 流程规范 / 技术流程规范 / 业务流程规范 | Reference + How-to（怎么做） |
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
 | [operations/](operations/) | 运维手册（[runbook.md](operations/runbook.md)：启停/巡检/故障处理） | How-to |
 | [archive/audits/](archive/audits/) | 历史审计报告（已归档，标注 Status，不再作为权威事实源） | 历史留档 |
@@ -19,15 +19,14 @@
 | 文档 | 位置 | 职责 | 维护时机 |
 |---|---|---|---|
 | **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.3.0） | 架构级变化时（走宪法修订流程） |
-| **CLAUDE.md** | 根目录 | Claude Code 自动加载的项目地图与指针 | 架构 / 文档路径变化时 |
-| **ADR** | `docs/adr/NNNN-*.md`（索引见 [docs/adr/README.md](adr/README.md)） | 记录不可逆/重要架构决策 | 每次重要决策时 |
-| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（9 节，含 §9 ADR 追溯索引）：总体架构、详细流程、非功能、部署、计划、风险、已决策 ADR 体现 | 架构基线变化时 |
-| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（10 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
-| **Roadmap** | `docs/architecture/roadmap.md` | 项目阶段、当前状态、Feature 依赖和下一步 | 阶段或里程碑变化时 |
-| **目录结构** | `docs/architecture/project-structure.md` | 项目骨架约定 | 模块增删时 |
-| **工程规范** | `docs/guides/engineering-standards.md` | 编码/测试/CI 的具体约束 | 规范调整时 |
-| **开发入口** | `docs/guides/development-guide.md` | 从需求到交付的日常开发入口 | 流程调整时 |
-| **AI 工作流** | `docs/guides/ai-workflow.md` | SDD 流程补充（配合 spec-kit 命令） | 流程调整时 |
+| **AGENTS.md** | 根目录 | AI 编码代理的项目地图与硬规则摘要（跨工具标准；`CLAUDE.md` 为兼容 Claude Code 的指针） | 架构 / 文档路径变化时 |
+| **ADR** | `docs/adr/NNNN-*.md`（索引见 [docs/adr/README.md](adr/README.md)，落点见 [traceability.md](adr/traceability.md)） | 记录不可逆/重要架构决策 | 每次重要决策时 |
+| **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（**只描述系统现状**：背景 / 目标 / 架构 / 流程 / 非功能 / 部署 / 风险） | 架构基线变化时 |
+| **系统设计文档** | `docs/architecture/systems/<service>-service.md`（9 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
+| **Roadmap** | `docs/architecture/roadmap.md` | 项目阶段、当前状态、计划与 Feature 依赖（计划类内容的唯一权威） | 阶段或里程碑变化时 |
+| **AI 流程规范** | `docs/guides/ai-standards.md` | Spec Kit 流水线、阶段门禁、Agent 角色与约束 | 流程调整时 |
+| **技术流程规范** | `docs/guides/engineering-standards.md` | 编码 / 测试 / CI / 可观测 / 安全 / 依赖管理 | 规范调整时 |
+| **业务流程规范** | `docs/guides/business-standards.md` | 领域边界 / 资金正确性 / 状态机 / 一致性 | 业务规则调整时 |
 | **部署说明** | `deployment/README.md` | 本地/Compose 启动最小 how-to | 运行方式变化时 |
 | **Feature Spec** | `docs/specs/<feature>/spec.md` | 特性的需求、边界与验收（单一事实源） | 特性新增或变更时 |
 | **README** | 根目录 | 项目目标、架构总览、快速开始 | 保持最新 |

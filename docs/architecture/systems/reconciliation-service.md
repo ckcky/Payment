@@ -45,14 +45,14 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `ReconciliationBatch` | [domain/ReconciliationBatch.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ReconciliationBatch.java) | 某周期内平台事实与渠道账单的比对结果（匹配 + 差异），持有状态机 |
-| 实体 | `Difference` | [domain/Difference.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/Difference.java) | 单侧/两侧不一致事实，含 `resolutionStatus`/`resolutionNote`，可标记已处理 |
-| 值对象 | `Match` | [domain/Match.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/Match.java) | 一致匹配（reference + type + amountMinor + currencyCode），结算侧直接取金额 |
-| 值对象 | `PlatformFact` | [domain/PlatformFact.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/PlatformFact.java) | 平台侧已确认事实快照（只读副本，type=PAYMENT/REFUND） |
-| 值对象 | `ChannelStatement` | [domain/ChannelStatement.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ChannelStatement.java) | 渠道账单条目（当前来自本地 Mock/CSV） |
-| 值对象 | `ReconciliationMatchingResult` | [domain/ReconciliationMatchingResult.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ReconciliationMatchingResult.java) | `match()` 的纯函数返回值（matches + differences） |
-| 枚举 | `DifferenceType` | [domain/DifferenceType.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/DifferenceType.java) | `AMOUNT_MISMATCH` / `STATUS_MISMATCH` / `PLATFORM_ONLY` / `CHANNEL_ONLY` |
-| 枚举 | `ReconciliationStatus` | [domain/ReconciliationStatus.java](../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ReconciliationStatus.java) | 批状态机枚举名 |
+| 聚合根 | `ReconciliationBatch` | [domain/ReconciliationBatch.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ReconciliationBatch.java) | 某周期内平台事实与渠道账单的比对结果（匹配 + 差异），持有状态机 |
+| 实体 | `Difference` | [domain/Difference.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/Difference.java) | 单侧/两侧不一致事实，含 `resolutionStatus`/`resolutionNote`，可标记已处理 |
+| 值对象 | `Match` | [domain/Match.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/Match.java) | 一致匹配（reference + type + amountMinor + currencyCode），结算侧直接取金额 |
+| 值对象 | `PlatformFact` | [domain/PlatformFact.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/PlatformFact.java) | 平台侧已确认事实快照（只读副本，type=PAYMENT/REFUND） |
+| 值对象 | `ChannelStatement` | [domain/ChannelStatement.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ChannelStatement.java) | 渠道账单条目（当前来自本地 Mock/CSV） |
+| 值对象 | `ReconciliationMatchingResult` | [domain/ReconciliationMatchingResult.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ReconciliationMatchingResult.java) | `match()` 的纯函数返回值（matches + differences） |
+| 枚举 | `DifferenceType` | [domain/DifferenceType.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/DifferenceType.java) | `AMOUNT_MISMATCH` / `STATUS_MISMATCH` / `PLATFORM_ONLY` / `CHANNEL_ONLY` |
+| 枚举 | `ReconciliationStatus` | [domain/ReconciliationStatus.java](../../../reconciliation-service/src/main/java/com/payment/reconciliation/domain/ReconciliationStatus.java) | 批状态机枚举名 |
 
 **基数关系（MVP）**：`ReconciliationBatch (1) ─ (N) Match`、`(1) ─ (N) Difference`；匹配/差异以 JSON 内嵌批次（见 §2.3），不拆表。
 
@@ -78,7 +78,7 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 
 ### 2.3 表结构与索引策略
 
-来源：[deployment/schema/07-reconciliation-schema.sql](../../deployment/schema/07-reconciliation-schema.sql)（权威 DDL）。
+来源：[deployment/schema/07-reconciliation-schema.sql](../../../deployment/schema/07-reconciliation-schema.sql)（权威 DDL）。
 
 **`reconciliation_batches`**
 
@@ -146,15 +146,15 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 
 **错误**：`NOT_FOUND`（周期无批次）。
 
-### 3.6 出站 RPC（reconciliation → payment / refund，只读）
+### 3.6 出站 RPC（reconciliation → payment-service，只读）
 
-**payment-service**：`GET /internal/payments/confirmed-facts`（Feign `PaymentFactsFeignClient`，[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/client/PaymentFactsFeignClient.java)）
-- 目标服务：`payment-service`，url `${services.payment.url:http://localhost:8084}`。
-- 映射为 `PlatformFact(type=PAYMENT)`（FeignPaymentFactsClient.java:22）；payment 侧端点 [ReconciliationFactsController](../../payment-service/src/main/java/com/payment/payment/api/ReconciliationFactsController.java) 仅返回 `SUCCEEDED` 支付。
+**payment-service**：`GET /internal/payments/confirmed-facts`（Feign `PaymentFactsFeignClient`，[源码](../../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/client/PaymentFactsFeignClient.java)）
+- 目标服务：`payment-service`（Feign name 解析，Nacos 服务发现；本地默认 `http://localhost:8084`）。
+- 映射为 `PlatformFact(type=PAYMENT)`（FeignPaymentFactsClient.java:22）；payment 侧端点 [ReconciliationFactsController](../../../payment-service/src/main/java/com/payment/payment/api/ReconciliationFactsController.java) 仅返回 `SUCCEEDED` 支付。
 
-**refund-service**：`GET /internal/refunds/confirmed-facts`（Feign `RefundFactsFeignClient`）
-- 目标服务：`refund-service`，url `${services.refund.url:http://localhost:8085}`。
-- 映射为 `PlatformFact(type=REFUND)`（FeignRefundFactsClient.java:22）；refund 侧端点 [RefundFactsController](../../refund-service/src/main/java/com/payment/refund/api/RefundFactsController.java) 仅返回已确认退款。
+**payment-service（退款域）**：`GET /internal/refunds/confirmed-facts`（Feign `RefundFactsFeignClient`）
+- 目标服务：同为 `payment-service`（Feature 015 / ADR-0064 起退款域并入，原 `refund-service` 已从 Nacos 注册表退役），本地默认 `http://localhost:8084`。
+- 映射为 `PlatformFact(type=REFUND)`（FeignRefundFactsClient.java:22）；退款侧端点 [RefundFactsController](../../../payment-service/src/main/java/com/payment/refund/api/RefundFactsController.java) 仅返回已确认退款。
 
 > 两者均为**只读查询**，不触发任何写操作——满足「绝不修改原始事实」硬约束。
 
@@ -175,7 +175,7 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 
 ### 4.1 执行对账（拉取 + 匹配 + 落库）
 
-`ReconciliationController.runReconciliation` → `ReconciliationApplicationService.runReconciliation`（[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/application/ReconciliationApplicationService.java:60)）：
+`ReconciliationController.runReconciliation` → `ReconciliationApplicationService.runReconciliation`（[源码](../../../reconciliation-service/src/main/java/com/payment/reconciliation/application/ReconciliationApplicationService.java):60）：
 
 1. `repository.findByPeriod(period)` 回查；命中 → 直接返回首次批次（**周期幂等**，ReconciliationApplicationService.java:61）。
 2. 拉取平台事实：`paymentFactsClient.fetchConfirmedFacts()` + `refundFactsClient.fetchConfirmedFacts()`（只读 RPC，ReconciliationApplicationService.java:66）。
@@ -189,8 +189,8 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 sequenceDiagram
     autonumber
     participant R as reconciliation-service
-    participant P as payment-service
-    participant F as refund-service
+    participant P as payment-service（支付事实）
+    participant F as payment-service（退款事实）
     participant C as CSV fixture
     participant DB as reconciliation DB
     R->>P: GET /internal/payments/confirmed-facts (只读)
@@ -202,7 +202,7 @@ sequenceDiagram
 
 ### 4.2 处理差异（resolve）
 
-`ReconciliationController.resolveDifference` → `ReconciliationApplicationService.resolveDifference`（[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/application/ReconciliationApplicationService.java:104)）：
+`ReconciliationController.resolveDifference` → `ReconciliationApplicationService.resolveDifference`（[源码](../../../reconciliation-service/src/main/java/com/payment/reconciliation/application/ReconciliationApplicationService.java):104）：
 
 1. 加载批次（`NOT_FOUND`）。
 2. 按 `reference` 定位 `Difference`（不存在 `NOT_FOUND`）。
@@ -211,7 +211,7 @@ sequenceDiagram
 
 ### 4.3 渠道账单加载（当前 Mock）
 
-`CsvChannelStatementLoader.load`（[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/CsvChannelStatementLoader.java:27)）读取 `fixtures/channel-statements/sample.csv`（头 `reference,amountMinor,currencyCode,status`）。
+`CsvChannelStatementLoader.load`（[源码](../../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/CsvChannelStatementLoader.java):27）读取 `fixtures/channel-statements/sample.csv`（头 `reference,amountMinor,currencyCode,status`）。
 
 > **渠道账单来源（ADR-0020，已落地）**：`[目标]`（roadmap Phase 6 不含真实渠道接入）当前由本地 Mock/预置 CSV fixture 实现。**`period` 为批次标识（非时间窗口），已全程参与**：作为 `uk_reconciliation_batches_period` 幂等键、传入 `ChannelStatementLoader.load(period)` 按 `{dir}/{period}.csv` 定位，未命中显式回退 `sample.csv` 并打 `reconciliation.statement_fallback` 指标 + WARN（**绝不静默**）；`period` 经 `[A-Za-z0-9._-]` 校验防路径穿越。平台侧事实经 `fetchConfirmedFacts()` 拉全量后按周期比对。
 
@@ -221,7 +221,7 @@ sequenceDiagram
 
 ### 5.1 存储读写策略
 
-- **写路径**：`MybatisReconciliationRepository`（[源码](../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/persistence/MybatisReconciliationRepository.java)）在 `@Transactional` 应用服务内写 `reconciliation_batches`；状态机逻辑在领域层，持久层只存枚举名 + JSON。
+- **写路径**：`MybatisReconciliationRepository`（[源码](../../../reconciliation-service/src/main/java/com/payment/reconciliation/infra/persistence/MybatisReconciliationRepository.java)）在 `@Transactional` 应用服务内写 `reconciliation_batches`；状态机逻辑在领域层，持久层只存枚举名 + JSON。
 - **读路径**：`findById` / `findByPeriod` / `findByPeriodBetween`（周期区间，供结算/查询）。
 - **JSON 内嵌**：`matches_json`/`differences_json` 由 `ObjectMapper` 序列化/反序列化（MybatisReconciliationRepository.java:102），避免拆表。
 - **缓存**：`[已评估·本期不引入]` 当前无 Redis/本地缓存，全部直连 MySQL；对账批量为低频写、按需读，不强一致热点，暂不引入缓存。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（低频按需读）；未来若出现只读热点须另立 ADR。
@@ -264,7 +264,7 @@ sequenceDiagram
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../reconciliation-service/src/main/resources/application.yml)
+来源：[application.yml](../../../reconciliation-service/src/main/resources/application.yml)
 
 ```yaml
 spring:
@@ -290,9 +290,8 @@ management:
 
 services:
   payment:
-    url: http://localhost:8084
-  refund:
-    url: http://localhost:8085
+    connect-timeout-ms: 1000
+    read-timeout-ms: 3000
 
 mybatis-plus:
   configuration:
@@ -306,8 +305,8 @@ mybatis-plus:
 | `spring.datasource.url` | `jdbc:mysql://localhost:3306/reconciliation` | Testcontainers MySQL | 环境变量/配置中心，指向生产实例 |
 | `spring.datasource.username/password` | root/root | — | 环境变量注入，禁止硬编码 |
 | `server.port` | 8088 | 随机 | 8088（或编排指定） |
-| `services.payment.url` | `http://localhost:8084` | fake | Nacos 服务发现（去掉硬编码 url） |
-| `services.refund.url` | `http://localhost:8085` | fake | Nacos 服务发现（去掉硬编码 url） |
+| `services.payment.connect-timeout-ms` | 1000 | fake | — |
+| `services.payment.read-timeout-ms` | 3000 | fake | — |
 | 连接池大小 `spring.datasource.hikari.maximum-pool-size` | 默认 10 | — | `[目标]` 按并发调优 |
 | 出站 Feign 超时 | 未配置 | — | `[目标]` connect 1s / read 3s |
 
@@ -316,7 +315,7 @@ mybatis-plus:
 ```text
 1. MySQL 8.0 就绪（reconciliation schema 由 deployment/schema/07-reconciliation-schema.sql 建库建表）
 2. Nacos 就绪（注册 + 配置）  [目标：生产启用；当前本地直连 MySQL，未强制依赖 Nacos]
-3. payment-service / refund-service 可就续（仅被对账只读查询，缺失时对账失败但不阻塞启动）
+3. payment-service 可就续（支付事实 + 退款事实两个只读端点，缺失时对账失败但不阻塞启动）
 4. 启动 reconciliation-service（端口 8088），完成 Feign 客户端装配
 5. 下游 settlement-service 可延后就绪（拉 settlement-summary，不阻塞启动）
 ```

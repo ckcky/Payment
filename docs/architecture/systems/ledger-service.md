@@ -106,7 +106,7 @@ MVP 为应用侧固定枚举，ID 与 `deployment/schema/09-ledger-schema.sql` �
 - `CREDIT MERCHANT_PAYABLE(2)  netMinor = amountMinor - feeMinor` （PAYMENT_CAPTURE，仅当 `netMinor > 0`）
 - `CREDIT PLATFORM_FEE_REVENUE(3)  feeMinor` （FEE，仅当 `feeMinor > 0`）
 
-### 5.2 refund-service → `REFUND:<退款幂等键>`（ADR-0018）
+### 5.2 payment-service（退款域）→ `REFUND:<退款幂等键>`（ADR-0018）
 
 退款**已确认成功**（SUCCEEDED / PARTIALLY_SUCCEEDED）才记账；金额 = 实际退款额，必须 `> 0`。
 冲正分录（与支付成功反向）：

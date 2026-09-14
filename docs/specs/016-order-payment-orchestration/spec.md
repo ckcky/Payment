@@ -8,7 +8,7 @@
 
 **Input**: 负责人裁决：「重复支付 / 超额支付的处理归属订单 / 交易编排层，用 `transaction_no + payment_no` 去发起自动退款；支付成功回调通知到 order-service 这层，再由 order-service 去通知履约和权益。order-service 内含 order 层（订单创建 / 商品 / 金额）与 transaction 层（交易动作含重复支付自动退款），order-no 与 transaction-no 一比一；payment 层负责支付流程编排（调用 payment_attempts 各渠道支付 + 记账），transaction-no 与 payment-no 一比多。保留 `fulfillment → entitlement` 链。」
 
-> 本 Feature **不是从零构建**——`payment-service` / `order-service` / `fulfillment-service` / `entitlement-service` 的核心能力均已落地。本 Spec 是**职责迁移 / 领域边界收口型** Spec：把「支付成功后的业务编排权」从 payment-service 移交到 order-service（**transaction 层**负责正常 / surplus 判定与自动退款发起；**order 层**负责订单状态推进、confirmStock 与履约驱动——负责人 2026-09-06 明确），并让自动退款的**决策与发起**归属 order。涉及重大服务边界变化，按 `ai-workflow.md` 先立 ADR-0054，再写本 Spec。
+> 本 Feature **不是从零构建**——`payment-service` / `order-service` / `fulfillment-service` / `entitlement-service` 的核心能力均已落地。本 Spec 是**职责迁移 / 领域边界收口型** Spec：把「支付成功后的业务编排权」从 payment-service 移交到 order-service（**transaction 层**负责正常 / surplus 判定与自动退款发起；**order 层**负责订单状态推进、confirmStock 与履约驱动——负责人 2026-09-06 明确），并让自动退款的**决策与发起**归属 order。涉及重大服务边界变化，按 `ai-standards.md` 先立 ADR-0054，再写本 Spec。
 
 ## 当前代码现实（已核实，禁止按绿地项目理解）
 

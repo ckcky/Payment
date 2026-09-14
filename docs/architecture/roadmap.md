@@ -31,6 +31,8 @@
 
 ## Feature Dependency Graph
 
+> ⚠️ **下方为 Roadmap 早期的「历史 Phase 规划编号」，与 `docs/specs/` 的 spec 目录编号无对应关系**（例：Phase 3「Refund」实际对应 `005-refund`；Phase 8「Ledger」实际对应 `004-ledger`，Ledger 已前置）。实际 spec 编号与交付状态以各 spec 目录及 §Current Status 为准；`008` 为历史缺口（有意保留，不补号）。
+
 ```text
 Phase 0 Foundation
         ↓

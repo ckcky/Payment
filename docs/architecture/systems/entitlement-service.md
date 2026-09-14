@@ -17,12 +17,12 @@
 | 维度 | 说明 |
 |---|---|
 | **负责** | 权益聚合、权益状态机、由「履约完成」触发的权益授予、由「退款成功」触发的权益撤销、按 ID 查询权益、授予幂等（sourceFulfillmentId）、乐观锁并发保护 |
-| **不负责** | 支付/履约状态判断（不读 payment/fulfillment 表）；金额收取；履约交付本身；退款整体决策（归属 refund-service）；消费核销的实际业务落账（仅领域方法，未接 API） |
+| **不负责** | 支付/履约状态判断（不读 payment/fulfillment 表）；金额收取；履约交付本身；退款整体决策（归属 payment-service 退款域）；消费核销的实际业务落账（仅领域方法，未接 API） |
 
 ### 1.2 硬约束（Constitution / ADR）
 
 - **Payment Success ≠ Entitlement Granted**：支付成功是财务事件，权益是消费权利。权益**仅由「履约完成」RPC 触发授予**，支付成功只经 fulfillment-service 间接传导，绝不反向直连 payment 状态或改写其数据（Constitution #3）。
-- **状态机集中**：权益状态只允许通过 `Entitlement` 领域方法迁移（`grant/consume/expire/revoke/revokeForRefund/fail`），禁止外部直接 set（见 [Entitlement.java](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java)）。
+- **状态机集中**：权益状态只允许通过 `Entitlement` 领域方法迁移（`grant/consume/expire/revoke/revokeForRefund/fail`），禁止外部直接 set（见 [Entitlement.java](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java)）。
 - **幂等**：授予以 `sourceFulfillmentId` 为幂等键，数据库唯一索引兜底；重复投递同一履约完成请求不会创建第二条权益。
 - **退款不伪造成功**：`revokeForRefund()` 对非 AVAILABLE 状态返回 `false` 不抛异常，不伪造「已撤销」成功（保留退款事实，留人工）。
 - **无跨服务 SQL**：entitlement-service 只读写自有 `entitlement` Schema，从不直连其他服务库。
@@ -44,17 +44,17 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `Entitlement` | [domain/Entitlement.java](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java) | 一项用户消费权利；含状态机与剩余量 |
-| 枚举 | `EntitlementStatus` | [domain/EntitlementStatus.java](../../entitlement-service/src/main/java/com/payment/entitlement/domain/EntitlementStatus.java) | PENDING_GRANT / AVAILABLE / PARTIALLY_USED / EXHAUSTED / EXPIRED / REVOKED / FAILED |
-| 仓储接口 | `EntitlementRepository` | [domain/EntitlementRepository.java](../../entitlement-service/src/main/java/com/payment/entitlement/domain/EntitlementRepository.java) | 依赖倒置：domain 声明，infra 实现 |
-| 持久化实体 | `EntitlementEntity` | [infra/persistence/entitlement/EntitlementEntity.java](../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/EntitlementEntity.java) | PO，仅承载表列，继承 `BaseEntity` |
-| Mapper | `EntitlementMapper` | [infra/persistence/entitlement/EntitlementMapper.java](../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/EntitlementMapper.java) | MyBatis-Plus `BaseMapper` |
+| 聚合根 | `Entitlement` | [domain/Entitlement.java](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java) | 一项用户消费权利；含状态机与剩余量 |
+| 枚举 | `EntitlementStatus` | [domain/EntitlementStatus.java](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/EntitlementStatus.java) | PENDING_GRANT / AVAILABLE / PARTIALLY_USED / EXHAUSTED / EXPIRED / REVOKED / FAILED |
+| 仓储接口 | `EntitlementRepository` | [domain/EntitlementRepository.java](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/EntitlementRepository.java) | 依赖倒置：domain 声明，infra 实现 |
+| 持久化实体 | `EntitlementEntity` | [infra/persistence/entitlement/EntitlementEntity.java](../../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/EntitlementEntity.java) | PO，仅承载表列，继承 `BaseEntity` |
+| Mapper | `EntitlementMapper` | [infra/persistence/entitlement/EntitlementMapper.java](../../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/EntitlementMapper.java) | MyBatis-Plus `BaseMapper` |
 
 **基数关系（MVP）**：`Order/履约 (1) ─ (N) Entitlement`，每权益由唯一 `sourceFulfillmentId` 关联一次履约完成事件（唯一约束，1:1）。
 
 ### 2.2 状态机
 
-**Entitlement**（`EntitlementStatus`，[源码](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java)）：
+**Entitlement**（`EntitlementStatus`，[源码](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java)）：
 
 ```text
 PENDING_GRANT --grant()--> AVAILABLE --consume(qty)--> PARTIALLY_USED (剩余>0)
@@ -65,18 +65,18 @@ PENDING_GRANT --grant()--> AVAILABLE --consume(qty)--> PARTIALLY_USED (剩余>0)
 PENDING_GRANT --fail(reason)--> FAILED
 ```
 
-- `grant()`：PENDING_GRANT → AVAILABLE（[Entitlement.java:55](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L55)）。
-- `consume(qty)`：AVAILABLE/PARTIALLY_USED → PARTIALLY_USED 或 EXHAUSTED；`qty<=0` 或 `qty>availableQuantity` 抛 `AMOUNT_INVARIANT_VIOLATION`（[Entitlement.java:64](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L64)）。
-- `expire()`：AVAILABLE → EXPIRED（[Entitlement.java:81](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L81)）。
-- `revoke()`：AVAILABLE → REVOKED，非法来源抛 `STATE_TRANSITION_VIOLATION`（[Entitlement.java:87](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L87)）。
-- `revokeForRefund()`：AVAILABLE → REVOKED；已 REVOKED 或非 AVAILABLE 返回 `false`（[Entitlement.java:100](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L100)）。
-- `fail(reason)`：PENDING_GRANT → FAILED（[Entitlement.java:112](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L112)）。
+- `grant()`：PENDING_GRANT → AVAILABLE（[Entitlement.java:55](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L55)）。
+- `consume(qty)`：AVAILABLE/PARTIALLY_USED → PARTIALLY_USED 或 EXHAUSTED；`qty<=0` 或 `qty>availableQuantity` 抛 `AMOUNT_INVARIANT_VIOLATION`（[Entitlement.java:64](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L64)）。
+- `expire()`：AVAILABLE → EXPIRED（[Entitlement.java:81](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L81)）。
+- `revoke()`：AVAILABLE → REVOKED，非法来源抛 `STATE_TRANSITION_VIOLATION`（[Entitlement.java:87](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L87)）。
+- `revokeForRefund()`：AVAILABLE → REVOKED；已 REVOKED 或非 AVAILABLE 返回 `false`（[Entitlement.java:100](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L100)）。
+- `fail(reason)`：PENDING_GRANT → FAILED（[Entitlement.java:112](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L112)）。
 
-**不变量**：所有迁移经 `requireState/requireAnyState` 校验；非法迁移抛 `STATE_TRANSITION_VIOLATION`（[Entitlement.java:117](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L117)）。
+**不变量**：所有迁移经 `requireState/requireAnyState` 校验；非法迁移抛 `STATE_TRANSITION_VIOLATION`（[Entitlement.java:117](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java#L117)）。
 
 ### 2.3 表结构与索引策略
 
-来源：[deployment/schema/05-entitlement-schema.sql](../../deployment/schema/05-entitlement-schema.sql)（权威 DDL，Database-per-Service 自有库 `entitlement`）。
+来源：[deployment/schema/05-entitlement-schema.sql](../../../deployment/schema/05-entitlement-schema.sql)（权威 DDL，Database-per-Service 自有库 `entitlement`）。
 
 **`entitlements`**
 
@@ -115,7 +115,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 **错误**：`NOT_FOUND`（不在此接口）、`STATE_TRANSITION_VIOLATION`（仅在并发/异常时）、`CONFLICT`（乐观锁冲突）。
 
-### 3.2 退款成功 → 撤销权益（内部 RPC，供 refund-service）
+### 3.2 退款成功 → 撤销权益（内部 RPC，供 payment-service 退款域）
 
 `POST /internal/entitlements/on-refund` → `200`
 
@@ -123,13 +123,13 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 **响应** `RefundPostProcessResponse`：`{ refundNo: String, status: "REVOKED"|"NOOP" }`；按订单撤销全部 AVAILABLE 权益，撤销≥1 条返回 REVOKED，无权益返回 NOOP。
 
-**规则**：非 AVAILABLE 权益不自动撤销（留人工），不伪造成功（[EntitlementApplicationService.java:64](../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L64)）。
+**规则**：非 AVAILABLE 权益不自动撤销（留人工），不伪造成功（[EntitlementApplicationService.java:64](../../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L64)）。
 
 ### 3.3 查询权益
 
 `GET /entitlements/{id}` → `200`
 
-**响应** `EntitlementResponse`：`{ id, userId, orderNo, status, availableQuantity }`（[EntitlementResponse.java](../../entitlement-service/src/main/java/com/payment/entitlement/api/EntitlementResponse.java)）。
+**响应** `EntitlementResponse`：`{ id, userId, orderNo, status, availableQuantity }`（[EntitlementResponse.java](../../../entitlement-service/src/main/java/com/payment/entitlement/api/EntitlementResponse.java)）。
 
 **错误**：`NOT_FOUND`。
 
@@ -139,7 +139,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 |---|---|---|
 | `INVALID_ARGUMENT` | 参数非法 | （预留） |
 | `NOT_FOUND` | 资源不存在 | 权益不存在（§3.3） |
-| `CONFLICT` | 并发冲突 | 乐观锁更新 0 行（[MybatisEntitlementRepository.java:64](../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/MybatisEntitlementRepository.java#L64)） |
+| `CONFLICT` | 并发冲突 | 乐观锁更新 0 行（[MybatisEntitlementRepository.java:64](../../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/MybatisEntitlementRepository.java#L64)） |
 | `STATE_TRANSITION_VIOLATION` | 非法状态迁移 | 重复 grant / 非 AVAILABLE 消费 / 非法 revoke/expire |
 | `AMOUNT_INVARIANT_VIOLATION` | 数量不变量 | consume qty≤0 或超可用量 |
 | `INTERNAL_ERROR` | 内部错误 | （预留） |
@@ -152,10 +152,10 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 ### 4.1 履约完成授予权益
 
-`FulfillmentCompletedRpcController.onFulfillmentCompleted` → `EntitlementApplicationService.grantOnFulfillmentCompleted`（[源码](../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L33)）：
+`FulfillmentCompletedRpcController.onFulfillmentCompleted` → `EntitlementApplicationService.grantOnFulfillmentCompleted`（[源码](../../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L33)）：
 
 1. `repository.findBySourceFulfillmentId(fulfillmentId)` 回查；命中 → 直接返回已有权益（**幂等**）。
-2. `newEntitlement(...)` 构造 PENDING_GRANT 权益（当前固定 `availableQuantity=1, scope="default", expiryAt=null`，[EntitlementApplicationService.java:54](../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L54)）。
+2. `newEntitlement(...)` 构造 PENDING_GRANT 权益（当前固定 `availableQuantity=1, scope="default", expiryAt=null`，[EntitlementApplicationService.java:54](../../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L54)）。
 3. `e.grant()`：PENDING_GRANT → AVAILABLE；若领域异常 → `e.fail(reason)` 并落 FAILED、计数 `entitlement.grant.failed`。
 4. `repository.save(e)` 持久化；成功计数 `entitlement.granted`。
 5. 返回 `EntitlementGrantedResponse`。
@@ -164,7 +164,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 ### 4.2 退款成功撤销权益
 
-`RefundPostProcessRpcController.onRefund` → `EntitlementApplicationService.revokeOnRefund`（[源码](../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L64)）：
+`RefundPostProcessRpcController.onRefund` → `EntitlementApplicationService.revokeOnRefund`（[源码](../../../entitlement-service/src/main/java/com/payment/entitlement/application/EntitlementApplicationService.java#L64)）：
 
 1. `repository.findByOrderNo(orderNo)` 取该订单全部权益。
 2. 空 → 返回 `NOOP`；否则逐条 `revokeForRefund()`，撤销成功计数。
@@ -174,10 +174,10 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 ```text
 payment-service ──RPC──> fulfillment-service ──履约完成 RPC──> entitlement-service (grant)
-refund-service  ──退款后处理 RPC──> entitlement-service (revokeForRefund)
+payment-service（退款域） ──退款后处理 RPC──> entitlement-service (revokeForRefund)
 ```
 
-- 支付成功**只触发**履约，不决定履约/权益最终状态（[technical-solution §4.3.4](../../docs/architecture/technical-solution.md)）。
+- 支付成功**只触发**履约，不决定履约/权益最终状态（[technical-solution §4.3.4](../technical-solution.md)）。
 - 权益授予失败保留履约事实，可重试/人工补发，不重复扣款。
 
 ---
@@ -186,7 +186,7 @@ refund-service  ──退款后处理 RPC──> entitlement-service (revokeForR
 
 ### 5.1 存储读写策略
 
-- **写路径**：`MybatisEntitlementRepository.save`（[源码](../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/MybatisEntitlementRepository.java#L54)）：新增 `insert`，更新走 `updateById` 乐观锁（version），0 行命中抛 `CONFLICT`；状态机逻辑在领域层，持久层只存枚举名。
+- **写路径**：`MybatisEntitlementRepository.save`（[源码](../../../entitlement-service/src/main/java/com/payment/entitlement/infra/persistence/entitlement/MybatisEntitlementRepository.java#L54)）：新增 `insert`，更新走 `updateById` 乐观锁（version），0 行命中抛 `CONFLICT`；状态机逻辑在领域层，持久层只存枚举名。
 - **读路径**：`findById` / `findBySourceFulfillmentId` / `findByOrderId`。
 - **缓存**：`[已评估·本期不引入]` 当前**无 Redis/本地缓存**，全部直连 MySQL；权益状态需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 
@@ -227,7 +227,7 @@ refund-service  ──退款后处理 RPC──> entitlement-service (revokeForR
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../entitlement-service/src/main/resources/application.yml)
+来源：[application.yml](../../../entitlement-service/src/main/resources/application.yml)
 
 ```yaml
 spring:
@@ -292,7 +292,7 @@ mybatis-plus:
 | 履约完成→授予（幂等） | 已实现 | 唯一索引 + 回查幂等 |
 | 退款成功→撤销（幂等） | 已实现 | 逐条 `revokeForRefund` 返回 REVOKED/NOOP |
 | 权益查询（按 ID） | 已实现 | `GET /entitlements/{id}` |
-| 状态机（grant/consume/expire/revoke/revokeForRefund/fail） | 已实现（领域） | [Entitlement.java](../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java)，含单测 [EntitlementStateMachineTest.java](../../entitlement-service/src/test/java/com/payment/entitlement/domain/EntitlementStateMachineTest.java) |
+| 状态机（grant/consume/expire/revoke/revokeForRefund/fail） | 已实现（领域） | [Entitlement.java](../../../entitlement-service/src/main/java/com/payment/entitlement/domain/Entitlement.java)，含单测 [EntitlementStateMachineTest.java](../../../entitlement-service/src/test/java/com/payment/entitlement/domain/EntitlementStateMachineTest.java) |
 | **消费核销 consume 暴露为 API** | 骨架 | 领域已实现，但无任何 RPC/Controller 调用，roadmap Phase 4「可消费的权益」验收未闭环 |
 | **过期 expire / 手动撤销 revoke 触发源** | 骨架 | 领域已实现，无定时任务/人工接口触发，权益不会自动过期 |
 | **grantRef 回填** | [待定] | 字段存在且可持久化，但授予路径从未 set，恒为 null |

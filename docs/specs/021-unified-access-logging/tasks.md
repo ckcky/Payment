@@ -19,7 +19,7 @@
 ## 批次 C — 格式固定与异步 MDC（依赖：批次 B）
 
 - [x] **T307** logback-spring.xml：`<springProperty>` 注入 `spring.application.name`，pattern 追加 `service=` 字段（FR-004；无服务名回退 unknown）
-- [x] **T308** `MdcTaskDecorator`（trace 包：捕获/恢复/清理 MDC+TraceContext）+ `ReliabilityConfig` 线程池装饰 + 4 个 Scheduler（ChannelQuery/TimeoutScan/OrderTimeout/Audit）入口补 traceId（FR-005；方案见 [plan.md §4](plan.md#4-定时任务-mdc-修复最小侵入)）
+- [x] **T308** `MdcTaskDecorator`（trace 包：捕获/恢复/清理 MDC+TraceContext）+ `ReliabilityConfig` 线程池装饰 + 4 个 Scheduler（ChannelQuery/TimeoutScan/OrderTimeout/Audit）入口补 traceId（FR-005；方案见 [plan.md §4](plan.md#4-定时任务-mdc-修复fr-005最小侵入)）
 - [x] **T309** 批次 C 测试：MdcTaskDecorator 子线程传播/执行后清理；Scheduler 入口 traceId 就位；ArchUnit ModuleBoundary 无越界
 
 ## 批次 D — 日志查看与演示（依赖：批次 B/C）

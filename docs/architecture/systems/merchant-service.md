@@ -8,7 +8,7 @@
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。
 
-> **成熟度说明（骨架）**：本服务在 `technical-solution.md §3.2` 中标注为「骨架」。代码实证与之一致——核心 **状态机已实现**，但 **持久层为内存 `ConcurrentHashMap`**（非 MySQL/MyBatis），**无 Schema DDL**、**无出站/入站 RPC**、**无幂等键**。下文凡涉及数据库/缓存/RPC 之处均按「骨架」如实标注。
+> **成熟度说明（骨架）**：本服务在 `technical-solution.md §3.3` 中标注为「骨架」。代码实证与之一致——核心 **状态机已实现**，但 **持久层为内存 `ConcurrentHashMap`**（非 MySQL/MyBatis），**无 Schema DDL**、**无出站/入站 RPC**、**无幂等键**。下文凡涉及数据库/缓存/RPC 之处均按「骨架」如实标注。
 
 ---
 
@@ -27,7 +27,7 @@
 - **依赖倒置**：领域层只依赖 `MerchantRepository` 接口，实现在 `infra`（当前为内存实现，`[骨架]`）。
 - **金额铁律（本服务不直接适用）**：商户不持有资金金额，仅以 `settlementEligible` 布尔 + `status` 表达「可否结算」；`settlementAccountRef` 为外部账户引用字符串，非金额。
 - **幂等**：**当前注册接口无幂等键**（仅以 `code` 唯一性抛 `CONFLICT` 兜底，`[骨架]`；注册非资金入口，但缺少幂等键属已知缺口，见 §5.2）。
-- **禁止跨服务直连 SQL**：本服务独立存储，符合 `technical-solution §3.4`；当前亦无任何跨服务调用。
+- **禁止跨服务直连 SQL**：本服务独立存储，符合 `technical-solution §3.1`；当前亦无任何跨服务调用。
 
 ### 1.3 技术指标（`[目标]`，待确认）
 
@@ -45,12 +45,12 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `Merchant` | [domain/Merchant.java](../../merchant-service/src/main/java/com/payment/merchant/domain/Merchant.java) | 商户实体 + 生命周期状态机；无金额字段 |
-| 枚举 | `MerchantStatus` | [domain/MerchantStatus.java](../../merchant-service/src/main/java/com/payment/merchant/domain/MerchantStatus.java) | `PENDING_REVIEW / ACTIVE / SUSPENDED / TERMINATED` |
-| 端口 | `MerchantRepository` | [domain/MerchantRepository.java](../../merchant-service/src/main/java/com/payment/merchant/domain/MerchantRepository.java) | 持久化端口（依赖倒置） |
-| 实现 | `InMemoryMerchantRepository` | [infra/InMemoryMerchantRepository.java](../../merchant-service/src/main/java/com/payment/merchant/infra/InMemoryMerchantRepository.java) | `ConcurrentHashMap` + `AtomicLong` 内存实现 `[骨架]` |
-| 入站 DTO | `RegisterMerchantRequest` | [api/dto/RegisterMerchantRequest.java](../../merchant-service/src/main/java/com/payment/merchant/api/dto/RegisterMerchantRequest.java) | `code / name / settlementAccountRef` |
-| 出站 DTO | `MerchantResponse` | [api/dto/MerchantResponse.java](../../merchant-service/src/main/java/com/payment/merchant/api/dto/MerchantResponse.java) | `id / code / name / status / settlementEligible` |
+| 聚合根 | `Merchant` | [domain/Merchant.java](../../../merchant-service/src/main/java/com/payment/merchant/domain/Merchant.java) | 商户实体 + 生命周期状态机；无金额字段 |
+| 枚举 | `MerchantStatus` | [domain/MerchantStatus.java](../../../merchant-service/src/main/java/com/payment/merchant/domain/MerchantStatus.java) | `PENDING_REVIEW / ACTIVE / SUSPENDED / TERMINATED` |
+| 端口 | `MerchantRepository` | [domain/MerchantRepository.java](../../../merchant-service/src/main/java/com/payment/merchant/domain/MerchantRepository.java) | 持久化端口（依赖倒置） |
+| 实现 | `InMemoryMerchantRepository` | [infra/InMemoryMerchantRepository.java](../../../merchant-service/src/main/java/com/payment/merchant/infra/InMemoryMerchantRepository.java) | `ConcurrentHashMap` + `AtomicLong` 内存实现 `[骨架]` |
+| 入站 DTO | `RegisterMerchantRequest` | [api/dto/RegisterMerchantRequest.java](../../../merchant-service/src/main/java/com/payment/merchant/api/dto/RegisterMerchantRequest.java) | `code / name / settlementAccountRef` |
+| 出站 DTO | `MerchantResponse` | [api/dto/MerchantResponse.java](../../../merchant-service/src/main/java/com/payment/merchant/api/dto/MerchantResponse.java) | `id / code / name / status / settlementEligible` |
 
 **基数关系（MVP）**：单一 `Merchant` 聚合，无子实体；`settlementAccountRef` 为外部账户引用（不持有 Settlement Account 聚合，与 `technical-solution §4.1`「核心实体 Merchant、Settlement Account」的表述尚不完全一致——Settlement Account 当前仅为字符串引用）。
 
@@ -93,7 +93,7 @@ TERMINATED 为终态，二次 terminate 抛 STATE_TRANSITION_VIOLATION
 
 ## 3. 接口详细定义（API 契约）
 
-来源：[MerchantController.java](../../merchant-service/src/main/java/com/payment/merchant/api/MerchantController.java)（`@RequestMapping("/merchants")`）。所有端点均 `REST`，请求/响应为 JSON（record DTO）。**无 Swagger/OpenAPI 注解**（与 roadmap `009 Observability` 中的 Swagger 目标一致，但本服务尚未补）。
+来源：[MerchantController.java](../../../merchant-service/src/main/java/com/payment/merchant/api/MerchantController.java)（`@RequestMapping("/merchants")`）。所有端点均 `REST`，请求/响应为 JSON（record DTO）。**无 Swagger/OpenAPI 注解**（与 roadmap `009 Observability` 中的 Swagger 目标一致，但本服务尚未补）。
 
 ### 3.1 注册商户（write）
 
@@ -223,7 +223,7 @@ sequenceDiagram
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../merchant-service/src/main/resources/application.yml)
+来源：[application.yml](../../../merchant-service/src/main/resources/application.yml)
 
 ```yaml
 spring:
@@ -272,6 +272,6 @@ management:
 
 ## 附：与 roadmap / technical-solution 的状态矛盾（C1–C3）
 
-- **C1（Schema 矛盾，确证）**：`technical-solution §3.4` 声称每服务独占 `merchant_schema`、§3.5 列 MyBatis/MySQL/Nacos 为全局技术栈；但 **`deployment/schema/` 无 merchant DDL**，`application.yml` 无 datasource，依赖树无 MyBatis/MySQL/Nacos，运行态为纯内存。**结论**：merchant-service 仍是「内存骨架」，尚未完成 DB 落地。
+- **C1（Schema 矛盾，确证）**：`technical-solution §3.1` 声称每服务独占 `merchant_schema`、§3.5 列 MyBatis/MySQL/Nacos 为全局技术栈；但 **`deployment/schema/` 无 merchant DDL**，`application.yml` 无 datasource，依赖树无 MyBatis/MySQL/Nacos，运行态为纯内存。**结论**：merchant-service 仍是「内存骨架」，尚未完成 DB 落地。
 - **C2（结算资格接口缺失，确证）**：`technical-solution §4.1` 与结算链路描述「settlement-service 校验结算资格」；但 merchant-service **未暴露任何结算资格查询端点**，`isEligibleForSettlement()` 仅为领域方法。settlement-service 现阶段无法实际调用本服务校验资格——「商户参与结算」尚未真正接线。
 - **C3（端到端可跑通声明，部分成立）**：roadmap 称「merchant→…→entitlement 端到端可跑通」。商户注册/查询端点存在、可参与主链，但因内存存储重启丢数据、且无结算资格 API，**「参与结算」环节未闭环**。骨架状态与 roadmap 主链声明在结算维度存在落差，建议 roadmap 措辞限定为「主链可跑通，结算环节仍为骨架」。

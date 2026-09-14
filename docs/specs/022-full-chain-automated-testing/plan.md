@@ -220,7 +220,7 @@ mvn -pl deployment/e2e-tests test -Dtest=OverRefundGuardE2ETest
 | 与演示脚本重复 | 阶段 1 后评估：E2E 稳定则 `run-all.sh` 改为调 E2E 模块，演示只保留交互页面 |
 | CI 起 Nacos/9 服务复杂 | 先「跟本地一致」的 compose 方案；过重再退到关注册中心 + Feign 直连 |
 | 断言库沦为一次性代码 | 原语集中在 `Invariants.java`，用例只写业务语义，新增用例成本趋近于 0 |
-| 三个假绿陷阱（T1~T3） | 见 [spec.md §1.3](spec.md#-三个会骗人的点断言设计的硬约束)：禁断言验签、对账必走 LIVE、对账拆真实一致性/差异检出两套断言 |
+| 三个假绿陷阱（T1~T3） | 见 [spec.md §1.3](spec.md#③-三个会骗人的点断言设计的硬约束)：禁断言验签、对账必走 LIVE、对账拆真实一致性/差异检出两套断言 |
 
 ---
 

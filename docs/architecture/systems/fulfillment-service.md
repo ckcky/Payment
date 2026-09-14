@@ -17,7 +17,7 @@
 | 维度 | 说明 |
 |---|---|
 | **负责** | 接收支付成功事件、履约聚合与自有状态机、交付执行（当前 Mock）、幂等（同支付只建一条履约）、履约完成后触发权益授予 RPC；自身失败记录与终态 |
-| **不负责** | 支付金额/渠道/退款决策（归属 payment/refund-service）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
+| **不负责** | 支付金额/渠道/退款决策（归属 payment-service 退款域）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -45,13 +45,13 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `Fulfillment` | [domain/Fulfillment.java](../../fulfillment-service/src/main/java/com/payment/fulfillment/domain/Fulfillment.java) | 履约 + 自有状态机；不保存支付内部状态 |
-| 仓储端口 | `FulfillmentRepository` | [domain/FulfillmentRepository.java](../../fulfillment-service/src/main/java/com/payment/fulfillment/domain/FulfillmentRepository.java) | 领域接口，不依赖 MyBatis/Spring |
-| 状态枚举 | `FulfillmentStatus` | [domain/FulfillmentStatus.java](../../fulfillment-service/src/main/java/com/payment/fulfillment/domain/FulfillmentStatus.java) | PENDING/PROCESSING/DELIVERED/PARTIALLY_DELIVERED/FAILED/CANCELLED |
-| 出站端口 | `EntitlementGateway` | [application/EntitlementGateway.java](../../fulfillment-service/src/main/java/com/payment/fulfillment/application/EntitlementGateway.java) | 履约完成→权益授予 RPC 抽象（生产 Feign / 测试 fake） |
-| 值对象 | `PaymentSucceededRequest` | [common-dto](../../common/common-dto/src/main/java/com/payment/common/dto/rpc/PaymentSucceededRequest.java) | 入站请求（仅原始事实，无 payment 内部实体） |
-| 值对象 | `FulfillmentAcceptedResponse` | [common-dto](../../common/common-dto/src/main/java/com/payment/common/dto/rpc/FulfillmentAcceptedResponse.java) | 入站受理响应（fulfillmentId + 状态枚举名） |
-| 值对象 | `FulfillmentCompletedRequest` / `EntitlementGrantedResponse` | [common-dto](../../common/common-dto/src/main/java/com/payment/common/dto/rpc/) | 出站权益授予请求/响应 |
+| 聚合根 | `Fulfillment` | [domain/Fulfillment.java](../../../fulfillment-service/src/main/java/com/payment/fulfillment/domain/Fulfillment.java) | 履约 + 自有状态机；不保存支付内部状态 |
+| 仓储端口 | `FulfillmentRepository` | [domain/FulfillmentRepository.java](../../../fulfillment-service/src/main/java/com/payment/fulfillment/domain/FulfillmentRepository.java) | 领域接口，不依赖 MyBatis/Spring |
+| 状态枚举 | `FulfillmentStatus` | [domain/FulfillmentStatus.java](../../../fulfillment-service/src/main/java/com/payment/fulfillment/domain/FulfillmentStatus.java) | PENDING/PROCESSING/DELIVERED/PARTIALLY_DELIVERED/FAILED/CANCELLED |
+| 出站端口 | `EntitlementGateway` | [application/EntitlementGateway.java](../../../fulfillment-service/src/main/java/com/payment/fulfillment/application/EntitlementGateway.java) | 履约完成→权益授予 RPC 抽象（生产 Feign / 测试 fake） |
+| 值对象 | `PaymentSucceededRequest` | [common-dto](../../../common/common-dto/src/main/java/com/payment/common/dto/rpc/PaymentSucceededRequest.java) | 入站请求（仅原始事实，无 payment 内部实体） |
+| 值对象 | `FulfillmentAcceptedResponse` | [common-dto](../../../common/common-dto/src/main/java/com/payment/common/dto/rpc/FulfillmentAcceptedResponse.java) | 入站受理响应（fulfillmentId + 状态枚举名） |
+| 值对象 | `FulfillmentCompletedRequest` / `EntitlementGrantedResponse` | [common-dto](../../../common/common-dto/src/main/java/com/payment/common/dto/rpc/) | 出站权益授予请求/响应 |
 
 **基数关系（MVP）**：`Payment (1) ── (1) Fulfillment`（按 `source_payment_no` 唯一约束，同一支付只对应一条履约）。当前无 `FulfillmentItem`/`Delivery` 子实体（technical-solution §4.1 提及但本服务未建模，`[待定]`）。
 
@@ -75,7 +75,7 @@ PENDING --cancel--> CANCELLED
 
 ### 2.3 表结构与索引策略
 
-来源：[deployment/schema/04-fulfillment-schema.sql](../../deployment/schema/04-fulfillment-schema.sql)（权威 DDL）。
+来源：[deployment/schema/04-fulfillment-schema.sql](../../../deployment/schema/04-fulfillment-schema.sql)（权威 DDL）。
 
 **`fulfillments`**
 
@@ -106,7 +106,7 @@ PENDING --cancel--> CANCELLED
 
 `POST /internal/fulfillments/on-payment-succeeded` → `200`
 
-来源：[api/PaymentSuccessRpcController.java:23](../../fulfillment-service/src/main/java/com/payment/fulfillment/api/PaymentSuccessRpcController.java)
+来源：[api/PaymentSuccessRpcController.java:23](../../../fulfillment-service/src/main/java/com/payment/fulfillment/api/PaymentSuccessRpcController.java)
 
 **请求** `PaymentSucceededRequest`（common-dto）：`{ paymentNo, orderNo, transactionId, userId, amountMinor, currencyCode }`（只携带原始事实，业务单号，ADR-0063）。
 
@@ -120,7 +120,7 @@ PENDING --cancel--> CANCELLED
 
 `GET /fulfillments/{id}` → `200`
 
-来源：[api/FulfillmentController.java:25](../../fulfillment-service/src/main/java/com/payment/fulfillment/api/FulfillmentController.java)
+来源：[api/FulfillmentController.java:25](../../../fulfillment-service/src/main/java/com/payment/fulfillment/api/FulfillmentController.java)
 
 **响应** `FulfillmentResponse`：`{ id, orderNo, sourcePaymentNo, status, failureReason }`（`FulfillmentResponse.java`）。
 
@@ -128,7 +128,7 @@ PENDING --cancel--> CANCELLED
 
 ### 3.3 出站 RPC（fulfillment → entitlement）
 
-来源：[infra/client/EntitlementFeignClient.java:10](../../fulfillment-service/src/main/java/com/payment/fulfillment/infra/client/EntitlementFeignClient.java)
+来源：[infra/client/EntitlementFeignClient.java:10](../../../fulfillment-service/src/main/java/com/payment/fulfillment/infra/client/EntitlementFeignClient.java)
 
 `POST /internal/entitlements/on-fulfillment-completed`（Feign，默认 `http://localhost:8087`）
 
@@ -236,7 +236,7 @@ sequenceDiagram
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../fulfillment-service/src/main/resources/application.yml)
+来源：[application.yml](../../../fulfillment-service/src/main/resources/application.yml)
 
 ```yaml
 spring:

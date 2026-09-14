@@ -112,7 +112,7 @@
 
 `technical-solution.md §4.3.3` 的退款链路标注 `C --> D["履约/权益处理 (refund→fulfillment/entitlement RPC)"]`，§4.3.6 亦列出 `refund-service → fulfillment/entitlement 退款后处理`，Roadmap Phase 5「包含：退款后的 Fulfillment/Entitlement RPC」。
 
-但**实测代码中该 RPC 完全不存在**：refund-service 仅有 `EntitlementGateway` / `EntitlementFeignClient`（`application/EntitlementGateway.java`、`infra/client/EntitlementFeignClient.java`），没有任何 fulfillment 网关；fulfillment-service 也只有 `GET /{id}` 与 `POST /internal/fulfillments/on-payment-succeeded`，**无退款端点**。文档与代码矛盾（已记录于 `systems/refund-service.md` §3.6 矛盾项 A）。
+但**实测代码中该 RPC 完全不存在**：refund-service 仅有 `EntitlementGateway` / `EntitlementFeignClient`（`application/EntitlementGateway.java`、`infra/client/EntitlementFeignClient.java`），没有任何 fulfillment 网关；fulfillment-service 也只有 `GET /{id}` 与 `POST /internal/fulfillments/on-payment-succeeded`，**无退款端点**。文档与代码矛盾（已记录于 `docs/specs/005-refund/` 与 git 历史；原 `systems/refund-service.md` 已并入 `systems/payment-service.md` §8）。
 
 另一重问题是语义边界：`Fulfillment` 的状态机为 `PENDING → PROCESSING → DELIVERED / PARTIALLY_DELIVERED / FAILED`，且 `cancel()` **仅允许 `PENDING → CANCELLED`**（`Fulfillment.java:68`）。即「已交付的履约」在当前领域模型下**不可逆**。
 
@@ -153,7 +153,7 @@
 - Constitution §III 边界 #5/#6、§IV、§V.7、§8.3、§8.4
 - `005-refund` spec：US2、FR-004~FR-007；data-model.md §4；contracts/refund-orchestration.md §2
 - `docs/architecture/technical-solution.md` §4.3.3（矛盾源）、§4.3.6
-- `docs/architecture/systems/refund-service.md` §3.6 矛盾项 A
+- `docs/specs/005-refund/`（refund → fulfillment 缺口 G2；原 refund-service 文档已并入 `systems/payment-service.md` §8）
 - `refund-service/.../application/RefundApplicationService.java:108-116`、`fulfillment-service/.../domain/Fulfillment.java:68`
 
 ---

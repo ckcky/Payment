@@ -42,12 +42,12 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `Order` | [domain/Order.java](../../order-service/src/main/java/com/payment/order/domain/Order.java) | 用户买什么、向谁买、金额与购买生命周期 |
-| 实体 | `Transaction` | [domain/Transaction.java](../../order-service/src/main/java/com/payment/order/domain/Transaction.java) | 交易生命周期 + Order 1:1 关联（MVP） |
-| 值对象 | `OrderItem` | [domain/OrderItem.java](../../order-service/src/main/java/com/payment/order/domain/OrderItem.java) | 订单明细 + 价格快照（不可变） |
-| 值对象 | `SkuSnapshot` | [application/SkuSnapshot.java](../../order-service/src/main/java/com/payment/order/application/SkuSnapshot.java) | catalog SKU 的可售性 + 价格只读视图 |
+| 聚合根 | `Order` | [domain/Order.java](../../../order-service/src/main/java/com/payment/order/domain/Order.java) | 用户买什么、向谁买、金额与购买生命周期 |
+| 实体 | `Transaction` | [domain/Transaction.java](../../../order-service/src/main/java/com/payment/order/domain/Transaction.java) | 交易生命周期 + Order 1:1 关联（MVP） |
+| 值对象 | `OrderItem` | [domain/OrderItem.java](../../../order-service/src/main/java/com/payment/order/domain/OrderItem.java) | 订单明细 + 价格快照（不可变） |
+| 值对象 | `SkuSnapshot` | [application/SkuSnapshot.java](../../../order-service/src/main/java/com/payment/order/application/SkuSnapshot.java) | catalog SKU 的可售性 + 价格只读视图 |
 
-> 金额承载：order-service 领域内**直接用 `long`（`*Minor`）**字段（`totalMinor`/`paidMinor`/`refundedMinor`），未使用 common-core 的 `Money` 值对象；`Money` 作为可复用的不可变金额值对象存在（[Money.java](../../common/common-core/src/main/java/com/payment/common/core/money/Money.java)），供后续服务按需引入。
+> 金额承载：order-service 领域内**直接用 `long`（`*Minor`）**字段（`totalMinor`/`paidMinor`/`refundedMinor`），未使用 common-core 的 `Money` 值对象；`Money` 作为可复用的不可变金额值对象存在（[Money.java](../../../common/common-core/src/main/java/com/payment/common/core/money/Money.java)），供后续服务按需引入。
 
 **基数关系（MVP）**：`Order (1) ─ (1) Transaction`；`Order (1) ─ (N) OrderItem`。
 
@@ -80,11 +80,11 @@ PENDING --cancel--> CANCELLED
 
 - 关键不变量：未知只能由权威结果收敛，不可猜成败；`succeed()/fail()` 对终态返回 `false`。
 
-> **状态回写（已实现，Feature 002）**：下单创建支付意图后，Transaction 由 `start()` 进入 `PROCESSING`；支付成功回调通过内部 RPC（[OrderPaymentRpcController](../../order-service/src/main/java/com/payment/order/api/OrderPaymentRpcController.java)）驱动 Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`，重复回调幂等吸收。
+> **状态回写（已实现，Feature 002）**：下单创建支付意图后，Transaction 由 `start()` 进入 `PROCESSING`；支付成功回调通过内部 RPC（[OrderPaymentRpcController](../../../order-service/src/main/java/com/payment/order/api/OrderPaymentRpcController.java)）驱动 Order `PENDING_PAYMENT → PAID`、Transaction `PROCESSING → SUCCEEDED`，重复回调幂等吸收。
 
 ### 2.3 表结构与索引策略
 
-来源：[deployment/schema/01-order-schema.sql](../../deployment/schema/01-order-schema.sql)（权威 DDL）。
+来源：[deployment/schema/01-order-schema.sql](../../../deployment/schema/01-order-schema.sql)（权威 DDL）。
 
 **`orders`**
 
@@ -194,7 +194,7 @@ PENDING --cancel--> CANCELLED
 
 ### 4.1 创建订单（两步式：建单与建支付单分离，spec 015 / 016）
 
-`OrderController.createOrder` → `OrderApplicationService.createOrder`（[源码](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
+`OrderController.createOrder` → `OrderApplicationService.createOrder`（[源码](../../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
 
 1. 断言 `lines` 非空（`INVALID_ARGUMENT`）。
 2. 逐行秒杀快速准入：`catalogClient.trySeckillDeduct(skuId, qty)`（Redis Lua 原子预扣；未播种 SKU `bypassed` 放行；配额不足抛 `CONFLICT`）。仅**真实扣减**（非 bypass）的行登记回滚清单——避免失败回滚凭空造出配额键（014 踩坑记录）。
@@ -236,7 +236,7 @@ sequenceDiagram
 
 ### 4.2 支付成功回调回写（transaction 层判定 → order 层收口，ADR-0054 已实施）
 
-`OrderPaymentRpcController.onPaymentSucceeded` → `TransactionApplicationService.onPaymentSucceeded`（surplus 判定）→ `OrderApplicationService.onPaymentSucceeded`（[源码](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
+`OrderPaymentRpcController.onPaymentSucceeded` → `TransactionApplicationService.onPaymentSucceeded`（surplus 判定）→ `OrderApplicationService.onPaymentSucceeded`（[源码](../../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java)）：
 
 1. **transaction 层判定**：订单已 `PAID` 且回调支付单不同 → surplus（重复/超额支付），以 `transactionNo + paymentNo` 经 `PaymentGateway.refund` 发起自动退款（不抛 409）；正常到账 → 委派 order 层。
 2. **order 层 DB 段（事务内，spec 023 / M1 收窄后仅含本地写）**：`order.markPaid(paymentNo)`（PENDING_PAYMENT → PAID，幂等重复回调吸收）→ `save`；`transaction.succeed()`（`PENDING` 时先 `start()`）→ `recordEffectivePayment(paymentNo)`（spec 019）→ `save`。
@@ -278,7 +278,7 @@ sequenceDiagram
 
 ### 5.3 分布式事务方案
 
-- 单服务内：订单 + 明细 + 交易 + `confirm` 在**同一本地事务**内原子提交（[OrderApplicationService.createOrder](../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java) 整体无 `@Transactional` 注解于方法，但仓储 `save` 各自落库 —— **注意**：见 §5.4 风险）。
+- 单服务内：订单 + 明细 + 交易 + `confirm` 在**同一本地事务**内原子提交（[OrderApplicationService.createOrder](../../../order-service/src/main/java/com/payment/order/application/OrderApplicationService.java) 整体无 `@Transactional` 注解于方法，但仓储 `save` 各自落库 —— **注意**：见 §5.4 风险）。
 - 跨服务：支付意图为下单的后置 RPC，支付失败不回滚订单（订单仍是合法商业意图，可重试支付）；禁 2PC/XA。
 
 ### 5.4 异常与边界场景
@@ -286,7 +286,7 @@ sequenceDiagram
 | 场景 | 处理 | 阈值/规则 |
 |---|---|---|
 | SKU 不可售 | 抛 `CONFLICT`，拒绝下单 | 不使用过期销售条件 |
-| SKU 不存在（catalog 404） | Feign 404 映射 `NOT_FOUND` | [FeignCatalogClient.getSku](../../order-service/src/main/java/com/payment/order/infra/client/FeignCatalogClient.java) |
+| SKU 不存在（catalog 404） | Feign 404 映射 `NOT_FOUND` | [FeignCatalogClient.getSku](../../../order-service/src/main/java/com/payment/order/infra/client/FeignCatalogClient.java) |
 | 多币种混用 | 抛 `INVALID_ARGUMENT` | 一单仅一种币种 |
 | 明细为空 / 数量 ≤ 0 | 抛 `INVALID_ARGUMENT` / `IllegalArgumentException` | OrderItem 构造校验 |
 | 金额溢出 | `Math.addExact/multiplyExact` 抛异常 | 拒绝溢出，不静默截断 |
@@ -306,7 +306,7 @@ sequenceDiagram
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../order-service/src/main/resources/application.yml)
+来源：[application.yml](../../../order-service/src/main/resources/application.yml)
 
 ```yaml
 spring:

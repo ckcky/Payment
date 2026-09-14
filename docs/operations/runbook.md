@@ -16,17 +16,16 @@
 | T3 | `catalog-service` | 8082 | `catalog` | — | `/actuator/health` |
 | T1 | `order-service` | 8083 | `order` | catalog, payment | `/actuator/health` |
 | T1 | `payment-service` | 8084 | `payment` | fulfillment, ledger, order | `/actuator/health` |
-| T1 | `refund-service` | 8085 | `refund` | entitlement, fulfillment, ledger, payment | `/actuator/health` |
 | T2 | `fulfillment-service` | 8086 | `fulfillment` | entitlement | `/actuator/health` |
 | T2 | `entitlement-service` | 8087 | `entitlement` | — | `/actuator/health` |
-| T1 | `reconciliation-service` | 8088 | `reconciliation` | payment, refund | `/actuator/health` |
+| T1 | `reconciliation-service` | 8088 | `reconciliation` | payment | `/actuator/health` |
 | T1 | `settlement-service` | 8089 | `settlement` | ledger, merchant, reconciliation | `/actuator/health` |
 | T0 | `ledger-service` | 8090 | `ledger` | — | `/actuator/health` |
 | —（演示） | `mock-channel-web` | 8091 | 无（演示组件，不进服务边界） | —（被 payment 收银台同源代理 `/proxy/**` 调用） | `/actuator/health` |
 
 - 全部服务暴露 `/actuator/health`、`/actuator/info`、`/actuator/metrics`、`/actuator/prometheus` 与 Swagger UI。
 - 关键等级（T0~T3）定义见 `docs/adr/0010-distributed-evolution-decisions.md` ADR-0032。
-- ⚠️ **`mock-channel-web`（8091）是 Feature 011 的演示组件，不是生产服务**：它**不进入** `architecture-tests` 的 `ServiceBoundaryTest.SERVICES` 边界（构建期门禁已验证），不承担任何资金/业务事实，仅用于演示收银台跳转、回调转发与演示控制台。舰队规模 = 10 个生产服务 + 1 个演示组件 = 11 个 JVM 进程。
+- ⚠️ **`mock-channel-web`（8091）是 Feature 011 的演示组件，不是生产服务**：它**不进入** `architecture-tests` 的 `ServiceBoundaryTest.SERVICES` 边界（构建期门禁已验证），不承担任何资金/业务事实，仅用于演示收银台跳转、回调转发与演示控制台。舰队规模 = 9 个服务（`refund` 域已并入 `payment-service`，端口 8085 退役） + 1 个演示组件 = 10 个 JVM 进程。
 
 ## 2. 启动顺序
 
@@ -43,7 +42,7 @@ payment-service (8084) → order-service (8083)
    ↓
 mock-channel-web (8091)  ← 演示组件：收银台页 + 回调转发 + 控制台；payment 收银台同源代理 /proxy/** 依赖它（任意时机起即可，建议与 payment 同批）
    ↓
-refund-service (8085) → reconciliation-service (8088) → settlement-service (8089)
+reconciliation-service (8088) → settlement-service (8089)
    ↓
 merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时机）
 ```
@@ -52,7 +51,7 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 
 ## 3. 数据库
 
-- 单实例 MySQL 8（`localhost:3306`，root/root），数据库按服务使用独立 **Schema**：`catalog` / `order` / `payment` / `refund` / `fulfillment` / `entitlement` / `reconciliation` / `settlement` / `ledger`。`merchant-service` 无库，使用内嵌存储（**重启即清空**）。
+- 单实例 MySQL 8（`localhost:3306`，root/root），数据库按服务使用独立 **Schema**：`catalog` / `order` / `payment`（含原 `refund` 库的退款表，该库已退役）/ `fulfillment` / `entitlement` / `reconciliation` / `settlement` / `ledger`。`merchant-service` 无库，使用内嵌存储（**重启即清空**）。
 - 建表脚本：`deployment/schema/`。
 - **跨服务零写路径**：任何服务只读写自己的 Schema，跨服务只经 HTTP。该约束由 `architecture-tests` 在构建期强制（ADR-0029）。
 

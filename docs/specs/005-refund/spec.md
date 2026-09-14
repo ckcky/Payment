@@ -20,15 +20,15 @@
 > | **ADR-0018 refund→ledger** | ✅ **Accepted** | US4 全量落地，记账金额 = `amountMinor` |
 >
 > - 裁决口径：**单笔退款没有「部分成功」**。渠道只回三态（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功即视为该笔申请额全额退回；若真实发生部分退回，走 `UNKNOWN` + 对账收敛，**不落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`**。
-> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
+> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
 > - ⚠️ **落地补充说明（2026-08-31）**：ADR-0016 曾按最简实现落地过（`refundedAmountMinor` 全链路），裁决后**已整体回退**。
->   回退清单见 [ADR-0016 回退落地记录](../adr/0006-refund-decisions.md)。
+>   回退清单见 [ADR-0016 回退落地记录](../../adr/0006-refund-decisions.md)。
 > - US2 / US3 中涉及 `PARTIALLY_SUCCEEDED` 的验收条款**一并移除**；**全额路径的条款全部保持有效**。
-> - 落地口径见 [technical-solution §2.4](../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
+> - 落地口径见 [technical-solution §2.4](../../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
 
 ## 当前代码现实（已核实，禁止按绿地项目理解）
 
-**`refund-service` 已远超「骨架」**：`technical-solution.md:101` 与 `roadmap.md:11` 仍标注为「骨架」，但实测代码已落地——领域聚合与状态机（`Refund`/`RefundStatus`）、资格与可退款金额策略（`RefundPolicy`）、MyBatis 持久化（悲观锁 + 乐观锁）、幂等（DB 唯一约束 `uk_refunds_idempotency_key` + `refund_intake_locks`）、出站 RPC（payment / entitlement）、对账事实接口、以及单元测试与 Testcontainers 集成测试。详见 `docs/architecture/systems/refund-service.md`。
+**`refund-service` 已远超「骨架」**：`technical-solution.md:101` 与 `roadmap.md:11` 仍标注为「骨架」，但实测代码已落地——领域聚合与状态机（`Refund`/`RefundStatus`）、资格与可退款金额策略（`RefundPolicy`）、MyBatis 持久化（悲观锁 + 乐观锁）、幂等（DB 唯一约束 `uk_refunds_idempotency_key` + `refund_intake_locks`）、出站 RPC（payment / entitlement）、对账事实接口、以及单元测试与 Testcontainers 集成测试。详见 `docs/architecture/systems/payment-service.md` §8。
 
 **因此本 Spec 的范围是「补缺口」，不是「建服务」。三项已核实的真实缺口：**
 
@@ -69,7 +69,7 @@
 
 ### ~~User Story 1 - 部分退款可追踪且累计金额不超限 (Priority: P1)~~ ⛔ 不做（ADR-0016 Rejected）
 
-> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../adr/0006-refund-decisions.md) 的「回退落地记录」即为准绳。
+> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../../adr/0006-refund-decisions.md) 的「回退落地记录」即为准绳。
 >
 > ⭐ **替代口径（当前生效）**：累计额度一律按**申请额 `amountMinor`** 计（含在途 `PROCESSING`/`UNKNOWN` 保守占位），
 > 超额申请 `REJECTED` 且不发起渠道尝试——防超退不变量（H1）不受影响。用例见
@@ -236,7 +236,7 @@
 
 - `refund-service`（8085 / Schema `refund`）核心链路已实现，本 Feature 只补缺口与扩展，**不重写**既有领域模型、持久化与幂等机制。
 - 不引入 MQ / 分布式事务 / 跨服务异步事件；后处理与记账均为同步 RPC + 幂等 + 有限重试/对账兜底（Constitution §IV、ADR-0001）。
-- 当前单节点/单机部署；出站 Feign 超时建议 `[目标]` connect 1s / read 3s（当前沿用 OpenFeign 默认值，见 `refund-service.md` §5.4）；熔断/降级 `[Phase 按需延后]`。
+- 当前单节点/单机部署；出站 Feign 超时建议 `[目标]` connect 1s / read 3s（当前沿用 OpenFeign 默认值，见 `payment-service.md` §8.6）；熔断/降级 `[Phase 按需延后]`。
 - ⛔ ~~渠道「部分退回」由 `RefundAttemptResponse` 回传实际金额~~ —— ADR-0016 裁决后**不成立**：渠道只回三态，成功即全额。真实渠道对接不在本 Feature。
 - `ledger-service` 与 payment 侧记账网关已实现并接入（端口 8090），退款侧接入复用该既有能力与科目表；科目编码与账户 ID 以账本侧预置为准（ADR-0018）。
 - 复杂退款审批流程、已消费权益的统一回收政策、真实出款均**不在本 Feature**（Roadmap Phase 5「不包含」）。
@@ -267,4 +267,4 @@
   1. **ADR 编号冲突（已解决）**：本包 ADR 原为 `0005-refund-decisions.md` + ADR-0012~0014，与既有 `0005-payment-reliability-impl-decisions.md`（ADR-0012~0015）冲突。**已于 2026-08-29 解决**：文件重命名为 `0006-refund-decisions.md`，标签重编号为 ADR-0016~0018，既有文件与其编号保持不变。
   2. **004-ledger 文档状态过期**：`ledger-service`（8090）与 payment 侧 `LedgerPostingGateway`/`FeignLedgerPostingGateway` **已实现**，但 `roadmap.md:13/16` 与 `004-ledger/acceptance.md` 仍描述为「待 ADR 确认 / 未完成」；且 spec `004-ledger` US2（退款记账 T013/T014）在退款侧未落地——本 Feature 的 US4/FR-009 承接该缺口（待 ADR-0018 裁定归属）。
   3. **契约文档漂移**：`004-ledger/contracts/post-refund.md` 使用 `accountCode`，而实际 `common-dto` 的 `PostingRequest.EntryRequest` 字段为 `accountId`（`common/common-dto/.../PostingRequest.java`）。
-  4. **成熟度标注过期**：`technical-solution.md:101` 仍将 refund-service 标为「骨架」（`refund-service.md` §1.1 已指出）。
+  4. **成熟度标注过期**：`technical-solution.md:101` 仍将 refund-service 标为「骨架」（`payment-service.md` §8.1 已指出）。

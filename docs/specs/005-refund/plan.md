@@ -23,7 +23,7 @@
 
 **Project Type**: 多模块 Web 服务（Spring Cloud 微服务）；**在既有 `refund-service` 模块内扩展**，另需在 `fulfillment-service` 新增一个入站端点。
 
-**Performance Goals**: 沿用 `refund-service.md` §1.3 `[目标]`：创建退款受理 P99 ≤ 500ms、收敛处理 P99 ≤ 300ms（新增记账/第二路后处理 RPC 后需复核）。
+**Performance Goals**: 沿用 `payment-service.md` §8.6 `[目标]`：创建退款受理 P99 ≤ 500ms、收敛处理 P99 ≤ 300ms（新增记账/第二路后处理 RPC 后需复核）。
 
 **Constraints**: 金额禁 float/double（long 分）；状态迁移唯一入口 + 乐观锁；幂等键 DB 唯一约束；跨服务同步 RPC + 幂等，禁 MQ / 2PC / XA；Database-per-service；后处理与记账失败不得回滚退款成功事实。
 

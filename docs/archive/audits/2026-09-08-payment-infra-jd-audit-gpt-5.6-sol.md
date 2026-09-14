@@ -42,7 +42,7 @@ PaymentArch 不是空壳 Demo。项目在支付领域边界、资金正确性、
 
 ### 3.1 支付核心链路和平台能力
 
-项目覆盖 Merchant、Catalog、Order、Payment、Refund、Fulfillment、Entitlement、Ledger、Reconciliation 和 Settlement。总体职责、状态机和关键边界见 [technical-solution.md:185](../../architecture/technical-solution.md#L185) 和 [technical-solution.md:212](../../architecture/technical-solution.md#L212)。
+项目覆盖 Merchant、Catalog、Order、Payment、Refund、Fulfillment、Entitlement、Ledger、Reconciliation 和 Settlement。总体职责、状态机和关键边界见 [technical-solution.md:185](../../architecture/technical-solution.md) 和 [technical-solution.md:212](../../architecture/technical-solution.md)。
 
 有价值的设计包括：
 
@@ -115,7 +115,7 @@ E2E 模块的黑盒原则和默认执行策略见 [e2e-tests/pom.xml:3](../../..
 - tag 触发构建并发布 tarball。
 - 发行包包含 fat jar、启动脚本、schema 和 SHA-256 校验文件。
 
-证据见 [verify.yml:1](../../.github/workflows/verify.yml#L1)、[e2e.yml:3](../../.github/workflows/e2e.yml#L3) 和 [release.yml](../../.github/workflows/release.yml)。
+证据见 [verify.yml:1](../../../.github/workflows/verify.yml#L1)、[e2e.yml:3](../../../.github/workflows/e2e.yml#L3) 和 [release.yml](../../../.github/workflows/release.yml)。
 
 当前部署形态是 Docker Compose 承载 MySQL、Redis、Nacos、Prometheus、Grafana、Loki 等基础设施，Java 服务以宿主机多 JVM 进程启动，见 [docker-compose.yml:34](../../../deployment/docker-compose.yml#L34)。未发现 Dockerfile、Kubernetes manifest、Helm、GitOps、Terraform、HPA、PDB、环境晋级或自动流量回退。
 
@@ -125,7 +125,7 @@ E2E 模块的黑盒原则和默认执行策略见 [e2e-tests/pom.xml:3](../../..
 
 ### P0：回调验签和内部鉴权为空实现
 
-技术方案明确记载：渠道回调验签恒通过，`/internal/**` 守卫恒放行，对外身份体系也未实现，见 [technical-solution.md:54](../../architecture/technical-solution.md#L54) 至 [technical-solution.md:62](../../architecture/technical-solution.md#L62)。
+技术方案明确记载：渠道回调验签恒通过，`/internal/**` 守卫恒放行，对外身份体系也未实现，见 [technical-solution.md:54](../../architecture/technical-solution.md) 至 [technical-solution.md:62](../../architecture/technical-solution.md)。
 
 这意味着当前系统不能作为真实支付渠道或公网支付服务部署。学习项目可以明确裁剪该范围，但在金融支付 Infra JD 中，这是生产安全阻断项，必须在面试中主动披露。
 

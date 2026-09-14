@@ -4,7 +4,9 @@
 
 **生效日期**：2026-08-26
 
-**最近修订**：2026-08-31（2026-08-30 负责人裁决的**落地同步**：鉴权 / 验签 = 预留空函数；出站令牌 / 风控 / 脱敏 = 代码已删除；部分退款 = 代码已回退；退款金额校验口径新增 ADR-0047 —— 见 §2.4、§4.3.3、§8.3、§10）
+**最近修订**：2026-09-14（文档治理：本方案收敛为**只描述系统现状** —— §2.4 范围裁剪精简、§7 计划精简并指向 `roadmap.md`、原 §9 ADR 追溯索引移出至 [docs/adr/traceability.md](../adr/traceability.md)（原 §10 顺延为 §9）、并入原 `project-structure.md` 为 §3.6；§3 重排 —— 原 §3.4「领域边界与数据架构」改写并上移为 §3.1，新增「3.1.1 领域模型」聚合根视图，其后原 §3.1~§3.3 顺延为 §3.2~§3.4）
+
+**历史修订**：2026-08-31（2026-08-30 负责人裁决的**落地同步**：鉴权 / 验签 = 预留空函数；出站令牌 / 风控 / 脱敏 = 代码已删除；部分退款 = 代码已回退；退款金额校验口径新增 ADR-0047 —— 见 §2.4、§4.3.3）
 
 **关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)、[ADR-0006](../adr/0006-refund-decisions.md)、[ADR-0009](../adr/0009-risk-security-decisions.md)、[ADR-0011](../adr/0011-internal-token-decisions.md)
 
@@ -63,59 +65,104 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 ---
 
-## 2.4 本阶段范围裁剪与预留契约
+### 2.4 本阶段范围裁剪与预留契约
 
-> **本节是 2026-08-30 负责人裁决的落地口径**，裁决范围涵盖鉴权、内部令牌、部分退款、敏感数据、风控五类能力。相关 ADR（[0006](../adr/0006-refund-decisions.md) / [0009](../adr/0009-risk-security-decisions.md) / [0011](../adr/0011-internal-token-decisions.md)）中对应条目以本节裁决为准，状态标注见 [ADR 索引](../adr/README.md)。
+> 2026-08-30 负责人裁决的落地口径；相关 ADR 状态见 [ADR 索引](../adr/README.md)、落点见 [ADR 追溯索引](../adr/traceability.md)。
 
-### 2.4.1 裁决总表
+五类能力**明确不做或只留预留挂点**：
 
-| # | 能力 | 裁决 | 落地形态 | 代码现状（预留位置） | 启用条件 / 后续路径 |
-|---|---|---|---|---|---|
-| 1 | 出站内部令牌（`X-Service-Token` 传播） | ⛔ **不做（代码已删除）** | 整条链路**已清理**：拦截器、Feign 自动配置、`platform.security.*` 配置全部移除，调用链零改动 | 无（原 `common-core/client/InternalTokenRequestInterceptor.java` 与 `config/FeignInternalTokenAutoConfiguration.java` 已删除） | 需要服务间网络边界防护时**重新立项**（ADR-0034） |
-| 2 | 入站内部鉴权（`/internal/**` 守卫） | ⭕ **预留空函数** | 拦截器保留并仍挂载在 `/internal/**`，`verifyServiceToken()` **恒放行**；无开关（开关语义随实现一并移除）；**不推广**到其余 7 个服务 | `payment-service/web/InternalServiceAuthInterceptor.java`（唯一接入点）；`WebConfig` 注册保留 | 接入时只改 `verifyServiceToken()`，**且必须同时**补出站令牌，否则调用方全线 `403`（ADR-0024 / 0034 / 0035） |
-| 3 | 对外 API 鉴权 / 身份体系 | ⭕ **预留空实现鉴权函数** | 不接入 Spring Security / OAuth2 | `payment-service/web/ResolveAuthorizationInterceptor.java`（admin 端点守卫，默认关闭）；鉴权扩展点见 §2.4.2 | 引入外部调用方 / 多租户时立项（Phase 9） |
-| 4 | 风控 | ⛔ **不做（代码已删除）** | 原「只预留空实现」裁决已被 2026-08-30 裁决**覆盖为不做**：`RiskCheckService` 类、`payment.risk.*` 配置、`PaymentApplicationService` 调用点全部移除 | 无（原 `payment-service/application/risk/RiskCheckService.java` 已删除） | 需风控时**重新立项**（ADR-0028） |
-| 5 | 敏感数据脱敏 | ⛔ **不做（代码已删除）** | 原「工具类保留」裁决已被 2026-08-30 裁决**覆盖为不管**：`SensitiveDataMasker` 类与测试移除；不新增脱敏点、不做响应层统一脱敏 | 无（原 `common-core/security/SensitiveDataMasker.java` 已删除） | 接入真实卡号 / 凭证 / 真实渠道时**重新引入**（ADR-0027） |
-| 6 | 部分退款（单笔退款的部分成功追踪） | ⛔ **不做（代码已回退）** | **单笔退款只回三态**（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功恒为全额；`PARTIALLY_SUCCEEDED` 枚举与 `partiallySucceed()` 保留为**不可达的预留实现**，不开放任何入口。实体 `refundedAmountMinor` 字段与 DDL 列**已回退删除**。**同一支付的多笔退款仍支持**（每笔独立幂等键、按申请额累计占用额度，ADR-0047） | `payment-service/src/main/java/com/payment/refund/domain/RefundStatus.java`（枚举保留，Feature 015 起退款域在 payment-service 内）；`RefundApplicationService.java:99-103` 当前只处理 `SUCCEEDED/FAILED/UNKNOWN`；回退清单见 [ADR-0016](../adr/0006-refund-decisions.md#adr-0016-部分退款支持模型如何让-partially_succeeded-可达部分金额如何跟踪)、口径收口见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额) | 需支持「单笔退款部分成功」时立项，届时须同步改状态机与退款单模型（属 Constitution §8 边界） |
-| 7 | 渠道回调验签（HMAC） | ⭕ **预留空函数** | **过滤器骨架保留**（路径 Ant 匹配、原始 body 读、`CachedBodyHttpServletRequest` 可重复读包装、403 拒绝分支），`verifySignature()` **恒通过**，回调一律放行 | `common-core/security/SignatureVerifier.java`（算法工具类保留，8 单测覆盖）；`payment-service/web/ChannelCallbackSignatureFilter.java`（空实现接入点） | 接入真实渠道时只实现 `verifySignature()`（ADR-0025） |
+- **不做（代码已删）**：出站内部令牌（ADR-0034）、风控（ADR-0028）、敏感数据脱敏（ADR-0027）。
+- **预留空函数、恒放行**：入站内部鉴权 `verifyServiceToken()`（ADR-0024）、渠道回调验签 `verifySignature()`（ADR-0025/0052）、对外 API 鉴权（ADR-0024）。
+- **不做（代码已回退）**：部分退款 —— 单笔退款只回三态、成功恒为全额；`PARTIALLY_SUCCEEDED` 仅作不可达枚举保留（ADR-0016 / ADR-0047）。
 
-> **关于 #7 的补充说明（2026-08-30 裁决已覆盖原边界说明）**：负责人裁决**明确包含渠道回调验签**——「ADR-0025 加验签预留函数空实现就行」。因此原「验签不在裁剪范围、默认开启不可关闭」的表述已失效。当前**伪造渠道回调可翻转支付状态**，这是**已知且已被负责人接受的风险**。
->
-> **部署前置条件**：payment-service **不得暴露到公网**，仅内网 / VPC 可达；`/internal/**` 同理依赖安全组 / 服务网格做网络层隔离。上述两条与 #2 / #7 的空实现直接相关，接入真实渠道或生产部署前必须先补齐实现。
+**预留契约（防隐性故障源）**：「预留空实现」MUST 为纯 no-op、不干扰主流程、不得留下"假绿"（测试名与 Javadoc 显式标注空实现、留 `TODO(ADR-00xx)`），且**挂点位置单一明确**：
 
-### 2.4.2 预留契约（空实现的硬性约定）
+- 入站内部鉴权 → `payment-service/web/InternalServiceAuthInterceptor#verifyServiceToken`
+- 渠道回调验签 → `payment-service/web/ChannelCallbackSignatureFilter#verifySignature`
+- 对外 API 鉴权 → `payment-service/web/ResolveAuthorizationInterceptor`
 
-凡标注「⭕ 预留空实现」的能力，其实现 MUST 满足以下四条，防止占位代码演化为隐性故障源：
-
-1. **纯 no-op，不干扰主流程**：不抛异常、不修改任何状态、不改变资金主链路的返回结果。调用方无需感知其存在。
-2. **不得留下"假绿"**：空实现必须在**测试与命名上显式暴露**——测试方法名带 `...IsAllowedWhileXxxIsStubbed`，Javadoc 标明「本期为空实现」，方法内留 `TODO(ADR-00xx)`。禁止让后人误以为校验已生效。
-3. **失败不静默、也不阻断**：预留点自身出错时，只记录日志/指标，**不得**导致业务主流程失败；同时不得吞掉业务异常。
-4. **挂点位置即契约**：预留点必须挂在**明确、单一**的位置，后续启用时不得散落到业务代码各处。当前挂点：
-   - 入站内部鉴权 → `payment-service/web/InternalServiceAuthInterceptor#verifyServiceToken`（MVC 拦截器层，覆盖 `/internal/**`）
-   - 渠道回调验签 → `payment-service/web/ChannelCallbackSignatureFilter#verifySignature`（Servlet 过滤器层，业务 Controller 之前）
-   - 对外 API 鉴权 → `payment-service/web/ResolveAuthorizationInterceptor`（admin 端点，默认关闭）
-
-> **关于「显式开关」的调整**：2026-08-30 裁决后，鉴权与验签的空实现**不再带开关**（`payment.security.internal-auth-enabled` / `platform.security.outbound-token-enabled` 已随实现一并移除）。理由：恒放行的空实现配一个开关只会造成「开关已开但没生效」的错觉。将来接入真实实现时，由实现方自行决定是否需要开关与灰度策略（建议保留，见 ADR-0024 / 0025）。
+**部署前置条件**：payment-service 不得暴露公网，仅内网 / VPC 可达；`/internal/**` 依赖网络层隔离。**当前伪造渠道回调可翻转支付状态，是已知且已被负责人接受的风险**；接入真实渠道或生产部署前 MUST 先补齐实现。
 
 ---
 
 ## 3. 总体架构设计
 
-### 3.1 分层架构
+> 本节组织顺序：先划**领域边界与领域模型**（系统由什么组成、如何划分），再谈分层、模块职责、通讯协议与目录结构。
+
+### 3.1 领域边界与数据架构
+
+**领域边界（六条关键区分，Constitution §2.3）**：
+
+| # | 区分 | 含义 |
+|---|---|---|
+| 1 | Order ≠ Payment | Order 是商业意图，Payment 是资金动作，独立生命周期与状态机 |
+| 2 | Payment ≠ Channel | Payment 是编排层，Channel 是渠道技术适配；Payment 只依赖接口抽象 |
+| 3 | Payment Success ≠ Entitlement Granted | 支付成功是财务事件，权益是消费权利，成功只「触发」授予 |
+| 4 | Reconciliation ≠ Settlement | 对账是比对找差异，结算是资金划转，二者解耦 |
+| 5 | Refund ≠ Payment Refund | Refund 是跨多领域编排，不是「调一次渠道退款」 |
+| 6 | Fulfillment 不强耦合 Payment | 履约有自己的状态机，不被支付状态反向阻塞 |
+
+#### 3.1.1 领域模型
+
+模型按**聚合根（Aggregate Root）**组织：每个聚合根是不变式与事务的边界，聚合内一致性由本地事务保证；**跨聚合只经业务单号引用或公开 RPC**，禁止共享表 / 共享实体（[ADR-0023](../adr/0023-cross-service-reference-by-business-no.md)）。
+
+```mermaid
+graph LR
+    Merchant["Merchant"] -. 结算资格 .-> Settlement["Settlement"]
+    Product["Product / SKU"] --- Order["Order"]
+    Order --- Transaction["Transaction"]
+    Transaction --- Payment["Payment"]
+    Payment --- PaymentAttempt["PaymentAttempt"]
+    Payment --> Channel["Payment Channel"]
+    Payment --> Refund["Refund"]
+    Order -. 支付成功驱动 .-> Fulfillment["Fulfillment"]
+    Fulfillment --> Entitlement["Entitlement"]
+    Payment -. 记账 .-> Ledger["Ledger"]
+    Refund -. 冲正 .-> Ledger
+    Reconciliation["Reconciliation"] -. 只读事实 .-> Payment
+    Reconciliation -. 只读事实 .-> Refund
+    Reconciliation --> Settlement
+```
+
+| 聚合根 | 关键实体 / 值对象 | 归属服务 |
+|---|---|---|
+| Merchant | Merchant、Settlement Account（仅字符串引用） | merchant-service |
+| Product | Product、Product Version | catalog-service |
+| SKU | SKU、Price、Delivery Definition | catalog-service |
+| Order | Order、Order Item、Price Snapshot | order-service |
+| Transaction | Transaction、Transaction Relation | order-service |
+| Payment | Payment、Payment Attempt、Payment Result | payment-service |
+| Payment Channel | Channel、Channel Attempt、Channel Reference（接口 + 模块，不单独部署） | payment-service |
+| Refund | Refund、Refund Item、Refund Decision | payment-service（退款域，见 [§8](systems/payment-service.md)） |
+| Fulfillment | Fulfillment（Item / Delivery `[待定]`，尚未建模） | fulfillment-service |
+| Entitlement | Entitlement、Grant、Consumption | entitlement-service |
+| Ledger | Posting、Entry（复式，借贷平衡 `A = N + F`） | ledger-service |
+| Reconciliation | Batch、Match、Difference | reconciliation-service |
+| Settlement | Batch、Item、Adjustment | settlement-service |
+
+> 各领域「负责 / 不负责」见 [§4.1](#41-领域职责)；**基数关系、状态机与金额铁律**见 [§4.2](#42-核心基数关系与状态机)。
+
+#### 3.1.2 依赖方向与数据所有权
+
+**依赖方向**：领域依赖 MUST **单向、向内**——编排层（Order/Payment/Refund）可依赖底层领域，底层领域不得反向依赖编排层；`Ledger` 只被依赖；`Channel` 只依赖外部协议。
+
+**数据所有权**：每服务独占自己的 Schema（`merchant` / `catalog` / `order` / `payment` / `refund` / `fulfillment` / `entitlement` / `reconciliation` / `settlement`；实际命名以 [deployment/schema/](../../deployment/schema/) DDL 为准；`merchant` 无独立数据源，使用内存 `ConcurrentHashMap`）。跨服务读写一律经对方公开 API/RPC，**禁止**任何服务直接 SQL 他服务 Schema 的表。单机/Compose 阶段多服务可共用一个物理库，但必须独立 Schema。
+
+### 3.2 分层架构
 
 ![PaymentArch 系统架构分层](diagrams/01-system-architecture.svg)
 
 > 该图的 PlantUML 源码：[diagrams/01-system-architecture.puml](diagrams/01-system-architecture.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
 
 - **接入层**：`gateway` 作为统一入口/鉴权/限流，本 MVP **延后**（虚线）；当前调用方直连各服务暴露的 REST。
-- **编排层**：order / payment / refund 承接业务意图并编排跨域流程（§3.2），可调用下游；独立进程、独立端口、独立部署单元。
+- **编排层**：order / payment / refund 承接业务意图并编排跨域流程（§3.3），可调用下游；独立进程、独立端口、独立部署单元。
 - **执行层**：catalog / fulfillment / entitlement 自持状态机，**不得反向依赖编排层**。
 - **资金层**：ledger / reconciliation / settlement / merchant 承载账务事实、核对与结算。其中 `ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），只被依赖、不调用任何业务服务。
-- **数据层**：MySQL 8.0，Database-per-Service 的**访问边界**（§3.4）；Nacos（注册 + 配置）为 `[目标]`，生产启用前本地直连。
+- **数据层**：MySQL 8.0，Database-per-Service 的**访问边界**（§3.1）；Nacos（注册 + 配置）为 `[目标]`，生产启用前本地直连。
 
-> **注**：reconciliation / settlement 对 payment / refund 的依赖是**只读事实抽取**（读已确认业务事实，不回写、不修改），不构成对编排层的反向业务依赖，不违反 §3.4 的单向依赖原则。
+> **注**：reconciliation / settlement 对 payment / refund 的依赖是**只读事实抽取**（读已确认业务事实，不回写、不修改），不构成对编排层的反向业务依赖，不违反 §3.1 的单向依赖原则。
 
-### 3.2 核心模块职责
+### 3.3 核心模块职责
 
 | 服务 | 负责领域 | 核心职责 | 状态 |
 |---|---|---|---|
@@ -135,30 +182,13 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 > **状态列口径**：上表基于本文 2026-08-26 基线。`ledger-service` 已按 `004-ledger` 前置实现并接入 payment 侧记账；refund / reconciliation / settlement 的进展以 [roadmap.md](roadmap.md) Current Status 与 `docs/specs/005~007` 为准，本文相关表述待下次基线刷新时统一修订。
 
-### 3.3 系统间通讯协议
+### 3.4 系统间通讯协议
 
 - **服务内**：本地事务保证原子。
 - **跨服务**：统一走**公开的同步 HTTP/RPC 用例**（Spring Cloud OpenFeign + LoadBalancer），契约 DTO 集中在 `common-dto`。
 - **对外渠道**：通过 Channel Adapter 抽象与第三方交互（当前 Mock Channel）。
 - **MQ / 跨服务异步事件**：当前**不引入**（Constitution §4）；服务内部可用事件表达本地状态变化，但**不跨服务发布**。
 - **后置流程**：由负责方通过同步 RPC 调用下游公开用例（如 Payment 成功 → 请求履约），任何同步边界不得要求一次调用完成跨领域全链路。
-
-### 3.4 领域边界与数据架构
-
-**12 领域 + 六条关键边界 + 依赖方向**（Constitution §2.3）：
-
-| # | 区分 | 含义 |
-|---|---|---|
-| 1 | Order ≠ Payment | Order 是商业意图，Payment 是资金动作，独立生命周期与状态机 |
-| 2 | Payment ≠ Channel | Payment 是编排层，Channel 是渠道技术适配；Payment 只依赖接口抽象 |
-| 3 | Payment Success ≠ Entitlement Granted | 支付成功是财务事件，权益是消费权利，成功只「触发」授予 |
-| 4 | Reconciliation ≠ Settlement | 对账是比对找差异，结算是资金划转，二者解耦 |
-| 5 | Refund ≠ Payment Refund | Refund 是跨多领域编排，不是「调一次渠道退款」 |
-| 6 | Fulfillment 不强耦合 Payment | 履约有自己的状态机，不被支付状态反向阻塞 |
-
-**依赖方向**：领域依赖 MUST **单向、向内**——编排层（Order/Payment/Refund）可依赖底层领域，底层领域不得反向依赖编排层；`Ledger` 只被依赖；`Channel` 只依赖外部协议。
-
-**数据所有权**：每服务独占自己的 Schema（`merchant` / `catalog` / `order` / `payment` / `refund` / `fulfillment` / `entitlement` / `reconciliation` / `settlement`；实际命名以 [deployment/schema/](../../deployment/schema/) DDL 为准；`merchant` 无独立数据源，使用内存 `ConcurrentHashMap`）。跨服务读写一律经对方公开 API/RPC，**禁止**任何服务直接 SQL 他服务 Schema 的表。单机/Compose 阶段多服务可共用一个物理库，但必须独立 Schema。
 
 ### 3.5 技术栈
 
@@ -175,6 +205,69 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 | 可观测 | Micrometer + Micrometer Tracing | 指标与链路追踪（**[目标] 未落地**：当前 0 依赖，实际为 `TraceIdFilter` + MDC，见宪法 §Obs.3） |
 | 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器（**[目标] 未落地**：实际全 H2 MySQL 兼容模式，见 backlog） |
 | 代码质量 | Checkstyle + Spotless | CI 强制（**[目标] 未落地**：根 pom 与 CI 均无插件） |
+
+### 3.6 项目目录结构（Maven 多模块单仓库）
+
+采用**单一 Git 仓库 + Maven 多模块**：一个父 POM 统一管理版本与依赖，每个服务一个 Maven 模块，共享代码抽为 `common-*`。
+
+```text
+PaymentArch/
+├── pom.xml                      # 父 POM：dependencyManagement 统一版本
+├── mvnw / mvnw.cmd              # Maven Wrapper（锁定 Maven 版本）
+├── AGENTS.md                    # AI 编码代理指令（唯一事实源；CLAUDE.md 为兼容指针）
+├── README.md / CHANGELOG.md / VERSION
+├── docs/                        # 工程文档（见 docs/README.md）
+│   ├── architecture/            # 总体技术方案、模块结构、Roadmap、systems/、AI 预研
+│   │   └── systems/             # 每服务一篇系统设计
+│   ├── adr/                     # 架构决策（索引 README + 落点追溯 traceability）
+│   ├── guides/                  # 三规范：AI 流程 / 技术流程 / 业务流程
+│   ├── operations/              # 运维手册、代码债清单、拆分模板
+│   ├── design/                  # 演示页设计系统
+│   ├── specs/                   # Feature 文档（Spec/Plan/Tasks）
+│   └── archive/audits/          # 归档审计报告
+├── .specify/                    # Spec Kit：宪法、模板、脚本、工作流
+├── common/                      # 共享库（被依赖，不独立部署）
+│   ├── common-core/             # 通用工具、异常、统一返回体、结果码、可观测
+│   ├── common-dto/              # 跨服务 RPC DTO
+│   └── common-mybatis/          # MyBatis 通用配置、拦截器、审计字段
+├── merchant-service/            # 商户
+├── catalog-service/             # 商品 / SKU（含 SKU 缓存 + Redis）
+├── order-service/               # 订单 / 交易（幂等键 + 超时库存释放）
+├── payment-service/             # 支付编排 + 渠道适配 + 退款（com.payment.refund，8084）
+├── fulfillment-service/         # 履约
+├── entitlement-service/         # 权益
+├── reconciliation-service/      # 对账 + 会计审计中心
+├── settlement-service/          # 结算
+├── ledger-service/              # 复式记账（资金核心，8090）
+└── deployment/                  # 非领域组件：mock-channel-web(8091)、e2e-tests、architecture-tests、demo、performance、schema、output
+```
+
+> `gateway` 本 MVP **不创建**（接入层延后，见 §3.2）；`refund-service` 已并入 `payment-service`（Feature 015）。测试 / 演示 / 压测组件一律收口在 `deployment/`（见根 [AGENTS.md](../../AGENTS.md)「目录与产物纪律」）。
+
+**单服务内部分层**（包根 `com.payment.<service>`）：
+
+```text
+<service>/src/main/java/com/payment/<service>/
+├── <Service>Application.java   # 启动类
+├── api/                        # 对外接口层：Controller + DTO + 入参校验
+├── application/                # 应用服务层：用例编排、事务边界、RPC 客户端
+│   └── channel/                # 渠道接口（Payment ≠ Channel 边界）
+├── domain/                     # 领域模型：实体、值对象、领域服务、状态机
+├── infra/                      # 基础设施：Repository、MyBatis mapper、RPC 客户端
+│   └── channel/                # 渠道具体实现（Mock/支付宝/微信等适配器）
+└── config/                     # 装配配置
+```
+
+**分层依赖方向（单向）**：`api → application → domain ← infra`。`domain` 不依赖任何层；`infra` 实现 `domain` 声明的仓储接口（依赖倒置）。禁止 `domain` 反向依赖 `infra` 或 `api`。
+
+**关键约定**：
+
+1. **包名**：统一 `com.payment.<service>.<layer>`，禁止在 `com.payment.common` 之外随意新建顶层包。
+2. **渠道适配**：`application/channel`（接口）与 `infra/channel`（实现）分离，落实 Payment ≠ Channel。
+3. **common 模块**：只放**跨服务共享**的稳定契约（DTO、事件、结果码），不放业务逻辑。
+4. **不建空模块**：一个服务只在对应阶段启动时才创建，避免空壳目录。
+5. **文档分层（Diátaxis）**：架构 / ADR / 指南 / 运维 / Spec 分目录；权威决策以 [docs/adr/README.md](../adr/README.md) 跳转表与 [traceability.md](../adr/traceability.md) 为准。
+6. **账本唯一事实源**：所有资金变动经 `ledger-service`（8090），业务服务不得自记资金（ADR-0008）。
 
 ---
 
@@ -445,33 +538,11 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 
 ## 7. 项目计划与资源
 
-**当前阶段**：Roadmap 主链 Phase 0~10 已走完，终点 `014-seckill-and-cache`（含 Phase 4 压测）；当前处于演示/打磨期。
+**当前阶段**：Roadmap 主链 Phase 0~10 已走完，终点 `014-seckill-and-cache`（含 Phase 4 压测）；当前处于演示 / 打磨期。
 
-| 阶段 | 目标 | 交付边界 |
-|---|---|---|
-| Phase 0 · Foundation | 收口架构裁决、服务目录、端口、Schema、Spec Kit 入口 | 不实现业务、不接真实支付、不建 Ledger、不引 MQ/K8s |
-| Phase 1 · Commerce Core | Merchant/Product/SKU/Order/Transaction 最小可运行 | 不含 Payment、退款、权益、结算、库存/促销/税费 |
-| Phase 2 · Payment Core | Payment/Attempt/Channel Adapter + Mock Channel | 不含真实渠道、Ledger、路由/风控/多币种 |
-| Phase 3 · Payment Reliability | UNKNOWN 收敛、重复/乱序/延迟回调、有限重试、审计 | 不含生产级 SLA、多活、复杂风控、自动补偿 |
-| Phase 4 · Fulfillment & Entitlement | 支付成功后履约 → 权益授予 | 不含复杂仓储物流、权益商城、退款回收政策 |
-| Phase 5 · Refund | **单笔退款只回三态**（成功恒为全额；部分退款追踪本期不做，§2.4 #6 / ADR-0047）、支持同一支付多笔退款、幂等、退款后处理 | 不含单笔部分成功追踪、审批、权益回收政策、真实出款；**退款侧 Ledger 冲正已接入**（退款成功经 `FeignLedgerPostingGateway` 留反向分录，ADR-0018） |
-| Phase 6 · Reconciliation | 平台事实与渠道账单比对、差异处理 | 不含真实账单、自动调账、真实资金修正 |
-| Phase 7 · Settlement | 商户周期结算批次、调整项、模拟结算结果 | 不真实出款、不接银行、不接多币种清分（结算侧记账经 ledger-service，见 §4.3.5） |
-| Phase 8 · Ledger | 复式记账、科目、分录、记账幂等 | 不含复杂会计准则、多币种清分、总账 |
-| Phase 9 · Risk / Security | 认证、授权、签名校验、敏感数据、最小风控 | 不含全量合规、复杂风控平台 |
-| Phase 10 · Distributed Evolution | 有证据地独立数据库/服务治理演进 | 不默认引入 Service Mesh/K8s/CQRS/ES |
+> **阶段划分、Feature 依赖图、每 Feature 完成后的 SOP 一律以 [roadmap.md](roadmap.md) 为准**，本节不再重复。`008` 为历史缺口（有意保留不补号）。
 
-**Feature 依赖图**：
-
-```text
-Phase 0 Foundation → 001 Core Business Model → 002 payment-order-callback → 003 payment-reliability → 004 ledger
-→ 005 refund → 006 reconciliation → 007 settlement → 009 → 010 → 011 → 012 → 013 → 014（含 Phase 4 压测）
-注：`008` 为历史缺口，有意保留不补号；`002~007` 均已落地，主链走至 `014-seckill-and-cache`。
-```
-
-可并行不阻塞主链路：`009 Observability Baseline`、`010 Delivery/CI-CD Baseline`。
-
-**每个 Feature 完成后的 SOP**：Spec → Clarify → Plan → 确认 → Tasks → Implement → 测试/verify/quickstart → Review → 更新 Roadmap（详见 [roadmap.md](roadmap.md)）。
+**演进路径**：本地多服务 → Docker Compose → 单机部署 → CI/CD → 可观测增强 → 有证据的部分服务独立数据库迁移（Phase 10）。
 
 ---
 
@@ -500,53 +571,7 @@ Phase 0 Foundation → 001 Core Business Model → 002 payment-order-callback �
 
 ---
 
----
-
-## 9. 已决策 ADR 在本文档的体现（追溯索引）
-
-> **审计要求（Phase 5）**：已决策的 ADR 必须在技术方案与系统设计文档中体现。全部 53 条 ADR 的「编号 → 承载文件 → 锚点」见 [`docs/adr/README.md` 跳转表](adr/README.md)。本节给出与本文档 / `systems/` 设计直接相关的决策落点，便于审计与防漂移。
->
-> 标记：**【P0·内联】** = 本次审计已在正文对应章节修正并体现；**【P1·索引】** = 本表集中索引；**【ADR 文件】** = 仅纪录于 `docs/adr/`，正文未展开（按惯例以 ADR 文件为权威）。
-
-### 9.1 已在正文内联体现的 ADR（P0，本次审计修正）
-
-| ADR | 决策 | 落点 |
-|---|---|---|
-| ADR-0002 | 技术栈选型 | §3.5（Nacos 未启用见 ADR-0056） |
-| ADR-0010 | 金额表示：long 分 + currencyCode，Money VO 不启用 | §4.2 |
-| ADR-0018 | 退款 → Ledger 记账接入（冲正分录） | §7 Phase 5 |
-| ADR-0019 / ADR-0020 / ADR-0021 | 对账：状态机接线 / 渠道账单周期 fixture / 事实读取弹性 | §4.3.5（reconciliation-service.md） |
-| ADR-0021 | 不引入熔断中间件 | payment-service 弹性口径 |
-| ADR-0024 / ADR-0025 / ADR-0027 / ADR-0028 | 安全：鉴权空实现 / 验签空实现 / 脱敏不做 / 风控不做 | §2.4、§5.2 |
-| ADR-0026 | 密钥明文 env 注入 | §5.2 |
-| ADR-0039 / ADR-0040 | 下单入口幂等键（Redis 唯一存储、409+Retry-After） | order-service.md §4.3.1 |
-| ADR-0041 / ADR-0042 / ADR-0043 | 库存域归属 catalog / 三段式扣减 / ZSet 超时释放 | catalog-service.md、order-service.md |
-| ADR-0044 / ADR-0045 / ADR-0046 | Redis 引入论证 / 用途边界（非数据源）/ 固定窗口限流 | §2.3、§3.5、§5 |
-| ADR-0047 | 退款金额校验口径（累计不超付） | §4.3.3 |
-| ADR-0048 ~ ADR-0051 | 演示形态：收银台 / 场景配置化 / 演示账单 / 脚本纪律 | §3.1、§6、§4.3.5 |
-| ADR-0052 | 渠道回调验签接入（回退至 ADR-0025 空实现） | §5.2 |
-| ADR-0053 | 013/014 代码超前 roadmap 落地处置 | §7 |
-
-### 9.2 P1 决策索引（集中列出，避免散落漂移）
-
-| ADR | 决策要点 | 本文落点 | systems 落点 |
-|---|---|---|---|
-| ADR-0012 | 双响应码错误分类（通信失败一律重试，业务失败不重试） | §4.4 | payment-service 错误分类 |
-| ADR-0013 | 重试不落库、请求内联重试（3 次退避 1s/2s/4s） | §4.4 | payment-service |
-| ADR-0014 | 同 attempt 重放（重试复用同一 attempt，靠幂等吸收） | §4.4 | payment-service |
-| ADR-0015 | UNKNOWN 真实收敛时长度量（entered_unknown_at） | §5.1 / §5.3 | payment-service |
-| 超时口径 | 出站 RPC 1s / 对外 HTTP 1.5s（全服务统一） | §3.3 / §4.4 | 全服务 |
-| ADR-0038 | 演示形态 → **Superseded by ADR-0048** | §6 | — |
-| ADR-0048 | 新增 `mock-channel-web` 收银台组件（payUrl 跳转链路） | §3.1 / §6 | mock-channel-web (8091) |
-| ADR-0049 | Mock 渠道场景配置化（`payment.channel.mock-scenario`） | §4.3 | payment-service |
-| ADR-0050 | 对账演示账单生成 CSV 写入 `target/classes` | §4.3.5 | reconciliation-service |
-| ADR-0051 | 演示脚本纪律（只编排不伪造、断言失败即非零退出） | §6 | deployment/ |
-
-### 9.3 仅纪录于 ADR 文件（正文未展开，按惯例以 ADR 为权威）
-
-ADR-0001（Spring Cloud 架构）、ADR-0003~0007（支付可靠性集合）、ADR-0008~0011（Ledger 设计集合）、ADR-0016~0017（退款模型/编排）、ADR-0022~0023（结算调整项/闸门）、ADR-0029~0033（分布式演进）、ADR-0034~0037（内部令牌，已不做）、ADR-0054~0058（核心资金正确性 / 入口与基础设施 / 性能基线，见 `docs/adr/0016~0018-*.md`）。
-
-## 10. Feature 017：审计四核对 + 挂账调账闭环（ADR-0065）
+## 9. Feature 017：审计四核对 + 挂账调账闭环（ADR-0065）
 
 **职责变化**：reconciliation-service 从「渠道对账 + 差异记录」升级为「会计审计中心」——账证（业务事实 ↔ 账本分录）、账账（借贷平衡 + 科目勾稽 + 跨账）、账实（账本 ↔ 渠道账单）、账表（006 报表 ↔ 业务回算）四核对，以及挂账 → 调账 → 复核 → 关批处置闭环。ledger 新增第 5 科目 `SUSPENSE`（待处理差错款，ASSET）；settlement 建批前接入审计门禁（fail-closed）。
 

@@ -53,7 +53,7 @@ bash deployment/demo/run-all.sh
 ## 从哪里开始
 
 - 文档导航：[docs/README.md](docs/README.md)
-- 开发流程：[docs/guides/development-guide.md](docs/guides/development-guide.md)
+- 开发流程：[docs/guides/ai-standards.md](docs/guides/ai-standards.md)（AI 流程规范）
 - 项目宪法：[.specify/memory/constitution.md](.specify/memory/constitution.md)
 - 总体技术方案：[docs/architecture/technical-solution.md](docs/architecture/technical-solution.md)
 - Roadmap：[docs/architecture/roadmap.md](docs/architecture/roadmap.md)

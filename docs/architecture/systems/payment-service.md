@@ -17,7 +17,7 @@
 | 维度 | 说明 |
 |---|---|
 | **负责** | 支付意图、支付金额/币种、幂等键、支付状态机、支付尝试（PaymentAttempt）、渠道结果应用、回调幂等、UNKNOWN 收敛、支付成功回写订单/交易（RPC）、退款渠道尝试透传、对账支付事实抽取 |
-| **不负责** | 具体渠道协议实现（依赖 `PaymentChannel` 接口抽象）；订单/履约/权益的最终状态；退款整体决策（归属 refund-service） |
+| **不负责** | 具体渠道协议实现（依赖 `PaymentChannel` 接口抽象）；订单/履约/权益的最终状态；退款整体决策（归属本服务退款域，见 [§8](#8-退款域设计原-refund-servicefeature-015-并入)） |
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -44,12 +44,12 @@
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
-| 聚合根 | `Payment` | [domain/Payment.java](../../payment-service/src/main/java/com/payment/payment/domain/Payment.java) | 平台支付意图 + 平台状态；不保存渠道内部状态 |
-| 实体 | `PaymentAttempt` | [domain/PaymentAttempt.java](../../payment-service/src/main/java/com/payment/payment/domain/PaymentAttempt.java) | 一次渠道交互的完整历史（渠道引用/时间/结果/状态） |
-| 值对象 | `Money` | [common-core](../../common/common-core/src/main/java/com/payment/common/core/money/Money.java) | 金额 + 币种（领域内金额用 `long` 分承载） |
-| 值对象 | `IdempotencyKey` | [common-core](../../common/common-core/src/main/java/com/payment/common/core/idempotency/IdempotencyKey.java) | 幂等键 |
-| 值对象 | `ChannelResult` | [application/channel/ChannelResult.java](../../payment-service/src/main/java/com/payment/payment/application/channel/ChannelResult.java) | 渠道结果 SUCCESS/FAILURE/UNKNOWN + 渠道引用 + 原因 |
-| 值对象 | `ChargeRequest` / `RefundRequest` | [application/channel/](../../payment-service/src/main/java/com/payment/payment/application/channel/) | 平台→渠道请求（只读必要字段，不访问支付聚合内部状态） |
+| 聚合根 | `Payment` | [domain/Payment.java](../../../payment-service/src/main/java/com/payment/payment/domain/Payment.java) | 平台支付意图 + 平台状态；不保存渠道内部状态 |
+| 实体 | `PaymentAttempt` | [domain/PaymentAttempt.java](../../../payment-service/src/main/java/com/payment/payment/domain/PaymentAttempt.java) | 一次渠道交互的完整历史（渠道引用/时间/结果/状态） |
+| 值对象 | `Money` | [common-core](../../../common/common-core/src/main/java/com/payment/common/core/money/Money.java) | 金额 + 币种（领域内金额用 `long` 分承载） |
+| 值对象 | `IdempotencyKey` | [common-core](../../../common/common-core/src/main/java/com/payment/common/core/idempotency/IdempotencyKey.java) | 幂等键 |
+| 值对象 | `ChannelResult` | [application/channel/ChannelResult.java](../../../payment-service/src/main/java/com/payment/payment/application/channel/ChannelResult.java) | 渠道结果 SUCCESS/FAILURE/UNKNOWN + 渠道引用 + 原因 |
+| 值对象 | `ChargeRequest` / `RefundRequest` | [application/channel/](../../../payment-service/src/main/java/com/payment/payment/application/channel/) | 平台→渠道请求（只读必要字段，不访问支付聚合内部状态） |
 
 **基数关系（MVP）**：`Payment (1) ─ (N) PaymentAttempt`，每次尝试 ≤ 1 个渠道引用（`channel_reference` 唯一约束）。
 
@@ -82,7 +82,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ### 2.3 表结构与索引策略
 
-来源：[deployment/schema/03-payment-schema.sql](../../deployment/schema/03-payment-schema.sql)（权威 DDL）。
+来源：[deployment/schema/03-payment-schema.sql](../../../deployment/schema/03-payment-schema.sql)（权威 DDL）。
 
 **`payments`**
 
@@ -243,7 +243,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ### 4.1 创建支付意图（含渠道调用）
 
-`PaymentController.createPayment` → `PaymentApplicationService.createPaymentIntent`（[源码](../../payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java)）：
+`PaymentController.createPayment` → `PaymentApplicationService.createPaymentIntent`（[源码](../../../payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java)）：
 
 1. `findByIdempotencyKey` 回查；命中 → 计数 `payment.duplicate` 并返回首次结果（幂等）。
 2. 构造 `Payment`（校验 `amountMinor > 0`）→ `insertNew`：`save` 撞 `uk_payments_idempotency_key` 的 `DuplicateKeyException` 时回查返回首次结果（**数据库级幂等兜底，覆盖并发/重启后重复插入**）。
@@ -286,7 +286,7 @@ sequenceDiagram
 
 ### 4.3 退款渠道事实（受理 + 异步回调收敛，spec 019 / ADR-0067）
 
-`PaymentRefundService.refund`（[源码](../../payment-service/src/main/java/com/payment/payment/application/PaymentRefundService.java)）：
+`PaymentRefundService.refund`（[源码](../../../payment-service/src/main/java/com/payment/payment/application/PaymentRefundService.java)）：
 
 1. 加载支付（`NOT_FOUND`）；断言 `SUCCEEDED`（否则 `STATE_TRANSITION_VIOLATION`）。
 2. `channel.refund(RefundRequest)` 调 Mock Channel：默认异步受理模式（`payment.channel.refund-async=true`）当场返回 `accepted`（受理流水号，无业务结论）；同步模式可配。落 REFUND 尝试行（`payment_attempts.attempt_type='REFUND'`，UNKNOWN/ACCEPTED 态）。
@@ -339,7 +339,7 @@ sequenceDiagram
 
 ### 6.1 运行态配置（application.yml）
 
-来源：[application.yml](../../payment-service/src/main/resources/application.yml)
+来源：[application.yml](../../../payment-service/src/main/resources/application.yml)
 
 ```yaml
 spring:
@@ -419,3 +419,74 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 **Mock 场景配置化（ADR-0049）**：`payment.channel.mock-scenario` 切换渠道模拟行为（成功/失败/超时/重复回调），供演示与测试断言。
 
 **部署前置条件**：上述「本期不做」成立的前提是**部署环境不对公网暴露**；一旦暴露，验签/对外鉴权 MUST 先于功能上线补齐。
+
+---
+
+## 8. 退款域设计（原 refund-service，Feature 015 并入）
+
+> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0024-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/refund/`，原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/005-refund/` 与 git 历史。
+
+### 8.1 职责边界
+
+| 维度 | 说明 |
+|---|---|
+| **负责** | 退款申请幂等受理、可退款金额 / 资格校验（`RefundPolicy`）、退款状态机、经 payment 渠道退款尝试、退款后权益吊销 RPC、UNKNOWN 退款收敛、向 reconciliation 暴露已确认退款事实、受理悲观锁（防超退） |
+| **不负责** | 真实资金出款（归 Channel，经 payment）、支付 / 履约 / 权益内部状态判定、对账差异处理（归 reconciliation）、Ledger 记账（经 payment） |
+
+边界铁律：**Refund ≠ Payment Refund**（Constitution 边界 5）——退款是跨多域编排，不是「调一次渠道退款」；渠道退款、权益吊销、对账差异各自归位。
+
+### 8.2 聚合与状态机
+
+- 聚合根 `Refund`（`domain/Refund.java`）；明细 `RefundItem`；值对象 `RefundDecision`；领域服务 `RefundPolicy`（纯函数）；出站端口 `PaymentRefundGateway` / `EntitlementGateway`。
+- 基数：`Refund (1) ─ (N) RefundItem`；同一 `paymentNo` 可对应多笔 `Refund`，累计金额受 `RefundPolicy` 约束。
+
+```text
+REQUESTED --process()--> PROCESSING --succeed()--------> SUCCEEDED
+                              |    （\--partiallySucceed()-> PARTIALLY_SUCCEEDED ⛔ 无调用方）
+                              |      \--fail()-------------> FAILED
+                              \--markUnknown()----------> UNKNOWN --succeed/fail--> SUCCEEDED/FAILED
+REQUESTED --reject()--------> REJECTED
+SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
+```
+
+- 所有迁移经唯一入口 `transitionTo(...)`，终态由 `isTerminal()` 吸收，**禁止散落 `setStatus`**。
+- ⛔ `PARTIALLY_SUCCEEDED` / `partiallySucceed()` 保留但**无调用方、不可达**（ADR-0016）：渠道只回三态，成功恒为全额；保留枚举是为了 `RefundStatus.valueOf` 反序列化历史行不抛异常。
+
+### 8.3 金额校验口径（ADR-0047 定稿）
+
+`RefundPolicy.decide` 只做三条校验：**币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额**（H1 防超退）；**不做**「申请额 = 可退全额」的等值校验。同一支付允许多笔退款（每笔独立幂等键）；累计超额落 `REJECTED` 且**不发起渠道尝试**。累计计额状态为 `SUCCEEDED/PROCESSING/UNKNOWN`，**一律按「申请额」计**（在途保守占用，防并发超退）。
+
+### 8.4 受理流程（createRefund，`@Transactional`）
+
+1. `findByIdempotencyKey` 回查命中 → 计数 `refund.duplicate` 并返回首次结果。
+2. `lockForIntake(paymentNo)`：以 `refund_intake_locks` 行锁串行化同一支付受理（防超退 H1）。
+3. `paymentRefundGateway.queryAmount(...)`：取支付状态 + 已支付额；非 `SUCCEEDED` → 落 `REJECTED`。
+4. 累计该支付已受理退款额 → `RefundPolicy.decide(...)` 校验。
+5. `insertNew` → `refund.process()`（REQUESTED → PROCESSING）→ `paymentRefundGateway.attemptRefund(...)` 调渠道，按 `SUCCEEDED/FAILED/UNKNOWN` 驱动状态机（UNKNOWN 原样登记，不臆断）。
+6. 事务提交（悲观锁释放）；`SUCCEEDED` 时 `entitlementGateway.notifyRefundPostProcess(...)`，**失败 catch 忽略、不回滚退款成功**。
+
+### 8.5 并发与幂等（四重保障）
+
+| 作用域 | 机制 |
+|---|---|
+| 创建退款受理 | `uk_refunds_idempotency_key` 唯一约束 + 先回查 + `DuplicateKeyException` 捕获回查 |
+| 防超退款（H1） | `refund_intake_locks` 悲观行锁串行化同一支付受理 |
+| 并发状态迁移 | `version` 乐观锁，更新 0 行抛 `CONFLICT` |
+| 重复/乱序收敛 | 状态机终态吸收（`succeed/fail/markUnknown` 对终态返回 `false`） |
+
+### 8.6 异常与边界场景
+
+| 场景 | 处理 |
+|---|---|
+| 支付非 SUCCEEDED 退款 | 落 `REJECTED` + 原因，仍登记幂等 |
+| 超可退金额 / 币种不符 | `RefundPolicy.decide` 拒绝 → `REJECTED`，不发渠道尝试 |
+| 渠道超时 / 断连 / 不完整 | payment 返回 `UNKNOWN`，退款登记 `UNKNOWN`，等 resolve 收敛 |
+| 并发受理同支付 | `refund_intake_locks` 行锁串行 |
+| 迟到成功覆盖失败 | 状态机终态吸收（FAILED 后 `succeed()` 返回 `false`） |
+| 权益吊销 RPC 失败 | 捕获忽略，不回滚退款成功，靠对账 / 人工收敛 |
+
+出站 Feign 超时（payment / entitlement）：当前用 OpenFeign 默认值，`[目标]` connect 1s / read 3s；重试仅限幂等调用。
+
+### 8.7 对账事实
+
+`GET /internal/refunds/confirmed-facts`（仅 `SUCCEEDED`）供 reconciliation-service 拉取——退款事实的对外唯一窗口，见 §3.7。

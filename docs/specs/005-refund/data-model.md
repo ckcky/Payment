@@ -2,7 +2,7 @@
 
 **Feature**: `005-refund` | **Date**: 2026-08-29 | **Plan**: [plan.md](plan.md)
 
-> 本文件**只定义补齐部分退款与后处理追踪所需的实体变更与不变量**，不重复已稳定的既有模型（完整基线见 `docs/architecture/systems/refund-service.md` §2）。
+> 本文件**只定义补齐部分退款与后处理追踪所需的实体变更与不变量**，不重复已稳定的既有模型（完整基线见 `docs/architecture/systems/payment-service.md` §8.2）。
 > 标注：无标记 = 已实现；`[改]` = 本 Feature 修改；`[新]` = 本 Feature 新增。
 
 > ## ⛔ 负责人裁决（2026-08-30）· 落地（2026-08-31）：部分退款不做，代码已回退

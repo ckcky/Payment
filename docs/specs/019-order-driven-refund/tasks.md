@@ -19,7 +19,7 @@
 ## 批次 C — payment 侧（依赖：批次 B 契约定稿）
 
 - [x] **T107** 双层单号落地：`BusinessNoType` 加 `PAYMENT_REFUND("PMRF")`；refunds.refund_no 改自生成 PMRF+雪花（存量 RF 保留）；refunds 加 `transaction_refund_no`（普通索引）；`CreateRefundCommand` 必填 transactionRefundNo，幂等键 = transaction_refund_no（同 TXRF 重试回放同一执行单）；响应携带 PMRF
-- [x] **T108** 退款异步回调闭环：`MockChannelAdapter.refund()` 改受理+异步模式（同步模式保留可配）；新增渠道退款回调端点（验参防重放）；`RefundResultProcessor` 统一后处理（attempts/refunds/payments 状态 + ledger 冲正 → 通知 order 带双号）；**同步/异步/resolve 三路收敛到同一编排**；payments 退款口径（refunded_minor 或状态补退款态）与编排归属定稿并回写 [plan.md §3.3](plan.md#33-编排归属t108-实施定稿)
+- [x] **T108** 退款异步回调闭环：`MockChannelAdapter.refund()` 改受理+异步模式（同步模式保留可配）；新增渠道退款回调端点（验参防重放）；`RefundResultProcessor` 统一后处理（attempts/refunds/payments 状态 + ledger 冲正 → 通知 order 带双号）；**同步/异步/resolve 三路收敛到同一编排**；payments 退款口径（refunded_minor 或状态补退款态）与编排归属定稿并回写 [plan.md §3.3](plan.md#33-编排归属t108-实施定稿--2026-09-09)
 - [x] **T109** 下线与修复：删除 `POST /internal/refunds` 创建入口（resolve 保留）；演示脚本 `scenario-refund.sh` 改调 order 入口；修记账幂等键双重前缀（统一 `REFUND:{PMRF}`）；`PaymentResultProcessor` 不再静默吞异常（WARN + 指标）
 - [x] **T110** payment 侧测试：PMRF 生成/幂等键切换/同 TXRF 回放；三路收敛一致性；回调重放幂等；RefundFactsService 对账口径（PMRF + channel_reference）
 
