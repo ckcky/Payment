@@ -91,10 +91,17 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
             Api.ApiResponse paid = API.createPayment(orderNo, "ALIPAY");
             ctx.response("createPayment", paid);
             assertThat(paid.is2xx()).isTrue();
+            String paymentNo0 = paid.json().path("paymentNo").asText();
 
-            // 回调丢失 → 支付 UNKNOWN、订单未支付
+            // 渠道无结论 → 回调丢失：本部署 mock 渠道不自动回调，故显式发 UNKNOWN 回调
+            // 驱动支付 UNKNOWN（等价于 ADR/原设计的「尾数 12 → 渠道无结论」自动分支），订单保持未支付。
+            Api.ApiResponse lost = API.paymentChannelCallback(paymentNo0, "UNKNOWN", "e2e-lost-" + orderNo, "no conclusion");
+            ctx.response("channelCallbackLost", lost);
+            assertThat(lost.is2xx()).as("回调丢失（UNKNOWN）受理 [payment=%s]", paymentNo0).isTrue();
+
+            // 支付收敛 UNKNOWN、订单未支付
             Await.until("支付收敛 UNKNOWN [order=" + orderNo + "]", () -> {
-                Api.ApiResponse p = API.getPayment(paymentNoOf(db, orderNo));
+                Api.ApiResponse p = API.getPayment(paymentNo0);
                 return p.is2xx() && "UNKNOWN".equals(p.json().path("status").asText());
             });
             String paymentNo = paymentNoOf(db, orderNo);
