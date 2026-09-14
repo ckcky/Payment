@@ -29,13 +29,14 @@
 | [0028](0028-order-driven-refund-two-layer-refund-order.md) | order 驱动的两层退款单模型与退款异步回调闭环（ADR-0067） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地，全量回归绿） | spec 019；双层退款单 TXRF（transaction 层）/PMRF（payment 层）互记、transactions 加 payment_no/refunded_minor、两层金额校验、渠道退款异步回调 + 三路收敛、秒杀库存回补、直调入口下线；明确不做：UNKNOWN 自动收敛器 / resolve Admin Token / 部分退款次数上限 |
 | [0029](0029-unified-access-logging.md) | 统一访问日志：结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 传播修复（ADR-0068） | ✅ **Accepted → Implemented**（2026-09-07 拍板并落地） | spec 021；Filter+ContentCaching 实现、结束时一条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断、/actuator 排除、可开关）、脱敏只留桩（SensitiveBodyMasker 透传）、logback springProperty 注入服务名、MdcTaskDecorator + 4 Scheduler 补 traceId、tail-logs.sh/trace-grep.sh；明确不做：真脱敏实现 / Loki 集中采集（后续期）/ AOP 方法级日志 |
 | [0030](0030-end-to-end-automated-testing.md) | 全链路自动化测试体系：独立 E2E 模块 + 分层门禁 + 不变量断言（ADR-0069） | ✅ **Accepted → 待实施**（2026-09-07 拍板，本次仅文档） | spec 022；新建 `deployment/e2e-tests`（JUnit5+Awaitility+JDBC，黑盒）、默认复用本地栈（ci profile 才 Testcontainers）、不引 SCC/Pact 改做 API 快照、PR 快跑 + nightly E2E；行级断言复用 `/demo/trace`、聚合不变量直连 MySQL、对账差异复用 audit F1~F9(LIVE)；硬约束：禁断言回调验签 / 对账必走 LIVE / 对账拆两套断言；明确不做：SCC-Pact / 改造或退役演示脚本 / k6-Gatling / PR 跑 E2E |
+| [0031](0031-containerized-local-stack.md) | 本地全栈容器化：Compose 而非 K8s + 双轨并存（宿主/容器）+ 宿主打 jar 只 COPY + 环境变量覆盖 Nacos 地址（ADR-0070，**Supersedes ADR-0057**） | 🟡 **Proposed**（2026-09-15 拍板，实施尚未开始） | spec 026；通用 Dockerfile 参数化复用 10 服务、compose profiles（infra/full）+ `pay-arch` 网络、应用 `depends_on nacos: service_healthy`、模式守卫双向互斥、Prometheus/Promtail 双模适配、demo UNKNOWN 场景等价切换；明确不做：K8s-Helm / registry-CI 推送 / 改业务源码 / Docker 内 Maven 构建 / 复用 8085 |
 
-## ADR 编号速查（0001–0069）
+## ADR 编号速查（0001–0070）
 
 | [0054](0016-core-payment-correctness.md#adr-0054) | 核心支付正确性约束（确认性纪录） | 0016 |
 | [0055](0017-entry-and-infra-decisions.md#adr-0055) | 支付意图幂等键由 order-service 生成 | 0017 |
 | [0056](0017-entry-and-infra-decisions.md#adr-0056) | Nacos 启用（落实 ADR-0002，撤销「暂不启用」偏离，见 ADR-0059） | 0017 |
-| [0057](0017-entry-and-infra-decisions.md#adr-0057) | 服务未容器化 | 0017 |
+| [0057](0017-entry-and-infra-decisions.md#adr-0057) | 服务未容器化（⛔ **Superseded by [ADR-0070](0031-containerized-local-stack.md#adr-0070)**，2026-09-15：改为双轨并存，新增容器模式） | 0017 |
 | [0058](0018-performance-baseline.md#adr-0058) | 性能与容量目标基线（已建立，3 项🟡已落地为 JUnit 并发/量化测试，并含分布式端到端验证 2026-09-04） | 0018 |
 | [0059](0019-enable-nacos.md#adr-0059) | 启用 Nacos 服务发现与注册中心（实施记录） | 0019 |
 | [0060](0020-redis-lettuce-pool.md#adr-0060) | Redis 客户端启用 Lettuce 连接池（压测驱动，2026-09-04） | 0020 |
@@ -49,6 +50,7 @@
 | [0067](0028-order-driven-refund-two-layer-refund-order.md#adr-0067) | order 驱动的两层退款单模型（TXRF 交易层 / PMRF 支付层互记）+ 退款异步回调闭环（三路收敛）+ 秒杀库存回补 + 直调入口下线（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0028 |
 | [0068](0029-unified-access-logging.md#adr-0068) | 统一访问日志：结束时单条 ACCESS（method/uri/status/costMs/req/resp，4KB 截断）+ 固定格式含服务名（springProperty 注入）+ 脱敏留桩（SensitiveBodyMasker）+ 异步 MDC 传播修复（MdcTaskDecorator + 4 Scheduler）+ 日志查看脚本（✅ Accepted → Implemented，2026-09-07 拍板并落地） | 0029 |
 | [0069](0030-end-to-end-automated-testing.md#adr-0069) | 全链路自动化测试体系：新建 `deployment/e2e-tests` 独立模块（黑盒 HTTP+JDBC）+ 测试钻石分层（L1 单元/L2 单服务集成/L3 API 快照/L4 E2E/L5 对账与故障注入）+ 默认复用本地栈（ci profile 用 Testcontainers）+ 不引 SCC/Pact + PR 快跑 / nightly 全量 + Invariants 断言原语库 + 确定性故障注入 + 测试有效性反证（✅ Accepted → 待实施，2026-09-07 拍板） | 0030 |
+| [0070](0031-containerized-local-stack.md#adr-0070) | 本地全栈容器化：Compose 编排 10 服务（非 K8s）+ **双轨并存**宿主/容器两种运行模式且端口互斥守卫 + 宿主打 fat jar（`deployment/output/jars`）镜像只 COPY（非 Docker 内多阶段 Maven 构建）+ compose `environment` 覆盖硬编码的 `127.0.0.1:8848`（源码零改动）+ `depends_on nacos: service_healthy`（🟡 Proposed，2026-09-15 拍板；**Supersedes ADR-0057「服务未容器化」**） | 0031 |
 
 > 决策 #2 落地：保留 30 个编号 ADR 文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 
