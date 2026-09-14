@@ -40,13 +40,19 @@ VUS=20 DURATION=90s SKU_ID=1 ORDER_RATE=40 SURPLUS_RATIO=0.2 \
 
 echo ""
 echo "==> 生成 HTML 报告"
+# catalog 缓存读 + 秒杀（generate-report.js 仅认 catalog 格式）
+RESULT="$RESULTS/stress-catalog-load.json" \
+  OUT="$RESULTS/stress-catalog-perf-report.html" \
+  node "$SCRIPT_DIR/generate-report.js"
+# 全链路 下单→支付→退款（专用生成器，schema 不同）
 RESULT="$RESULTS/stress-chain-load.json" \
   OUT="$RESULTS/stress-chain-perf-report.html" \
-  node "$SCRIPT_DIR/generate-report.js"
+  node "$SCRIPT_DIR/generate-chain-report.js"
 
 echo ""
 echo "压测完成。"
-echo "  链路报告 : $RESULTS/stress-chain-perf-report.html"
-echo "  原始数据 : $RESULTS/stress-catalog-load.json"
-echo "             $RESULTS/stress-chain-load.json"
+echo "  catalog 报告 : $RESULTS/stress-catalog-perf-report.html"
+echo "  链路报告     : $RESULTS/stress-chain-perf-report.html"
+echo "  原始数据     : $RESULTS/stress-catalog-load.json"
+echo "                $RESULTS/stress-chain-load.json"
 echo "  注：k6 版脚本见 $SCRIPT_DIR/*-k6.js（需自行安装 k6）"
