@@ -29,7 +29,18 @@
 
 ## 2. 启动顺序
 
-依赖方向决定启动顺序（先起被依赖方，可减少启动期熔断）：
+**先选模式**（spec 026 / ADR-0070）：宿主模式与容器模式**端口互斥，二选一**。
+启动脚本内置双向守卫，检测到另一侧在跑会中止并提示。
+
+| 模式 | 启动 | 停止 |
+|---|---|---|
+| 容器模式 | `bash deployment/start-container.sh` | `bash deployment/stop-all.sh` |
+| 宿主模式 | `bash deployment/start-all.sh` | `bash deployment/stop-all.sh` |
+
+- **容器模式**下，下面的启动顺序由 `docker compose` 的 `depends_on` + healthcheck 自动保证，
+  特别是 **Nacos 必须先 healthy**（它是所有 `@FeignClient` 的硬依赖，ADR-0059）——
+  只依赖启动顺序会造成「服务起来了但跨服务调用全 Connection refused」的假成功。
+- **宿主模式**下需人工按依赖方向起，顺序如下（先起被依赖方，可减少启动期熔断）：
 
 ```text
 MySQL 8 (localhost:3306)
@@ -172,4 +183,8 @@ docker exec payment-prometheus promtool check rules /tmp/check.yml
   2. **端口被环境变量抢占**：若环境里存在 `SERVER_PORT` / `PORT`，Spring 的环境变量优先级高于 `application.yml`，服务会被拉到错误端口（实测三个服务被拉到 60956 而启动失败）。`restart-payment.sh` 已显式传 `--server.port`；手工启动时同样显式指定。
   3. **只杀监听进程**：按端口 kill 时必须限定监听态（macOS：`lsof -ti tcp:<port> -sTCP:LISTEN`），否则会连带杀掉持有出站连接的调用方服务（实测一次重启干掉 9 个进程）。
 - **配置**：payment 的 `payment.channel.mock-scenario`（ADR-0049）决定 Mock 渠道默认结果（`SUCCESS`/`FAILURE`/`BUSINESS_UNKNOWN`/`TIMEOUT` 等），构造期注入、坏值 FAIL FAST，运行时切换需重启 payment（见 `demo/restart-payment.sh`）。
+  - **宿主模式**：`bash demo/restart-payment.sh BUSINESS_UNKNOWN`（以 JVM 参数重载）。
+  - **容器模式**：compose 已把该值暴露为 `PAYMENT_CHANNEL_MOCK_SCENARIO`，用
+    `PAYMENT_CHANNEL_MOCK_SCENARIO=BUSINESS_UNKNOWN docker compose -f deployment/docker-compose.yml --profile full up -d --force-recreate payment-service`
+    重建 payment 容器即可（等价手段，FR-009）。注意真实配置键在 **channel** 层（`payment.channel.mock-scenario`）。
 - **013/014 库存与秒杀（Redis 依赖）**：catalog `Stock` 三段式库存 + order `OrderTimeoutScheduler`（Redis ZSet 时间轮）+ 014 的 Redis 缓存 / 秒杀预扣 / 限流均已落地（spec/ADR 见 `docs/specs/013-*` / `014-*` 与 `docs/adr/0014-next-stage-decisions.md`）。**需 Redis 可用**：Redis 不可用时超时取消降级（仅记日志跳过）、秒杀预扣 fail-closed 拒绝保护库存。

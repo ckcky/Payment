@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 一键启动：MySQL / Prometheus / Grafana（容器） + 9 个微服务（宿主进程）
+# 一键启动【宿主模式】：仅 MySQL/Prometheus/Grafana/Nacos 等中间件（容器） + 10 个应用（宿主进程）
+#
+# 双模式说明（spec 026 / ADR-0070 D2）：本脚本是**宿主模式**入口，与**容器模式**
+# （deployment/start-container.sh，10 个应用也全部容器化）**端口互斥，二选一**。
+# 两者对外都使用 8081–8091，同时运行会 bind 失败——本脚本启动前会检测容器模式并中止。
+#
 # 用法（Windows 在 Git Bash 里跑，macOS/Linux 直接跑）：
 #   bash deployment/start-all.sh
 # 停止：
 #   bash deployment/stop-all.sh
+# 容器模式（另一种选择）：
+#   bash deployment/start-container.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+# 模式守卫：容器模式在跑时拒绝启动（ADR-0070 D2 双轨互斥）
+# shellcheck source=lib-mode-guard.sh
+source "$ROOT_DIR/deployment/lib-mode-guard.sh"
+guard_no_container_apps "start-all.sh" || exit 1
 
 LOG_DIR="$ROOT_DIR/deployment/logs"
 PID_FILE="$LOG_DIR/.pids"
