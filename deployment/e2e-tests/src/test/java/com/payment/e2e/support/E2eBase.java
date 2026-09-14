@@ -54,19 +54,23 @@ public abstract class E2eBase {
         if (!paid.is2xx()) {
             throw new IllegalStateException("createPayment failed: HTTP " + paid.status() + " " + paid.body());
         }
+        // 驱动渠道回调使 payment→SUCCEEDED→order PAID。
+        // 本部署 mock 渠道不自动回调（demo/scenario-happy-path.sh 亦显式发 /mock-channel/callback），
+        // 故此处显式驱动；payment-service 内部回调端点（ADR-0025 验签占位放行）。
+        String paymentNo = paid.json().path("paymentNo").asText();
+        Api.ApiResponse cb = API.paymentChannelCallback(paymentNo, "SUCCESS", "e2e-" + orderNo, null);
+        ctx.response("channelCallback", cb);
+        if (!cb.is2xx()) {
+            throw new IllegalStateException("channelCallback failed: HTTP " + cb.status() + " " + cb.body());
+        }
         Await.until("订单收敛为 PAID [order=" + orderNo + "]", () -> {
             Api.ApiResponse resp = API.getOrder(orderNo);
             return resp.is2xx() && "PAID".equals(resp.json().path("status").asText());
         });
-        Object paidPaymentNo = db.scalar("order",
-                "SELECT payment_no FROM orders WHERE order_no='" + orderNo + "'");
-        if (paidPaymentNo != null && !String.valueOf(paidPaymentNo).isBlank()) {
-            PAYMENT_NOS.put(orderNo, String.valueOf(paidPaymentNo));
-        }
-        // 等账本 posting 落定：payment 记账与订单 PAID 收敛非同一事务边界，
+        // 账本 posting 落定：payment 记账与订单 PAID 收敛非同一事务边界，
         // recon 故障注入按 posting 备份（空备份 joinIds → IN (NULL) 会静默失效）
-        String paymentNo = paidPaymentNo == null ? null : String.valueOf(paidPaymentNo);
         if (paymentNo != null && !paymentNo.isBlank()) {
+            PAYMENT_NOS.put(orderNo, paymentNo);
             Await.until("账本 posting 落定 [payment=" + paymentNo + "]", () -> {
                 Object cnt = db.scalar("ledger",
                         "SELECT COUNT(*) FROM postings WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'");
