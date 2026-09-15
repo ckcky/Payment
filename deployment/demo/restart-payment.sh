@@ -3,6 +3,12 @@
 # Mock 渠道场景是构造期注入的（ADR-0049），运行期不可热切换，故用重启切换。
 # 用法：bash demo/restart-payment.sh BUSINESS_UNKNOWN   # 演示 UNKNOWN
 #       bash demo/restart-payment.sh SUCCESS            # 恢复默认成功路径
+#
+# 双模式（spec 026 / ADR-0070）：
+#   - 宿主模式：杀掉监听 8084 的 JVM，再以 -Dpayment.channel.mock-scenario=$SCENARIO 重新拉起。
+#   - 容器模式：以 PAYMENT_CHANNEL_MOCK_SCENARIO=$SCENARIO 重建 payment-service 容器
+#     （compose 里该变量已提升为可注入项，见 docker-compose.yml payment-service.environment）。
+#   模式自动判定，调用方（run-all.sh）无需改动（FR-009 / T503）。
 set -euo pipefail
 
 SCENARIO="${1:-SUCCESS}"
@@ -10,11 +16,46 @@ MAVEN_CMD="${MAVEN_CMD:-./mvnw}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PID_FILE="$ROOT_DIR/deployment/logs/.pids"
 PORT=8084
+COMPOSE_FILE="$ROOT_DIR/deployment/docker-compose.yml"
 
 # 兼容 Git Bash 沙箱（MSYS_NO_PATHCONV 会让 Windows curl 写 /dev/null 失败，见 lib.sh）
 unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
 
-# ---- 终止现有 payment-service ----
+wait_healthy() {
+  for i in $(seq 1 60); do
+    if curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "http://localhost:$PORT/actuator/health" 2>/dev/null | grep -q 200; then
+      echo "payment-service UP（mock-scenario=${SCENARIO}，模式=${1}）"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "⚠️ payment-service 未在 120s 内就绪，请检查 deployment/logs/payment-service.log"
+  return 1
+}
+
+# ---- 模式判定：容器模式下 payment-service 由 compose 管理，不是宿主 JVM ----
+# 判定依据：compose 中 payment-service 正在运行。docker 不可用或容器未起 → 一律回落宿主模式，
+# 保证 IDE 断点调试等既有路径不被破坏（FR-009 / T502）。
+MODE=host
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  if docker compose -f "$COMPOSE_FILE" --profile full ps --services --filter status=running 2>/dev/null \
+      | grep -qx "payment-service"; then
+    MODE=container
+  fi
+fi
+echo "模式判定：${MODE}"
+
+if [ "$MODE" = "container" ]; then
+  echo "以 PAYMENT_CHANNEL_MOCK_SCENARIO=${SCENARIO} 重建 payment-service 容器…"
+  # --no-deps：只重建 payment 自身，避免连带重启 mysql/nacos。
+  # --force-recreate：环境变量变化在部分 compose 版本下不会触发重建，显式强制以确保场景生效。
+  PAYMENT_CHANNEL_MOCK_SCENARIO="$SCENARIO" \
+    docker compose -f "$COMPOSE_FILE" --profile full up -d --force-recreate --no-deps payment-service
+  wait_healthy container
+  exit 0
+fi
+
+# ---- 宿主模式：终止现有 payment-service ----
 # 以【端口】为准而非 .pids 文件：.pids 会随多次重启堆积陈旧条目，且 Git Bash 的 kill
 # 对其它 shell 会话启动的 Windows 进程通常无效，必须 taskkill 按 Windows PID 兜底。
 #
@@ -70,10 +111,4 @@ fi
 echo "$! payment-service" >> "$PID_FILE"
 echo "payment-service 以 mock-scenario=$SCENARIO 重启（PID $!）；等待健康…"
 sleep 5
-for i in $(seq 1 60); do
-  if curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "http://localhost:$PORT/actuator/health" 2>/dev/null | grep -q 200; then
-    echo "payment-service UP（mock-scenario=${SCENARIO}）"; exit 0
-  fi
-  sleep 2
-done
-echo "⚠️ payment-service 未在 120s 内就绪，请检查 deployment/logs/payment-service.log"
+wait_healthy host

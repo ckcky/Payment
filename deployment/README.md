@@ -126,6 +126,11 @@ bash deployment/build-images.sh
 > 前提：镜像构建需要能访问 Docker Hub 拉取基础镜像。若网络不可达，`docker compose build` 会在
 > `FROM` 阶段报 `failed to resolve source metadata`——此时可先用宿主模式。
 
+> Prometheus 抓取目标统一写 `host.docker.internal:808x`：**一份配置双模通吃**——宿主模式下它指向
+> 宿主进程，容器模式下端口已 publish 到宿主，同样可达（故刻意**未**改成 compose 服务名，否则宿主模式会失联）。
+> macOS/Windows 的 Docker Desktop 自动解析该域名；**Linux 原生 docker 引擎需补**
+> `extra_hosts: ["host.docker.internal:host-gateway"]`（加在 prometheus 服务下）。
+
 ### 宿主模式
 
 `start-all.sh` 依次做：模式守卫 → `docker compose up -d`（仅中间件）→ `./mvnw -q install -DskipTests`
@@ -154,7 +159,8 @@ docker compose -f deployment/docker-compose.yml --profile full  up -d   # 全栈
 
 ## 日志在哪看
 
-服务当前没有文件日志 appender，日志 = 每个服务的控制台输出：
+应用侧没有文件日志 appender（`logback-spring.xml` 只有 CONSOLE），
+启动脚本负责把控制台输出落到 `deployment/logs/<service>.log`（容器模式见下节）：
 
 - **一键启动后**：`deployment/logs/<service>.log`，实时跟踪 `tail -f deployment/logs/payment-service.log`。
 - **手动 `spring-boot:run` 时**：日志直接打在启动该服务的终端窗口里。
@@ -163,6 +169,18 @@ docker compose -f deployment/docker-compose.yml --profile full  up -d   # 全栈
   grep FINANCIAL_AUDIT deployment/logs/payment-service.log
   ```
 - **容器日志**（MySQL/Prometheus/Grafana）：`docker compose -f deployment/docker-compose.yml logs -f <service>`。
+
+### 容器模式的日志落盘约定
+
+容器模式下 10 个**应用容器**同样把日志写进 `deployment/logs/<service>.log`，与宿主模式同名同路径，
+因此 Promtail 采集配置在两种模式下**零改动**：
+
+- compose 侧为每个应用挂 `./logs:/var/log/payment-arch`，并注入 `LOGGING_FILE_NAME=/var/log/payment-arch/<service>.log`。
+- 但项目用自定义 `logback-spring.xml`（`common/common-core`），**只有 CONSOLE appender、没有 FILE appender**，
+  Spring Boot 的 `logging.file.name` 因此不生效。故由 Dockerfile 的 ENTRYPOINT 用
+  `exec java -jar /app/app.jar > >(tee -a ${LOGGING_FILE_NAME}) 2>&1` 把 stdout 分流到文件——
+  `docker logs` 与挂载卷文件两边都有日志，`exec` 保证 java 仍是 PID 1 可优雅停机。
+  （改产品侧日志配置代价更大，见 ADR-0070 D5。）
 
 ## 本地运行（Maven Wrapper）
 

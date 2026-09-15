@@ -62,7 +62,7 @@ guard_no_container_apps() {
   local self="${1:-start-all.sh}"
   if container_apps_running; then
     cat >&2 <<EOF
-✗ 检测到【容器模式】正在运行（存在 payment-*-service 容器），与 $self（宿主模式）端口冲突。
+✗ 检测到【容器模式】正在运行（存在 payment-*-service 容器），与 ${self}（宿主模式）端口冲突。
 
   两种模式对外都使用 8081–8091，**不可同时运行**（ADR-0070 D2 双轨互斥）。
 
