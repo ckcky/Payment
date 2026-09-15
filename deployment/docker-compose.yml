@@ -175,9 +175,14 @@ services:
     image: paymentarch/merchant-service:local
     container_name: payment-merchant-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8081:8081"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/merchant-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
     volumes:
       - ./logs:/var/log/payment-arch
@@ -197,9 +202,16 @@ services:
     image: paymentarch/catalog-service:local
     container_name: payment-catalog-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    # catalog 单独放宽到 768m：它承载「SKU 缓存读 + 秒杀 Lua」压测主流量，
+    # 实测压测后瞬时 RSS 450MiB（512m 的 88%），余量不足有被 OOM-kill 的风险。
+    mem_limit: 768m
     ports:
       - "8082:8082"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/catalog-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/catalog?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -228,9 +240,14 @@ services:
     image: paymentarch/order-service:local
     container_name: payment-order-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8083:8083"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/order-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/order?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -259,9 +276,14 @@ services:
     image: paymentarch/payment-service:local
     container_name: payment-payment-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8084:8084"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/payment-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -299,9 +321,14 @@ services:
     image: paymentarch/fulfillment-service:local
     container_name: payment-fulfillment-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8086:8086"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/fulfillment-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fulfillment?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -326,9 +353,14 @@ services:
     image: paymentarch/entitlement-service:local
     container_name: payment-entitlement-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8087:8087"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/entitlement-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/entitlement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -353,15 +385,25 @@ services:
     image: paymentarch/reconciliation-service:local
     container_name: payment-reconciliation-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8088:8088"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/reconciliation-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/reconciliation?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
     volumes:
       - ./logs:/var/log/payment-arch
+      # 渠道账单 CSV 注入目录（reconciliation.statement-dir-override，见 application.yml:56）。
+      # e2e 的 ChannelStatementDiffE2ETest 由**测试 JVM（宿主）**写 /tmp/e2e-channel-statements，
+      # 容器侧必须挂载同一路径才能读到——否则 4 个 CSV 差异用例全部「差异为空」而失败
+      # （2026-09-15 实测：容器模式 23 测试中这 4 例必挂，宿主模式全过）。
+      - /tmp/e2e-channel-statements:/tmp/e2e-channel-statements
     depends_on:
       nacos:
         condition: service_healthy
@@ -380,9 +422,14 @@ services:
     image: paymentarch/settlement-service:local
     container_name: payment-settlement-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8089:8089"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/settlement-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/settlement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -407,9 +454,14 @@ services:
     image: paymentarch/ledger-service:local
     container_name: payment-ledger-service
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8090:8090"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/ledger-service.log
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ledger?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
@@ -439,9 +491,14 @@ services:
     image: paymentarch/mock-channel-web:local
     container_name: payment-mock-channel-web
     profiles: ["full"]
+    # 内存硬上限：Docker Desktop 默认配额 7.75GiB，10 个 JVM 必须各自受限，
+    # 否则单一 JVM 失控会顶穿 VM 内存致全部容器 Exited(255)（2026-09-15 实测）。
+    mem_limit: 512m
     ports:
       - "8091:8091"
     environment:
+      # 容器日志落挂载卷（与宿主模式共用 deployment/logs，Promtail 配置零改动）
+      LOGGING_FILE_NAME: /var/log/payment-arch/mock-channel-web.log
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_USER: root

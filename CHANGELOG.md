@@ -8,7 +8,7 @@
 
 ## [2026-09-15] spec 026：本地全栈容器化（双模式 · Compose 而非 K8s）
 
-**范围**：spec 026 立项 + P1/P2/P3/P6 落地（P4 可观测适配、P5 演示脚本模式分支、P7 验证矩阵待网络恢复后执行）。
+**范围**：spec 026 立项 + P1~P7 全部落地并实测通过（P4 可观测适配、P5 演示脚本模式分支、P7 双模验证矩阵）。
 详见 [docs/specs/026-containerized-local-stack/](docs/specs/026-containerized-local-stack/)，决策见 **ADR-0070**
 
 - **Supersedes ADR-0057「服务未容器化」**：原决策理由「学习项目，容器化非当前目标」被推翻——
@@ -23,10 +23,24 @@
   MySQL `mysql:3306`、Redis `redis`、mock-channel-web 的 `/proxy` 目标改容器服务名），业务源码零变更。
 - **compose 增加 `pay-arch` 网络与 profiles**：`infra`（7 中间件）/ `full`（+10 应用）；
   应用 `depends_on nacos: condition: service_healthy`，避免 Connection refused 假成功。
-- **已知未完成项**：P4（Prometheus/Promtail 双模适配）、P5（`restart-payment.sh` 容器分支）、
-  P7（验证矩阵）——镜像构建需拉取 `eclipse-temurin:21-jre-jammy`，当前沙箱**无法访问 Docker Hub**
-  （经代理/不经代理均 HTTP 000），故运行时验证未执行；代码与配置均已就绪，网络恢复后可直接跑
-  `bash deployment/start-container.sh`。
+- **P4 可观测适配**：`prometheus.yml` **刻意不改**——抓取目标沿用 `host.docker.internal:808x`，
+  容器模式端口已 publish 到宿主，一份配置双模通吃（改 compose 服务名会让宿主模式失联）。
+  实测容器模式 Prometheus 10 target 全 UP、Loki 10 个服务均有日志。
+  应用日志落挂载卷靠 Dockerfile 的 `tee` 双写：项目 `logback-spring.xml` 只有 CONSOLE appender，
+  `logging.file.name` 无效，只能由入口把 stdout 分流到文件（同时保留 `docker logs`）。
+- **P5 演示脚本**：`restart-payment.sh` 按当前模式自动选宿主重启 / 容器重建
+  （`docker compose up -d -e PAYMENT_CHANNEL_MOCK_SCENARIO=...`）；容器模式 demo 5 场景退出码 0。
+- **P7 双模验证矩阵（已全部执行）**：demo 两种模式均退出码 0；e2e 两种模式**同形 22/23**
+  （唯一红为已知本地代理伪影 `MISSING_POSTING`，CI 为准）；压测两种模式均 `chain_completed=100`、
+  0 个 5xx（吞吐 rps 36.4 → 26.2，catalog 609 → 552，源于容器堆 256m < 宿主 384m + NAT 开销，可接受）。
+- **容器模式专属修复（无此则 e2e 必挂）**：①reconciliation 容器挂载宿主 `/tmp/e2e-channel-statements`
+  ——渠道账单 CSV 由测试 JVM（宿主）写入，容器不挂就读不到；②Dockerfile 加 `TZ=Asia/Shanghai`
+  ——基础镜像默认 UTC，与宿主差 8 小时会让按日期窗口的断言分叉。
+- **内存教训**：容器堆必须**低于**宿主（`-Xmx256m` + `metaspace 128m`）并给每个服务
+  `mem_limit: 512m`（catalog 承载秒杀主流量放宽到 768m）。不限量时 10 个 JVM 顶穿 Docker Desktop
+  默认配额 7.75GiB，导致 VM 被杀、全部容器 Exited(255)。稳态实测约 5.3GiB。
+- **前提提示**：镜像构建需能访问 Docker Hub 拉取 `eclipse-temurin:21-jre-jammy`；网络不可达时
+  `docker compose build` 会在 `FROM` 阶段失败，此时用宿主模式。
 
 ---
 

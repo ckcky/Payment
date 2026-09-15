@@ -40,14 +40,26 @@ fi
 source "$ROOT_DIR/deployment/lib-mode-guard.sh"
 guard_no_host_apps "start-container.sh" || exit 1
 
-# ---- 2. 前置：fat jar 齐全性检查 ----
-# 这是 ADR-0070 D3 的代价：镜像只 COPY，故 jar 必须先由宿主构建。
-# 这里给出明确指引，而不是让 compose build 在 COPY 阶段才失败。
 SERVICES=(
   merchant-service catalog-service order-service payment-service
   fulfillment-service entitlement-service reconciliation-service settlement-service
   ledger-service mock-channel-web
 )
+
+# ---- 2. 构建 jar（可选）----
+if [ "${PAYMENT_SKIP_BUILD:-0}" = "1" ]; then
+  echo "==> [1/4] PAYMENT_SKIP_BUILD=1，跳过 jar 构建"
+else
+  echo "==> [1/4] 宿主构建 fat jar（首次较慢；PAYMENT_SKIP_BUILD=1 可跳过）"
+  # 与 start-all.sh 一致：必须 clean，避免残留半成品 class 引发运行期 NoClassDefFoundError
+  "${MAVEN_BIN:-./mvnw}" ${MAVEN_ARGS:-} -q clean install -DskipTests
+fi
+
+# ---- 3. fat jar 齐全性检查 ----
+# 这是 ADR-0070 D3 的代价：镜像只 COPY，故 jar 必须先由宿主构建。
+# 放在**构建之后、镜像构建之前**：新建克隆无 jar 时先自动构建（而不是直接报错拒跑），
+# 构建失败/被跳过导致 jar 仍缺失时，在这里给出明确指引——而不是让 compose build 在
+# COPY 阶段才失败，那会留下「镜像构建半途而废」的难排查现场。
 MISSING=()
 for svc in "${SERVICES[@]}"; do
   [ -f "$JAR_DIR/$svc-0.1.0-SNAPSHOT.jar" ] || MISSING+=("$svc")
@@ -60,15 +72,6 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   echo "  或一步到位：" >&2
   echo "      bash deployment/build-images.sh" >&2
   exit 1
-fi
-
-# ---- 3. 构建 jar（可选）----
-if [ "${PAYMENT_SKIP_BUILD:-0}" = "1" ]; then
-  echo "==> [1/4] PAYMENT_SKIP_BUILD=1，跳过 jar 构建"
-else
-  echo "==> [1/4] 宿主构建 fat jar（首次较慢；PAYMENT_SKIP_BUILD=1 可跳过）"
-  # 与 start-all.sh 一致：必须 clean，避免残留半成品 class 引发运行期 NoClassDefFoundError
-  "${MAVEN_BIN:-./mvnw}" ${MAVEN_ARGS:-} -q clean install -DskipTests
 fi
 
 # ---- 4. 构建镜像并启动 ----

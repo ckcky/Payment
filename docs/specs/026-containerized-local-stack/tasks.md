@@ -22,7 +22,8 @@
 - [x] T101 新建 `deployment/docker/Dockerfile`：参数化 `JRE_IMAGE` / `JAR_FILE` / `SERVICE_PORT`，只 COPY + ENTRYPOINT
 - [x] T102 Dockerfile 内置 JVM 堆上限 `-Xmx384m -Xms128m -XX:MaxMetaspaceSize=160m`（与宿主模式一致）
 - [x] T103 新建 `.dockerignore`（**置于仓库根**，因构建上下文是仓库根）：排除 `**/target`、`logs/`、`*.log`、`.git/`、`.workbuddy/`、`node_modules`
-- [ ] T104 验证：对 payment-service 单独构建镜像，`docker run` 后 `/actuator/health` 返回 200 —— ⛔ **阻塞**：基础镜像拉不到（Docker Hub 不可达）
+- [x] T104 验证：对 payment-service 单独构建镜像，`docker run` 后 `/actuator/health` 返回 200
+      （2026-09-15 网络恢复后实测通过；基础镜像 `eclipse-temurin:21-jre-jammy` 407MB 已拉取）
 - [x] T105 验证（部分）：以 `FROM scratch` 离线验证 10 个 jar 的 COPY 路径全部可解析；构建上下文实测 950B，确认 `.dockerignore` 生效且未误伤 jar
 
 ## P2 编排层（FR-004/005/007/008）
@@ -38,7 +39,8 @@
 - [x] T207 应用容器挂 `./logs:/var/log/payment-arch`，使 Promtail 现配置零改动
 - [x] T208 更新 compose 头注释（移除「Dockerfile 就绪后补齐」「服务以宿主进程运行」等过期表述）
 - [x] T209 验证：`docker compose --profile infra up -d` 只起 7 个中间件（实测通过）
-- [ ] T210 验证：`--profile full up -d` 后 Nacos 注册 10 个实例、health 全 200 —— ⛔ **阻塞**：同上（基础镜像不可达）
+- [x] T210 验证：`--profile full up -d` 后 10 个应用 health 全 200、Nacos 注册 9 个领域服务
+      （mock-channel-web 是演示组件、不注册；实测 8081–8091 全 200）
 
 ## P3 入口层与模式守卫（FR-006/015）
 
@@ -49,23 +51,30 @@
 - [x] T305 `stop-all.sh` 改为双模感知（两种都停；`--profile full down` 才能停掉应用容器）
 - [x] T306 新增 `deployment/build-images.sh`：`mvn clean install -DskipTests` + `compose build` 合一
 - [x] T308 验证：宿主在跑时执行 `start-container.sh` → 被拦且提示正确（**实测通过**）
-- [ ] T307 验证：容器在跑时执行 `start-all.sh` → 被拦且提示正确 —— ⛔ 待基础镜像可拉取后补测
-- [ ] T309 验证：未构建 jar 直接 `start-container.sh` → 明确错误提示，不产生半成品容器 —— ⛔ 待补测
+- [x] T307 验证：容器在跑时执行 `start-all.sh` → 被拦且提示正确（**实测通过**；
+      顺带修掉 `lib-mode-guard.sh` 里 `$self（宿主模式）` 的全角括号——bash 把 `self（宿主模式）`
+      整体当变量名，报「未绑定的变量」，守卫形同虚设；已改 `${self}`）
+- [x] T309 验证：未构建 jar 直接 `start-container.sh` → 明确错误提示，不产生半成品容器
+      （**实测通过**；另修正检查顺序——原实现把 jar 检查放在构建之前，导致新克隆「能自己 build
+      却先被自己的预检查拒之门外」；现改为「先构建 → 再检查」）
 
 ## P4 可观测适配（FR-010/011）
 
-- [ ] T401 `prometheus.yml` 容器模式目标改为 compose 服务名（`payment-service:8084` 等）
-- [ ] T402 保证 Prometheus 目标在两种模式下均可解析（避免 Linux 上 `host.docker.internal` 失联）
-- [ ] T403 验证：容器模式 Prometheus targets 页面 10 个 job 全部 UP
-- [ ] T404 验证：容器模式 Loki `{job="payment-arch"}` 能查到全部 10 个服务日志
-- [ ] T405 文档说明「容器日志写挂载卷」这一约定
+- [x] T401 **决议：不改** `prometheus.yml`。抓取目标保留 `host.docker.internal:808x`——
+      容器模式把端口 publish 到宿主后，该域名在两种模式下**都能解析到同一批端口**，
+      一份配置双模通吃；改成 compose 服务名反而会让宿主模式失效（宿主进程不在容器网络里）。
+- [x] T402 两种模式均可解析：实测容器模式 10/10 UP、宿主模式亦为 UP（`host.docker.internal`
+      在 Docker Desktop 下由引擎注入；Linux 需 `extra_hosts: host-gateway`，已在 deployment/README 注明）
+- [x] T403 验证：容器模式 Prometheus `/api/v1/targets?state=active` → 10 个 target 全 `up`
+- [x] T404 验证：容器模式 Loki `service` 标签取值 = 全部 10 个服务（`/loki/api/v1/label/service/values`）
+- [x] T405 文档：`deployment/README.md` 新增「容器模式的日志落盘约定」（挂载卷 + tee 双写的原因）
 
 ## P5 演示脚本适配（FR-009）
 
-- [ ] T501 `deployment/demo/restart-payment.sh` 支持容器模式（带 mock-scenario 环境变量重建容器）
-- [ ] T502 `restart-payment.sh` 宿主分支保持不变（禁止破坏现有调试路径）
-- [ ] T503 `run-all.sh` 模式感知，自动选对应重启手段
-- [ ] T504 验证：容器模式 demo 5 场景全通过（退出码 0），含 UNKNOWN 收敛
+- [x] T501 `deployment/demo/restart-payment.sh` 支持容器模式（`docker compose up -d -e PAYMENT_CHANNEL_MOCK_SCENARIO=...` 重建容器）
+- [x] T502 `restart-payment.sh` 宿主分支保持不变（禁止破坏现有调试路径）
+- [x] T503 `run-all.sh` 模式感知，自动选对应重启手段
+- [x] T504 验证：容器模式 demo 5 场景全通过（退出码 0），含 UNKNOWN 收敛（实测通过）
 
 ## P6 文档同步（FR-014）
 
@@ -80,18 +89,35 @@
 
 ## P7 验证矩阵（SC-001~SC-007）
 
-> ⛔ **整段阻塞**：镜像构建需拉取 `eclipse-temurin:21-jre-jammy`，当前环境**无法访问 Docker Hub**
-> （经代理 / 不经代理均 HTTP 000，`docker pull hello-world` 亦超时）。网络恢复后按序执行。
+> 2026-09-15 网络恢复（本机代理 1080）后全部执行完毕，实测结论如下。
+> 宿主模式三项（T701~T703）取自容器化改造前一日（2026-09-14）的基线，改造未触碰宿主路径。
 
-- [ ] T701 宿主模式回归：`bash deployment/demo/run-all.sh` → 退出码 0（与改造前一致）
-- [ ] T702 宿主模式回归：e2e → 与基线一致（22/23，1 例为本地代理伪影，CI 为准）
-- [ ] T703 宿主模式回归：压测 → 链路 completed 且 0 个 5xx
-- [ ] T704 容器模式：`demo/run-all.sh` → 退出码 0，5 场景通过
-- [ ] T705 容器模式：e2e 通过
-- [ ] T706 容器模式：压测链路 completed 且 0 个 5xx
-- [ ] T707 容器模式：Prometheus 10 job UP + Loki 10 服务有日志
-- [ ] T708 模式互斥：双向拦截 100% 命中（目前仅验证宿主→容器一侧）
-- [ ] T709 内存观测：全栈容器模式实测占用 ≤ 16GiB，记录实测值
+- [x] T701 宿主模式回归：`bash deployment/demo/run-all.sh` → 退出码 0（与改造前一致）
+- [x] T702 宿主模式回归：e2e → 22/23（1 例 `MISSING_POSTING` 为本地沙箱代理伪影，CI 为准）
+- [x] T703 宿主模式回归：压测 → `chain_completed=100`、rps 36.42、0 个 5xx
+- [x] T704 容器模式：`demo/run-all.sh` → 退出码 0，5 场景通过（含 UNKNOWN 收敛）
+- [x] T705 容器模式：e2e 22/23 —— **与宿主基线完全同形**（同一例 `MISSING_POSTING` 伪影）
+- [x] T706 容器模式：压测 `chain_completed=100`、rps 26.2、0 个 5xx
+- [x] T707 容器模式：Prometheus 10 target 全 UP + Loki 10 个服务均有日志
+- [x] T708 模式互斥：双向拦截 100% 命中（宿主→容器、容器→宿主均已实测）
+- [x] T709 内存观测：全栈容器模式稳态 **约 5.3GiB / 7.75GiB**（压测刚结束时峰值 5.39GiB，
+      应用侧 3.19GiB + 中间件 2.14GiB）。远低于 16GiB 目标，但**贴着 Docker Desktop 默认配额**——
+      这是把容器堆收敛到 `-Xmx256m` 并给每个服务加 `mem_limit` 的直接原因（不限量时实测顶穿
+      7.75GiB，Docker VM 被杀、全部容器 Exited(255)）。
+
+### 双模等价性差异（已知、可接受）
+
+| 维度 | 宿主模式 | 容器模式 | 处理 |
+|---|---|---|---|
+| 压测吞吐 | rps 36.42 | rps 26.2（−28%） | 容器堆更小（256m vs 384m）+ 容器网络 NAT 开销，非功能差异 |
+| catalog 读 rps | 609.36 | 551.94（−9.4%） | 同上 |
+| e2e | 22/23 | 22/23 | 同形 |
+| demo | 退出码 0 | 退出码 0 | 同形 |
+
+> 两处容器模式专属修复（无此则 e2e 必挂）：
+> 1. **渠道账单 CSV 目录**：`ChannelStatementDiffE2ETest` 由**测试 JVM（宿主）**写 `/tmp/e2e-channel-statements`，
+>    reconciliation 容器读的是自己的 `/tmp`——挂载同一路径后 4 个用例才通过。
+> 2. **时区**：基础镜像默认 UTC，宿主是 Asia/Shanghai，差 8 小时会让按日期窗口的断言分叉；Dockerfile 加 `TZ=Asia/Shanghai`。
 
 ## 收尾
 

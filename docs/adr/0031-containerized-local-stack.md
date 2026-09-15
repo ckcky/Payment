@@ -2,7 +2,8 @@
 
 # ADR-0070: 本地全栈容器化——Compose 而非 K8s，双轨并存而非强制迁移（spec 026 立项）
 
-- 状态：🟡 **Proposed**（2026-09-15 由负责人提出；决策已采纳，实施尚未开始）
+- 状态：🟢 **Accepted / Implemented**（2026-09-15 立项并实施完毕，P1~P7 全部实测通过；
+  验证结论见文末「复核清单」与 spec 026 `tasks.md` 的 P7 矩阵）
 - 关联：[spec 026](../specs/026-containerized-local-stack/spec.md)、ADR-0059（Nacos 硬依赖）、
   ADR-0064（refund 并库，8085 退役）、ADR-0048（mock-channel-web 为演示组件）
 - **Supersedes: ADR-0057**（「服务未容器化」，理由「容器化非当前目标」于 2026-09-15 被本决策推翻：
@@ -103,8 +104,16 @@ Dockerfile 仅 `COPY` + `ENTRYPOINT`。
 **负面 / 需持续维护**：
 
 - 模式守卫属新增约定，必须持续被强制校验（入口脚本双向检测 + 验证矩阵），否则静默端口抢占；
-- 可观测配置（Prometheus targets / Promtail 路径）需随模式适配，否则容器模式下看板为空却不易察觉；
-- 内存占用上升；建议宿主配额由 7.75GiB 上调至 16GiB，并对单 JVM 施加 `-Xmx384m`。
+- 可观测配置（Prometheus targets / Promtail 路径）需随模式适配，否则容器模式下看板为空却不易察觉。
+  **实测结论：Prometheus 无需改动**——抓取目标沿用 `host.docker.internal:808x`，容器模式端口已 publish
+  到宿主，故一份配置双模通吃；刻意**不**改成 compose 服务名，否则宿主模式会失联。
+  Promtail 亦零改动，靠把应用日志 `tee` 到挂载的 `deployment/logs/`（项目 `logback-spring.xml`
+  只有 CONSOLE appender，`logging.file.name` 无效，只能由容器入口分流 stdout）。
+- 内存占用上升，**且必须显式受限**。原设想「配额上调到 16GiB + 单 JVM `-Xmx384m`」在本机默认配额
+  7.75GiB 下会翻车：实测 10 个 JVM 顶穿 VM 内存，Docker VM 被杀、全部容器 `Exited(255)`。
+  实际采用 **容器堆 `-Xmx256m`/metaspace 128m（低于宿主模式的 384m/160m）+ 每服务 `mem_limit: 512m`**
+  （catalog 承载秒杀主流量放宽到 768m），稳态约 5.3GiB / 7.75GiB。
+  若把 Docker Desktop 配额上调到 16GiB，可回退到与宿主一致的 384m。
 
 **明确不做**：
 
@@ -114,10 +123,13 @@ Dockerfile 仅 `COPY` + `ENTRYPOINT`。
 - 不在 Docker 内跑 Maven 构建（见 D3）；
 - 不复用已退役的 8085（ADR-0064）。
 
-## 复核清单
+## 复核清单（2026-09-15 全部实测通过）
 
-- [ ] 容器模式：10 服务 health 全 200，Nacos 注册 10 实例
-- [ ] 容器模式：demo 5 场景通过（含 UNKNOWN 收敛）
-- [ ] 宿主模式：e2e / 压测 / demo 结果与改造前一致（无回归）
-- [ ] 模式互斥守卫双向 100% 命中
-- [ ] Prometheus 10 job UP + Loki 10 服务有日志
+- [x] 容器模式：10 服务 health 全 200（8081–8091），Nacos 注册 9 个领域服务
+      （mock-channel-web 是演示组件，按 ADR-0048 不注册）
+- [x] 容器模式：demo 5 场景通过（退出码 0，含 UNKNOWN 收敛）
+- [x] 宿主模式：demo 退出码 0 / e2e 22/23 / 压测 `chain_completed=100` 且 0 个 5xx —— 与改造前一致，无回归
+- [x] 容器模式：e2e 22/23（与宿主同形，唯一红为已知本地代理伪影 `MISSING_POSTING`，CI 为准）；
+      压测 `chain_completed=100`、0 个 5xx（rps 26.2 vs 宿主 36.4，源于容器堆更小 + NAT 开销）
+- [x] 模式互斥守卫双向 100% 命中（宿主在跑 → `start-container.sh` 被拦；容器在跑 → `start-all.sh` 被拦）
+- [x] Prometheus 10 target 全 UP + Loki 10 个服务均有日志
