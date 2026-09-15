@@ -74,10 +74,27 @@ public final class Dump {
 
         private void write(String name, String content) {
             try {
-                Files.writeString(dir.resolve(name), content, StandardCharsets.UTF_8);
+                Files.writeString(dir.resolve(sanitize(name)), content, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 System.err.println("[dump] write failed " + name + ": " + e.getMessage());
             }
+        }
+
+        /**
+         * 把 step 名净化为合法文件名。
+         *
+         * <p>step 常含完整 URL（如 {@code GET http://localhost:8091/cashier?paymentNo=PMxxx&orderNo=ORxxx}），
+         * 其中的 {@code / : ? &} 在 macOS/Linux 上是路径分隔符或非法字符，直接 resolve 会
+         * {@code NoSuchFileException} 而把诊断产物丢掉（2026-09-15 实测）——失败时最需要产物，
+         * 恰恰在此时写不进去。故统一替换为 {@code _} 并限长。</p>
+         */
+        private static String sanitize(String name) {
+            String safe = name.replaceAll("[^A-Za-z0-9._-]", "_");
+            // 文件名长度上限（多数文件系统 255 字节），超长时保留尾部（URL 的特征在尾部）
+            if (safe.length() > 180) {
+                safe = safe.substring(0, 60) + "_" + safe.substring(safe.length() - 110);
+            }
+            return safe;
         }
     }
 

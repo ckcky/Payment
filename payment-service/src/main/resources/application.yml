@@ -52,6 +52,11 @@ payment:
   # （run-e2e-*.sh 与 .github/workflows/e2e.yml 已显式声明）。
   mock-cashier:
     enabled: ${PAYMENT_MOCK_CASHIER_ENABLED:true}
+    # 收银台基地址：**必须填「客户端可达」地址**，不是服务端调用目标。
+    # 该值被拼进 payUrl 交给前端 window.open()，由浏览器解析——口径是「宿主能否打开」。
+    # ✗ mock-channel-web:8091（容器内服务名，宿主 NXDOMAIN）
+    # ✗ host.docker.internal:8091（该名仅容器内可解析，宿主同样 NXDOMAIN）
+    # ✓ localhost:8091（8091 已 publish 到宿主）
     base-url: ${PAYMENT_MOCK_CASHIER_BASE_URL:http://localhost:8091}
   # 渠道回调验签（ADR-0025：本期为空实现（占位），回调一律放行；接入真实渠道时再实现 verifySignature）
   # 支付可靠性（Feature 003 / ADR-0003~0005、ADR-0012~0015）
