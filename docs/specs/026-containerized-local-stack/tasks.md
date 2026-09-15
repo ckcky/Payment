@@ -125,3 +125,29 @@
 - [x] T802 主工作区 `git merge --no-ff feature/026-container-stack` → push master（6a07a3d）
 - [x] T803 `git worktree remove ../Payment-wt/feature-026-container-stack` 清理
 - [x] T804 更新 `.workbuddy/memory/2026-09-15.md`（本机配额、模式守卫、Promtail 卷约定等坑）
+
+## 补丁：收银台 payUrl 客户端可达性（2026-09-15，验收后发现）
+
+> **性质**：spec 026 的**验收后缺陷**。P4 阶段配 compose 时把
+> `PAYMENT_MOCK_CASHIER_BASE_URL` 填成了容器内服务名，而该值实际是**给浏览器用的**。
+> 当时的验证矩阵只测了「容器内能否访问 8091」（返回 200 即判过），**从未站在客户端视角
+> 打开过 payUrl**——这是验收口径的漏洞，不是执行疏漏。
+
+- [x] T901 缺陷定位：`buildPayUrl()` 把 `base-url` 拼进 `payUrl` → 前端 `window.open()` → 宿主 NXDOMAIN
+- [x] T902 排除错误候选：`host.docker.internal` 实测**仅容器内可解析**，宿主同样 NXDOMAIN；正解 `localhost:8091`
+- [x] T903 compose 修正为 `http://localhost:8091`，并把两种错误填法写进注释
+- [x] T904 `MockCashierProperties` / `application.yml` 补文档：标明「客户端可达地址，非服务端调用目标」
+- [x] T905 `DemoProxyController` 加展示层兜底改写（服务名 / host.docker.internal → localhost）
+- [x] T906 新增 `CashierPayUrlReachabilityTest`：绝对 URL 直连 payUrl 要求 2xx + 禁容器内服务名
+- [x] T907 `Env` 加 `e2e.client-shared-network` / `e2e.client-reachability-check` 开关（local/ci 拓扑差异）
+- [x] T908 用例有效性验证：注入回错误配置 → 用例变红且直指根因（HTTP 503）
+- [x] T909 顺带修 `Dump.write` 文件名未净化（step 含 URL 时写盘失败，失败现场丢诊断产物）
+- [x] T910 回归：容器模式 e2e 24/25 + demo 5 场景退出码 0
+
+### 验收口径修正（沉淀为规则）
+
+> **凡接口返回「给客户端用的 URL」，必须按客户端视角实测其可达性**——
+> 不能只验证「服务端能构造出这个字符串」，也不能用「容器内能访问」当替代。
+> 服务端出站地址（容器内视角）与客户端跳转地址（宿主视角）是**两个不同口径**，
+> 同一变量承载两种用途时尤其容易错配。
+

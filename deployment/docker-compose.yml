@@ -290,14 +290,21 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
       # 支付相关演示开关（取值与宿主模式 start-all.sh 对齐）：
       #   PAYMENT_MOCK_CASHIER_ENABLED=true  支付走「收银台跳转」路径（payUrl），演示优先
-      #   PAYMENT_MOCK_CASHIER_BASE_URL      收银台地址，容器内 localhost 不可达 → 指向 mock-channel-web 容器
+      #   PAYMENT_MOCK_CASHIER_BASE_URL      收银台地址——**必须填客户端（浏览器所在宿主）可达地址**！
+      #       该值被拼进 payUrl 交给前端 window.open()，由**浏览器**解析，故口径是「宿主能否打开」。
+      #       两种错误填法都实测过（2026-09-15）：
+      #         ✗ http://mock-channel-web:8091 —— 容器内服务名，仅容器网络内可解析，宿主 NXDOMAIN
+      #         ✗ http://host.docker.internal:8091 —— 该名仅**容器内**可解析，宿主同样 NXDOMAIN
+      #       正解是 localhost:8091：8091 已 publish 到宿主，浏览器与宿主 curl 都能直达。
+      #       （对比：prometheus.yml 用 host.docker.internal 是对的——那里是**容器主动出站抓取**，
+      #        请求由 prometheus 容器发起；此处地址是给浏览器用的，方向相反，故取值不同。）
       #   PAYMENT_ADMIN_TOKEN                /payments/{id}/resolve 人工收敛端点的管理令牌（UNKNOWN 演示用）
       #   PAYMENT_CHANNEL_SECRET             与 mock-channel-web 同源签名密钥
       #   PAYMENT_CHANNEL_MOCK_SCENARIO     渠道模拟场景（SUCCESS / BUSINESS_UNKNOWN 等，ADR-0049 构造期注入），
       #                                      demo 的 UNKNOWN 权威收敛场景靠它切换（FR-009）。
       #                                      真实键为 payment.channel.mock-scenario（**注意在 channel 层**）。
       PAYMENT_MOCK_CASHIER_ENABLED: "true"
-      PAYMENT_MOCK_CASHIER_BASE_URL: http://mock-channel-web:8091
+      PAYMENT_MOCK_CASHIER_BASE_URL: http://localhost:8091
       PAYMENT_ADMIN_TOKEN: demo-admin-token
       PAYMENT_CHANNEL_SECRET: demo-channel-secret-2026
       PAYMENT_CHANNEL_MOCK_SCENARIO: ${PAYMENT_CHANNEL_MOCK_SCENARIO:-SUCCESS}

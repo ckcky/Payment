@@ -239,6 +239,31 @@ public final class Api {
 
     // ---- 基础方法 ----
 
+    /**
+     * 按<b>绝对 URL</b> 发 GET（不是服务基址 + path）。
+     *
+     * <p>用途：验证「接口返回给客户端的链接本身是否可用」。{@code payUrl} 由服务端拼接、
+     * 交给浏览器 {@code window.open()} 打开，因此它的可达性必须用「客户端视角」验证——
+     * 若服务端误把容器内服务名（如 {@code http://mock-channel-web:8091}）填进去，
+     * 容器内访问会 200 而宿主 NXDOMAIN，只有按绝对 URL 直连才能暴露（2026-09-15 实测缺陷）。</p>
+     *
+     * @param absoluteUrl 完整 URL（含 scheme 与 host）
+     */
+    public ApiResponse getAbsolute(String absoluteUrl) {
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(absoluteUrl))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+            HttpResponse<String> resp = CLIENT.send(req, HttpResponse.BodyHandlers.ofString());
+            return new ApiResponse(resp.statusCode(), resp.body());
+        } catch (Exception e) {
+            // 链接不可达（DNS 解析失败 / 连接拒绝）本身就是要断言的失败信号，不抛异常
+            return new ApiResponse(0, "unreachable: " + e.getMessage());
+        }
+    }
+
     public ApiResponse get(String service, String path) {
         return exchange(service, "GET", path, Map.of(), null);
     }

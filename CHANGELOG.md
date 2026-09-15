@@ -6,6 +6,31 @@
 
 ---
 
+## [2026-09-15] fix：容器模式收银台 payUrl 客户端不可达（spec 026 补丁）
+
+**范围**：修 `PAYMENT_MOCK_CASHIER_BASE_URL` 在容器模式下的取值错误 + 补「payUrl 客户端可达性」回归用例。
+无 ADR（属 spec 026 容器化的缺陷修复，非新决策）。
+
+- **缺陷**：容器模式下 compose 把 `payment.mock-cashier.base-url` 配成 `http://mock-channel-web:8091`
+  （容器内服务名）。该值被 `buildPayUrl()` 拼进 `payUrl`，交给前端 `window.open()` 由**浏览器**打开——
+  浏览器所在宿主解析不了容器内网名字（NXDOMAIN）。表现为「下单成功、支付单也建了，但收银台跳转不了」，
+  而容器内 curl 该 URL 反而 200，极具迷惑性。
+- **扫清的第二个错误候选**：`host.docker.internal` **同样不可用**——实测该名仅容器内可解析（宿主 NXDOMAIN）。
+  正解是 `localhost:8091`（8091 已 publish 到宿主）。与 `prometheus.yml` 的取值差异是有意的：
+  那里是**容器主动出站抓取**，请求由 prometheus 容器发起；此处地址是给浏览器用的，方向相反。
+- **测试缺口（根因）**：既有 e2e / demo 全是 curl 打接口断言状态码，**从不打开接口返回的链接**，
+  故此类缺陷对整套自动化隐形。新增 `CashierPayUrlReachabilityTest`：按**绝对 URL** 直连 payUrl 要求 2xx，
+  并断言客户端不共享服务网络时 payUrl 不得含容器内服务名。
+  已做**有效性验证**：把配置改回错误值 → 用例立刻变红并直指根因（HTTP 503 / NXDOMAIN），非空跑。
+- **展示层兜底**：`DemoProxyController` 对上游响应做 `mock-channel-web:8091` / `host.docker.internal:8091`
+  → `localhost:8091` 的改写，即使环境变量又被配错，/demo 页拿到的 payUrl 也保证可用。
+- **顺带修复**：`Dump.write` 未净化文件名——step 含完整 URL 时 `? : / &` 使写盘失败，
+  失败时恰恰丢掉诊断产物。已改为替换非法字符并限长。
+- **回归**：容器模式 e2e 24/25（新增用例绿；唯一红仍是已知本地代理伪影 MISSING_POSTING，CI 为准）；
+  demo 5 场景退出码 0。
+
+---
+
 ## [2026-09-15] spec 026：本地全栈容器化（双模式 · Compose 而非 K8s）
 
 **范围**：spec 026 立项 + P1~P7 全部落地并实测通过（P4 可观测适配、P5 演示脚本模式分支、P7 双模验证矩阵）。

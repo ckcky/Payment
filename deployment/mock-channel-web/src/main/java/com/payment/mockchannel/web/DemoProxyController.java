@@ -74,7 +74,7 @@ public class DemoProxyController {
                     // 禁止浏览器缓存代理响应：reset 前后同一 URL 的数据会变（如空 SKU 列表），
                     // 缓存旧响应会让 /demo 永远显示过期状态
                     .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                    .body(upstream.getBody());
+                    .body(rewriteClientFacingPayUrl(upstream.getBody()));
         } catch (HttpStatusCodeException e) {
             return ResponseEntity.status(e.getStatusCode())
                     .header(HttpHeaders.CACHE_CONTROL, "no-store")
@@ -90,6 +90,35 @@ public class DemoProxyController {
     @org.springframework.web.bind.annotation.GetMapping("/proxy")
     public Map<String, Object> index() {
         return Map.of("services", properties.getServices().keySet().stream().sorted().toList());
+    }
+
+    /**
+     * 把上游响应里的容器内服务地址改写成<b>客户端可达</b>地址。
+     *
+     * <p>背景（2026-09-15 实测缺陷）：容器模式下 payment-service 的
+     * {@code payment.mock-cashier.base-url} 曾配成 {@code http://mock-channel-web:8091}
+     * （容器内服务名）。容器内访问确实 200，但该 URL 会被前端 {@code window.open()} 交给
+     * <b>浏览器</b>打开，而浏览器所在宿主解析不了容器内网名字（NXDOMAIN）——
+     * 表现为「下单成功、支付单也建了，但收银台跳转不了」。</p>
+     *
+     * <p>注意 {@code host.docker.internal} <b>不是</b>可用替代：该名仅在容器内可解析，
+     * 宿主同样 NXDOMAIN（实测）。客户端口径下唯一正解是 {@code localhost}——
+     * 端口已 publish 到宿主。</p>
+     *
+     * <p>修复分两层：①compose 已改配 {@code localhost}（根因）；②本方法作为「展示层兜底」
+     * ——即使环境变量又被配错，/demo 页（唯一经此代理的入口）拿到的 {@code payUrl} 也一定可用。</p>
+     */
+    private String rewriteClientFacingPayUrl(String body) {
+        if (body == null || body.isEmpty()) {
+            return body;
+        }
+        if (body.contains("//mock-channel-web:8091")) {
+            return body.replace("//mock-channel-web:8091", "//localhost:8091");
+        }
+        if (body.contains("//host.docker.internal:8091")) {
+            return body.replace("//host.docker.internal:8091", "//localhost:8091");
+        }
+        return body;
     }
 
     /** 透传客户端请求头（含 Idempotency-Key 等），跳过 hop-by-hop 头避免冲突。 */

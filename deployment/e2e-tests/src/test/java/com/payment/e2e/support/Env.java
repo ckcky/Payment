@@ -58,6 +58,33 @@ public final class Env {
         return "e2e-" + Long.toString(System.currentTimeMillis(), 36);
     }
 
+    /**
+     * 当前环境里「浏览器/客户端视角」与「测试进程视角」是否同一网络。
+     *
+     * <p>用于判定 {@code payUrl} 可达性用例（CashierPayUrlReachabilityTest）的口径：</p>
+     * <ul>
+     *   <li>{@code local}（默认 true）：测试跑在宿主、服务在容器/宿主，**客户端视角 = 宿主**，
+     *       故 payUrl 必须是宿主可达地址（不得含容器内服务名）——这正是 2026-09-15 缺陷的判据；</li>
+     *   <li>{@code ci}（默认 false）：测试 JVM 与各服务同处一个容器网络，服务名可解析，
+     *       payUrl 用服务名是合理的，此时跳过「不得含服务名」的断言，只保留直连可达性。</li>
+     * </ul>
+     */
+    public static boolean clientAndTestShareNetwork() {
+        return Boolean.parseBoolean(
+                props.getProperty("e2e.client-shared-network", "false"));
+    }
+
+    /**
+     * 客户端视角可达性断言是否可用（默认 true）。
+     *
+     * <p>当测试进程本身无法触达客户端网络（例如某些 CI 拓扑）时可置 false 跳过该断言，
+     * 避免产生「环境导致的假红」。本地与默认 CI 拓扑均应保持 true——这正是本用例的价值所在。</p>
+     */
+    public static boolean clientReachabilityCheckEnabled() {
+        return Boolean.parseBoolean(
+                props.getProperty("e2e.client-reachability-check", "true"));
+    }
+
     private static Properties load() {
         String env = System.getProperty("e2e.env", "local");
         String resource = "e2e-" + env + ".properties";
