@@ -276,8 +276,11 @@ Apple HIG 系统色板（v2024）有一组**无障碍变体（accessible variant
 | 4 | 收银台「确认支付」 | 按下 `scale(.97)` →「支付中…」→ 日志 `payment 状态 → SUCCEEDED` → 卡内绿勾 + 「返回控制台」 | 对勾描边 400ms |
 | 5 | 回 demo | 右栏轮询自动收敛：SUCCEEDED → FULFILLED → AVAILABLE，chip 逐项变色 | chip 颜色 200ms |
 | 6 | 步骤 ③ 输金额 →「发起退款」 | 右栏退款卡新增 TXRF/PMRF 行；REQUESTED→PROCESSING→SUCCEEDED 逐帧变色 | 新行 slide-down 240ms |
-| 7 | 点「同参重放（幂等）」 | **不新增行**，toast「幂等回放：返回同一 TXRF」 | toast slide-down，2.5s 收 |
-| 8 | 故意超额再发起 | 409 → **红色 toast 常驻不自动消失**（错误需人工确认），行显示 REJECTED + 原因 | toast shake 200ms |
+| 7 | 故意超额再发起 | 409 → **红色 toast 常驻不自动消失**（错误需人工确认），行显示 REJECTED + 原因 | toast shake 200ms |
+
+> ⚠️ **2026-09-16 变更**：原第 7 步「同参重放（幂等）」按钮已下线，后续步骤编号前移。
+> 下线原因：上一笔退款到达终态后，同参重放不满足「在途守卫」（同单同额且 `REQUESTED`/`PROCESSING`），
+> 在 spec 019 语义下等于**新建一笔退款单**，演示中易被误读为"重复退了一笔钱"。
 
 **关键点**：右栏 sticky + 日志抽屉 → 全程视线不离开 800px，无需滚动。
 
