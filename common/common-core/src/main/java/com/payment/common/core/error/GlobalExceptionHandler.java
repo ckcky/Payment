@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 全局异常处理器兜底，统一返回 {@link ApiError}（Engineering Standards §1）。
@@ -37,6 +38,23 @@ public class GlobalExceptionHandler {
                 .orElse("validation failed");
         return ResponseEntity.badRequest()
                 .body(ApiError.of(ErrorCodes.INVALID_ARGUMENT, message, TraceContext.getTraceId(), request.getRequestURI()));
+    }
+
+    /**
+     * 路径 / 静态资源不存在 → 404。
+     *
+     * <p>Spring 6.1+ 的 {@link NoResourceFoundException} 语义就是「没有这个资源」，
+     * 若不单独处理会被 {@link #handleUnknown} 兜成 500，把「地址打错」误报为服务故障：
+     * 浏览器对每个页面都会自动请求 {@code /favicon.ico}，演示页因此每次都刷 500
+     * （2026-09-16 排查 /portal 500 时发现）。</p>
+     *
+     * <p>只记 WARN 不记堆栈：这不是异常，是正常的「未命中」。</p>
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
+        log.warn("resource not found traceId={} path={}", TraceContext.getTraceId(), request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiError.of(ErrorCodes.NOT_FOUND, "resource not found", TraceContext.getTraceId(), request.getRequestURI()));
     }
 
     @ExceptionHandler(SystemException.class)
