@@ -16,8 +16,8 @@
 
 | 维度 | 说明 |
 |---|---|
-| **负责** | 支付意图、支付金额/币种、幂等键、支付状态机、支付尝试（PaymentAttempt）、渠道结果应用、回调幂等、UNKNOWN 收敛、支付成功回写订单/交易（RPC）、退款渠道尝试透传、对账支付事实抽取 |
-| **不负责** | 具体渠道协议实现（依赖 `PaymentChannel` 接口抽象）；订单/履约/权益的最终状态；退款整体决策（归属本服务退款域，见 [§8](#8-退款域设计原-refund-servicefeature-015-并入)） |
+| **负责** | **payment 支付层**：支付意图、支付金额/币种、幂等键、支付状态机、渠道结果应用、回调幂等、UNKNOWN 收敛、支付成功回写订单/交易（RPC）、对账支付事实抽取、支付指令编排（含记账）；**channelAttempt 渠道层**：渠道交互生命周期（`PaymentAttempt`）、渠道实现族、渠道身份与注册表（spec 028） |
+| **不负责** | 具体渠道协议实现（由渠道层的实现族承载；payment 层只依赖 `PaymentChannel` 接口抽象，**不依赖 `infra/channel`**）；订单/履约/权益的最终状态；退款整体决策（归属本服务退款域，见 [§8](#8-退款域设计原-refund-servicefeature-015-并入)） |
 
 ### 1.2 硬约束（Constitution / ADR）
 
@@ -52,6 +52,24 @@
 | 值对象 | `ChargeRequest` / `RefundRequest` | [application/channel/](../../../payment-service/src/main/java/com/payment/payment/application/channel/) | 平台→渠道请求（只读必要字段，不访问支付聚合内部状态） |
 
 **基数关系（MVP）**：`Payment (1) ─ (N) PaymentAttempt`，每次尝试 ≤ 1 个渠道引用（`channel_reference` 唯一约束）。
+
+### 2.1.1 内部两层结构（ADR-0072）
+
+本服务内部分 **payment 支付层**与 **channelAttempt 渠道层**，各有自己的聚合、表与写入口：
+
+| 层 | 聚合根 | 表 | 职责 |
+|---|---|---|---|
+| **payment 支付层** | `Payment` | `payments` | 支付单生命周期、**支付指令编排**（选路 → 调渠道 → 应用结果 → 记账 → 扇出 order）、幂等键、金额口径 |
+| **channelAttempt 渠道层** | `PaymentAttempt` | `payment_attempts` | **渠道交互生命周期**（创建尝试 → 调用外部渠道 → 收敛结果 → 落渠道引用与错误分类）、**渠道实现族**（Alipay / Wechat / Douyin / Mock） |
+
+**边界**：
+
+- `payments` 表**只由 payment 层写**；`payment_attempts` 表**只由渠道层写**——payment 层 MUST NOT 直接依赖 `PaymentAttemptRepository`。
+- payment 层需要渠道交互时**经 `PaymentChannel` 端口调用**，拿回 `ChannelResult` 后更新自己的 `Payment`（只持 `currentAttemptId` 作为指向，不持渠道细节）；**不关心渠道如何实现**（`Payment ≠ Channel`）。
+- 退款 / 重试 / 主动查询走**反向路径**：以 `payment_attempts.channel_code` 记下的渠道解析实现，**禁止重新路由**（退款换渠道＝钱退错地方）。
+- **分层 ≠ 拆事务**：两层共享同一本地事务——`payments` 与 `payment_attempts` 状态必须同时迁移，否则出现 `payment=SUCCEEDED / attempt=PENDING` 之类的永久不一致。
+
+> 现状与目标差距、实施成本见 [ADR-0072](../../adr/0033-two-layer-channel-architecture.md)；渠道身份、注册表与选路规则见 [ADR-0073](../../adr/0034-channel-routing.md) 与 [spec 028](../../specs/028-channel-routing/spec.md)。
 
 ### 2.2 状态机
 
@@ -145,19 +163,21 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 | 字段 | 类型 | 必填 | 约束/说明 |
 |---|---|---|---|
-| orderId | String | 是 | 订单 ID |
-| transactionId | String | 是 | 交易 ID |
+| orderNo | String | 是 | 订单业务单号（OR+雪花，[ADR-0063](../../adr/0023-cross-service-reference-by-business-no.md)） |
+| transactionId | String | 是 | 交易单号 |
 | userId | String | 是 | 用户 ID |
-| amountMinor | long | 是 | 金额（分，> 0） |
+| amountMinor | long | 是 | 金额（分，`> 0`） |
 | currencyCode | String | 是 | `^[A-Z]{3}$`，如 `CNY` |
-| idempotencyKey | String | 是 | 非空；重复请求不得产生第二次资金动作 |
-| channelCode | String | 是 | 非空；必须已注册到渠道 Registry/Router |
+| idempotencyKey | String | **否** | 由 payment-service 服务端生成 `payment:{orderNo}:{channelCode}:{attemptSeq}`（Feature 015 起）；调用方传 `null` 即可 |
+| channelCode | String | **否**（spec 028 起） | 未传 → 由 `ChannelRouter` 按配置规则选路；传了 → **显式优先**（仅校验已注册，不校验 `enabled`）。`ChannelRegistry` / `ChannelRouter` 由 [spec 028](../../specs/028-channel-routing/spec.md) 引入——此前该处描述的组件在代码中并不存在 |
 
-**响应** `CreatePaymentResponse`：`{ paymentId: Long, status: String, payUrl: String|null }`。
+**响应** `CreatePaymentResponse`：`{ paymentNo: String, status: String, payUrl: String|null, attemptSeq: int, channelCode: String }`。
 
-`status` 为 `PaymentStatus` 枚举名；`payUrl` 仅在 `payment.mock-cashier.enabled=true` 时返回，否则为 `null`。
+- `status` 为 `PaymentStatus` 枚举名；
+- `payUrl` 仅在 `payment.mock-cashier.enabled=true` 时返回，否则为 `null`；
+- `attemptSeq` / `channelCode`（Feature 015）：本次尝试序号与所选渠道，供订单侧「换渠道重付」展示与对账聚合；`channelCode` 在 spec 028 后语义收口为「**路由后最终渠道**」（不再等同于调用方原始输入，未指定渠道时为 Router 选出的结果）。
 
-**错误**：`400 INVALID_ARGUMENT`（字段缺失、金额 `<= 0`、币种格式非法、`channelCode` 未注册）；`409 AMOUNT_INVARIANT_VIOLATION`（领域层金额不变量失败）、`409 DUPLICATE`（唯一键冲突且无法回查原支付）。
+**错误**：`400 INVALID_ARGUMENT`（字段缺失、金额 `<= 0`、币种格式非法、`channelCode` 未注册）；`409 AMOUNT_INVARIANT_VIOLATION`（领域层金额不变量失败）、`409 DUPLICATE`（唯一键冲突且无法回查原支付）；`409 NO_AVAILABLE_CHANNEL`（spec 028：未指定渠道且无可用候选）、`409 CHANNEL_UNAVAILABLE`（spec 028：显式指定的渠道已 DOWN——明确拒绝，不偷偷改选）。
 
 ### 3.3 查询支付
 
@@ -292,6 +312,8 @@ sequenceDiagram
 2. `channel.refund(RefundRequest)` 调 Mock Channel：默认异步受理模式（`payment.channel.refund-async=true`）当场返回 `accepted`（受理流水号，无业务结论）；同步模式可配。落 REFUND 尝试行（`payment_attempts.attempt_type='REFUND'`，UNKNOWN/ACCEPTED 态）。
 3. **不迁移支付领域状态**（支付单保留 SUCCEEDED 事实不回滚，ADR-0054）；退款权威结果经渠道回调（进程内推送桥或 `POST /internal/refunds/{refundNo}/channel-callback`）→ `RefundResultProcessor` 统一收敛：退款状态机终态 + REFUND 尝试行收敛到 SUCCEEDED/FAILED + 成功记账冲正（`REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。
 4. 退款整体决策（发起/收口/秒杀回补/履约终止/权益撤销）归 order，payment 只提供渠道事实（ADR-0054/0067）。
+
+> **REFUND 尝试的渠道归属（spec 028 / ADR-0072）**：该行 `channel_code` MUST 取自被退支付单的**生效支付渠道**（该 `payment_no` 下 `attempt_type='PAYMENT'` 且状态 `SUCCEEDED` 那一行），**禁止硬编码、禁止重新路由**——退款换渠道＝钱退错地方。当前实现把渠道硬编码为 `"mock"`（`PaymentRefundService.java:89`），属 spec 028 待修的**潜伏缺陷**：单一 Mock 渠道下不触发任何失败，一旦拆出三渠道即刻暴露并污染退款对账事实。
 
 ---
 
