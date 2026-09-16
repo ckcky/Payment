@@ -107,7 +107,6 @@
             </div>
             <div class="pa-row" style="margin-top:12px">
               <button class="pa-btn" onclick="createRefund()">发起退款</button>
-              <button class="pa-btn ghost" onclick="replayRefund()">同参重放（幂等）</button>
               <button class="pa-btn ghost" onclick="stopRefundPoll()">停止退款轮询</button>
             </div>
             <div class="pa-note">防超额演示：累计退款超过可退额度时 order 前置拦截返回 409（AMOUNT_INVARIANT_VIOLATION）；渠道侧拒绝才落 REJECTED。</div>
@@ -210,7 +209,7 @@ const esc = PA.esc;
 const api = (method, path, body, headers) => PA.api(method, path, body, headers);
 
 let pollTimer = null, currentOrderNo = null, currentPaymentNo = null;
-let refundPollTimer = null, lastRefund = null;   // 退款：轮询 + 最近一次幂等键（供同键重放）
+let refundPollTimer = null;   // 退款：终态收敛轮询
 
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
 
@@ -583,7 +582,6 @@ async function loadLimit() {
 /* ---- ③ 退款流程（spec 019 / ADR-0067）---- */
 function resetRefunds() {
   stopRefundPoll();
-  lastRefund = null;
   document.getElementById('refundRows').innerHTML =
     '<tr><td colspan="5" style="color:var(--pa-ink-3)">（尚无退款 —— 支付成功后发起）</td></tr>';
   document.getElementById('refundAttemptRows').innerHTML =
@@ -647,8 +645,7 @@ async function createRefund() {
   }
   const refund = { refundNo: r.data.pmrf, transactionRefundNo: r.data.txrf,
     status: r.data.status, amountMinor: payload.amountMinor, currencyCode: 'CNY',
-    failureReason: null, _payload: payload };
-  lastRefund = refund;
+    failureReason: null };
   renderRefundRow(refund);
   renderRefundStatus(refund);
   PA.setStep(3);
@@ -657,32 +654,6 @@ async function createRefund() {
   } else {
     log('   受理为 ' + refund.status + '（TXRF=' + refund.transactionRefundNo + '，PMRF=' + refund.refundNo + '），2s 轮询收敛…');
     startRefundPoll();
-  }
-  traceOrder(currentOrderNo);
-  loadRefundAttempts();
-}
-
-async function replayRefund() {
-  if (!lastRefund) { PA.toast('先发起一次退款，才有可重放的请求', 'bad'); return; }
-  log('>> POST /proxy/order/internal/orders/refund（同参重放）' + JSON.stringify(lastRefund._payload));
-  const r = await api('POST', '/order/internal/orders/refund', lastRefund._payload);
-  log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
-  if (r.status === 200 && r.data && r.data.txrf === lastRefund.transactionRefundNo) {
-    log('   幂等回放：返回同一 TXRF=' + r.data.txrf + '（进行中退款不重复落单）');
-    PA.toast('幂等回放：返回同一 TXRF', 'ok');
-  } else if (r.status === 200 && r.data && r.data.pmrf) {
-    log('   原单已终态，同参重放 = 新退款请求（spec 019 语义）：新 TXRF=' + r.data.txrf + '，受可退额度约束');
-    const refund = { refundNo: r.data.pmrf, transactionRefundNo: r.data.txrf,
-      status: r.data.status, amountMinor: lastRefund.amountMinor, currencyCode: 'CNY',
-      failureReason: null, _payload: lastRefund._payload };
-    lastRefund = refund;
-    renderRefundRow(refund);
-    renderRefundStatus(refund);
-    if (!REFUND_TERMINAL.includes(refund.status)) startRefundPoll();
-  } else {
-    log('   重放被拒：HTTP ' + r.status + ' ' + JSON.stringify(r.data)
-      + '（如可退额度不足 → 409 AMOUNT_INVARIANT_VIOLATION，属预期资金约束）');
-    PA.toast('重放被拒：HTTP ' + r.status + '（可退额度不足 → 409，属预期资金约束）', 'bad');
   }
   traceOrder(currentOrderNo);
   loadRefundAttempts();

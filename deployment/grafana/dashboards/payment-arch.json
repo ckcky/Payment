@@ -1,6 +1,6 @@
 {
   "uid": "payment-arch",
-  "title": "PaymentArch · SRE 黄金指标",
+  "title": "PaymentArch监控大盘",
   "description": "Google SRE 四大黄金信号（延迟 / 流量 / 错误 / 饱和度）+ 服务间 RPC（Feign）+ 业务指标。耗时统一毫秒 (ms)，服务图例均为中文名（service_cn）。",
   "tags": [
     "payment-arch",
@@ -18,7 +18,7 @@
     {
       "id": 100,
       "type": "row",
-      "title": "Google SRE 黄金信号 · 总览",
+      "title": "总览",
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -287,7 +287,7 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 12,
+        "x": 8,
         "y": 6
       },
       "targets": [
@@ -1160,7 +1160,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 70
       },
       "collapsed": false,
       "panels": []
@@ -1178,7 +1178,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 71
       },
       "targets": [
         {

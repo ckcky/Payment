@@ -47,7 +47,7 @@
 |---|---|---|
 | ① 商品与下单 | 拉 SKU → 下单（前端 `crypto.randomUUID()` 生成 `Idempotency-Key`）→ 自动「选渠道建支付单」→ 拿 `payUrl` 开收银台 | `/proxy/catalog/skus`、`/proxy/order/orders`、`/proxy/order/orders/{no}/payments` |
 | ② 状态面板 | 2s 轮询订单/支付/履约/权益四个状态（spec 018 后履约按明细多条，`join(',')` 展示） | `/proxy/{order,payment,fulfillment,entitlement}/...` |
-| ③ 退款（spec 019） | 输金额 + 原因 → 发起退款拿 **TXRF/PMRF** → 「同参重放」演示幂等 → 2s 轮询 PMRF 到终态 → 展示 `payment_attempts` 中 `attempt_type=REFUND` 的渠道流水号 | `POST /proxy/order/internal/orders/refund`、`GET /proxy/payment/internal/refunds/{pmrf}`、`/demo/refund-attempts` |
+| ③ 退款（spec 019） | 输金额 + 原因 → 发起退款拿 **TXRF/PMRF** → 2s 轮询 PMRF 到终态 → 展示 `payment_attempts` 中 `attempt_type=REFUND` 的渠道流水号（⚠️ 2026-09-16 下线「同参重放」按钮：终态后同参重放 = 新建退款单，易被误读为重复退款） | `POST /proxy/order/internal/orders/refund`、`GET /proxy/payment/internal/refunds/{pmrf}`、`/demo/refund-attempts` |
 | ④ 全链路 DB 数据 | 输入 orderNo → **跨 9 个库 14 张表的只读行级快照**（orders、order_items、transactions、**transaction_refunds**、payments、payment_attempts、refunds、fulfillments、entitlements、settlement_items/batches、reconciliation_batches、postings、ledger_entries），每个 section 含 `system/table/label/sql/rows/error` | `GET /demo/trace?orderId=ORxxx`（`DemoDbTraceController`） |
 
 后端三项对测试极关键的能力：`/proxy/{service}/**` 同源透传且 **4xx/5xx 原样回传**（409/429 可直接按状态码断言）、`/mock-channel/callback`（支付回调）、`/mock-channel/refund-callback`（退款回调，可指定 `status` 与 `channelReference`）。
