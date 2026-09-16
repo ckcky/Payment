@@ -2,7 +2,12 @@
 
 - 版本: v1
 - 日期: 2026-09-15
-- 状态: Draft
+- 状态: ✅ **Implemented**（2026-09-15 收口）——P1~P7 全部完成并合入 master：
+  ①`61e9e3d` / `6a07a3d`（P1/P2/P3/P6：Dockerfile、compose 编排、模式守卫、启动脚本）；
+  ②`08f3bb1`（P4/P5/P7：容器模式可观测、`restart-payment.sh` 双模、验证矩阵全绿）；
+  ③`01193ff`（验收后缺陷补丁：容器模式收银台 payUrl 客户端不可达，见 tasks.md「补丁」节）。
+  实测：容器模式 demo 5 场景退出码 0、e2e 24/25（唯一红为已知 `MISSING_POSTING` 本地代理伪影，CI 为准）、
+  Prometheus 10 target UP。**遗留**：spec 此前的 Draft 标记系文件未刷新，非任务未完成。
 - 输入: 用户需求——「搞个 spec，把 docker 化做上，相应的文档还有什么启动脚本这些也要更新。用了 docker 之后我之前的 start-all 那个脚本还能用吗」
 - 关联: ADR-0070
 - 已决策（用户 2026-09-15 拍板）：①双轨并存 + 模式开关；②宿主打 jar + 镜像只 COPY

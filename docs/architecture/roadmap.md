@@ -9,12 +9,32 @@
 ## Current Status
 
 - **当前阶段**：主链 MVP 已交付——`001-core-business-model` 已通过验收；端到端 merchant→catalog→order→payment→fulfillment→entitlement 可跑通；`004-ledger` / `005-refund` / `006-reconciliation` / `007-settlement` 均已落地并接入指标与记账（详见 `docs/architecture/systems/`）；**Feature 015（多支付单模型 + 退款并入 + 雪花单号）已落地**，服务数 10→9。
-- **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016 ⛔ Rejected 已回退、ADR-0017~0018 Accepted）、`006-reconciliation`（ADR-0019~0021 Accepted）、`007-settlement`（ADR-0022~0023，按最简单实现落地）、`009-risk-security`（按 2026-08-30 裁决降级）、`010-distributed-evolution`（ADR-0029~0033 Accepted / 0031 不使用 MQ）、**`011-demo-showcase`（ADR-0048~0051 Accepted：新增 `mock-channel-web` 演示组件 + payUrl 跳转链路 + 对账演示账单 + demo 脚本；验签回落 ADR-0025 空实现，ADR-0052 ⛔ Not Implemented）**、**`012-entry-idempotency`（下单入口幂等：客户端生成 `Idempotency-Key` + 仅 Redis 防重、不建幂等表，ADR-0039/0040，2026-09-02 补写收口）**、**`013-inventory-reservation`（三段式库存，ADR-0041~0043 Accepted；spec 收口补写，代码先行见 ADR-0053）**、**`014-seckill-and-cache`（Redis 缓存/秒杀预扣/限流，ADR-0044~0046 Accepted；Redis 引入偏离 roadmap §7 论证闸门，见 ADR-0053）**、**`016-order-payment-orchestration`（支付编排职责归位：order 升业务编排者 / payment 退能力提供方，ADR-0054 Accepted；order 内分 order 层与 transaction 层，退款渠道流水号落 `payment_attempts`，消除 N4）**。`mvn test` 全量通过。
+- **已实现 Feature**：`001-core-business-model`（验收通过）、`003-payment-reliability`（验收通过）、`004-ledger`（前置实现，ADR-0008~0011 Accepted）、`005-refund`（ADR-0016 ⛔ Rejected 已回退、ADR-0017~0018 Accepted）、`006-reconciliation`（ADR-0019~0021 Accepted）、`007-settlement`（ADR-0022~0023，按最简单实现落地）、`009-risk-security`（按 2026-08-30 裁决降级）、`010-distributed-evolution`（ADR-0029~0033 Accepted / 0031 不使用 MQ）、**`011-demo-showcase`（ADR-0048~0051 Accepted：新增 `mock-channel-web` 演示组件 + payUrl 跳转链路 + 对账演示账单 + demo 脚本；验签回落 ADR-0025 空实现，ADR-0052 ⛔ Not Implemented）**、**`012-entry-idempotency`（下单入口幂等：客户端生成 `Idempotency-Key` + 仅 Redis 防重、不建幂等表，ADR-0039/0040，2026-09-02 补写收口）**、**`013-inventory-reservation`（三段式库存，ADR-0041~0043 Accepted；spec 收口补写，代码先行见 ADR-0053）**、**`014-seckill-and-cache`（Redis 缓存/秒杀预扣/限流，ADR-0044~0046 Accepted；Redis 引入偏离 roadmap §7 论证闸门，见 ADR-0053）**、**`016-order-payment-orchestration`（支付编排职责归位：order 升业务编排者 / payment 退能力提供方，ADR-0054 Accepted；order 内分 order 层与 transaction 层，退款渠道流水号落 `payment_attempts`，消除 N4）**。（本条最后一句原为「`mvn test` 全量通过」，2026-09-16 已按实况移入下方 `018`~`026` 汇总。）
 - **`017-accounting-audit` 已实现**（2026-09-07 合并 `63f73d1`，ADR-0065）：reconciliation `audit` 包四核对 + 挂账/调账/recheck/关批 + settlement 建批审计门禁 + SUSPENSE(5) 科目 + AB/AD 单号；`mvn verify` 450 测试全绿，live 冒烟（触发→差异→挂账→SUSPENSE 勾稽→recheck）通过；demo 控制台 `audit.html`（8091）+ `scenario-audit.sh`。
-- **当前 Feature**：`011-demo-showcase`（Roadmap 下一阶段规划之首，见 `next-stage-design.md` §1）——**已交付并通过构建门禁**：新增 `mock-channel-web` 演示组件（端口 8091，演示用、不进服务边界）、payment 接入 payUrl 跳转、Mock 渠道场景配置化（ADR-0049）、对账演示账单生成（ADR-0050）、`demo/` 四场景脚本（ADR-0051）。`mvn -o clean verify -fae` 16 reactor 条目全绿，`architecture-tests` 边界门禁通过。
+- **`018`~`026` 已实现（2026-09-08 ~ 2026-09-15 陆续合并，本行 2026-09-16 补记）**：
+
+  | Spec | 内容 | 关键 ADR |
+  | --- | --- | --- |
+  | `018-schema-normalization-item-fulfillment` | 订单项与履约 schema 规范化 | – |
+  | `019-order-driven-refund` | 订单驱动退款：order 发起+收口，payment 只管渠道事实与记账 | ADR-0054 / 0064 / 0067 |
+  | `020-demo-ui-design-system` | 演示界面设计系统（`docs/design/DESIGN.md` 单一真相源 + token 层） | – |
+  | `021-unified-access-logging` | 统一访问日志：结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 修复 | – |
+  | `022-full-chain-automated-testing` | 全链路自动化测试体系（e2e-tests 模块 + 分层门禁） | ADR-0069 |
+  | `023-audit-ops-remediation` | 审计中性项收尾：Prometheus 死目标清理、优雅停机、事务收窄 + 收敛端点鉴权 | – |
+  | `024-demo-ui-apple-redesign` | 演示 UI 由 Stripe 基底改为 Apple 基底（Action Blue + HIG 语义色） | – |
+  | `025-snowflake-business-no` | 雪花业务单号（`Implemented`） | – |
+  | `026-containerized-local-stack` | 本地全栈容器化：双模式（host/container）+ Compose 而非 K8s | ADR-0070 |
+
+  其中 019 退款域并入 payment（服务数 10→9，refund-service 退役，端口 8085 释放）；
+  026 为**唯一一次形态级变更**（新增 `Dockerfile` + 10 应用服务进 compose），
+  但严格遵守 ADR-0031 / 010 的「引入分布式基础设施须走闸门」约定——用 Compose 而非 K8s。
+  **测试基线**：`./mvnw -o verify -fae` 全绿；`e2e-tests` 容器模式 24/25（唯一红为已知
+  `MISSING_POSTING` 本地代理伪影，CI 环境为准）；`demo/run-all.sh` 双模式均退出码 0。
+- **当前 Feature**：`026-containerized-local-stack`（已 Implemented，收口于 2026-09-15）——详见 `docs/specs/026-containerized-local-stack/spec.md`。
 - **⚠️ 已知偏离（SOP 偏离，已收口，待复盘）**：working tree 曾含**超前 roadmap 顺序（011→012→013→014）**落地的 `013-inventory-reservation` / `014-seckill-and-cache` 实质实现（catalog `Stock*` 聚合 + 三段式库存、order `OrderTimeoutScheduler` Redis ZSet 时间轮 + `SeckillResult` + 限流 + 幂等 + Lua）。代码先行、当时缺 spec/ADR，属 **ADR-0053** 记录的偏离。现已于 2026-08-31 补写 `docs/specs/013-*` / `014-*` 与 **ADR-0041~0046**（`0014-next-stage-decisions.md`）完成收口。**唯一遗留偏离**：014 的 Redis 引入**仍未经 roadmap §7「压测基线→论证引入」闸门**（ADR-0044 标注），k6 基线 + 论证证据列为 TODO。
-- **Feature 状态**：001/003/004/005/006/007/009/010/011/**012**/013/014/**015**/**016** 均有完整 Spec/Plan/Tasks/Acceptance 产物且已代码实现（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。`017` 已实现（2026-09-07，ADR-0065），450 测试全绿。
-- **当前能力**：`mvn -o verify -fae` 全量 BUILD SUCCESS（15 个 Maven 子模块：3 common + 10 服务 + `mock-channel-web` + `architecture-tests` + root，共 **16 个 reactor 条目**，含 `architecture-tests`）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。
+- **Feature 状态**：`001`~`026`（除 `008` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+  **非阻塞遗留**（均为「待补 Testcontainers 集成测试」，不影响功能）：`003` T016~T018（人工收敛，标记 Deferred，但代码已由 `023` 的 F2 修复实际落地——`POST /payments/{ref}/resolve` + `ResolveAuthorizationInterceptor`，003 的 tasks.md 未回头更新）；`006` T023（并发乐观锁）；`007` T013/T031/T039/T045（集成测试与最终 `/review`）。
+- **当前能力**：`./mvnw -o verify -fae` 全量 BUILD SUCCESS（15 个 Maven 子模块：3 common + 9 服务 + `mock-channel-web` + `e2e-tests` + `architecture-tests`，含 root 共 **16 个 reactor 条目**）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。**双运行模式**（宿主进程 / 容器）由 `deployment/lib-mode-guard.sh` 双向互斥守卫，端口契约 8081–8091 两模式一致。
 - **ADR 状态（2026-08-30 负责人已裁决，2026-08-31 全部落定）**：
   - ✅ **Accepted**：`0004`（0008~0011）、`0005`（0012~0015）、`0007`（0019~0021 对账）、`0010`（0029/0030/0032/0033 保持现状）、0006 的 `0017` / `0018`、0009 的 `0024`（实现=预留空函数）/ `0025`（实现=预留空函数）/ `0026`（明文 env）。
   - ❌ **Rejected**：`0016`（部分退款不做，代码已回退）。
