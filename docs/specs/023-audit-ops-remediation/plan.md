@@ -48,7 +48,7 @@
 1. `order-service.md`：createOrder 流程改为两步式（步骤 6-8 重写：`POST /orders` 仅建单返回 `transactionNo`；支付意图由 `POST /orders/{orderNo}/payments` 创建；时序图同步改）。
 2. `payment-service.md`：复核退款章节归属表述（ADR-0054/0067 口径：order 发起收口、payment 管渠道事实+记账、端口 8085 退役）。
 3. H1/H5 与 2026-09-06 基线未修项逐条核对，结果记录进 tasks.md 勾选行。
-4. ADR README 无需新条目（本 spec 无新决策；M2 拆出后另行立项 ADR-0070）。
+4. ADR README 无需新条目（本 spec 无新决策；M2 拆出后另行立项 ADR，**编号按届时水位取用**——2026-09-16 水位已到 ADR-0073：0070「026 容器化」、0071「027 用户支付限额」（worktree，未 merge）、0072/0073「028 两层结构 + 渠道路由」）。
 
 ## 回归
 

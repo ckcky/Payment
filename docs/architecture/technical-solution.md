@@ -131,8 +131,9 @@ graph LR
 | SKU | SKU、Price、Delivery Definition | catalog-service |
 | Order | Order、Order Item、Price Snapshot | order-service |
 | Transaction | Transaction、Transaction Relation | order-service |
-| Payment | Payment、Payment Attempt、Payment Result | payment-service |
-| Payment Channel | Channel、Channel Attempt、Channel Reference（接口 + 模块，不单独部署） | payment-service |
+| Payment（**payment 支付层**） | Payment、Payment Result、幂等键 | payment-service |
+| Payment Attempt（**channelAttempt 渠道层**） | PaymentAttempt、Channel Reference、Error Type | payment-service |
+| Payment Channel（**channelAttempt 渠道层**） | Channel / Adapter 实现族（接口 + 模块，不单独部署） | payment-service |
 | Refund | Refund、Refund Item、Refund Decision | payment-service（退款域，见 [§8](systems/payment-service.md)） |
 | Fulfillment | Fulfillment（Item / Delivery `[待定]`，尚未建模） | fulfillment-service |
 | Entitlement | Entitlement、Grant、Consumption | entitlement-service |
@@ -141,6 +142,8 @@ graph LR
 | Settlement | Batch、Item、Adjustment | settlement-service |
 
 > 各领域「负责 / 不负责」见 [§4.1](#41-领域职责)；**基数关系、状态机与金额铁律**见 [§4.2](#42-核心基数关系与状态机)。
+
+**payment-service 内部的两层结构**（[ADR-0072](../adr/0033-two-layer-channel-architecture.md)）：payment-service 内部分 **payment 支付层**与 **channelAttempt 渠道层**，各有自己的聚合、表与写入口——`payments` 表只由 payment 层写（支付单生命周期 + 支付指令编排：选路 → 调渠道 → 记账 → 扇出 order）；`payment_attempts` 表只由渠道层写（渠道交互生命周期 + 渠道实现族 Alipay / Wechat / Douyin / Mock）。payment 层经 `PaymentChannel` 端口调用渠道层，**不关心渠道如何实现**（`Payment ≠ Channel`）。两层**共享同一本地事务**——分层是**职责切分**，不是分布式拆分、不是拆数据源。
 
 #### 3.1.2 依赖方向与数据所有权
 
@@ -295,12 +298,14 @@ PaymentArch/
 **MVP 基数关系**：
 
 ```text
-Order (1) ───── (1) Transaction (1) ───── (N) Payment (1) ───── (1) PaymentAttempt
-   │                                                                      │
-   └─ Order Items / Price Snapshots                             每次尝试 ≤ 1 个渠道引用
+Order (1) ───── (1) Transaction (1) ───── (N) Payment ───── (1+N) PaymentAttempt
+   │                                                                  │
+   └─ Order Items / Price Snapshots        PAYMENT 1 + REFUND N；每次尝试 ≤ 1 个渠道引用
 ```
 
-> **基数修订**：`Transaction : Payment = 1:N`（ADR-0064：一交易多支付单，用户每选一个支付方式即新建一张支付单，`payments.attempt_seq` 区分）；`Payment : PaymentAttempt = 1:1`（ADR-0054：每张支付单仅一条渠道尝试记录，渠道重试在同一 attempt 行内 `retry_count` 递增、不新建行）。
+> **基数修订**：`Transaction : Payment = 1:N`（ADR-0064：一交易多支付单，用户每选一个支付方式即新建一张支付单，`payments.attempt_seq` 区分）；`Payment : PaymentAttempt = 1:1（支付尝试）+ 1:N（退款尝试）`——`payment_attempts` 以 `attempt_type` 区分 `PAYMENT` / `REFUND`（Feature 016 / FR-017），同一 `payment_no` 可有 **1 条 PAYMENT 尝试 + N 条 REFUND 尝试**。渠道重试在同一 attempt 行内 `retry_count` 递增、不新建行（ADR-0054）。
+>
+> ⚠️ **ADR-0054 原文的「`payment_no : payment_attempts = 1:1`」已过时**：该约定写于退款尝试复用本表（Feature 016）之前，只覆盖支付尝试。引用时须按本行的修订口径理解。
 
 **核心状态机**（领域自持，集中状态转换函数，禁止散落 set）：
 
@@ -338,9 +343,10 @@ sequenceDiagram
     Cat-->>O: 可售 + 销售/交付定义
     O->>O: 创建订单 + 明细 + 价格快照（本地事务）
     O->>P: 创建支付意图（RPC，携带幂等键）
-    P->>P: 创建 Payment + PaymentAttempt（本地事务）
-    P->>Ch: 发起支付（渠道接口抽象）
-    Ch-->>P: 明确成功/失败/未知
+    P->>P: 创建 Payment（payment 支付层记录支付单）
+    P->>Ch: 创建渠道尝试 + 发起支付（channelAttempt 渠道层）
+    Ch-->>P: 明确成功/失败/未知（渠道层收敛 attempt）
+    P->>P: 应用结果推进 Payment（与 attempt 同一本地事务）
     alt 支付成功
         P->>P: 编排支付指令：记账 ledger postPaymentCapture（保留在 payment）
         P->>O: 支付成功通知（业务侧仅通知 order，ADR-0054）

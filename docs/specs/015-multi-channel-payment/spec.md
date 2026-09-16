@@ -131,7 +131,8 @@
 
 ## 8. 不做（Out of Scope）
 
-- ❌ 不做 `Map<ChannelCode, PaymentChannel>` 注册表；不改 `channelCode` 为枚举。
+- ❌ ~~不做 `Map<ChannelCode, PaymentChannel>` 注册表~~；不改 `channelCode` 为枚举。
+  > ⚠️ **第一条已于 2026-09-16 被 [ADR-0073](../../adr/0034-channel-routing.md) 取代**（[spec 028](../../specs/028-channel-routing/spec.md) 引入 `ChannelRegistry` / `ChannelRouter`）：当时「一期不做」是**最简实现的取舍，不是永久否决**。「不改 `channelCode` 为枚举」**仍然有效**。
 - ❌ 不做自动退款的定时扫描兜底（同步重试 3 次后转人工）。
 - ❌ 不修改 `/internal/stock/seed` 支持补货（流量自建 SKU 绕开）。
 - ❌ 不引入 CLOSED 状态；15 分钟到期沿用 `cancel()` → CANCELLED。
