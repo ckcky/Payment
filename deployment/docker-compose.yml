@@ -313,12 +313,21 @@ services:
       #       的 S3/S4 靠它把渠道置 DOWN。**不激活该 profile 时端点不存在**（404/500），
       #       因为通道状态是纯内存覆盖、重启即回到配置值，只应存在于演示环境。
       SPRING_PROFILES_ACTIVE: demo
+      #   Redis 连接（spec 027 用户支付限额，ADR-0071 D13）：payment-service 首次依赖 Redis，
+      #       用途单一——预占额度的**惰性回收索引**（key `limit:pending:{paymentNo}`，EX=reserve-ttl）。
+      #       取值与 order/catalog-service 对齐（同为容器网络内服务名）。
+      #       运行期注意：Redis 不可用时限额域 fail-open（INV-9.2，不拦截支付），
+      #       但 Actuator 的 redis 健康指示器为强依赖，会拖垮整体 /actuator/health（503/DOWN）。
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:
       nacos:
         condition: service_healthy
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - pay-arch

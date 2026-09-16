@@ -94,15 +94,26 @@ bash deployment/demo/stop-stack.sh
 
 ## 用户支付限额演示（spec 027 / ADR-0071）
 
-- 入口：`bash deployment/demo/scenario-limit.sh`（**默认不纳入 `run-all.sh`**——会临时设/清限额配置，且 L6 需短 TTL 重跑 payment）。
+- 入口：`bash deployment/demo/scenario-limit.sh`（**默认不纳入 `run-all.sh`**——会临时设/清限额配置）。
+  **live 实测（2026-09-16，容器模式）**：`EXIT=0`，58 条断言全 PASS。
 - 网页版：`http://localhost:8091/demo` 左栏「用户限额」disclosure（设置 / 一键演示超限 / 清除）+
   右栏「用户限额」水位卡（日/月/年进度条 = `used` 实心 + `pending` 半透明、超限红条、最近流水）。
 - **前置**：Redis（`docker-compose` 的 `redis:7`）已启动——在途占用过期索引依赖它；未启动时降级为
-  保守占用（fail-open，不拦截支付），但 L6 断言会失败。
-- **L6 需要短 TTL**：脚本把 `payment.limit.reserve-ttl` 临时调至 5s 并重启 payment，跑完恢复默认 900s。
-  只做 L1~L5 时用 `SKIP_TTL=1 bash deployment/demo/scenario-limit.sh`（不重启 payment）。
+  保守占用（fail-open，不拦截支付）。容器模式下 payment-service 的 Redis 连接由
+  `docker-compose.yml` 的 `SPRING_DATA_REDIS_HOST/PORT` 提供。
+- **演示用户每轮唯一**：脚本默认用 `limit-demo-user-$RANDOM`（可 `LIMIT_USER=xxx` 覆盖）。
+  原因：额度占用是支付事实的投影，**没有清空端点**，`clear_limit` 只删配置不动占用——
+  固定用户名会让上一轮的在途 pending 残留进来，导致基线断言随机假红。
+- **两套状态字面量别混**：渠道回调用 `SUCCESS` / **`FAILURE`** / `UNKNOWN`（渠道层
+  `ChannelResult.Status`）；payment 落库状态是 `SUCCEEDED` / **`FAILED`**（`PaymentStatus`）。
+  回调发 `FAILED` 会被 400 INVALID_ARGUMENT 拒收。
+- **`0` = 该周期不限**（FR-020）：`set_limit` 传 0 表示**不限制**该周期，而非「额度为零」。
+  造超限要用「当前占用 + 1 分」，不能用 0。
+- **只有被配了额度（>0）的周期才被预占/记账**：只配日额度时，月/年周期不参与判定也不累计占用。
+  演示「月周期是短板」需先给月周期配一个额度让它进入受管态。
 - 断言口径：`user_limit_usage` / `limit_operations` 经 `/demo/trace?orderId=` 只读直查
-  （`user_limit_usage` 按 `userId`、`limit_operations` 按 `paymentNo`）。
+  （`user_limit_usage` 按 `userId`、`limit_operations` 按 `paymentNo`）；
+  某支付单的额度流水另有 `GET /internal/limits/payments/{paymentNo}/operations`。
 
 ## 渠道路由演示（spec 028 / ADR-0072、ADR-0073）
 

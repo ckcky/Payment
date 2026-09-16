@@ -26,9 +26,14 @@ source "$HERE/lib.sh"
 
 wait_for_services
 
-LIMIT_USER="limit-demo-user"
+# 每轮用**本次运行唯一**的用户（可被 LIMIT_USER 覆盖）：
+# 额度占用是随支付事实累计的，而「清占用」没有对外的写端点（`user_limit_usage` 只能靠支付事实演进）。
+# 复用固定用户会让上一轮未结算的在途/pending 残留进来，使 L1b「起点占用为 0」这类断言随机失败
+# ——这是「脚本自己污染自己」的假红，2026-09-16 实跑踩到。用唯一用户名天然隔离历史。
+LIMIT_USER="${LIMIT_USER:-limit-demo-user-$RANDOM}"
 LIMIT_URL="$PAYMENT_URL/internal/limits/users/$LIMIT_USER"
 AMOUNT=9900
+info "本轮限额演示用户：$LIMIT_USER"
 
 # ---------------------------------------------------------------------------
 # 端点封装
@@ -104,8 +109,11 @@ settle_success() { # settle_success <paymentNo>
 
 # 代渠道补发失败回调（释放 pending）
 settle_failure() { # settle_failure <paymentNo>
+  # ⚠️ 回调状态字面量是 **FAILURE**（渠道层 ChannelResult.Status），不是 payment 侧的 FAILED
+  #    （PaymentStatus）。写 FAILED 会被渠道回调端点以 400 INVALID_ARGUMENT 拒收
+  #    ——「status must be SUCCESS, FAILURE or UNKNOWN」（2026-09-16 实跑踩到）。
   http POST "$DEMO_URL/mock-channel/callback" \
-    "{\"paymentNo\":\"$1\",\"status\":\"FAILED\",\"channelReference\":\"limit-demo-f-$1\",\"amountMinor\":$AMOUNT,\"signMode\":\"VALID\"}"
+    "{\"paymentNo\":\"$1\",\"status\":\"FAILURE\",\"channelReference\":\"limit-demo-f-$1\",\"amountMinor\":$AMOUNT,\"signMode\":\"VALID\"}"
   assert_status 200 "渠道失败回调受理"
 }
 
@@ -129,16 +137,24 @@ L1_PAYMENT_NO="$PAYMENT_NO"
 [ -n "$L1_PAYMENT_NO" ] || fail "L1 应建单成功，但响应缺少 paymentNo"
 assert_eq "$(payment_row_count "$ORDER_NO")" "1" "L1 payments 表确有新行（不限额放行）"
 settle_success "$L1_PAYMENT_NO"
+# ⚠️ 本笔发生在「无配置」状态：按 FR-012 / INV-2，无配置 = 不限额 → **不预占、不结算**，
+#    故它不会在 user_limit_usage 里留下任何占用（下面 L2 的基线断言的正是这一点）。
+#    这是 US1 场景 4「行为与今天完全一致」的实跑证据，不是缺陷。
+
+echo "==> L1b 无配置下结算不留占用（FR-012 / INV-2 的正面证据）"
+assert_eq "$(occupied_of DAY used)" "0" "L1b 无配置期间的支付不累计 used"
+assert_eq "$(occupied_of DAY pending)" "0" "L1b 无配置期间的支付不产生 pending"
 
 echo "==> L2 配置日额度 → 额度内预占：pending 上升"
 DAY_LIMIT=$((AMOUNT * 3))     # 日额度只够 3 笔
 set_limit "$DAY_LIMIT" 0 0
 assert_status 200 "PUT 日额度 $DAY_LIMIT"
-# 上一笔已 settle 成 used，先读基线
+# 起点是「已核实为 0」的干净基线（L1b 已断言）——不再假设上一笔会累计。
 USED_BASE="$(occupied_of DAY used)"
 PENDING_BASE="$(occupied_of DAY pending)"
-info "L2 基线：used=$USED_BASE pending=$PENDING_BASE（上一笔已确认，used 应已含它）"
-[ "$USED_BASE" -ge "$AMOUNT" ] || fail "L2 上一笔确认后 used 应 >= $AMOUNT，实际 $USED_BASE"
+info "L2 基线：used=$USED_BASE pending=${PENDING_BASE}（配置刚生效，占用为 0）"
+assert_eq "$USED_BASE" "0" "L2 起点的 used 为 0（配置生效前的支付不计入）"
+assert_eq "$PENDING_BASE" "0" "L2 起点的 pending 为 0"
 
 create_order_and_pay
 assert_status 201 "L2 额度内建支付单"
@@ -147,12 +163,18 @@ assert_eq "$(occupied_of DAY used)" "$USED_BASE" "L2 used 不因预占而变（F
 assert_eq "$(occupied_of DAY pending)" "$((PENDING_BASE + AMOUNT))" "L2 pending 增加一笔（在途占用）"
 
 echo "==> L3 用尽额度后超限 → 409 + LIMIT_EXCEEDED 且 payments 无新行（FR-019 / INV-3）"
-# 把日额度压到「已用满」：used=9900, pending=9900, limit 只剩 0 可用
-set_limit "$((USED_BASE + PENDING_BASE))" 0 0
-assert_status 200 "PUT 日额度收窄到当前占用"
+# 把日额度压到「只剩 1 分」：现读占用（L2 已产生 pending=9900），额度 = 占用 + 1 分。
+# ⚠️ 不能直接 PUT 0：0 的语义是「该周期不限」（FR-020），会变成放行而非超限。
+DAY_OCCUPIED="$(occupied_of DAY occupied)"
+L3_LIMIT=$((DAY_OCCUPIED + 1))
+set_limit "$L3_LIMIT" 0 0
+assert_status 200 "PUT 日额度收窄到当前占用 + 1 分（${L3_LIMIT}）"
 http POST "$ORDER_URL/orders" "{\"userId\":\"$LIMIT_USER\",\"merchantId\":\"1\",\"items\":[{\"skuId\":$SKU_ID,\"quantity\":1}]}"
 assert_status 201 "L3 下单（下单不受限额影响）"
-L3_ORDER_NO="$ORDER_NO"
+# ⚠️ 必须解析出本轮的 orderNo：不解析的话 ORDER_NO 会停留在上一笔（L2）的订单号上，
+#    INV-3 的「payments 无该订单的行」就会去查一个无关订单，断言随机假红（2026-09-16 踩到）。
+jget "d['orderNo']"; L3_ORDER_NO="$VALUE"
+[ -n "$L3_ORDER_NO" ] || fail "L3 下单响应缺少 orderNo"
 http POST "$ORDER_URL/orders/$L3_ORDER_NO/payments" '{}'
 assert_status 409 "L3 建支付单被拒（409）"
 jget "d['code']"; assert_eq "$VALUE" "LIMIT_EXCEEDED" "L3 错误码为 LIMIT_EXCEEDED"
@@ -163,24 +185,38 @@ info "L3 错误消息：$VALUE_MSG"
 assert_eq "$(payment_row_count "$L3_ORDER_NO")" "0" "L3 超限时 payments 表无该订单的行（未创建而非创建了再拒）"
 jget "d['paymentNo']"; L3_PAYMENT_NO="$VALUE"
 if [ -n "$L3_PAYMENT_NO" ]; then
-  info "注意：L3 响应意外携带 paymentNo=$L3_PAYMENT_NO（若 payments 无行则仍属未创建）"
+  info "注意：L3 响应意外携带 paymentNo=${L3_PAYMENT_NO}（若 payments 无行则仍属未创建）"
 else
   info "PASS: L3 响应未携带 paymentNo（建单事务已整体回滚）"
 fi
 
+# L3 收尾：把 L2 那笔仍挂在在途的支付结算掉（used 累加、pending 归零）。
+# ⚠️ 必要性：`clear_limit` 只删配置、**不碰占用**（占用是支付事实的投影，没有清空端点）。
+#    L2 的 pending 会一直挂到被结算或 TTL 回收为止，若不带走，L4 的 seed 会叠加上它，
+#    使 L4/L5 的基线变成 19800 而不是 9900（2026-09-16 实跑踩到）。
+info "L3 收尾：结算 L2 的在途支付，避免占用带入后续场景"
+settle_success "$L2_PAYMENT_NO"
+assert_eq "$(occupied_of DAY pending)" "0" "L3 收尾：L2 在途已结算，pending 归零"
+
 echo "==> L4 三周期任一超限即整笔拒绝，且已预占周期不留残留（FR-010）"
-# 日额度放宽（不构成短板）、月额度设成「已用满」
+# ⚠️ 关键前提：**只有被配置了额度（>0）的周期才会被预占/记账**（FR-020：0 = 该周期不限，
+#    限额服务对该周期直接 continue）。所以「制造月周期占用」必须先给月周期配额度——
+#    只配日额度的话 MONTH 恒为 0，本场景就退化成「无月短板」（2026-09-16 实跑踩到）。
+#    这里先同时配日、月额度各 100000000（都远大于单笔），跑一笔并确认：两周期各累计 9900。
 clear_limit
-set_limit 100000000 0 0
-assert_status 200 "PUT 日额度极大（非短板）"
+set_limit 100000000 100000000 0
+assert_status 200 "PUT 日/月额度均极大（先让两个周期都进入受管状态）"
 create_order_and_pay
-assert_status 201 "L4 先用掉一笔，制造月周期占用"
+assert_status 201 "L4 先用掉一笔，制造日/月周期占用"
 L4_SEED_PAYMENT="$PAYMENT_NO"
 settle_success "$L4_SEED_PAYMENT"
 USED_DAY="$(occupied_of DAY used)"
 USED_MONTH="$(occupied_of MONTH used)"
 info "L4 基线：DAY used=$USED_DAY / MONTH used=$USED_MONTH"
-# 月额度 = 月已用（放不下新的一笔），日额度仍有极大余量
+# 两个周期都必须已有正占用，否则下面的「收窄成短板」不成立（用 0 收窄会变成「不限」）。
+[ "$USED_DAY" -gt 0 ] || fail "L4 前置不成立：日周期 used 应为正，实际 $USED_DAY"
+[ "$USED_MONTH" -gt 0 ] || fail "L4 前置不成立：月周期 used 应为正，实际 $USED_MONTH"
+# 月额度 = 月已用（放不下新的一笔），日额度仍有极大余量 → MONTH 是唯一短板
 set_limit 100000000 "$USED_MONTH" 0
 assert_status 200 "PUT 月额度收窄（制造 MONTH 短板、DAY 富余）"
 PENDING_DAY_BEFORE="$(occupied_of DAY pending)"
@@ -225,7 +261,10 @@ info "L7 首次确认后 used=$USED_AFTER_FIRST"
 settle_success "$L7_PAYMENT_NO"
 assert_eq "$(occupied_of DAY used)" "$USED_AFTER_FIRST" "L7 重复确认后 used 不变（幂等流水挡住二次累加）"
 # 流水侧证：同一单号的 CONFIRM 流水只有一条
-http GET "$LIMIT_URL/payments/$L7_PAYMENT_NO/operations"
+# ⚠️ 端点路径是 /internal/limits/payments/{paymentNo}/operations —— **不含** /users/{userId}；
+#    用 $LIMIT_URL（= /internal/limits/users/{userId}）拼接会落到静态资源处理器上，
+#    表现为 500 NoResourceFoundException（2026-09-16 实跑踩到）。
+http GET "$PAYMENT_URL/internal/limits/payments/$L7_PAYMENT_NO/operations"
 assert_status 200 "L7 额度流水可查"
 CONFIRM_COUNT="$(echo "$BODY" | python -c "
 import json,sys
