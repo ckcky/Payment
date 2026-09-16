@@ -8,13 +8,14 @@
 
 ## [2026-09-16] docs：spec 进度文档刷新 + 陈旧分支清理
 
-**范围**：纯文档 + 仓库清理，无代码改动、无 ADR。
+**范围**：纯文档 + 仓库清理，无代码改动（028 的 ADR 为 Proposed，未开工）。
 
 - `docs/specs/026-containerized-local-stack/spec.md`：状态由 `Draft` 改为
   `✅ Implemented`，补齐三条收口合并点（`61e9e3d`/`6a07a3d`、`08f3bb1`、`01193ff`）与实测口径。
   原 `Draft` 系文件未刷新的滞后标记，非任务未完成（tasks.md 早为 68/68）。
 - `docs/architecture/roadmap.md`：Current Status 补齐 `018`~`026` 九个 spec 的落地汇总表
-  （此前只登记到 `017`，`018`~`026` 全部缺失）；订正「当前能力」行的模块清单
+  （此前只登记到 `017`，`018`~`026` 全部缺失）；并登记 `028-channel-routing`
+  为「已立项待实现」（ADR-0072/0073 🟡 Proposed，待核准）；订正「当前能力」行的模块清单
   （10 服务 → **9 服务**，反映 spec 019 退款域并入 payment；补 `e2e-tests` 模块）；
   登记 `003`/`006`/`007` 的非阻塞遗留测试项。
 - **分支清理**（均已确认并入 master）：远端删 `chore/022-pr-contract-gate`、
