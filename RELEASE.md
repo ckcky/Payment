@@ -20,6 +20,14 @@ tag push (v*)  →  GitHub Actions（.github/workflows/release.yml）
 手动打包：`bash deployment/release/make-release.sh`
 （产物落仓库根目录 `payment-platform-<版本>-bin.tar.gz`，已 gitignore）
 
+### 发版前必做
+
+1. 更新仓库根 `VERSION` 为待发版本号。
+2. **撰写 `docs/releases/<tag>.md`** —— Release 正文由该文件提供（`release.yml` 的 `body_path`），
+   取代 GitHub 自动生成的 release notes。历史版本说明见 `docs/releases/`。
+3. 在 `CHANGELOG.md` 置顶新增版本条目（只留索引 + 破坏性变更，细节指向 `docs/releases/<tag>.md`）。
+4. 合并到 master 后打 tag：`git tag v<版本> && git push origin v<版本>`，CI 自动构建并发布。
+
 ---
 
 ## 2. 使用发行包

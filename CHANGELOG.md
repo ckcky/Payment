@@ -6,6 +6,29 @@
 
 ---
 
+## [2026-09-16] v2.0.0 发布（tag `v2.0.0`）
+
+**范围**：自 v1.0.0（2026-09-07）以来 124 个提交 —— spec 018 / 019 / 020 / 021 / 022 / 023 / 026 落地，
+spec 027 / 028 立项（仅文档）。**完整发布说明见 [docs/releases/v2.0.0.md](docs/releases/v2.0.0.md)**，本节只留索引。
+
+- **运行形态**：新增容器模式 `deployment/start-container.sh`，与宿主模式端口契约一致故互斥，
+  由 `lib-mode-guard.sh` 双向守卫；一份通用 Dockerfile 参数化 10 模块（**ADR-0070，Supersedes ADR-0057**）。
+- **质量体系**：新增黑盒 `deployment/e2e-tests` 模块 + 9 条资金不变量断言原语 + 确定性故障注入；
+  `verify.yml` 增 PR 契约快照门禁；E2E 进 nightly 且 v* tag 强制（**ADR-0069**）。
+- **退款链路**：两层退款单 TXRF / PMRF 双号互记 + 渠道退款异步回调闭环（HMAC 验签）+ 编排归属收口到 order
+  （**ADR-0067**）；`transactions` 补 `payment_no` / `refunded_minor`。
+- **可观测**：统一单行 `ACCESS_LOG`（含服务名）+ 异步 MDC traceId + 9 服务优雅停机 30s drain（**ADR-0068** / spec 023）；
+  `onPaymentSucceeded` 出站 RPC 移出事务边界（事实不回滚）。
+- **数据模型**：22 表列序归一、新增 `order_item_no`（OI+雪花）、履约细化到明细级、
+  `payment_attempts` 补金额与币种留痕（**ADR-0066**）。
+- **⚠️ 破坏性变更**：退款创建入口 `POST /internal/refunds` **下线**（改走 order 侧，`resolve` 保留）；
+  `refunds.refund_no` 前缀改 `PMRF`（存量 `RF` 可读）；`GET /fulfillments/by-order` 改返回数组；
+  **存量库升级须依次执行 `deployment/schema/018-*.sql` 与 `019-*.sql`**（幂等，步骤见发布说明）。
+- **发布流程变更**：`release.yml` 改用 `body_path: docs/releases/<tag>.md` 取代 `generate_release_notes`
+  ——**今后每个版本发布前必须提供对应的说明文件**，否则 Release 正文为空。
+
+---
+
 ## [2026-09-16] docs：spec 进度文档刷新 + 陈旧分支清理
 
 **范围**：纯文档 + 仓库清理，无代码改动（028 的 ADR 为 Proposed，未开工）。
