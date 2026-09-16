@@ -89,6 +89,29 @@ mock-channel-web / arch-tests 六个模块，53 个文件。ADR-0072（`0033-two
 **验证**：`./mvnw -o clean verify -fae` 全部 **16 个 reactor 模块 BUILD SUCCESS**；payment-service
 测试 149 + 路由 22 全绿；架构测试 8/8。
 
+**Batch G 实跑暴露并修复的 5 处缺陷（纯构建/单测均未发现）**
+
+首轮 live 演示即失败，逐项定位——**这是 live 验证不可替代的价值**：
+
+1. **`channelCode` 的 `@NotBlank` 实际漏改**（`common-dto` + `order-service`）：T27/T28 标记完成但代码
+   仍拒绝空值，不传渠道直接 `400 must not be blank`，US2「只表达支付意图」主路径**完全不可用**。
+   改为 `@Pattern`（允许空、非空时校验形态）。
+2. **`application.yml` 的 flow mapping 里裸写 `${...}`**：SnakeYAML 把 `{ scenario: ${X:Y} }` 中的
+   `${` 判为嵌套 mapping 起始 → 容器启动即 `expected ',' or '}'` 崩溃。加引号修复。
+3. **控制器回显请求里的原始 `channelCode`**（违反 FR-027/FR-030）：自动选路时响应与 payUrl
+   都带 `null`/`MOCK`，与真实落库渠道不一致。新增 `RoutedPayment`（支付单 + 最终渠道码）由服务层
+   回带，控制器一律以它为准。
+4. **下游 409 被压成 500**：order-service 无 Feign `ErrorDecoder`，`FeignException` 落进兜底分支，
+   调用方看到「内部错误」而非「渠道不可用」。新增 `PaymentFeignConfig`（仅绑定 payment 客户端）
+   解析下游 `code`/`message` 还原为 `BizException`，让 `409 CHANNEL_UNAVAILABLE` 语义穿透。
+5. **演示件三处**：`docker-compose.yml` 补 `SPRING_PROFILES_ACTIVE: demo`（否则 FR-035 端点不存在）；
+   `scenario-routing.sh` 补 `⓪a 复位渠道可用性`（内存覆盖不随 `reset.sh` 清、上轮残留致误报）
+   + 修 `attempt_channel_of` 的 stdout 污染（`http()` 日志被 `$(...)` 一并捕获）。
+
+**实跑结果**：全栈容器起栈 → `run-all.sh` 全绿（含路由段）→ `scenario-routing.sh` **22 条断言全过**
+（S1 自动落 ALIPAY / S2 显式 WECHAT 零干预 / S3 绕开 DOWN / S4 显式 DOWN → 409 且无部分写入 /
+S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_total{result="routed"}` 正常暴露。
+
 ---
 
 ## [2026-09-16] docs：spec 进度文档刷新 + 陈旧分支清理

@@ -29,9 +29,12 @@ set_channel_status() { # set_channel_status <CODE> <UP|DEGRADED|DOWN>
 
 # 读 payment_attempts.channel_code 列（权威口径），按 attempt_type 过滤取最新一条。
 # 经 /demo/trace?orderId=<orderNo> 查库（该端点已暴露 payment_attempts 全列）。
+#
+# 注意：本函数**只向 stdout 输出渠道码**，其余一切（含 http() 的调用日志）一律重定向到
+# stderr —— 否则 `$(attempt_channel_of ...)` 会把日志行一并捕获进变量，断言必然失败。
 attempt_channel_of() { # attempt_channel_of <orderNo> <PAYMENT|REFUND> [paymentNo]
   local order_no="$1" type="$2" want_pn="${3:-}"
-  http GET "$DEMO_URL/demo/trace?orderId=$order_no" || true
+  http GET "$DEMO_URL/demo/trace?orderId=$order_no" >&2 || true
   echo "$BODY" | python -c "
 import json,sys
 try:
@@ -86,6 +89,15 @@ assert_status 200 "SKU 列表"
 SKU_ID="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);m=[x for x in d if x.get('skuCode')=='DEMO-SKU-101'];print(m[0]['id'] if m else '')")"
 [ -n "$SKU_ID" ] || fail "未找到种子 SKU DEMO-SKU-101（请先 bash demo/reset.sh）"
 AMOUNT=9900
+
+# ⓪a 复位渠道可用性（**必须**）。
+# POST /internal/channels/{code}/status 是纯内存覆盖，重启才失效；demo/reset.sh 只重建数据库，
+# 不会碰它。上次运行若把 ALIPAY 置 DOWN 且中途失败，本轮的 auto 选路起点就不是配置值，
+# 断言会在最开头误报（2026-09-08 实测踩坑）。故每个渠道都显式置回 UP，让场景从确定起点开始。
+echo "==> ⓪a 复位渠道可用性（清掉上轮遗留的内存覆盖）"
+for code in ALIPAY WECHAT DOUYIN MOCK; do
+  set_channel_status "$code" UP
+done
 
 echo "==> ⓪b 路由快照（FR-044 / FR-045）"
 http GET "$PAYMENT_URL/internal/channels"

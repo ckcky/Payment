@@ -82,5 +82,24 @@
 
 - [x] T54 `mvn -o clean verify -fae` 全绿（含 F1 两条新 ArchUnit 规则）
 - [x] T55 既有支付 / 退款 / 可靠性 / 集成 / E2E 测试**零改动**通过（SC-012）
-- [ ] T56 demo 实跑（**待有栈环境**：`start-all.sh` 起栈 → `run-all.sh` 全绿 → `scenario-routing.sh` 六场景全绿 → `stop-all.sh`）：`start-all.sh` 起栈 → `run-all.sh` 全绿 → `scenario-routing.sh` 六场景全绿 → `stop-all.sh` 优雅停机
-- [ ] T57 CHANGELOG + `--no-ff` 合并 master + 推送
+- [x] T56 demo 实跑：全栈容器起栈 → `run-all.sh` 全绿（含路由段）→ `scenario-routing.sh` 六场景 22 条断言全过
+- [x] T57 CHANGELOG + `--no-ff` 合并 master + 推送
+
+## 实跑补记（2026-09-08，Batch G live 验证暴露并修复的 4 处真实缺陷）
+
+T56 实跑初轮即失败，逐项定位后修复——**这四项均未在纯单测/构建中暴露**，正是 live 演示的价值：
+
+- [x] T58 `order-service` / `common-dto` 的 `channelCode` **仍带 `@NotBlank`**（T27/T28 声称已改但实际漏做）：
+  不传渠道直接 `400 must not be blank`，US2「只表达支付意图」主路径完全不可用。
+  改为 `@Pattern`（允许空、非空时校验形态），order 侧空白串归一为 null。
+- [x] T59 `application.yml` 的 `adapters` **未给 `${...}` 加引号**：YAML flow mapping 里裸写占位符
+  被 SnakeYAML 判为嵌套 mapping，容器启动即 `expected ',' or '}'` 崩溃。
+- [x] T60 `PaymentController` **回显请求里的原始 channelCode**（违反 FR-027/FR-030）：
+  自动选路时响应与 payUrl 都带 `null`/`MOCK`，与真实落库渠道不一致。
+  新增 `RoutedPayment`（支付单 + 最终渠道码）由服务层回带，控制器一律以它为准。
+- [x] T61 **下游 409 被 order 侧压成 500**：order-service 无 Feign `ErrorDecoder`，
+  `FeignException` 落进兜底 `Exception` 分支。新增 `PaymentFeignConfig`（仅绑定 payment 客户端）
+  解析下游 `code`/`message` 还原为 `BizException`，让 409 `CHANNEL_UNAVAILABLE` 语义穿透到调用方。
+- [x] T62 `docker-compose.yml` 补 `SPRING_PROFILES_ACTIVE: demo`：否则 FR-035 的演示开关端点不存在。
+- [x] T63 `scenario-routing.sh` 补 `⓪a 复位渠道可用性` + 修 `attempt_channel_of` 的 stdout 污染
+  （`http()` 的调用日志被 `$(...)` 一并捕获，断言必然失败）。

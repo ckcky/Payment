@@ -11,8 +11,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * payment-service 的 Feign 客户端：创建支付意图。
+ *
+ * <p>绑定 {@link PaymentFeignConfig}：保留下游 4xx 的业务语义（如 409 CHANNEL_UNAVAILABLE），
+ * 避免被兜底成 500——路由失败是**可预期的业务结果**，不是服务端故障。</p>
  */
-@FeignClient(name = "payment-service")
+@FeignClient(name = "payment-service", configuration = PaymentFeignConfig.class)
 public interface PaymentFeignClient extends PaymentGateway {
 
     @PostMapping("/payments")
