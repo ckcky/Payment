@@ -50,11 +50,17 @@ public class PaymentController {
                 request.userId(), request.amountMinor(), request.currencyCode(),
                 request.idempotencyKey(), request.channelCode());
         boolean defer = mockCashier.isEnabled();
-        Payment payment = applicationService.createPaymentIntent(command, defer);
+        PaymentApplicationService.RoutedPayment routed =
+                applicationService.createPaymentIntentWithRouting(command, defer);
+        Payment payment = routed.payment();
+        // FR-027 / FR-030（Feature 028）：对外暴露的渠道码必须是**路由后的最终渠道**，
+        // 不得回显调用方请求里的原始值——请求未指定渠道时那是 null，回显既无意义、
+        // 也会让收银台拿到错误渠道（演示与排障都会被误导）。
+        String routedChannelCode = routed.channelCode();
         String payUrl = defer ? buildPayUrl(payment, request.orderNo(), request.amountMinor(),
-                request.currencyCode(), request.channelCode()) : null;
+                request.currencyCode(), routedChannelCode) : null;
         return new CreatePaymentResponse(payment.getPaymentNo(), payment.getStatus().name(), payUrl,
-                payment.getAttemptSeq(), request.channelCode());
+                payment.getAttemptSeq(), routedChannelCode);
     }
 
     /** 收银台页链接：mock-channel-web 的 /cashier，页面从查询串自渲染（channelCode 供收银台展示/换渠道）。 */

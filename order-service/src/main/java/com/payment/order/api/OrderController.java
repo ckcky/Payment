@@ -70,12 +70,20 @@ public class OrderController {
     }
 
     /**
-     * 显式选渠道创建支付单（Feature 015，INV-2）：同一订单可多次调用，每次新建一张支付单。
+     * 创建支付单（Feature 015 + Feature 028）。
+     *
+     * <p>显式传 {@code channelCode} → 按指定渠道建单（INV-2：换渠道 = 再次调用本端点新建支付单，
+     * 平台**不会**自动改道）；不传 → 只表达支付意图，交由 payment-service 的 Router 确定性选路（FR-026）。
+     * 空/空白串归一为 null，避免把 {@code ""} 当渠道码透传下去。
      */
     @PostMapping("/{ref}/payments")
     public ResponseEntity<CreatePaymentResponse> createOrderPayment(
             @PathVariable String ref, @Valid @RequestBody CreateOrderPaymentRequest request) {
-        CreatePaymentResponse response = service.createPaymentForOrder(ref, request.channelCode());
+        String channelCode = request.channelCode();
+        if (channelCode != null && channelCode.isBlank()) {
+            channelCode = null;
+        }
+        CreatePaymentResponse response = service.createPaymentForOrder(ref, channelCode);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

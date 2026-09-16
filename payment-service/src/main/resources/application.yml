@@ -44,10 +44,13 @@ payment:
     # per-channel 场景覆盖（Feature 028 / FR-014、FR-010）：未配回落全局 mock-scenario。
     # 场景名必须严格等于枚举名（SUCCESS / FAILURE / TIMEOUT / TRANSPORT_ERROR / BUSINESS_UNKNOWN），
     # 坏值在 Bean 创建期 FAIL FAST（ADR-0049 第 2 条）。
+    # 注意：占位符值**必须加引号**——flow mapping（`{ ... }`）里裸写 `${...}` 会被
+    # SnakeYAML 当成嵌套 flow mapping 起始（解析报 "expected ',' or '}'"），宿主模式不报
+    # 只因默认值恰为空串/不触发该路径；容器模式指定 PAYMENT_CHANNEL_*_SCENARIO 时必崩。
     adapters:
-      ALIPAY: { scenario: ${PAYMENT_CHANNEL_ALIPAY_SCENARIO:SUCCESS} }
-      WECHAT: { scenario: ${PAYMENT_CHANNEL_WECHAT_SCENARIO:SUCCESS} }
-      DOUYIN: { scenario: ${PAYMENT_CHANNEL_DOUYIN_SCENARIO:SUCCESS} }
+      ALIPAY: { scenario: "${PAYMENT_CHANNEL_ALIPAY_SCENARIO:SUCCESS}" }
+      WECHAT: { scenario: "${PAYMENT_CHANNEL_WECHAT_SCENARIO:SUCCESS}" }
+      DOUYIN: { scenario: "${PAYMENT_CHANNEL_DOUYIN_SCENARIO:SUCCESS}" }
   # 支付渠道路由（Feature 028 / ADR-0073 / FR-031）
   routing:
     # false = 回落旧行为（channelCode 必填，不选路）；灰度开关，可一键退回今天的行为（FR-020①/FR-033）

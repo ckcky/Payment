@@ -308,6 +308,11 @@ services:
       PAYMENT_ADMIN_TOKEN: demo-admin-token
       PAYMENT_CHANNEL_SECRET: demo-channel-secret-2026
       PAYMENT_CHANNEL_MOCK_SCENARIO: ${PAYMENT_CHANNEL_MOCK_SCENARIO:-SUCCESS}
+      #   SPRING_PROFILES_ACTIVE=demo        激活演示专用 Bean（spec 028 / FR-035）：
+      #       `POST /internal/channels/{code}/status` 渠道可用性开关 —— scenario-routing.sh
+      #       的 S3/S4 靠它把渠道置 DOWN。**不激活该 profile 时端点不存在**（404/500），
+      #       因为通道状态是纯内存覆盖、重启即回到配置值，只应存在于演示环境。
+      SPRING_PROFILES_ACTIVE: demo
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:

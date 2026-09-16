@@ -143,13 +143,28 @@ public class PaymentApplicationService {
      * （返回首次结果）与渠道调用无关，不受 defer 影响。</p>
      */
     public Payment createPaymentIntent(CreatePaymentCommand cmd, boolean deferChannel) {
+        return createPaymentIntentWithRouting(cmd, deferChannel).payment();
+    }
+
+    /**
+     * 支付意图创建，并**回带最终路由渠道码**（Feature 028 / FR-027）。
+     *
+     * <p>为什么需要回带：渠道身份记在 {@code payment_attempts.channel_code}（{@code payments}
+     * 表无该列），调用方若回显自己请求里的 {@code channelCode}，在「不指定渠道、由 Router 选路」
+     * 的场景下会得到 {@code null}——收银台与排障都会拿到错误信息。故由本方法统一给出权威值。</p>
+     */
+    public RoutedPayment createPaymentIntentWithRouting(CreatePaymentCommand cmd, boolean deferChannel) {
         // FR-023：选路在建单之前——最终 code 同时用于幂等键与 attempt 落库
         String routedChannelCode = resolveChannelCode(cmd);
 
         PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd, routedChannelCode);
+        // 幂等重复（返回首次结果）时，以库内已记录的 attempt 渠道为准（首次那笔的真实渠道）
+        String effectiveChannelCode = pending.attempt() == null || pending.attempt().getChannelCode() == null
+                ? routedChannelCode
+                : pending.attempt().getChannelCode();
         if (!pending.created()) {
             metrics.counter("payment.duplicate", 1.0, "module", MODULE);
-            return pending.payment();
+            return new RoutedPayment(pending.payment(), effectiveChannelCode);
         }
         metrics.counter("payment.initiated", 1.0, "module", MODULE);
 
@@ -157,7 +172,7 @@ public class PaymentApplicationService {
             // 收银台路径：不调渠道、不落渠道结果。超时（30s）后由 TimeoutScanner 转 UNKNOWN，
             // 主动查询不收敛即停留 UNKNOWN —— 演示「点了不回调」「不猜成败落账」。
             metrics.counter("payment.deferred_to_cashier", 1.0, "module", MODULE);
-            return pending.payment();
+            return new RoutedPayment(pending.payment(), effectiveChannelCode);
         }
 
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
@@ -190,7 +205,17 @@ public class PaymentApplicationService {
                     applied.payment().getPaymentNo(), applied.payment().getAmountMinor(), 0L,
                     applied.payment().getCurrencyCode());
         }
-        return applied.payment();
+        return new RoutedPayment(applied.payment(), routedChannelCode);
+    }
+
+    /**
+     * 建单结果：支付单 + **最终生效的渠道码**（FR-027）。
+     *
+     * <p>{@code channelCode} 是权威渠道口径——显式指定时即该值，自动选路时为 Router 决策结果，
+     * 幂等重复时取首次落库的 attempt 渠道。调用方（HTTP 响应 / 收银台 payUrl）一律用它，
+     * 不得回显请求里的原始 {@code channelCode}。</p>
+     */
+    public record RoutedPayment(Payment payment, String channelCode) {
     }
 
     /**

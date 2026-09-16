@@ -57,8 +57,9 @@ bash deployment/demo/start-stack.sh
 # 2) 复位并灌种子（重建 8 个业务 Schema + 商户/商品/SKU 种子）
 bash deployment/demo/reset.sh        # 需 Docker（docker exec mysql）；若仅重灌数据可用 deployment/demo/seed.sh
 
-# 3) 跑四个场景（每个脚本自带断言，失败即非零退出）
+# 3) 跑场景（每个脚本自带断言，失败即非零退出）
 bash deployment/demo/scenario-happy-path.sh        # 主链：下单→收银台回调→履约/权益/记账
+bash deployment/demo/scenario-routing.sh          # 渠道路由 S1~S6（spec 028：自动选路/显式优先/避开停用/拒绝改道/回原渠道）
 bash deployment/demo/scenario-refund.sh           # 退款：累计不超额 + 幂等重放
 # 演示 UNKNOWN 需先切换支付场景为 BUSINESS_UNKNOWN：
 bash deployment/demo/restart-payment.sh BUSINESS_UNKNOWN
@@ -84,9 +85,21 @@ bash deployment/demo/stop-stack.sh
 | --- | --- |
 | happy-path | 下单后支付为 `PROCESSING`（收银台路径）；回调后 `SUCCEEDED`；权益 `AVAILABLE` 且仅一份；账本 balanced 且分录可追溯；**重复回调幂等吸收** |
 | refund | 支付 `SUCCEEDED` → 退款 `CREATED`；同幂等键重放返回同一退款；**累计超额被 409 拒（H1 防超额）** |
+| routing | `GET /internal/channels` 与 `/route-preview` 快照；**不传渠道自动落 ALIPAY**（priority 最小）；显式 WECHAT 零干预；ALIPAY 置 `DOWN` 后自动绕开；显式指定 DOWN → **409 CHANNEL_UNAVAILABLE 且不落 attempt**；两渠道各自独立落库；退款回原渠道（INV-6，不因优先级改道）；`payment_routing_total` 已暴露 |
 | payment-unknown | 支付 `UNKNOWN`（不猜成败落账）；无令牌 resolve 被 `403`；带令牌 resolve 收敛为 `FAILED` 终态 |
 | reconciliation | 批次产生差异；**未处理差异时关闭被 400 拒（门禁）**；处理全部差异后关闭 `CLOSED` |
 | audit | 注入 F1~F7 演示故障（幂等）；账证核对捕获漏记/孤儿/金额/重复/跨账 5 类差异；**未收口关批被 400 拒**；挂账（AD 单号、LP 记账）→ 调账转出 → SUSPENSE 归零 → 全部差异收口 → `CLOSED`；试算平衡 `balanced=true`；处置台账留痕 |
+
+## 渠道路由演示（spec 028 / ADR-0072、ADR-0073）
+
+- 入口：`bash deployment/demo/scenario-routing.sh`（或经 run-all）；网页版：`http://localhost:8091/routing`（门户「渠道路由」入口）。
+- **前置：payment-service 必须激活 `demo` profile**。脚本的 S3/S4 依赖 `POST /internal/channels/{code}/status`
+  把渠道置 `DOWN`，该端点标注 `@Profile("demo")`，未激活时不存在（表现为 404/500）。
+  容器模式已在 `docker-compose.yml` 设 `SPRING_PROFILES_ACTIVE: demo`；宿主模式经 `start-demo.sh` 同值传递。
+- 该端点是**纯内存覆盖，重启即回到配置值**；`demo/reset.sh` 只重建数据库、不碰它。脚本开头有
+  `⓪a 复位渠道可用性` 把四个渠道显式置回 `UP`，以避免上轮失败残留导致误报。
+- **断言口径**：渠道归属一律读 `payment_attempts.channel_code` **列**（经 `/demo/trace?orderId=`），
+  **不以渠道引用字符串的形态为准**，也不读 `payments` 表——该表**没有** `channel_code` 列。
 
 ## 审计演示（spec 017）
 
