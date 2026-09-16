@@ -30,13 +30,15 @@ jobs:
       - name: Build release tarball
         run: bash deployment/release/make-release.sh
 
+      # Release 正文取自 docs/releases/<tag>.md（人工撰写，质量优于自动生成）。
+      # 发版前务必创建该文件，例如 tag v2.0.0 → docs/releases/v2.0.0.md。
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Payment Platform ${{ github.ref_name }}
+          body_path: docs/releases/${{ github.ref_name }}.md
           files: |
             payment-platform-*.tar.gz
             payment-platform-*.tar.gz.sha256
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

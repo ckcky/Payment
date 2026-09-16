@@ -30,6 +30,13 @@
   但严格遵守 ADR-0031 / 010 的「引入分布式基础设施须走闸门」约定——用 Compose 而非 K8s。
   **测试基线**：`./mvnw -o verify -fae` 全绿；`e2e-tests` 容器模式 24/25（唯一红为已知
   `MISSING_POSTING` 本地代理伪影，CI 环境为准）；`demo/run-all.sh` 双模式均退出码 0。
+- **`027-user-payment-limit` 已立项待实现（2026-09-16）**：用户支付限额——日 / 月 / 年
+  三档周期额度 + 两阶段预占（`RESERVE → CONFIRM / RELEASE`）+ 三表模型
+  （`user_payment_limits` / `user_limit_usage` / `limit_operations`）+ 三道幂等闸门；
+  在途占用 TTL（Redis 惰性回收）+ 软超限口径 + payment 使用 Redis 例外。
+  决策见 **ADR-0071**（`docs/adr/0032-user-payment-limit.md`，🟡 Proposed，D1~D13 已确认）。
+  **文档已齐备**（spec/plan/tasks/acceptance），**实现待负责人核准后开工**，本轮只写文档未改代码。
+  实现期另开 `feature/027-user-payment-limit`。
 - **`028-channel-routing` 已实现（2026-09-08）**：payment-service 两层结构重构
   （payment 支付层 / channelAttempt 渠道层，ADR-0072）+ 支付渠道路由
   （注册表 + 规则化确定性选路，ADR-0073），两份 ADR 已由 🟡 Proposed 转 ✅ Accepted。
@@ -41,9 +48,10 @@
   + 单通道垫片）、`payment_routing_total` 指标、`GET /internal/channels` 与 `/route-preview`
   只读端点、`routing.html` 演示页 + `scenario-routing.sh`（S1~S6）。
   > 遗留：T56 demo 实跑（`scenario-routing.sh` 六场景）**待有栈环境**验证；代码与构建已全绿。
-  > ⚠️ `027` 为历史缺口（有意保留）。**下一个已立项但未实现的 spec 待定**（`028` 已闭环）。
-- **当前 Feature**：无进行中 Feature（`028` 已合入 master，详见
-  `docs/specs/028-channel-routing/spec.md`）。
+- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` 立项待实现，等待 ADR-0071 核准；
+  `028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`
+  与 `docs/specs/028-channel-routing/spec.md`。
+- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` 立项待实现，等待 ADR-0071 核准；`028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md` 与 `docs/specs/028-channel-routing/spec.md`。
 - **⚠️ 已知偏离（SOP 偏离，已收口，待复盘）**：working tree 曾含**超前 roadmap 顺序（011→012→013→014）**落地的 `013-inventory-reservation` / `014-seckill-and-cache` 实质实现（catalog `Stock*` 聚合 + 三段式库存、order `OrderTimeoutScheduler` Redis ZSet 时间轮 + `SeckillResult` + 限流 + 幂等 + Lua）。代码先行、当时缺 spec/ADR，属 **ADR-0053** 记录的偏离。现已于 2026-08-31 补写 `docs/specs/013-*` / `014-*` 与 **ADR-0041~0046**（`0014-next-stage-decisions.md`）完成收口。**唯一遗留偏离**：014 的 Redis 引入**仍未经 roadmap §7「压测基线→论证引入」闸门**（ADR-0044 标注），k6 基线 + 论证证据列为 TODO。
 - **Feature 状态**：`001`~`028`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
   **非阻塞遗留**（均为「待补 Testcontainers 集成测试」，不影响功能）：`003` T016~T018（人工收敛，标记 Deferred，但代码已由 `023` 的 F2 修复实际落地——`POST /payments/{ref}/resolve` + `ResolveAuthorizationInterceptor`，003 的 tasks.md 未回头更新）；`006` T023（并发乐观锁）；`007` T013/T031/T039/T045（集成测试与最终 `/review`）。

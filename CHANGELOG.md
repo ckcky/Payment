@@ -6,6 +6,26 @@
 
 ---
 
+## [2026-09-16] v2.0.0 发布（tag `v2.0.0`）
+
+**范围**：自 v1.0.0（2026-09-07）以来 124 个提交 —— spec 018 / 019 / 020 / 021 / 022 / 023 / 026 落地，
+spec 027 / 028 立项（仅文档）。**完整发布说明见 [docs/releases/v2.0.0.md](docs/releases/v2.0.0.md)**，本节只留索引。
+
+- **运行形态**：新增容器模式 `deployment/start-container.sh`，与宿主模式端口契约一致故互斥，
+  由 `lib-mode-guard.sh` 双向守卫；一份通用 Dockerfile 参数化 10 模块（**ADR-0070，Supersedes ADR-0057**）。
+- **质量体系**：新增黑盒 `deployment/e2e-tests` 模块 + 9 条资金不变量断言原语 + 确定性故障注入；
+  `verify.yml` 增 PR 契约快照门禁；E2E 进 nightly 且 v* tag 强制（**ADR-0069**）。
+- **退款链路**：两层退款单 TXRF / PMRF 双号互记 + 渠道退款异步回调闭环（HMAC 验签）+ 编排归属收口到 order
+  （**ADR-0067**）；`transactions` 补 `payment_no` / `refunded_minor`。
+- **可观测**：统一单行 `ACCESS_LOG`（含服务名）+ 异步 MDC traceId + 9 服务优雅停机 30s drain（**ADR-0068** / spec 023）；
+  `onPaymentSucceeded` 出站 RPC 移出事务边界（事实不回滚）。
+- **数据模型**：22 表列序归一、新增 `order_item_no`（OI+雪花）、履约细化到明细级、
+  `payment_attempts` 补金额与币种留痕（**ADR-0066**）。
+- **⚠️ 破坏性变更**：退款创建入口 `POST /internal/refunds` **下线**（改走 order 侧，`resolve` 保留）；
+  `refunds.refund_no` 前缀改 `PMRF`（存量 `RF` 可读）；`GET /fulfillments/by-order` 改返回数组；
+  **存量库升级须依次执行 `deployment/schema/018-*.sql` 与 `019-*.sql`**（幂等，步骤见发布说明）。
+- **发布流程变更**：`release.yml` 改用 `body_path: docs/releases/<tag>.md` 取代 `generate_release_notes`
+  ——**今后每个版本发布前必须提供对应的说明文件**，否则 Release 正文为空。
 ## [2026-09-08] feat：spec 028 支付两层结构 + 渠道路由（ADR-0072/0073 落地）
 
 **范围**：payment-service 由「单渠道硬编码」改为**两层结构 + 确定性路由**；跨 common / order / payment /
@@ -83,6 +103,14 @@ mock-channel-web / arch-tests 六个模块，53 个文件。ADR-0072（`0033-two
   为「已立项待实现」（ADR-0072/0073 🟡 Proposed，待核准）；订正「当前能力」行的模块清单
   （10 服务 → **9 服务**，反映 spec 019 退款域并入 payment；补 `e2e-tests` 模块）；
   登记 `003`/`006`/`007` 的非阻塞遗留测试项。
+- **新增 spec 027（用户支付限额，纯文档）**：`docs/specs/027-user-payment-limit/`
+  （`spec.md` / `plan.md` / `tasks.md` / `acceptance.md`）+
+  `docs/adr/0032-user-payment-limit.md`（ADR-0071，🟡 Proposed，D1~D13 已确认）。
+  三表模型（`user_payment_limits` / `user_limit_usage` / `limit_operations`）+ 两阶段预占
+  （`RESERVE → CONFIRM / RELEASE`）+ 三道幂等闸门（终态吸收 / 流水 UK / 以 payment 为事实源的补偿扫描）；
+  在途占用 TTL=900s（D11，Redis 惰性回收，零调度器）+ 软超限口径（D12，新支出硬约束、已发生事实软记账）
+  + 允许 payment 使用 Redis（D13，**ADR-0044 的显式例外**，仅限 TTL 标记、不做计数）。
+  与 ADR-0028「最小风控」切割——限额属业务合规能力，非风控翻案。**无代码改动**。
 - **分支清理**（均已确认并入 master）：远端删 `chore/022-pr-contract-gate`、
   `fix/023-ops-closeout`、`feature/026-container-stack`；本地删 `chore/022-pr-contract-gate`、
   `feature/007-outbound-resilience`、`fix/023-ops-closeout`。
