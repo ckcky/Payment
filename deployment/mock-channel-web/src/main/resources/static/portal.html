@@ -54,7 +54,9 @@
     <div class="chips">
       <span class="flowchip">下单</span><span class="flowchip">建支付单</span><span class="flowchip">收银台</span>
       <span class="flowchip">渠道回调</span><span class="flowchip">履约</span><span class="flowchip">权益</span><span class="flowchip">退款</span>
+      <span class="flowchip">限额</span>
     </div>
+    <div class="tile-lead" style="margin-top:10px;font-size:13px">限额（spec 027）：按用户日 / 月 / 年周期约束支付发生额 —— 建支付单前原子预占，超限直接 409 且支付单不创建；在途占用带 TTL 自动释放，已发生事实按实记账（软超限可见）。</div>
     <a class="pa-btn cta" href="/demo">进入演示控制台 <span class="arrow">→</span></a>
   </div>
 </section>

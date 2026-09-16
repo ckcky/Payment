@@ -61,6 +61,7 @@ bash deployment/demo/reset.sh        # 需 Docker（docker exec mysql）；若�
 bash deployment/demo/scenario-happy-path.sh        # 主链：下单→收银台回调→履约/权益/记账
 bash deployment/demo/scenario-routing.sh          # 渠道路由 S1~S6（spec 028：自动选路/显式优先/避开停用/拒绝改道/回原渠道）
 bash deployment/demo/scenario-refund.sh           # 退款：累计不超额 + 幂等重放
+bash deployment/demo/scenario-limit.sh            # 用户支付限额 L1~L7（spec 027：预占/超限409/幂等流水/TTL 惰性回收）
 # 演示 UNKNOWN 需先切换支付场景为 BUSINESS_UNKNOWN：
 bash deployment/demo/restart-payment.sh BUSINESS_UNKNOWN
 bash deployment/demo/scenario-payment-unknown.sh  # UNKNOWN 权威收敛 + resolve 鉴权
@@ -89,6 +90,19 @@ bash deployment/demo/stop-stack.sh
 | payment-unknown | 支付 `UNKNOWN`（不猜成败落账）；无令牌 resolve 被 `403`；带令牌 resolve 收敛为 `FAILED` 终态 |
 | reconciliation | 批次产生差异；**未处理差异时关闭被 400 拒（门禁）**；处理全部差异后关闭 `CLOSED` |
 | audit | 注入 F1~F7 演示故障（幂等）；账证核对捕获漏记/孤儿/金额/重复/跨账 5 类差异；**未收口关批被 400 拒**；挂账（AD 单号、LP 记账）→ 调账转出 → SUSPENSE 归零 → 全部差异收口 → `CLOSED`；试算平衡 `balanced=true`；处置台账留痕 |
+| limit | 设日限额 ¥150 → 首笔 ¥99 `used=9900`；第二笔 ¥99 **409 LIMIT_EXCEEDED 且 `payments` 无第二行**（INV-3）；重发回调 2 次 `CONFIRM` 恰 1 条（INV-4）；FAILED 支付 `pending` 归零；TTL 到期 `pending` 归零并出 `EXPIRED` 流水（惰性回收）；收尾清除限额配置（守 FR-025） |
+
+## 用户支付限额演示（spec 027 / ADR-0071）
+
+- 入口：`bash deployment/demo/scenario-limit.sh`（**默认不纳入 `run-all.sh`**——会临时设/清限额配置，且 L6 需短 TTL 重跑 payment）。
+- 网页版：`http://localhost:8091/demo` 左栏「用户限额」disclosure（设置 / 一键演示超限 / 清除）+
+  右栏「用户限额」水位卡（日/月/年进度条 = `used` 实心 + `pending` 半透明、超限红条、最近流水）。
+- **前置**：Redis（`docker-compose` 的 `redis:7`）已启动——在途占用过期索引依赖它；未启动时降级为
+  保守占用（fail-open，不拦截支付），但 L6 断言会失败。
+- **L6 需要短 TTL**：脚本把 `payment.limit.reserve-ttl` 临时调至 5s 并重启 payment，跑完恢复默认 900s。
+  只做 L1~L5 时用 `SKIP_TTL=1 bash deployment/demo/scenario-limit.sh`（不重启 payment）。
+- 断言口径：`user_limit_usage` / `limit_operations` 经 `/demo/trace?orderId=` 只读直查
+  （`user_limit_usage` 按 `userId`、`limit_operations` 按 `paymentNo`）。
 
 ## 渠道路由演示（spec 028 / ADR-0072、ADR-0073）
 

@@ -6,6 +6,40 @@
 
 ---
 
+## [2026-09-16] feat：spec 027 用户支付限额（ADR-0071 落地）
+
+**范围**：payment-service 新增**用户支付限额**子域（`com.payment.payment.limit.*`），加上 common-core
+错误码、schema 与演示组件，跨 4 个模块。ADR-0071（`docs/adr/0032-user-payment-limit.md`）
+状态 🟡 Proposed → 🟢 **Accepted → Implemented**。
+
+- **能力**：按 `userId` + `currencyCode` 的**日 / 月 / 年**三档周期额度；建支付单前**原子预占**
+  （一条 `UPDATE ... WHERE used + pending + ? <= limit`），超限 → **`409 LIMIT_EXCEEDED` 且支付单不创建**
+  （是「未创建」而非「创建了再拒」）；`SUCCEEDED` 确认、`FAILED` / `CLOSED` 释放。
+- **三表**：`user_payment_limits`（配置）/ `user_limit_usage`（`used` + `pending` 双金额）/ `limit_operations`
+  （幂等流水）。**`limit_operations` 唯一键为 `(biz_no, op_type, period)`**——一笔支付同时占三档，
+  原 `(biz_no, op_type)` 会使 MONTH / YEAR 档静默失效（实现期修正）。
+- **在途占用 TTL**：`RESERVE` 成功后写 Redis `SET limit:pending:{paymentNo} {amt} EX 900s`，
+  回收**惰性**发生在用户下次 `RESERVE` 之前（`LimitPendingRecycler`，零调度器、零全表扫描）；
+  TTL 下界 105s（须大于支付侧最大自动收敛窗口），启动强校验。**payment 首次依赖 Redis**
+  （`spring-boot-starter-data-redis`，ADR-0044 的限用途反转：**仅作过期索引，不做计数**）。
+- **软超限口径**：`used` 按已发生事实**如实累加**（哪怕 `used > limit`），不拒绝、不 clamp、不回滚；
+  以 `payment_limit_overrun{period}` 指标 + `limit.overrun` 审计 + 查询响应 `overrun` 标记**让偏差可见**，
+  收敛靠下一笔 `RESERVE` 被拒，直至周期重置。
+- **降级（INV-9）**：Redis 未配置 / 不可用 → `NoopLimitExpiryIndex` **fail-open 保守占用**
+  （跳过回收、不拦截支付）；H2 全量测试**零 Redis 依赖**通过。
+- **默认不限额**（D8）：查不到配置行即不约束；`demo/seed.sh` 不为 `demo-user` 播种限额，
+  `traffic-gen.sh` 与 E2E 不被 409 打断。`payment.limit.enabled=false` 时行为与今天逐字节一致。
+- **内部端点**：`GET/PUT/DELETE /internal/limits/users/{userId}`、`GET /internal/limits/payments/{paymentNo}/operations`、
+  `GET /internal/limits/diagnostics`；对既有对外契约**零改动**（超限只以错误码表达）。
+- **演示例外**：`mock-channel-web` 允许经 `/proxy/payment/internal/limits/**` 读写该路径
+  —— ADR-0071 D9 对 **ADR-0048「演示代理只读」的显式例外**（例外范围严格限于该路径）。
+- **演示**：`demo.html` 新增限额输入组（设置 / 一键演示超限 / 清除）+ 右栏「用户限额」卡
+  （日 / 月 / 年进度条 = `used` 实心 + `pending` 半透明、超限红条、最近流水）；
+  `/demo/trace` 新增「用户限额」分组；`portal.html` 补「限额」chip；
+  新增 `deployment/demo/scenario-limit.sh`（7 场景 L1~L7）。
+- **与 ADR-0028 的切割**：限额是**业务合规约束**（确定性比较 + 硬拒绝），**非风控评分**；
+  风控 ⛔ Not Implemented、代码已删的结论**不变**。
+
 ## [2026-09-16] v2.0.0 发布（tag `v2.0.0`）
 
 **范围**：自 v1.0.0（2026-09-07）以来 124 个提交 —— spec 018 / 019 / 020 / 021 / 022 / 023 / 026 落地，

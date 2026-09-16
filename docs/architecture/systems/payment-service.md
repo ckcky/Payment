@@ -533,3 +533,70 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 ### 8.7 对账事实
 
 `GET /internal/refunds/confirmed-facts`（仅 `SUCCEEDED`）供 reconciliation-service 拉取——退款事实的对外唯一窗口，见 §3.7。
+
+## 9. 用户支付限额域（spec 027 / ADR-0071）
+
+> **定位**：限额是**业务合规约束**（确定性额度比较 + 硬拒绝），**不是风控评分**——与被否决的 ADR-0028「最小风控」严格切割（该 ADR ⛔ Not Implemented、代码已删）。
+
+### 9.1 数据模型（3 表）
+
+| 表 | 键 | 语义 |
+|---|---|---|
+| `user_payment_limits` | `UK(user_id, currency_code)` | 配置：一行存 `daily_limit_minor` / `monthly_limit_minor` / `yearly_limit_minor`；`NULL` = 该周期不限额 |
+| `user_limit_usage` | `UK(user_id, currency_code, period)` | 累计：`used_minor`（已确认）+ `pending_minor`（在途占用）+ `period_start` |
+| `limit_operations` | `UK(biz_no, op_type, period)` | 幂等流水：`op_type ∈ {RESERVE, CONFIRM, RELEASE, EXPIRED}`，`biz_no = paymentNo` |
+
+> **⚠️ 唯一键必须含 `period`**：一笔支付同时占用日 / 月 / 年**三档**，故三档各需一条流水。原设计 `UK(biz_no, op_type)` 会使首笔 `RESERVE(DAY)` 落库后，`RESERVE(MONTH)` / `RESERVE(YEAR)` 撞键被当作「重复」跳过 → **MONTH / YEAR 档从不累加、限额静默失效**。实现期已修正。
+
+### 9.2 两阶段预占：RESERVE → CONFIRM / RELEASE（+ EXPIRED）
+
+判定是**一条原子 UPDATE**（`MybatisLimitUsageMapper.reserveIfWithinLimit`），不引入分布式锁：
+
+```sql
+UPDATE user_limit_usage SET pending_minor = pending_minor + #{a}
+WHERE user_id = ? AND currency_code = ? AND period = ? AND period_start = ?
+  AND used_minor + pending_minor + #{a} <= #{limit}
+```
+
+- **RESERVE**（准入，`PaymentPersistence.insertPending` 内）**硬**：影响 0 行 → `LimitExceededException` → `409 LIMIT_EXCEEDED`，建单事务回滚，**`payments` 无新增行**（不是「创建了再拒」）。
+- **CONFIRM**（`PaymentResultProcessor` 收到 `SUCCEEDED`）**无条件累加** `used`，即使 `used > limit` 也**不拒绝、不 clamp**（软超限 D12）。
+- **RELEASE**（`FAILED` / `CLOSED`）`pending = GREATEST(0, pending - ?)`，绝不置负。
+- **EXPIRED**（在途超期）见 §9.4。
+
+### 9.3 三道幂等闸门
+
+1. **状态机终态吸收**：重复 / 乱序回调 `changed=false` → 不触发额度操作；
+2. **幂等流水 `UK(biz_no, op_type, period)`**：撞键即跳过（挡事务外重试与补偿重跑）；
+3. **补偿扫描**（`LimitCompensationScanner` + `LimitCompensationScheduler`，`@Scheduled fixedDelay = payment.limit.compensation-interval-ms`）：以 **payment 为事实源**，扫「payment 已终态但只有 RESERVE、无 CONFIRM/RELEASE」补结算。`UNKNOWN` **不处理**（守「不猜成败」）。
+
+### 9.4 在途占用 TTL：Redis 惰性回收（D13，**payment 首次依赖 Redis**）
+
+- `RESERVE` 成功后 `SET {key-prefix}{paymentNo} {amount} EX {reserve-ttl}`（`RedisLimitExpiryIndex`）；
+- 回收**惰性**发生在**用户下一次 RESERVE 判定之前**（`LimitPendingRecycler` + `LimitReserveService`）——按 `idx_limitop_user_type` 查该用户未结算在途（通常 0~几条），`MGET` 判存：Redis 中不存在的即已过期 → 插 `(paymentNo, EXPIRED, period)` 流水 + 释放 `pending`。**零调度器、零全表扫描**。
+- **TTL 下界 = 105s**（= `payment.reliability.timeout` 30s + `query-max-attempts` 5 × `query-interval-ms` 15s），否则会释放一笔正在被主动查询收敛的支付；默认 **900s**，与 `order.timeout.ttl-seconds` 对齐（跨服务无法共享，两处需人工保持一致）。
+- **INV-9 边界（不变量）**：① Redis **不做计数**——`used` / `pending` 权威恒在 DB；② Redis 不可用 MUST **fail-open 保守占用**（`NoopLimitExpiryIndex`，跳过回收、不拦截支付）；③ Redis 数据丢失导致的提前释放落入软超限并留痕（`limit.overrun`），**绝不静默修正 `used`**；④ 方向性原则：Redis 出错只能让约束**变松且可见**，绝不能让已发生事实被篡改。
+
+### 9.5 内部端点（`LimitController`，ADR-0063 一律用业务单号 / userId）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/internal/limits/users/{userId}` | 查配置 + 三档 `used` / `pending` / `remaining` / `overrun`（现算 `max(0, used - limit)`）+ 最近流水 |
+| PUT | `/internal/limits/users/{userId}` | 设置限额（`currencyCode` + 三档 `*LimitMinor`，可空） |
+| DELETE | `/internal/limits/users/{userId}` | 清除限额（回到不限额行为） |
+| GET | `/internal/limits/payments/{paymentNo}/operations` | 该支付单的额度流水 |
+| GET | `/internal/limits/diagnostics` | 诊断：开关 / TTL / Redis 实现 / 降级状态 |
+
+> 对既有对外契约**零改动**：`CreatePaymentRequest` / `CreatePaymentResponse` 字段不变，超限只以错误码表达（FR-022）。
+> 演示例外：`mock-channel-web` 允许经 `/proxy/payment/internal/limits/**` 读写该路径（ADR-0071 D9，对 ADR-0048 的显式例外）。
+
+### 9.6 配置挂点（`payment.limit.*`）
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `payment.limit.enabled` | `true` | `false` 时限额子域不参与建单路径，行为与今天逐字节一致 |
+| `payment.limit.reserve-ttl` | `900s` | 在途占用 TTL；启动时强校验 `> 105s`，否则拒启（`LimitPropertiesValidator`） |
+| `payment.limit.compensation-interval-ms` | `30000` | 补偿扫描间隔 |
+| `payment.limit.redis.key-prefix` | `limit:pending:` | 过期索引 key 前缀 |
+
+- **默认不限额**（D8 / FR-025）：查不到配置行 = 不约束。`deployment/demo/seed.sh` **不得**为 `demo-user` 播种限额，避免 `traffic-gen.sh` 与 E2E 被 409 打断。
+- 指标：`payment_limit_total{op,result,period}`、`payment_limit_exceeded`、`payment_limit_overrun{period}`、`payment_limit_compensated`、`payment_limit_redis_error` / `payment_limit_redis_unavailable`；审计：`limit.exceeded` / `limit.overrun`。

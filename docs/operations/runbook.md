@@ -109,8 +109,37 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 **启动失败的常见原因（FR-032 强校验，设计如此）**：`channels` 为空 / 某渠道 `priority` 缺失 /
 出现未注册的渠道码 / 全部渠道 `enabled=false` / `availability.status` 非法值。错误信息会列出合法取值清单。
 
-## 5. 关键指标
+### 4.2 用户支付限额配置（spec 027 / ADR-0071，非密钥）
 
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `payment.limit.enabled` | `true` | `false` 时限额子域不参与建单路径，行为与今天逐字节一致（FR-024） |
+| `payment.limit.reserve-ttl` | `900s` | 在途占用 TTL。**启动强校验 `> 105s`**（= `payment.reliability.timeout` 30s + `query-max-attempts` 5 × `query-interval-ms` 15s），否则**拒启** |
+| `payment.limit.compensation-interval-ms` | `30000` | 补偿扫描间隔（扫「payment 已终态但只有 RESERVE」补结算） |
+| `payment.limit.redis.key-prefix` | `limit:pending:` | 在途占用过期索引 key 前缀 |
+
+**⚠️ 跨服务人工一致项**：`payment.limit.reserve-ttl`（900s）须与 order 侧 `order.timeout.ttl-seconds`
+保持一致——两处同名语义但**配置无法跨服务共享**，改一处必须同步改另一处。若 `reserve-ttl` 小于支付侧
+最大自动收敛窗口（105s），会释放一笔正在被主动查询收敛的支付。
+
+**限额行为（运维关注点，均为预期语义）**：
+
+- **默认不限额**：查不到 `user_payment_limits` 行 = 不约束。`demo/seed.sh` **不**为 `demo-user` 播种限额，
+  故 `traffic-gen.sh` / E2E 不会被 409 打断（FR-025 / D8）。
+- **软超限可见**：`payment_limit_overrun{period}` 有值 + `limit.overrun` 审计出现，说明有支付在
+  TTL 释放后才成功（或限额被调低）。**这是设计允许的**（D12：新支出硬约束、已发生事实软记账），
+  处置是「下一笔被拒直至周期重置」，**不要**手工去改 `used_minor`。
+- **Redis 不可用 / 未配置**：`GET /internal/limits/diagnostics` 显示降级为 `NoopLimitExpiryIndex`；
+  表现为在途占用**保持不被回收**（保守占用）。这是 fail-open（INV-9.2），**不拦截支付**，属预期。
+- **配置限额**：`PUT /internal/limits/users/{userId}`（body 含 `currencyCode` + 三档 `*LimitMinor`，可空）；
+  查询 `GET /internal/limits/users/{userId}`；清除 `DELETE /internal/limits/users/{userId}`。
+
+**限额指标**：`payment_limit_total{op,result,period}` / `payment_limit_exceeded` /
+`payment_limit_overrun{period}` / `payment_limit_compensated` /
+`payment_limit_redis_error` / `payment_limit_redis_unavailable`；
+审计 `limit.exceeded`（超限拒绝）与 `limit.overrun`（软超限）。
+
+## 5. 关键指标
 | 指标 | 含义 | 关注点 |
 | --- | --- | --- |
 | `payment.initiated` | 支付单创建 | 与订单创建量对比，突降说明下单链路异常 |
@@ -197,7 +226,7 @@ docker exec payment-prometheus promtool check rules /tmp/check.yml
 - **组件**：`mock-channel-web`（端口 8091），演示用，**非生产服务**，不进服务边界（见 §1）。
 - **能力**：① 收银台页（点支付后跳转，模拟渠道收银台，可触发 SUCCESS/FAILURE/UNKNOWN 等结果回传）；② 渠道回调转发（`/mock-channel/callback` 把结果回传 payment，支持 `signMode=VALID/FORGED/NONE`）；③ 演示控制台（按钮触发各场景）；④ 同源代理 `/proxy/{service}/**` 解决浏览器跨域。
 - **⚠️ 验签占位（ADR-0025 / ADR-0052 ⛔ Not Implemented）**：payment 的 `ChannelCallbackSignatureFilter#verifySignature` 恒放行。因此演示控制台的「伪造签名（FORGED）」按钮**点下去也会被 payment 放行**，不会 403。**本环境无法演示「伪造签名被拒」**——接入真实验签（实现 `verifySignature` + 补 ADR-0052）后才能演示。
-- **脚本**：`demo/` 提供 `run-all.sh` 串联五场景（happy-path / refund / unknown / reconciliation / audit）与 `seed.sh` / `restart-payment.sh` / `start-stack.sh` / `stop-stack.sh`。脚本按真实 API 契约编写、断言失败即非零退出。详细前置与断言表见 `demo/README.md`。
+- **脚本**：`demo/` 提供 `run-all.sh` 串联五场景（happy-path / refund / unknown / reconciliation / audit）与 `seed.sh` / `restart-payment.sh` / `start-stack.sh` / `stop-stack.sh`。脚本按真实 API 契约编写、断言失败即非零退出。详细前置与断言表见 `demo/README.md`。**`scenario-limit.sh`（spec 027，7 场景 L1~L7）默认不纳入 `run-all.sh`**——它会临时设置并清除限额配置，且 L6 需要把 `reserve-ttl` 调至 5s 重跑 payment，故单独执行。
 - **✅ 全栈实跑已通过（2026-09-09）**：容器组 + 10 进程全绿，`run-all.sh` 96 条断言 0 失败（详见 `docs/specs/011-demo-showcase/acceptance.md` §4）。实跑踩过的三个坑，复现时先确认已规避：
   1. **JDK 版本**：`spring-boot:run` 需用 JDK 21+（本机默认 `java` 可能是 11，会报 `UnsupportedClassVersionError`）。启动前显式 `export JAVA_HOME=<JDK26 路径>`。
   2. **端口被环境变量抢占**：若环境里存在 `SERVER_PORT` / `PORT`，Spring 的环境变量优先级高于 `application.yml`，服务会被拉到错误端口（实测三个服务被拉到 60956 而启动失败）。`restart-payment.sh` 已显式传 `--server.port`；手工启动时同样显式指定。

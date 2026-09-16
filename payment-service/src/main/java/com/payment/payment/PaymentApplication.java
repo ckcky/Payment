@@ -13,7 +13,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication(scanBasePackages = {"com.payment.payment", "com.payment.refund"})
 @EnableFeignClients(basePackages = {"com.payment.payment", "com.payment.refund"})
 @EnableScheduling
-@MapperScan({"com.payment.payment.infra.persistence", "com.payment.refund.infra.persistence"})
+@MapperScan({"com.payment.payment.infra.persistence", "com.payment.refund.infra.persistence",
+        // spec 027 / ADR-0071：限额子域三表 Mapper 与支付域同库，须一并扫描
+        "com.payment.payment.limit.infra.persistence"})
 public class PaymentApplication {
 
     public static void main(String[] args) {
