@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- UI 规范：docs/design/DESIGN.md（Feature 024 · Apple 基底）——改样式前先读它；token 在 /design.css
+     Feature 028：渠道路由演示页（spec 028 §5.1），与 audit.html 并列。 -->
+<link rel="stylesheet" href="/design.css">
+<title>渠道路由 · PaymentArch</title>
+<style>
+  .rt-cand { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--pa-r-input);
+             background:var(--pa-canvas-2); margin-bottom:8px; }
+  .rt-cand .rank { width:22px; height:22px; border-radius:50%; background:var(--pa-action); color:#fff;
+                   font-size:12px; font-weight:600; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .rt-cand .code { font-family:var(--pa-mono); font-size:14px; font-weight:600; color:var(--pa-ink); }
+  .rt-cand .meta { font-size:12px; color:var(--pa-ink-2); font-variant-numeric:tabular-nums; }
+  .rt-cand.is-excluded { background:transparent; border:1px dashed var(--pa-line); }
+  .rt-cand.is-excluded .rank { background:var(--pa-ink-3); }
+  .rt-cand.is-excluded .code { color:var(--pa-ink-3); font-weight:500; }
+  .rt-scn { border-left:2px solid var(--pa-line); padding-left:14px; margin:0 0 20px; }
+  .rt-scn h3 { font-size:15px; margin:0 0 4px; }
+  .rt-scn .why { font-size:12px; color:var(--pa-ink-3); margin-bottom:8px; }
+  .rt-out { font-size:13px; line-height:1.9; }
+  .rt-out b { font-weight:600; }
+  .rt-out .col { font-family:var(--pa-mono); background:var(--pa-canvas-2); padding:1px 6px; border-radius:4px; }
+  .rt-toggle { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="pa-section pa-section--parchment">
+  <div class="pa-main">
+    <div class="pa-eyebrow">Feature 028 · ADR-0072 / ADR-0073</div>
+    <h1 style="font-size:34px;letter-spacing:-.02em;margin-top:12px">渠道两层结构与路由</h1>
+    <div style="font-size:16px;color:var(--pa-ink-2);margin-top:10px;line-height:1.6;max-width:720px">
+      payment 层负责编排支付单，channelAttempt 层负责与渠道交互并独占 <code>payment_attempts</code> 的写入。
+      路由只产出渠道码字符串；反向路径（退款 / 重试 / 查询）一律按尝试行记录的渠道码解析，绝不重新选路。
+    </div>
+    <div style="font-size:12px;color:var(--pa-ink-3);margin-top:10px">
+      观测口径：渠道归属一律读 <code>payment_attempts.channel_code</code> 列，不解析渠道引用的字符串形态。
+    </div>
+  </div>
+</section>
+
+<!-- 渠道现状 -->
+<section class="pa-section pa-section--white">
+  <div class="pa-main">
+    <div style="font-size:22px;font-weight:600">① 渠道现状</div>
+    <div style="font-size:14px;color:var(--pa-ink-2);margin-top:6px;margin-bottom:16px">
+      来自 <code>GET /internal/channels</code>。可用性是<strong>静态配置桩</strong>，不做真实探测（L1）。
+    </div>
+    <div class="pa-tblwrap"><table class="pa-table" id="tbl">
+      <thead><tr><th>渠道码</th><th>可用性</th><th>优先级</th><th>参与自动选路</th></tr></thead>
+      <tbody><tr><td colspan="4" style="color:var(--pa-ink-3)">加载中…</td></tr></tbody>
+    </table></div>
+
+    <div style="font-size:22px;font-weight:600;margin-top:32px">② 路由预览（dry-run）</div>
+    <div style="font-size:14px;color:var(--pa-ink-2);margin-top:6px;margin-bottom:16px">
+      来自 <code>GET /internal/channels/route-preview</code>。此刻不指定渠道会选谁、候选如何排序、谁被排除及理由；
+      <strong>不产生任何落库</strong>。
+    </div>
+    <div id="preview"><div style="color:var(--pa-ink-3);font-size:13px">加载中…</div></div>
+  </div>
+</section>
+
+<!-- 演示开关 -->
+<section class="pa-section pa-section--parchment">
+  <div class="pa-main">
+    <div style="font-size:22px;font-weight:600">③ 演示开关（仅 demo profile）</div>
+    <div style="font-size:14px;color:var(--pa-ink-2);margin-top:6px;margin-bottom:16px">
+      <code>POST /internal/channels/{code}/status</code> —— 覆盖配置的可用性，用于手工制造 DEGRADED / DOWN 场景。
+      只在内存生效，<strong>重启即回到配置值</strong>，不落库、不泄漏成持久状态。
+    </div>
+    <div class="rt-toggle" id="switches"></div>
+    <div style="font-size:12px;color:var(--pa-ink-3);margin-top:12px">
+      提示：把 ALIPAY 置 DOWN 后回到 ②，「会选谁」会立刻变 WECHAT，「排除理由」会显示 unavailable (status=DOWN)。
+    </div>
+  </div>
+</section>
+
+<!-- 六场景 -->
+<section class="pa-section pa-section--white">
+  <div class="pa-main">
+    <div style="font-size:22px;font-weight:600">④ 六个可演示场景</div>
+    <div style="font-size:14px;color:var(--pa-ink-2);margin-top:6px;margin-bottom:20px">
+      全部断言读 <code>payment_attempts.channel_code</code> 列。命令行等价物：<code>bash demo/scenario-routing.sh</code>。
+    </div>
+
+    <div class="rt-scn">
+      <h3>S1 · 只表达支付意图</h3>
+      <div class="why">建支付单时不传 channelCode，由平台按 priority 选路（US2 主路径）。</div>
+      <div class="rt-out">输入 <span class="col">{"items":[…]} 不含 channelCode</span> →
+        期望 <span class="col">attempt(channel_code) = ALIPAY</span>（enabled 且 priority 最小）</div>
+    </div>
+
+    <div class="rt-scn">
+      <h3>S2 · 显式指定优先</h3>
+      <div class="why">Router 对显式意图零干预，即使该渠道 enabled=false 也不拦截（L3）。</div>
+      <div class="rt-out">输入 <span class="col">channelCode=WECHAT</span> →
+        期望 <span class="col">attempt(channel_code) = WECHAT</span></div>
+    </div>
+
+    <div class="rt-scn">
+      <h3>S3 · 自动避开停用渠道</h3>
+      <div class="why">DOWN 被排除出候选集；不指定渠道时会自动落到次优渠道。</div>
+      <div class="rt-out">输入 <span class="col">ALIPAY=DOWN</span> + 不传渠道 →
+        期望 <span class="col">attempt(channel_code) = WECHAT</span></div>
+    </div>
+
+    <div class="rt-scn">
+      <h3>S4 · 明确拒绝，不偷改</h3>
+      <div class="why">显式指定的渠道 DOWN 时明确拒绝，不悄悄改选别的渠道——不篡改调用方意图。</div>
+      <div class="rt-out">输入 <span class="col">ALIPAY=DOWN</span> + <span class="col">channelCode=ALIPAY</span> →
+        期望 <span class="col">409 CHANNEL_UNAVAILABLE</span>，且<strong>不落 payment_attempt</strong>（无部分写入）</div>
+    </div>
+
+    <div class="rt-scn">
+      <h3>S5 · 两渠道是各自独立的实现实例</h3>
+      <div class="why">三个 Adapter 是不同 Bean，各自声明自己的 channelCode；路由按身份寻址而非 if-else 分发。</div>
+      <div class="rt-out">分别显式 ALIPAY / WECHAT 各建一笔 →
+        期望两笔各自 <span class="col">attempt(channel_code)</span> 落在各自渠道</div>
+    </div>
+
+    <div class="rt-scn">
+      <h3>S6 · 退款回原渠道（INV-6）</h3>
+      <div class="why">退款渠道取自被退支付单<strong>已记录</strong>的渠道码，禁止重新路由。资金安全红线：退款换渠道＝钱退错地方。</div>
+      <div class="rt-out">对 S2 的 WECHAT 支付发起退款 →
+        期望退款 attempt（<span class="col">attempt_type=REFUND</span>）的
+        <span class="col">channel_code = WECHAT</span>，不因 ALIPAY 优先级更高而改道</div>
+    </div>
+  </div>
+</section>
+
+<!-- 边界 -->
+<section class="pa-section pa-section--parchment" style="padding:32px 0">
+  <div class="pa-main">
+    <div style="font-size:12px;color:var(--pa-ink-3);line-height:1.9">
+      <strong>不做（Out of Scope）</strong>：不拆微服务／不拆事务边界；不做渠道失败自动 failover（与 INV-2 互斥）；
+      不做智能路由与权重分流；不接入真实渠道 SDK（三个 Adapter 在协议层仍是同一 mock 语义，L5）。<br>
+      本页经同源代理 <code>/proxy/payment/**</code> 访问只读端点（ADR-0048），不为演示改动任何服务契约。
+    </div>
+  </div>
+</section>
+
+<div id="log" style="display:none"></div>
+<script src="/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var CH = ['ALIPAY', 'WECHAT', 'DOUYIN', 'MOCK'];
+  var STATUSES = ['UP', 'DEGRADED', 'DOWN'];
+
+  function esc(s) { return PA.esc(s); }
+
+  function renderTable(data) {
+    var tb = document.querySelector('#tbl tbody');
+    var rows = (data && data.channels) || [];
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="4" style="color:var(--pa-ink-3)">无渠道</td></tr>'; return; }
+    tb.innerHTML = rows.map(function (c) {
+      var cls = c.status === 'UP' ? '' : ' style="color:var(--pa-ink-2)"';
+      return '<tr><td' + cls + '><strong>' + esc(c.code) + '</strong></td>'
+        + '<td' + cls + '>' + esc(c.status) + '</td>'
+        + '<td' + cls + '>' + (c.priority == null ? '—' : esc(String(c.priority))) + '</td>'
+        + '<td>' + (c.enabled ? '是' : '<span style="color:var(--pa-ink-3)">否</span>') + '</td></tr>';
+    }).join('');
+  }
+
+  function renderPreview(p) {
+    var box = document.getElementById('preview');
+    if (!p) { box.innerHTML = '<div style="color:var(--pa-ink-3);font-size:13px">无数据</div>'; return; }
+    var html = '';
+    if (p.routingEnabled === false) {
+      html += '<div class="pa-note" style="margin-bottom:12px">路由已关闭（<code>payment.routing.enabled=false</code>）：'
+        + '回落旧行为，建单必须显式指定渠道码。</div>';
+    }
+    html += '<div style="font-size:14px;margin-bottom:14px">此刻不指定渠道 → <strong>'
+      + (p.wouldRouteTo ? esc(p.wouldRouteTo) : '<span style="color:var(--pa-ink-3)">无可用渠道</span>')
+      + '</strong></div>';
+
+    (p.orderedCandidates || []).forEach(function (code, i) {
+      var meta = [];
+      var hit = (p.channels || []).filter(function (c) { return c.code === code; })[0];
+      html += '<div class="rt-cand"><span class="rank">' + (i + 1) + '</span>'
+        + '<span class="code">' + esc(code) + '</span>'
+        + '<span class="meta">候选</span></div>';
+    });
+    (p.excluded || []).forEach(function (e) {
+      html += '<div class="rt-cand is-excluded"><span class="rank">×</span>'
+        + '<span class="code">' + esc(e.code) + '</span>'
+        + '<span class="meta">' + esc(e.reason) + '</span></div>';
+    });
+    if (!(p.orderedCandidates || []).length && !(p.excluded || []).length) {
+      html += '<div style="color:var(--pa-ink-3);font-size:13px">无候选、无排除项</div>';
+    }
+    box.innerHTML = html;
+  }
+
+  function renderSwitches() {
+    var box = document.getElementById('switches');
+    box.innerHTML = CH.map(function (code) {
+      return '<span style="display:inline-flex;align-items:center;gap:6px">'
+        + '<span class="code" style="font-family:var(--pa-mono);font-size:13px">' + code + '</span>'
+        + STATUSES.map(function (st) {
+            return '<button class="pa-btn ghost pa-btn--sm" data-code="' + code + '" data-st="' + st + '">' + st + '</button>';
+          }).join('')
+        + '</span>';
+    }).join('');
+
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-st]');
+      if (!b) return;
+      var code = b.getAttribute('data-code'), st = b.getAttribute('data-st');
+      PA.api('POST', '/proxy/payment/internal/channels/' + code + '/status', { status: st }).then(function (r) {
+        if (!r.ok) { PA.toast(code + ' → ' + st + ' 失败（' + r.status + '）', 'bad'); PA.log('失败: ' + r.text, 'err'); return; }
+        PA.toast(code + ' → ' + st + ' 已生效（重启复位）', 'ok');
+        PA.log('可用性覆盖 ' + code + ' = ' + st);
+        return load();
+      });
+    });
+  }
+
+  function load() {
+    return PA.api('GET', '/proxy/payment/internal/channels').then(function (r) {
+      if (!r.ok) { PA.log('渠道清单失败: ' + r.status, 'err'); return null; }
+      renderTable(r.data);
+      return PA.api('GET', '/proxy/payment/internal/channels/route-preview');
+    }).then(function (r2) {
+      if (r2 && r2.ok) {
+        // 把渠道清单挂到 preview 上，供排序渲染复用
+        PA.api('GET', '/proxy/payment/internal/channels').then(function (r3) {
+          var p = r2.data || {};
+          p.channels = (r3.data && r3.data.channels) || [];
+          renderPreview(p);
+        });
+      } else if (r2) {
+        PA.log('路由预览失败: ' + r2.status, 'err');
+      }
+    });
+  }
+
+  PA.log('渠道路由页已加载');
+  renderSwitches();
+  load();
+  setInterval(load, 15000);
+})();
+</script>
+</body>
+</html>

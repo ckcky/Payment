@@ -248,14 +248,35 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 | 错误码 | 语义 | 本服务使用场景 |
 |---|---|---|
-| `INVALID_ARGUMENT` | 400 | 参数非法 | resolve 结果非法、字段缺失、未注册渠道 |
+| `INVALID_ARGUMENT` | 400 | 参数非法 | resolve 结果非法、字段缺失、未注册渠道（列出已注册清单）、`routing.enabled=false` 且未指定渠道 |
 | `NOT_FOUND` | 404 | 资源不存在 | 支付/尝试不存在 |
 | `CONFLICT` | 409 | 状态冲突 | （预留） |
 | `DUPLICATE` | 409 | 幂等冲突 | 幂等键撞唯一约束且回查失败 |
 | `STATE_TRANSITION_VIOLATION` | 409 | 非法状态迁移 | 非 SUCCEEDED 支付退款、非法 close/start/resolve |
 | `AMOUNT_INVARIANT_VIOLATION` | 409 | 金额不变量 | amount ≤ 0 |
 | `UNKNOWN_STATUS` | 400 | 未知状态 | （预留） |
-| `INTERNAL_ERROR` | 500 | 内部错误 | 尝试缺失（数据不一致） |
+| `INTERNAL_ERROR` | 500 | 内部错误 | 尝试缺失（数据不一致）、被退支付单无生效支付渠道记录（FR-005） |
+| `NO_AVAILABLE_CHANNEL` | 409 | 无可用渠道 | 自动选路候选集为空（全部 `enabled=false` 或 `DOWN`，Feature 028 / FR-032） |
+| `CHANNEL_UNAVAILABLE` | 409 | 指定渠道不可用 | 显式指定的渠道当前 `status=DOWN`，明确拒绝不偷改（Feature 028 / FR-034） |
+
+### 3.10 渠道路由只读端点（Feature 028 / FR-044、FR-045）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/internal/channels` | 各渠道 `code / status / priority / enabled`（演示页与排障两用） |
+| `GET` | `/internal/channels/route-preview` | dry-run：此刻不指定渠道会选谁 + 候选排序 + 排除理由；**不产生任何落库** |
+| `POST` | `/internal/channels/{code}/status` | **仅 `demo` profile** 注册的可用性覆盖开关（内存生效，重启复位；生产环境不存在此入口） |
+
+响应示例（`GET /internal/channels`）：
+
+```json
+{ "routingEnabled": true,
+  "channels": [ { "code": "ALIPAY", "status": "UP", "priority": 10, "enabled": true },
+                { "code": "DOUYIN", "status": "UP", "priority": 30, "enabled": false } ] }
+```
+
+> **可用性是静态配置桩**（L1）：不做渠道健康探测，渠道故障需人工关渠；`DOWN` 只影响路由候选集，
+> 不复用 Resilience4j CircuitBreaker 状态（D6 / S11）。
 
 ---
 

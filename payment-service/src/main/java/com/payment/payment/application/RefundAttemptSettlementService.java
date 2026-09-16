@@ -1,5 +1,6 @@
 package com.payment.payment.application;
 
+import com.payment.payment.application.channel.ChannelAttemptRecorder;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
@@ -8,6 +9,7 @@ import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -19,6 +21,11 @@ import org.springframework.stereotype.Service;
  * <p>刻意只依赖 {@link PaymentAttemptRepository}（不碰渠道 {@code PaymentChannel}）：
  * 若经 {@link PaymentRefundService} 走渠道 bean，会形成
  * mockChannelAdapter → 回调桥 → RefundResultProcessor → 本收敛 → 渠道 的循环依赖。</p>
+ *
+ * <p><b>Feature 028 / INV-5 / FR-002</b>：本类只需<b>读</b>尝试行做匹配（
+ * {@code findByPaymentNo} 找目标行），而写动作（accepted 标记 / 终态迁移）统一经
+ * 渠道层端口 {@link ChannelAttemptRecorder}——「尝试表的写入口唯一归属渠道层」在本类同样成立。
+ * 匹配所需的读仍走仓储（只读不违反 INV-5）。</p>
  *
  * <p>匹配规则：优先按 {@code channelReference} 精确匹配（受理与推送共用同一渠道流水号）；
  * 精确引用存在但无匹配行时（典型：异步受理时渠道未返回引用，尝试行 channel_reference 落 NULL，
@@ -32,10 +39,27 @@ public class RefundAttemptSettlementService {
 
     private static final Logger log = LoggerFactory.getLogger(RefundAttemptSettlementService.class);
 
+    /** 只读用途：按支付单找出待收敛的尝试行（INV-5 只约束写入口，不禁止读）。 */
     private final PaymentAttemptRepository attemptRepository;
+    /** 唯一写入口（INV-5）：标记 accepted / 终态迁移 / 回填渠道引用一律经此。 */
+    private final ChannelAttemptRecorder attemptRecorder;
 
-    public RefundAttemptSettlementService(PaymentAttemptRepository attemptRepository) {
+    /** 生产主构造：Spring 必须确定地选它（另有测试用兼容构造，故显式标注）。 */
+    @Autowired
+    public RefundAttemptSettlementService(PaymentAttemptRepository attemptRepository,
+                                          ChannelAttemptRecorder attemptRecorder) {
         this.attemptRepository = attemptRepository;
+        this.attemptRecorder = attemptRecorder;
+    }
+
+    /**
+     * 兼容构造（Feature 028 / FR-036 / SC-012）：保留既有「只传仓储」签名。
+     *
+     * <p>内存仓储（{@code InMemoryPaymentAttemptRepository}）本身实现了写入口端口，
+     * 故既有单测零改动。</p>
+     */
+    public RefundAttemptSettlementService(PaymentAttemptRepository attemptRepository) {
+        this(attemptRepository, ChannelAttemptRecorders.of(attemptRepository));
     }
 
     /**
@@ -84,7 +108,8 @@ public class RefundAttemptSettlementService {
             default -> false;
         };
         if (changed || refBackfilled) {
-            attemptRepository.save(target);
+            // INV-5：写入口唯一——经渠道层端口落库，而非直连仓储。
+            attemptRecorder.save(target);
             log.info("退款尝试已收敛 attemptId={} paymentNo={} channelRef={} -> {}",
                     target.getId(), paymentNo, target.getChannelReference(), target.getStatus());
         } else {

@@ -90,6 +90,25 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 
 相关配置：`payment-service/src/main/resources/application.yml` 的 `payment.resolve.*`（唯一在用的安全配置；`payment.security.*` / `payment.risk.*` 与各服务的 `platform.security.*` 已按裁决移除）。
 
+### 4.1 渠道路由配置（Feature 028，非密钥）
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `payment.routing.enabled` | `true`（`PAYMENT_ROUTING_ENABLED`） | 灰度开关：`false` 回落旧行为——建单**必须显式传** `channelCode` |
+| `payment.routing.channels.<CODE>.enabled` | ALIPAY/WECHAT/MOCK=true，DOUYIN=false | 是否参与**自动**选路。语义是「别自动挑我」，**不是**「禁止使用」——显式指定仍可用（L3） |
+| `payment.routing.channels.<CODE>.priority` | ALIPAY 10 / WECHAT 20 / DOUYIN 30 / MOCK 90 | 数值越小越优先；同优先级按渠道码字典序（确定性 INV-3）。**必填**，缺失启动失败 |
+| `payment.routing.availability.<CODE>.status` | 缺省 `UP` | `UP` 正常 / `DEGRADED` 保留候选但排序降级 / `DOWN` 排除出候选集（显式指定则 409） |
+| `payment.channel.adapters.<CODE>.scenario` | 回落 `payment.channel.mock-scenario` | per-channel Mock 人格（`PAYMENT_CHANNEL_<CODE>_SCENARIO`） |
+
+**故障处置：某渠道持续失败（表现为 FAILED / UNKNOWN 而非路由层规避，L1 无健康探测）**
+
+1. 置 `payment.routing.availability.<CODE>.status: DOWN` 并重启（或演示期走 `POST /internal/channels/{code}/status`）；
+2. 用 `GET /internal/channels/route-preview` 确认自动选路已绕开该渠道、`excluded` 含理由；
+3. 告警 `no_available_channel` 出现时**不要**急着开灰度开关：先确认是否有渠道仍 `enabled=true` 且非 `DOWN`。
+
+**启动失败的常见原因（FR-032 强校验，设计如此）**：`channels` 为空 / 某渠道 `priority` 缺失 /
+出现未注册的渠道码 / 全部渠道 `enabled=false` / `availability.status` 非法值。错误信息会列出合法取值清单。
+
 ## 5. 关键指标
 
 | 指标 | 含义 | 关注点 |
@@ -102,6 +121,7 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 | `payment.duplicate` / `payment.duplicate_callback` | 幂等命中 | 突增可能是上游重试风暴 |
 | `payment.order_notify_failed` | 通知订单失败（多为 RPC 抖动） | 事实不回滚，由对账兜底 |
 | `payment.order_illegal_state_rejected` | 支付成功但订单以非法前态拒收 | **资金风险信号**：款已收、订单不认账，需人工核对（已写 `FINANCIAL_AUDIT`） |
+| `payment_routing_total` | 路由决策（`result ∈ {explicit, explicit_disabled, routed, no_available_channel, unavailable_explicit}`；`routed` 另带 `routed` 标签＝渠道码） | `no_available_channel` 出现即**配置事故**（全部关渠或全 DOWN），需人工检查 `payment.routing.channels.*.enabled` 与 `availability` |
 | `refund.rejected` | 退款被业务规则拒绝 | 突增需确认是否超退/状态非法 |
 | `refund.order_notify_failed` / `refund.ledger_posting_failed` | 退款下游联动失败 | 退款事实不回滚，需人工补单 |
 | `ledger.posting_failed` | 记账失败 | 出现后资金事实与账本不一致，需补记账 |

@@ -60,6 +60,11 @@ class PaymentRetryTest {
         }
 
         @Override
+        public String channelCode() {
+            return "MOCK";
+        }
+
+        @Override
         public ChannelResult charge(ChargeRequest request) {
             chargeCalls++;
             if (repeatLast && !scripted.isEmpty()) {

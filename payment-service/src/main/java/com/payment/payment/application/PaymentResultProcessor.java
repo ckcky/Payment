@@ -6,10 +6,10 @@ import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
+import com.payment.payment.application.channel.ChannelAttemptRecorder;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +32,7 @@ public class PaymentResultProcessor {
     private static final Logger log = LoggerFactory.getLogger(PaymentResultProcessor.class);
 
     private final PaymentRepository paymentRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelAttemptRecorder attemptRecorder;
     private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
     private final BusinessMetrics metrics;
@@ -41,34 +41,40 @@ public class PaymentResultProcessor {
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  PaymentAttemptRepository attemptRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics) {
-        this(paymentRepository, attemptRepository, orderGateway, ledgerGateway, metrics,
+        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics,
                 new StructuredAuditLogger());
     }
 
     /** 显式指定审计器（测试场景可捕获 FINANCIAL_AUDIT；生产走默认构造）。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  PaymentAttemptRepository attemptRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
                                   StructuredAuditLogger auditLogger) {
         this.paymentRepository = paymentRepository;
-        this.attemptRepository = attemptRepository;
+        this.attemptRecorder = attemptRecorder;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
     }
 
-    /** 兼容构造：不接账本时使用空记账网关（测试/账本未接入场景）。 */
+    /**
+     * 兼容构造（Feature 028 / FR-036）：仅接「按 attempt 写」的渠道层端口兜底实现，
+     * 保持既有「无账本 / 无指标」重载签名语义——既有测试零改动（SC-012）。
+     *
+     * <p>{@code InMemoryPaymentAttemptRepository} 已直接实现 {@link ChannelAttemptRecorder}，
+     * 故既有测试传仓储即可匹配本构造，无需额外的仓储重载（避免重载歧义）。</p>
+     */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  PaymentAttemptRepository attemptRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
                                   OrderGateway orderGateway) {
-        this(paymentRepository, attemptRepository, orderGateway,
+        this(paymentRepository, attemptRecorder, orderGateway,
                 (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
                 },
                 new NoopBusinessMetrics());
@@ -76,22 +82,23 @@ public class PaymentResultProcessor {
 
     /** 兼容构造：显式指定记账网关（测试场景），指标用空实现。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  PaymentAttemptRepository attemptRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway) {
-        this(paymentRepository, attemptRepository, orderGateway, ledgerGateway, new NoopBusinessMetrics());
+        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, new NoopBusinessMetrics());
     }
 
     /** 返回支付是否真正发生了状态迁移（据此决定是否已触发订单通知与记账）。 */
     public boolean applyAndNotify(String paymentNo, ChannelResult result) {
         Payment payment = paymentRepository.findByPaymentNo(paymentNo)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentNo));
-        PaymentAttempt attempt = attemptRepository.findById(payment.getCurrentAttemptId())
-                .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR,
-                        "payment attempt missing: " + payment.getCurrentAttemptId()));
-        boolean changed = PaymentResultApplier.apply(payment, attempt, result);
+        PaymentAttempt attempt = attemptRecorder.require(payment.getCurrentAttemptId());
+        // Feature 028 / FR-004：先收敛 attempt（渠道层）→ 再推进 payment（payment 层），
+        // 顺序与拆分前一致（plan §B4 风险点）。
+        attemptRecorder.converge(attempt, result);
+        boolean changed = PaymentResultApplier.applyPayment(payment, result);
         paymentRepository.save(payment);
-        attemptRepository.save(attempt);
+        attemptRecorder.save(attempt);
         if (changed && result.status() == ChannelResult.Status.SUCCESS) {
             PaymentSucceededRequest request = PaymentResultApplier.toSucceededRequest(payment);
             try {

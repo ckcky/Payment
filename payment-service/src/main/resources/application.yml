@@ -36,6 +36,33 @@ payment:
   channel:
     # 对外（渠道 / 外部系统）HTTP 调用超时预算：1.5s（ADR-0012 超时口径，全服务统一）
     http-timeout-ms: 1500
+    # 全局默认场景（FR-014：语义不变；per-channel 可覆盖，见下 adapters）
+    mock-scenario: ${PAYMENT_MOCK_SCENARIO:SUCCESS}
+    # 退款「受理 + 异步推送」模式（spec 019 / D7）
+    refund-async: ${PAYMENT_CHANNEL_REFUND_ASYNC:true}
+    refund-async-delay-ms: 1000
+    # per-channel 场景覆盖（Feature 028 / FR-014、FR-010）：未配回落全局 mock-scenario。
+    # 场景名必须严格等于枚举名（SUCCESS / FAILURE / TIMEOUT / TRANSPORT_ERROR / BUSINESS_UNKNOWN），
+    # 坏值在 Bean 创建期 FAIL FAST（ADR-0049 第 2 条）。
+    adapters:
+      ALIPAY: { scenario: ${PAYMENT_CHANNEL_ALIPAY_SCENARIO:SUCCESS} }
+      WECHAT: { scenario: ${PAYMENT_CHANNEL_WECHAT_SCENARIO:SUCCESS} }
+      DOUYIN: { scenario: ${PAYMENT_CHANNEL_DOUYIN_SCENARIO:SUCCESS} }
+  # 支付渠道路由（Feature 028 / ADR-0073 / FR-031）
+  routing:
+    # false = 回落旧行为（channelCode 必填，不选路）；灰度开关，可一键退回今天的行为（FR-020①/FR-033）
+    enabled: ${PAYMENT_ROUTING_ENABLED:true}
+    # enabled=true 且 priority 最小者被自动选中；同优先级按 channelCode 字典序（INV-3 确定性）
+    channels:
+      ALIPAY: { enabled: true,  priority: 10 }
+      WECHAT: { enabled: true,  priority: 20 }
+      DOUYIN: { enabled: false, priority: 30 }
+      MOCK:   { enabled: true,  priority: 90 }
+    # per-channel 可用性（Feature 028 / FR-034、FR-035）：**静态配置桩**，不做真实探测。
+    # UP = 正常；DEGRADED = 保留候选但排序降级；DOWN = 排除出候选集（显式指定则 409 CHANNEL_UNAVAILABLE）。
+    # 留空 = 全部按 UP 处理；演示期可用 POST /internal/channels/{code}/status 覆盖（仅 demo profile）。
+    # 注意：不复用 Resilience4j CircuitBreaker 状态（D6 / S11）。
+    availability: {}
   # 出站 RPC 弹性参数（仅对幂等 sink 调用生效）
   fulfillment:
     retry:

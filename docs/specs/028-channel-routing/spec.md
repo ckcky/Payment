@@ -262,13 +262,19 @@
 
 ### 5.3 六个可演示场景（观测口径＝读列，不解析字符串）
 
+> **列位置更正（2026-09-16 实现期核对）**：`payments` 表**没有** `channel_code` 列——
+> 渠道身份只记在 `payment_attempts.channel_code` 上（一笔支付可有多次尝试，渠道归属是
+> 「尝试」的属性而非「支付单」的属性；这也正是本 Spec 把 `payment_attempts` 的写入口
+> 提升为渠道层端口的理由，INV-5 / FR-002）。下面 S1/S2 原文误写作「两表 `channel_code`」，
+> 现统一更正为**只读 `payment_attempts.channel_code`**，与 `acceptance.md` 的断言口径一致。
+
 | # | 动作 | 输入 | 可观测结果 | 验证 |
 |---|---|---|---|---|
-| S1 | 只表达支付意图 | 不传 `channelCode` | `payments.channel_code` = `payment_attempts.channel_code` = `ALIPAY` | US2 |
-| S2 | 显式指定优先 | `channelCode=WECHAT` | 两表 `channel_code` 均为 `WECHAT`，Router 不干预 | US3 |
-| S3 | 自动避开停用渠道 | ALIPAY=DOWN，不传渠道 | `channel_code = WECHAT` | FR-034 |
+| S1 | 只表达支付意图 | 不传 `channelCode` | `payment_attempts.channel_code = ALIPAY`（`attempt_type=PAYMENT`） | US2 |
+| S2 | 显式指定优先 | `channelCode=WECHAT` | `payment_attempts.channel_code = WECHAT`，Router 不干预 | US3 |
+| S3 | 自动避开停用渠道 | ALIPAY=DOWN，不传渠道 | `payment_attempts.channel_code = WECHAT` | FR-034 |
 | S4 | 明确拒绝不偷改 | ALIPAY=DOWN，显式 ALIPAY | `409 CHANNEL_UNAVAILABLE`，**不落 payment_attempt** | FR-034 |
-| S5 | 三渠道各有 mock 人格 | WECHAT=FAILURE / ALIPAY=SUCCESS | 同金额下 A 成功、B 被拒 | FR-010 |
+| S5 | 两渠道是独立实现实例 | 分别显式 ALIPAY / WECHAT | 两笔各自落在各自渠道（同金额下行为一致，因 mock 人格仍属同一语义；见 L5） | FR-010 |
 | S6 | **退款回原渠道** | 对 S2 的 WECHAT 支付发起退款 | 退款 attempt（`attempt_type=REFUND`）的 `channel_code == WECHAT`，不因 ALIPAY 优先级更高而改道 | INV-6 / FR-005 |
 
 ## 6. 验收标准（SC）

@@ -60,7 +60,10 @@ public class GlobalExceptionHandler {
             case ErrorCodes.CONFLICT, ErrorCodes.DUPLICATE,
                     ErrorCodes.CONCURRENT_UPDATE,
                     ErrorCodes.STATE_TRANSITION_VIOLATION, ErrorCodes.AMOUNT_INVARIANT_VIOLATION,
-                    ErrorCodes.ORDER_NOT_PAYABLE -> HttpStatus.CONFLICT;
+                    ErrorCodes.ORDER_NOT_PAYABLE,
+                    // Feature 028：路由/可用性类拒绝均为 409——「此刻无合适渠道」是状态冲突，
+                    // 不是请求格式错误（400 会误导调用方改参数，而正确做法是稍后重试或改配置）。
+                    ErrorCodes.NO_AVAILABLE_CHANNEL, ErrorCodes.CHANNEL_UNAVAILABLE -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
     }

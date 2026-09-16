@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# demo/restart-payment.sh <SCENARIO> —— 重启 payment-service 并切换 Mock 渠道场景
+# demo/restart-payment.sh <SCENARIO> [PER_CHANNEL] —— 重启 payment-service 并切换 Mock 渠道场景
 # Mock 渠道场景是构造期注入的（ADR-0049），运行期不可热切换，故用重启切换。
 # 用法：bash demo/restart-payment.sh BUSINESS_UNKNOWN   # 演示 UNKNOWN
 #       bash demo/restart-payment.sh SUCCESS            # 恢复默认成功路径
+#       bash demo/restart-payment.sh SUCCESS "WECHAT=FAILURE"   # per-channel 人格（Feature 028 / FR-010）
+#       bash demo/restart-payment.sh SUCCESS "ALIPAY=SUCCESS,WECHAT=FAILURE"  # 多渠道路径
+#
+# PER_CHANNEL（可选，Feature 028 / FR-014）：逗号分隔的 `CODE=SCENARIO` 列表，写入
+# `payment.channel.adapters.<CODE>.scenario`，覆盖全局 mock-scenario 作为该渠道的默认场景。
+# 渠道码大小写不敏感（Spring 松散绑定 + Registry 归一大写）。
 #
 # 双模式（spec 026 / ADR-0070）：
 #   - 宿主模式：杀掉监听 8084 的 JVM，再以 -Dpayment.channel.mock-scenario=$SCENARIO 重新拉起。
@@ -12,11 +18,29 @@
 set -euo pipefail
 
 SCENARIO="${1:-SUCCESS}"
+PER_CHANNEL="${2:-}"
 MAVEN_CMD="${MAVEN_CMD:-./mvnw}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PID_FILE="$ROOT_DIR/deployment/logs/.pids"
 PORT=8084
 COMPOSE_FILE="$ROOT_DIR/deployment/docker-compose.yml"
+
+# 把 "WECHAT=FAILURE,ALIPAY=SUCCESS" 转成 JVM 参数数组（per-channel 优先级高于全局）。
+JVM_ARGS=("-Dpayment.channel.mock-scenario=$SCENARIO")
+ENV_ARGS=("PAYMENT_CHANNEL_MOCK_SCENARIO=$SCENARIO")
+SPRING_ARGS=("--payment.channel.mock-scenario=$SCENARIO")
+if [ -n "$PER_CHANNEL" ]; then
+  IFS=',' read -ra _PAIRS <<< "$PER_CHANNEL"
+  for _pair in "${_PAIRS[@]}"; do
+    _code="$(echo "${_pair%%=*}" | tr -d ' ' | tr '[:lower:]' '[:upper:]')"
+    _scn="$(echo "${_pair#*=}" | tr -d ' ')"
+    [ -n "$_code" ] && [ -n "$_scn" ] && [ "$_code" != "$_pair" ] || {
+      echo "⚠️ 忽略非法 per-channel 片段：${_pair}（期望 CODE=SCENARIO）" >&2; continue; }
+    JVM_ARGS+=("-Dpayment.channel.adapters.${_code}.scenario=${_scn}")
+    ENV_ARGS+=("PAYMENT_CHANNEL_${_code}_SCENARIO=${_scn}")
+    SPRING_ARGS+=("--payment.channel.adapters.${_code}.scenario=${_scn}")
+  done
+fi
 
 # 兼容 Git Bash 沙箱（MSYS_NO_PATHCONV 会让 Windows curl 写 /dev/null 失败，见 lib.sh）
 unset MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
@@ -46,10 +70,10 @@ fi
 echo "模式判定：${MODE}"
 
 if [ "$MODE" = "container" ]; then
-  echo "以 PAYMENT_CHANNEL_MOCK_SCENARIO=${SCENARIO} 重建 payment-service 容器…"
+  echo "以 ${ENV_ARGS[*]} 重建 payment-service 容器…"
   # --no-deps：只重建 payment 自身，避免连带重启 mysql/nacos。
   # --force-recreate：环境变量变化在部分 compose 版本下不会触发重建，显式强制以确保场景生效。
-  PAYMENT_CHANNEL_MOCK_SCENARIO="$SCENARIO" \
+  env "${ENV_ARGS[@]}" \
     docker compose -f "$COMPOSE_FILE" --profile full up -d --force-recreate --no-deps payment-service
   wait_healthy container
   exit 0
@@ -95,7 +119,7 @@ cd "$ROOT_DIR"
 # 源码仓库 → spring-boot:run（场景为构造期注入 ADR-0049，运行期不可热切换）。
 JAR="$ROOT_DIR/jars/payment-service-0.1.0-SNAPSHOT.jar"
 if [ -f "$JAR" ]; then
-  nohup java "-Dpayment.channel.mock-scenario=$SCENARIO" -jar "$JAR" \
+  nohup java "${JVM_ARGS[@]}" -jar "$JAR" \
     > "$ROOT_DIR/deployment/logs/payment-service.log" 2>&1 &
 else
   # 注意：spring-boot:run 默认 fork 独立 JVM，直接 -D<prop> 留在 Maven 进程里传不进去，
@@ -104,8 +128,8 @@ else
   # Spring 的环境变量优先级高于 application.yml，实测会把服务起在错误端口上
   # （2026-09-09：三个服务被拉到 60956 而启动失败）。本脚本只管 8084，显式指定最稳。
   nohup $MAVEN_CMD -pl payment-service spring-boot:run \
-    -Dspring-boot.run.jvmArguments="-Dpayment.channel.mock-scenario=$SCENARIO" \
-    -Dspring-boot.run.arguments="--server.port=$PORT" \
+    -Dspring-boot.run.jvmArguments="${JVM_ARGS[*]}" \
+    -Dspring-boot.run.arguments="--server.port=$PORT $(printf '%s ' "${SPRING_ARGS[@]}")" \
     > "$ROOT_DIR/deployment/logs/payment-service.log" 2>&1 &
 fi
 echo "$! payment-service" >> "$PID_FILE"

@@ -131,6 +131,68 @@ class ServiceBoundaryTest {
     }
 
     /**
+     * INV-4（Feature 028 / ADR-0073）：渠道路由的<b>决策</b>与<b>实现</b>必须分居两层，
+     * 应用层不得反向依赖基础设施层的渠道适配器与路由器。
+     *
+     * <p>允许的依赖方向是 {@code infra.channel → application.channel}（实现依赖抽象）。
+     * 若 {@code application.channel..} 反向 import {@code infra.channel..}，后果不是「代码难看」，
+     * 而是<b>路由决策被绑死在具体渠道实现上</b>——此后新增渠道、替换实现、写纯单测都必须
+     * 拖上整个 infra 包，ADR-0072 的两层结构当场失效。</p>
+     */
+    @Test
+    void channelRoutingAbstractionMustNotDependOnChannelInfrastructure() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.payment.payment.application.channel..")
+                .should().dependOnClassesThat().resideInAPackage("com.payment.payment.infra.channel..")
+                .because("依赖方向必须是 infra.channel → application.channel；"
+                        + "应用层反向依赖适配器会把路由决策绑死在具体实现上（INV-4 / ADR-0072、ADR-0073）");
+        rule.check(serviceClasses);
+    }
+
+    /**
+     * INV-5（Feature 028 / FR-002）：{@code payment_attempts} 的<b>写入口唯一</b>归属于渠道层端口
+     * {@code ChannelAttemptRecorder}；应用层不得直接依赖 {@code PaymentAttemptRepository}。
+     *
+     * <p>一条支付尝试行的生命周期跨了「应用层编排」与「渠道层调用」两个关注点。若应用层既能
+     * 经端口收敛、又能直连仓储改写，同一行就有两个写入口——两个写入口意味着两套不变量，
+     * 而它们必然会漂移（典型症状：一处收敛了 status 忘了 channel_reference，对账就缺流水号）。</p>
+     *
+     * <p><b>本规则只约束「写」</b>：{@code save} 是唯一的写方法，故规则针对
+     * {@code PaymentAttemptRepository.save(...)} 的调用点；纯读（{@code findById} /
+     * {@code findByPaymentNo}）不受约束——匹配目标行、抽取渠道引用、拼装对账事实都需要读，
+     * 把读也禁掉只会逼出「绕道反射或新开只读仓储」的更差做法。</p>
+     *
+     * <p><b>豁免</b>：
+     * <ul>
+     *   <li>{@code application.reliability..} —— UNKNOWN 主动查询的只读反向路径；</li>
+     *   <li>{@code application.channel..} —— 端口自身所在包。</li>
+     * </ul>
+     * {@code ChannelAttemptRecorders}（把仓储适配成端口的兼容垫片）是全类豁免：
+     * 它的职责就是持有仓储并转发，是端口本身的实现细节。</p>
+     *
+     * <p><b>为什么用「按类名 + 方法名」的字符串匹配而不是 {@code callMethod(PaymentAttemptRepository.class, …)}</b>：
+     * 各服务经 {@code spring-boot-maven-plugin} 重打包，类在 {@code BOOT-INF/classes}，
+     * 本模块无法在编译期引用它们的类型（见类注释）。ArchUnit 的字符串重载对这类
+     * 「只导入字节码、不建依赖」的用法是唯一可行路径。</p>
+     */
+    @Test
+    void attemptTableWriteEntryMustBeOwnedByChannelPort() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.payment.payment.application..")
+                .and().resideOutsideOfPackages(
+                        "com.payment.payment.application.reliability..",
+                        "com.payment.payment.application.channel..")
+                .and().haveNameNotMatching(
+                        "com\\.payment\\.payment\\.application\\.ChannelAttemptRecorders.*")
+                .should().callMethod(
+                        "com.payment.payment.domain.PaymentAttemptRepository", "save",
+                        "com.payment.payment.domain.PaymentAttempt")
+                .because("payment_attempts 的写入口唯一归属 channel 层端口 ChannelAttemptRecorder；"
+                        + "应用层直连仓储写会产生第二个写入口，两套不变量必然漂移（INV-5 / FR-002）");
+        rule.check(serviceClasses);
+    }
+
+    /**
      * 定位某服务的编译输出目录（ledger-service 的 artifactId 与目录名一致，无需特例）。
      *
      * <p>本模块位于 {@code deployment/architecture-tests}，工作目录即该目录，

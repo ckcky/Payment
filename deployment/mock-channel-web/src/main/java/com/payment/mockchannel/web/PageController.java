@@ -29,4 +29,10 @@ public class PageController {
     public String demo() {
         return "forward:/demo.html";
     }
+
+    /** 渠道路由演示页（Feature 028 / spec §5.1）。 */
+    @GetMapping("/routing")
+    public String routing() {
+        return "forward:/routing.html";
+    }
 }

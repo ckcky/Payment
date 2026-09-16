@@ -8,3 +8,15 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema.sql
+
+# 渠道路由（Feature 028 / ADR-0073）：测试 profile 的 application.yml 会**替换**主配置文件，
+# 因此路由配置必须在此重新声明，否则 payment.routing.channels 为空 → 启动期强校验（FR-032）直接失败。
+payment:
+  routing:
+    enabled: true
+    channels:
+      ALIPAY: { enabled: true,  priority: 10 }
+      WECHAT: { enabled: true,  priority: 20 }
+      DOUYIN: { enabled: false, priority: 30 }
+      MOCK:   { enabled: true,  priority: 90 }
+    availability: {}
