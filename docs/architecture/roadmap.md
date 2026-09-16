@@ -37,17 +37,21 @@
   决策见 **ADR-0071**（`docs/adr/0032-user-payment-limit.md`，🟡 Proposed，D1~D13 已确认）。
   **文档已齐备**（spec/plan/tasks/acceptance），**实现待负责人核准后开工**，本轮只写文档未改代码。
   实现期另开 `feature/027-user-payment-limit`。
-- **`028-channel-routing` 已实现（2026-09-08）**：payment-service 两层结构重构
+- **`028-channel-routing` 已实现并完成 live 验证（2026-09-08）**：payment-service 两层结构重构
   （payment 支付层 / channelAttempt 渠道层，ADR-0072）+ 支付渠道路由
   （注册表 + 规则化确定性选路，ADR-0073），两份 ADR 已由 🟡 Proposed 转 ✅ Accepted。
-  实现于 `feature/028-channel-routing`，`--no-ff` 合入 master（合并点 `33d9b9d`）。
-  53 个文件、+3204/−395；`mvn -o clean verify -fae` **全 16 个 reactor 模块 BUILD SUCCESS**；
-  架构测试 6/6 → **8/8**（新增 INV-4 `application.channel..` 不得依赖 `infra.channel..`、
-  INV-5 `application..` 不得调用 `PaymentAttemptRepository.save` 两条门禁）。
+  实现于 `feature/028-channel-routing`，`--no-ff` 合入 master（合并点 `33d9b9d`）；
+  live 修复于 `fix/028-live-demo-gaps`（合并点 `a8e0d0e`）。
+  53 + 14 个文件；`mvn -o clean verify -fae` **全 16 个 reactor 模块 BUILD SUCCESS**，
+  13 个测试模块 **595 用例全绿**；架构测试 6/6 → **8/8**（新增 INV-4 `application.channel..`
+  不得依赖 `infra.channel..`、INV-5 `application..` 不得调用 `PaymentAttemptRepository.save` 两条门禁）。
   交付：`application/channel/` 四端口、`infra/channel/` 实现族（基类 + 3 渠道 + 注册表 + 路由器
   + 单通道垫片）、`payment_routing_total` 指标、`GET /internal/channels` 与 `/route-preview`
   只读端点、`routing.html` 演示页 + `scenario-routing.sh`（S1~S6）。
-  > 遗留：T56 demo 实跑（`scenario-routing.sh` 六场景）**待有栈环境**验证；代码与构建已全绿。
+  **T56 demo 实跑已完成**：全栈容器 `run-all.sh` 全绿（含路由段），`scenario-routing.sh`
+  六场景 **22 条断言全过**——实跑并修出 5 处纯构建/单测不可见的缺陷（`channelCode` 漏改、
+  YAML flow mapping 占位符、渠道码回显、下游 409 被压成 500、演示件与 demo profile），
+  补记见 `docs/specs/028-channel-routing/tasks.md` T58~T63 与 CHANGELOG。
 - **当前 Feature**：无进行中 Feature（`027-user-payment-limit` 立项待实现，等待 ADR-0071 核准；
   `028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`
   与 `docs/specs/028-channel-routing/spec.md`。
