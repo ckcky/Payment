@@ -32,4 +32,8 @@ public final class ErrorCodes {
     /** 显式指定的渠道当前不可用（availability=DOWN）：明确拒绝而非静默改选（Feature 028 / FR-034，HTTP 409）。
      *  不篡改调用方意图——偷偷改选等于替用户做了资金路径决策。 */
     public static final String CHANNEL_UNAVAILABLE = "CHANNEL_UNAVAILABLE";
+    /** 用户支付限额超限：日 / 月 / 年任一周期本笔金额放不下（spec 027 / FR-019，HTTP 409）。
+     *  语义是「支付单<b>未创建</b>」而非「创建了再拒」——建单事务整体回滚，`payments` 表无新增行（INV-3）。
+     *  错误消息 MUST 说明<b>哪个周期</b>超限与当前额度（对齐 ADR-0049「给出合法取值清单」）。 */
+    public static final String LIMIT_EXCEEDED = "LIMIT_EXCEEDED";
 }

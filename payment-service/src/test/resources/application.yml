@@ -20,3 +20,14 @@ payment:
       DOUYIN: { enabled: false, priority: 30 }
       MOCK:   { enabled: true,  priority: 90 }
     availability: {}
+
+  # 用户支付限额（spec 027 / ADR-0071）：测试同样需要显式声明（原因同上）。
+  # **无 Redis 依赖**（SC-016）：测试环境没有 StringRedisTemplate → LimitConfiguration
+  # 自动降级 NoopLimitExpiryIndex（alive 返回 null → 跳过回收 → 在途保持占用）。
+  limit:
+    enabled: true
+    # 测试里把 TTL 压到较小值便于断言；仍须 ≥ 105s 下界，否则 LimitProperties.validate() fail-fast。
+    reserve-ttl: 900s
+    compensation-interval-ms: 30000
+    redis:
+      key-prefix: "limit:pending:"

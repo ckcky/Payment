@@ -37,6 +37,7 @@ public class PaymentResultProcessor {
     private final LedgerPostingGateway ledgerGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
+    private final LimitSettlementHook limitSettlement;
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
@@ -44,9 +45,10 @@ public class PaymentResultProcessor {
                                   ChannelAttemptRecorder attemptRecorder,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
-                                  BusinessMetrics metrics) {
+                                  BusinessMetrics metrics,
+                                  LimitSettlementHook limitSettlement) {
         this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics,
-                new StructuredAuditLogger());
+                new StructuredAuditLogger(), limitSettlement);
     }
 
     /** 显式指定审计器（测试场景可捕获 FINANCIAL_AUDIT；生产走默认构造）。 */
@@ -56,12 +58,25 @@ public class PaymentResultProcessor {
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
                                   StructuredAuditLogger auditLogger) {
+        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics, auditLogger,
+                LimitSettlementHook.noop());
+    }
+
+    /** 全参构造：显式给出额度结算钩子（spec 027）。 */
+    public PaymentResultProcessor(PaymentRepository paymentRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
+                                  OrderGateway orderGateway,
+                                  LedgerPostingGateway ledgerGateway,
+                                  BusinessMetrics metrics,
+                                  StructuredAuditLogger auditLogger,
+                                  LimitSettlementHook limitSettlement) {
         this.paymentRepository = paymentRepository;
         this.attemptRecorder = attemptRecorder;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
+        this.limitSettlement = limitSettlement;
     }
 
     /**
@@ -86,6 +101,16 @@ public class PaymentResultProcessor {
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway) {
         this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, new NoopBusinessMetrics());
+    }
+
+    /** 兼容构造：显式指定记账网关与指标（测试场景），审计器取默认实现。 */
+    public PaymentResultProcessor(PaymentRepository paymentRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
+                                  OrderGateway orderGateway,
+                                  LedgerPostingGateway ledgerGateway,
+                                  BusinessMetrics metrics) {
+        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics,
+                new StructuredAuditLogger(), LimitSettlementHook.noop());
     }
 
     /** 返回支付是否真正发生了状态迁移（据此决定是否已触发订单通知与记账）。 */
@@ -128,6 +153,14 @@ public class PaymentResultProcessor {
             // 一交易多支付单时每张支付单独立记账，不再复用支付幂等键避免撞键静默少记账。
             ledgerGateway.postPaymentCapture("PAYMENT:" + payment.getPaymentNo(), payment.getPaymentNo(),
                     payment.getAmountMinor(), 0L, payment.getCurrencyCode());
+        }
+        // 额度结算（spec 027 / FR-013，ADR-0071 D4/D12）：与记账**同级**挂在 changed=true 分支，
+        // 保证「支付真正发生状态迁移」才结算一次。UNKNOWN 不结算（INV-5：保守占用，不猜成败）。
+        //
+        // 结算失败不回滚支付事实（ADR-0009 哲学）：钩子内部走 REQUIRES_NEW 独立短事务并自行吞掉
+        // 异常，残留不一致由 LimitCompensationScanner 以 payment 为事实源收敛（FR-016）。
+        if (changed && result.status() != ChannelResult.Status.UNKNOWN) {
+            limitSettlement.settle(payment);
         }
         return changed;
     }

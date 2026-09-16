@@ -9,6 +9,7 @@ import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +26,35 @@ import org.springframework.transaction.annotation.Transactional;
  * （payment 层）；{@code payment_attempts} 表的创建与收敛经 {@link ChannelAttemptRecorder} 端口
  * 委托给渠道层。<b>这是职责分层而非拆事务</b>——两者仍在同一个 {@code @Transactional} 内，
  * 保证两张表的状态同时迁移（否则会出现 {@code payment=SUCCEEDED / attempt=PENDING} 的永久不一致）。</p>
+ *
+ * <p><b>限额闸门（spec 027 / FR-006、INV-3）</b>：本方法的事务还额外包住
+ * {@link LimitGate#acquire} 的「惰性回收 + 三周期预占」。这样超限抛出的
+ * {@code LIMIT_EXCEEDED} 会让<b>整个建单事务</b>回滚——{@code payments} /
+ * {@code payment_attempts} 都不落行，是真正的「<b>未创建</b>」而非「创建了再拒」。
+ * 闸门放在这里而不是 {@code PaymentApplicationService}，是因为那里没有事务
+ * （渠道调用必须在事务外），单独给闸门开事务会让它与建单分属两个边界。</p>
  */
 @Component
 public class PaymentPersistence {
 
     private final PaymentRepository paymentRepository;
     private final ChannelAttemptRecorder attemptRecorder;
+    private final LimitGate limitGate;
 
+    /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
+    @Autowired
     public PaymentPersistence(PaymentRepository paymentRepository,
-                             ChannelAttemptRecorder attemptRecorder) {
+                             ChannelAttemptRecorder attemptRecorder,
+                             LimitGate limitGate) {
         this.paymentRepository = paymentRepository;
         this.attemptRecorder = attemptRecorder;
+        this.limitGate = limitGate;
+    }
+
+    /** 兼容构造（测试 / 限额关闭场景）：闸门用恒不放行的空实现。 */
+    public PaymentPersistence(PaymentRepository paymentRepository,
+                             ChannelAttemptRecorder attemptRecorder) {
+        this(paymentRepository, attemptRecorder, LimitGate.disabled());
     }
 
     /** 插入待处理支付；若幂等键已存在则返回既有支付（created=false，表示命中重复）。 */
@@ -56,11 +75,20 @@ public class PaymentPersistence {
         }
         Optional<Payment> existing = paymentRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
-            // 幂等命中：回放既有支付单与它已记录的 PAYMENT attempt（不改写、不新建）
+            // 幂等命中：回放既有支付单与它已记录的 PAYMENT attempt（不改写、不新建）。
+            //
+            // 注意这里**不做限额闸门**：命中的是同一笔已受理的支付（同 idempotencyKey），
+            // 它在上一次请求里已经预占过。再预占一次会重复占用额度（同一 paymentNo 撞
+            // UK(biz_no, RESERVE) 会被幂等跳过，但语义上仍不该走这条路）。
             return new PendingPayment(existing.get(), findPaymentAttempt(existing.get()), false);
         }
         Payment payment = new Payment(cmd.transactionId(), cmd.orderNo(), cmd.userId(),
                 cmd.amountMinor(), cmd.currencyCode(), idempotencyKey);
+        // 限额闸门（spec 027 / FR-006、INV-3）：在**落库之前**预占，使超限时本事务整体回滚。
+        // paymentNo 已由 Payment 构造生成（PM+雪花），可直接作为额度流水的 biz_no（ADR-0063）。
+        // 注：本调用位于 @Transactional 方法体内，与随后的 insertNew 同事务——
+        // 抛 LIMIT_EXCEEDED 时 payments / payment_attempts 都不落行（SC-003）。
+        limitGate.acquire(cmd.userId(), cmd.currencyCode(), cmd.amountMinor(), payment.getPaymentNo());
         payment = insertNew(payment);
         // 渠道层写 payment_attempts（INV-5）：路由后的最终渠道码落 attempt 行
         PaymentAttempt attempt = attemptRecorder.openPaymentAttempt(
