@@ -49,6 +49,10 @@ class PaymentAutoRefundServiceTest {
         payment.succeed();
         payments.save(payment);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        // Feature 028 / FR-005 / INV-6：退款渠道取自被退支付单的**生效支付渠道**记录，先落这条 PAYMENT 尝试。
+        paymentAttempts.save(PaymentAttempt.rehydrate(null, payment.getPaymentNo(), "MOCK", 0,
+                java.time.Instant.now(), java.time.Instant.now(), "mock-ref", PaymentAttemptStatus.SUCCEEDED,
+                null, null, 0, PaymentAttempt.TYPE_PAYMENT, 100, "CNY"));
         return payment;
     }
 
@@ -84,9 +88,11 @@ class PaymentAutoRefundServiceTest {
         assertThat(refund.getIdempotencyKey()).isEqualTo("TXRF-AR-1");
         assertThat(refund.getTransactionRefundNo()).isEqualTo("TXRF-AR-1");
         assertThat(refund.getTransactionNo()).isEqualTo("TXN-AR");
-        assertThat(paymentAttempts.findByPaymentNo(payment.getPaymentNo())).hasSize(1);
-        assertThat(paymentAttempts.findByPaymentNo(payment.getPaymentNo()).get(0).getAttemptType())
-                .isEqualTo(PaymentAttempt.TYPE_REFUND);
+        // Feature 028：PAYMENT 尝试（生效支付渠道）之外新增 1 条 REFUND 尝试，共 2 条
+        assertThat(paymentAttempts.findByPaymentNo(payment.getPaymentNo())).hasSize(2);
+        assertThat(paymentAttempts.findByPaymentNo(payment.getPaymentNo()).stream()
+                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType())).count())
+                .isEqualTo(1);
         // 支付单保留 SUCCEEDED，不回滚
         assertThat(payments.findByPaymentNo(payment.getPaymentNo()).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.SUCCEEDED);

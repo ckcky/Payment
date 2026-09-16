@@ -6,6 +6,71 @@
 
 ---
 
+## [2026-09-08] feat：spec 028 支付两层结构 + 渠道路由（ADR-0072/0073 落地）
+
+**范围**：payment-service 由「单渠道硬编码」改为**两层结构 + 确定性路由**；跨 common / order / payment /
+mock-channel-web / arch-tests 六个模块，53 个文件。ADR-0072（`0033-two-layer-channel-architecture.md`）
+与 ADR-0073（`0034-channel-routing.md`）状态 🟡 Proposed → ✅ Accepted。
+
+**核心不变式（INV-1~INV-6，均有门禁或测试兜底）**
+
+- **INV-3 确定性路由**：`ConfiguredChannelRouter` 决策链为 `enabled=false 回落旧行为` → `显式 code 只校验
+  已注册（不校验 enabled）` → `priority 最小、同级字典序` → `抛 NO_AVAILABLE_CHANNEL`。无随机、无计数器；
+  同一 `RouteContext` 连跑 20 次结果一致的确定性用例在 `ConfiguredChannelRouterTest` 中固化。
+- **INV-4 / INV-5 边界门禁**：`ServiceBoundaryTest` 新增两条**非空断言**规则——`application.channel..`
+  MUST NOT 依赖 `infra.channel..`；`application..`（豁免 `reliability` / `channel` 两包与
+  `ChannelAttemptRecorders`）MUST NOT 调用 `PaymentAttemptRepository.save`（`payment_attempts` 写入口
+  唯一归属 channel 层端口 `ChannelAttemptRecorder`）。架构测试 6/6 → **8/8**。
+- **INV-6 反向路径不重路由**：退款 / 渠道查询 / 重试三处一律经 `ChannelRegistry` 按 attempt 记录的
+  `channel_code` 解析，禁止触达 Router；显式请求 `DOWN` 渠道 → `409 CHANNEL_UNAVAILABLE`。
+- **INV-5 真实违规修复**：`RefundAttemptSettlementService` 原直接 `attemptRepository.save(...)`，
+  改注入端口 `ChannelAttemptRecorder`（保留单参兼容构造，经 `ChannelAttemptRecorders.of()` 委托）。
+
+**分层与端口**
+
+- 新增 `application/channel/`：`ChannelAttemptRecorder`（openPaymentAttempt / openRefundAttempt /
+  converge / markUnknown）、`ChannelRegistry`（resolve / registeredCodes）、`ChannelRouter` +
+  `RouteContext` record（javadoc 明写 `amountMinor` / `currencyCode` 当前未使用）。
+- 新增 `infra/channel/`：`AbstractMockChannelAdapter`（逐字承载尾数故障注入 / 退款异步推送 /
+  每实例独立 `runId` / scenario 严格枚举 4 件横切行为）、`Alipay` / `Wechat` / `DouyinChannelAdapter`
+  （`@Component`，只声明身份 + 差异）、`SpringChannelRegistry`（启动期校验 code 非空且唯一）、
+  `ConfiguredChannelRouter`、`SingleChannelRegistry`（FR-036 兼容垫片）。
+- `PaymentChannel` 端口补 `String channelCode()`；`MockChannelAdapter` 改继承抽象基类、声明
+  `channelCode()="MOCK"`，**保留全部 6 个既有构造签名**，既有 10 处 `new MockChannelAdapter(...)`
+  测试零改动通过。
+
+**调用侧契约**
+
+- `CreatePaymentRequest.channelCode` / `CreateOrderPaymentRequest.channelCode` 去 `@NotBlank`，
+  可空即交由 Router 决定；`CreatePaymentResponse.channelCode` 语义收口为「路由后最终渠道」。
+- 幂等键取值来源改为**路由后** code，避免 `payment:OR1:null:1` 脏键；选路 MUST 在建单之前
+  （不先落库再改写 `channel_code`）。显式传未注册 code → `400 INVALID_ARGUMENT` 且错误信息列出已注册清单。
+- `PaymentApplicationService` 保留单通道构造重载，内部包装为「单通道注册表 + 恒等路由」。
+
+**可观测性与只读端点**
+
+- 计数器 `payment_routing_total`（Micrometer 点名 `payment.routing`，导出为下划线），标签
+  `result ∈ {explicit, routed, no_available_channel, unavailable_explicit}`；每次路由落 INFO（经 MDC
+  带 `traceId`，复用 spec 021 ACCESS 体系）；`no_available_channel` 额外落 WARN。
+- 新增 `GET /internal/channels`（code/status/priority/enabled）与 `GET /internal/channels/route-preview`
+  （候选排序 + 排除理由，**零落库**）；`ErrorCodes` 新增 `NO_AVAILABLE_CHANNEL` / `CHANNEL_UNAVAILABLE`
+  （复用 `GlobalExceptionHandler` 映射 409，**不新建异常类**）。
+
+**文档与演示件**
+
+- `payment-service.md` 补 §3.9 两个新错误码、§3.10 路由只读端点表；`runbook.md` 补 `payment_routing_total`
+  指标行与 §4.1 非密钥路由配置项 + 启动失败原因；`tasks.md` 批次 A–G 全勾（T56 实跑待有栈环境）。
+- 新增 `mock-channel-web/static/routing.html` + portal 入口 + 导航项；新增 `deployment/demo/scenario-routing.sh`
+  （S1~S6 确定性断言，读 `payment_attempts.channel_code`，无 sleep / 无概率）并纳入 `run-all.sh`；
+  `restart-payment.sh` 支持 `<SCENARIO> [CODE=SCENARIO,...]` 按渠道设定 mock 人格（S5/FR-010）。
+- **订正**：spec §5.3 原表声称可断言 `payments.channel_code`，实测该表**无此列**（`PaymentResponse` 亦无该字段），
+  改为统一读 `payment_attempts.channel_code`；未新增伪列。
+
+**验证**：`./mvnw -o clean verify -fae` 全部 **16 个 reactor 模块 BUILD SUCCESS**；payment-service
+测试 149 + 路由 22 全绿；架构测试 8/8。
+
+---
+
 ## [2026-09-16] docs：spec 进度文档刷新 + 陈旧分支清理
 
 **范围**：纯文档 + 仓库清理，无代码改动（028 的 ADR 为 Proposed，未开工）。

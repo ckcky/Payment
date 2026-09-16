@@ -59,8 +59,21 @@
   </div>
 </section>
 
-<!-- T2 财务合规（parchment） -->
+<!-- T2 渠道路由（parchment） -->
 <section class="pa-section pa-section--parchment">
+  <div class="pa-main">
+    <div class="tile-title">渠道路由</div>
+    <div class="tile-lead">payment 层编排支付单、channelAttempt 层独占渠道交互；路由只产出渠道码，反向路径（退款 / 重试 / 查询）按尝试行记录的渠道码回原渠道，绝不重新选路。</div>
+    <div class="chips">
+      <span class="flowchip">渠道码身份</span><span class="flowchip">注册表</span><span class="flowchip">确定性选路</span>
+      <span class="flowchip">可用性桩</span><span class="flowchip">回原渠道</span>
+    </div>
+    <a class="pa-btn ghost cta" href="/routing.html">进入路由演示 <span class="arrow">→</span></a>
+  </div>
+</section>
+
+<!-- T3 财务合规（white） -->
+<section class="pa-section pa-section--white">
   <div class="pa-main">
     <div class="tile-title">财务合规</div>
     <div class="tile-lead">会计四核对只报差异、不自动修钱：差额先挂账到 SUSPENSE，查清后调账定性，重新核对验证，全清才能关批。</div>
@@ -71,8 +84,8 @@
   </div>
 </section>
 
-<!-- T3 可观测（white） -->
-<section class="pa-section pa-section--white">
+<!-- T4 可观测（parchment） -->
+<section class="pa-section pa-section--parchment">
   <div class="pa-main">
     <div class="tile-title">可观测</div>
     <div class="tile-lead" style="margin-bottom:24px">监控栈与压测脚本均运行在本机；未启动时属预期，不影响上面两个入口。</div>

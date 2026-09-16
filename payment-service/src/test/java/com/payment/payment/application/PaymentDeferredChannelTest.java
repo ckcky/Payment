@@ -24,6 +24,11 @@ class PaymentDeferredChannelTest {
     /** 一旦被调用即失败的渠道：defer 模式下绝不允许触达。 */
     private static final PaymentChannel NEVER_CALLED = new PaymentChannel() {
         @Override
+        public String channelCode() {
+            return "MOCK";
+        }
+
+        @Override
         public ChannelResult charge(ChargeRequest request) {
             throw new AssertionError("deferred mode must not call the channel: " + request.paymentNo());
         }
@@ -68,6 +73,11 @@ class PaymentDeferredChannelTest {
     @DisplayName("defer=false（默认）：既有同步 charge 主链零变化（SUCCESS → SUCCEEDED + 履约）")
     void nonDeferredPathUnchanged() {
         PaymentChannel successChannel = new PaymentChannel() {
+            @Override
+            public String channelCode() {
+                return "MOCK";
+            }
+
             @Override
             public ChannelResult charge(ChargeRequest request) {
                 return ChannelResult.success("mock-ref-ok");

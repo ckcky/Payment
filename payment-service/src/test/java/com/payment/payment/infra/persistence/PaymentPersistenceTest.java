@@ -99,7 +99,8 @@ class PaymentPersistenceTest {
     void insertPendingRecordsPaymentAmountOnAttempt() {
         CreatePaymentCommand cmd = new CreatePaymentCommand("txn-ip", "order-ip", "user-ip",
                 250L, "USD", "idem-ip", "mock");
-        PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd);
+        // Feature 028 / FR-028：insertPending 新增 routedChannelCode 形参（路由后最终渠道码）
+        PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd, "MOCK");
         assertThat(pending.created()).isTrue();
 
         PaymentAttempt attempt = attemptRepository.findByPaymentNo(pending.payment().getPaymentNo())

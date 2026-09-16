@@ -12,6 +12,7 @@
     { label: '门户', href: '/' },
     { label: '演示', href: '/demo' },
     { label: '收银台', href: null, title: '需从演示控制台下单后进入（携带 paymentNo）' },
+    { label: '路由', href: '/routing' },
     { label: '对账', href: '/audit.html' }
   ];
   var PIN_KEY = 'pa.drawer.pinned';
@@ -47,6 +48,7 @@
         var on = (t.href === '/' && (path === '/' || path === '/index.html'))
           || (t.href.indexOf('audit') >= 0 && path.indexOf('audit') >= 0)
           || (t.href === '/demo' && path.indexOf('demo') >= 0)
+          || (t.href.indexOf('routing') >= 0 && path.indexOf('routing') >= 0)
           || (t.href.indexOf('cashier') >= 0 && path.indexOf('cashier') >= 0);
         if (on) a.className += ' is-on';
         tabs.appendChild(a);

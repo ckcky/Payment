@@ -4,12 +4,18 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
+import com.payment.payment.application.channel.ChannelRegistry;
 import com.payment.payment.application.channel.ChannelResult;
+import com.payment.payment.application.channel.ChannelRouter;
 import com.payment.payment.application.channel.ChargeRequest;
+import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.payment.application.channel.RouteContext;
 import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
+import java.util.Set;
+import java.util.TreeSet;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +24,10 @@ import org.springframework.stereotype.Service;
  *
  * <p>幂等键以 {@code payment:create} 作用域登记：先于扣款登记（避免并发重复重复扣款），
  * 重复请求返回首次结果。</p>
+ *
+ * <p><b>选路（Feature 028 / FR-023，ADR-0073）</b>：选路 MUST 发生在<b>建单之前</b>——
+ * 以最终 {@code channelCode} 参与幂等键构造与支付单落库，<b>不得先落库再改写</b>
+ * （否则出现「建单用 A、请求发往 B」的不一致窗口）。</p>
  */
 @Service
 public class PaymentApplicationService {
@@ -31,6 +41,8 @@ public class PaymentApplicationService {
     private final LedgerPostingGateway ledgerGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
+    private final ChannelRouter channelRouter;
+    private final ChannelRegistry channelRegistry;
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
@@ -40,7 +52,9 @@ public class PaymentApplicationService {
                                      OrderGateway orderGateway,
                                      LedgerPostingGateway ledgerGateway,
                                      BusinessMetrics metrics,
-                                     StructuredAuditLogger auditLogger) {
+                                     StructuredAuditLogger auditLogger,
+                                     ChannelRouter channelRouter,
+                                     ChannelRegistry channelRegistry) {
         this.paymentRepository = paymentRepository;
         this.paymentPersistence = paymentPersistence;
         this.retryService = retryService;
@@ -48,9 +62,11 @@ public class PaymentApplicationService {
         this.ledgerGateway = ledgerGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
+        this.channelRouter = channelRouter;
+        this.channelRegistry = channelRegistry;
     }
 
-    /** 兼容构造：不接账本时使用空记账网关（测试/账本未接入场景）。 */
+    /** 兼容构造（不接账本）：空记账网关（测试/账本未接入场景）；选路用恒等路由。 */
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
                                      PaymentRetryService retryService,
@@ -59,7 +75,51 @@ public class PaymentApplicationService {
                                      StructuredAuditLogger auditLogger) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway,
                 (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
-                }, metrics, auditLogger);
+                }, metrics, auditLogger, null, null);
+    }
+
+    /**
+     * 账本兼容构造（Feature 028 / FR-036）：保留既有 7 参重载签名，内部包装为
+     * 「<b>单通道注册表 + 恒等路由</b>」——{@code route()} 恒返回该通道 code，
+     * 且显式渠道校验恒通过。既有测试零改动（SC-012）。
+     */
+    public PaymentApplicationService(PaymentRepository paymentRepository,
+                                     PaymentPersistence paymentPersistence,
+                                     PaymentRetryService retryService,
+                                     OrderGateway orderGateway,
+                                     LedgerPostingGateway ledgerGateway,
+                                     BusinessMetrics metrics,
+                                     StructuredAuditLogger auditLogger,
+                                     PaymentChannel singleChannel) {
+        this(paymentRepository, paymentPersistence, retryService, orderGateway, ledgerGateway,
+                metrics, auditLogger, identityRouter(singleChannel), singleChannelRegistry(singleChannel));
+    }
+
+    /** 恒等路由：不管上下文如何，恒返回该通道 code（FR-036 兼容垫片）。 */
+    private static ChannelRouter identityRouter(PaymentChannel channel) {
+        return context -> channel.channelCode();
+    }
+
+    /** 单通道注册表：只认该通道，未知码抛 INVALID_ARGUMENT（FR-036 兼容垫片）。 */
+    private static ChannelRegistry singleChannelRegistry(PaymentChannel channel) {
+        String code = channel.channelCode().toUpperCase();
+        Set<String> codes = new TreeSet<>();
+        codes.add(code);
+        return new ChannelRegistry() {
+            @Override
+            public PaymentChannel resolve(String channelCode) {
+                if (channelCode == null || !code.equals(channelCode.trim().toUpperCase())) {
+                    throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                            "unknown channelCode '" + channelCode + "'; registered channels: " + codes);
+                }
+                return channel;
+            }
+
+            @Override
+            public Set<String> registeredCodes() {
+                return codes;
+            }
+        };
     }
 
     /**
@@ -83,7 +143,10 @@ public class PaymentApplicationService {
      * （返回首次结果）与渠道调用无关，不受 defer 影响。</p>
      */
     public Payment createPaymentIntent(CreatePaymentCommand cmd, boolean deferChannel) {
-        PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd);
+        // FR-023：选路在建单之前——最终 code 同时用于幂等键与 attempt 落库
+        String routedChannelCode = resolveChannelCode(cmd);
+
+        PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(cmd, routedChannelCode);
         if (!pending.created()) {
             metrics.counter("payment.duplicate", 1.0, "module", MODULE);
             return pending.payment();
@@ -101,13 +164,13 @@ public class PaymentApplicationService {
         // 重试期间不落库，最终结果与重试次数一次性写入。
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(
                 new ChargeRequest(pending.payment().getPaymentNo(),
-                        pending.payment().getCurrentAttemptId(), cmd.amountMinor(), cmd.currencyCode(),
-                        cmd.channelCode()));
+                        pending.attempt().getId(), cmd.amountMinor(), cmd.currencyCode(),
+                        routedChannelCode));
         ChannelResult result = outcome.result();
 
         // 应用渠道结果并落库（独立短事务，含本次实际重试次数）
         PaymentPersistence.AppliedPayment applied = paymentPersistence.applyAndPersist(
-                pending.payment().getId(), pending.payment().getCurrentAttemptId(), result, outcome.retries());
+                pending.payment().getId(), pending.attempt().getId(), result, outcome.retries());
         if (applied.changed()) {
             recordTransition(applied.payment(), applied.fromStatus(), result);
         }
@@ -128,6 +191,20 @@ public class PaymentApplicationService {
                     applied.payment().getCurrencyCode());
         }
         return applied.payment();
+    }
+
+    /**
+     * 解析本次支付的最终渠道码（FR-023 / FR-028）。
+     *
+     * <p>无 Router（兼容构造）时回落到「用调用方给的 code，缺省 MOCK」——保持旧行为；
+     * 有 Router 时走 {@link ChannelRouter#route}（显式优先 / 自动选路 / 可用性判定）。</p>
+     */
+    private String resolveChannelCode(CreatePaymentCommand cmd) {
+        if (channelRouter == null) {
+            return cmd.channelCode() == null || cmd.channelCode().isBlank() ? "MOCK" : cmd.channelCode();
+        }
+        return channelRouter.route(
+                new RouteContext(cmd.amountMinor(), cmd.currencyCode(), cmd.channelCode()));
     }
 
     public Payment getPayment(Long id) {
@@ -159,11 +236,7 @@ public class PaymentApplicationService {
             case FAILURE -> "payment.failed";
             case UNKNOWN -> "payment.unknown";
         };
-        PaymentStatus toStatus = switch (result.status()) {
-            case SUCCESS -> PaymentStatus.SUCCEEDED;
-            case FAILURE -> PaymentStatus.FAILED;
-            case UNKNOWN -> PaymentStatus.UNKNOWN;
-        };
+        PaymentStatus toStatus = PaymentResultApplier.terminalStatusOf(result);
         metrics.counter(action, 1.0, "module", MODULE);
         auditLogger.audit(action, payment.getIdempotencyKey(), payment.getAmountMinor(),
                 payment.getCurrencyCode(), fromStatus.name(), toStatus.name(), "payment",

@@ -36,7 +36,15 @@ class PaymentRefundServiceTest {
         Payment payment = new Payment("txn-1", "order-1", "user-1", 100, "CNY", "idem-1");
         payment.start(1L);
         payment.succeed();
-        return repository.save(payment);
+        Payment saved = repository.save(payment);
+        // Feature 028 / FR-005 / INV-6：退款渠道取自被退支付单的**生效支付渠道**记录
+        // （attempt_type=PAYMENT 且 SUCCEEDED 的 channel_code），所以必须先落这条支付尝试。
+        // 用 id=1 会被 INNER 内存仓储的 idGen 自增覆盖，故不显式给 id。
+        PaymentAttempt paid = PaymentAttempt.rehydrate(null, saved.getPaymentNo(), "MOCK", 0,
+                java.time.Instant.now(), java.time.Instant.now(), "mock-ref", PaymentAttemptStatus.SUCCEEDED,
+                null, null, 0, PaymentAttempt.TYPE_PAYMENT, 100, "CNY");
+        attempts.save(paid);
+        return saved;
     }
 
     @Test
@@ -72,8 +80,12 @@ class PaymentRefundServiceTest {
         assertThat(response.status()).isEqualTo("SUCCEEDED");
         assertThat(response.channelReference()).isNotNull();
         // Feature 016 / FR-017 ②：退款渠道尝试落库（attempt_type=REFUND，channel_reference=渠道退款流水号）
-        assertThat(attempts.findByPaymentNo(payment.getPaymentNo())).hasSize(1);
-        PaymentAttempt attempt = attempts.findByPaymentNo(payment.getPaymentNo()).get(0);
+        // Feature 028：PAYMENT 尝试（生效支付渠道）之外新增 1 条 REFUND 尝试，共 2 条
+        assertThat(attempts.findByPaymentNo(payment.getPaymentNo())).hasSize(2);
+        PaymentAttempt attempt = attempts.findByPaymentNo(payment.getPaymentNo()).stream()
+                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType()))
+                .findFirst()
+                .orElseThrow();
         assertThat(attempt.getAttemptType()).isEqualTo(PaymentAttempt.TYPE_REFUND);
         assertThat(attempt.getChannelReference()).isEqualTo(response.channelReference());
         assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);

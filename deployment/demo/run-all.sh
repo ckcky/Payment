@@ -27,6 +27,8 @@ echo "  PaymentArch 演示总入口"
 echo "=================================================="
 bash "$HERE/reset.sh"
 bash "$HERE/scenario-happy-path.sh"
+# spec 028：渠道路由六场景（S1~S6；断言读 payment_attempts.channel_code 列）
+bash "$HERE/scenario-routing.sh"
 bash "$HERE/scenario-refund.sh"
 # UNKNOWN 路径需 payment-service 以 BUSINESS_UNKNOWN 场景运行（构造期注入，ADR-0049）
 bash "$HERE/restart-payment.sh" BUSINESS_UNKNOWN
@@ -37,4 +39,4 @@ bash "$HERE/scenario-reconciliation.sh"
 bash "$HERE/scenario-audit.sh"
 
 echo ""
-info "✅ 全部演示场景通过（主链 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环）"
+info "✅ 全部演示场景通过（主链 / 渠道路由 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环）"

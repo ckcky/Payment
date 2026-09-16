@@ -2,7 +2,7 @@
 
 # ADR-0072: payment-service 两层结构——payment 支付层与 channelAttempt 渠道层的职责切分
 
-- 状态：🟡 **Proposed**（2026-09-16 提出，待负责人确认）
+- 状态：✅ **Accepted**（2026-09-16 提出，2026-09-16 负责人裁决接受并随 spec 028 落地）
 - 关联：ADR-0054（支付编排职责归位——本 ADR 细化其「payment 层编排支付指令」的内部结构）、ADR-0064（一交易多支付单 / 三渠道 mock）、ADR-0012（双响应码错误分类）、ADR-0063（跨系统一律业务单号）、ADR-0049（配错不许静默走默认）、ADR-0073（渠道路由——本 ADR 的直接下游）、[technical-solution §3.1](../architecture/technical-solution.md)、[payment-service.md](../architecture/systems/payment-service.md)
 - 需求源头：负责人 2026-09-16 对 payment-service 结构的裁决——
   > 「之前设计的时候明明说了在 payment-service 里是有两层：一个 payment 支付层，一个 channelAttempt 渠道层。在 payment 层编排支付指令（比如说账务这些），然后调用 channelAttempt 渠道层进行外部渠道的调用。那么 payment 表就应该是在 payment 层的时候记录，在 channelAttempt 返回的时候更新。channelAttempt 渠道层负责具体渠道的实现和抽象，payment 层压根不关心外部渠道是如何实现的，只管调用就行了。但是在代码里我看 channelAttempt 和 payment 表是一起记录更新的，更离谱的是在渠道层完全一点没有看到外部渠道的影子，连桩实现都没有。」

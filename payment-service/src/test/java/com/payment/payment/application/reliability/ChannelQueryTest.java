@@ -35,6 +35,11 @@ class ChannelQueryTest {
         private int queryCalls;
 
         @Override
+        public String channelCode() {
+            return "MOCK";
+        }
+
+        @Override
         public ChannelResult charge(ChargeRequest request) {
             return ChannelResult.businessUnknown("not used");
         }

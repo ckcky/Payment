@@ -40,6 +40,11 @@ class ReliabilityMetricsTest {
         private ChannelResult queryResult = ChannelResult.success("mock-q-ref");
 
         @Override
+        public String channelCode() {
+            return "MOCK";
+        }
+
+        @Override
         public ChannelResult charge(ChargeRequest request) {
             return chargeResult;
         }

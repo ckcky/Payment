@@ -26,4 +26,10 @@ public final class ErrorCodes {
     /** 复式记账借贷不平衡：数据质量门禁，拒绝落任何分录（Feature 004 / FR-002）。 */
     public static final String LEDGER_UNBALANCED = "LEDGER_UNBALANCED";
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
+    /** 无可用渠道：全部渠道被禁用/不可用，且调用方未指定渠道（Feature 028 / FR-016，HTTP 409）。
+     *  此时<b>不产生任何支付单落库</b>——不允许部分写入。 */
+    public static final String NO_AVAILABLE_CHANNEL = "NO_AVAILABLE_CHANNEL";
+    /** 显式指定的渠道当前不可用（availability=DOWN）：明确拒绝而非静默改选（Feature 028 / FR-034，HTTP 409）。
+     *  不篡改调用方意图——偷偷改选等于替用户做了资金路径决策。 */
+    public static final String CHANNEL_UNAVAILABLE = "CHANNEL_UNAVAILABLE";
 }
