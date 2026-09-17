@@ -13,6 +13,34 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # ── 依赖就绪（MySQL + Redis）─────────────────────────────────────────
+    # 用 service container 而非宿主 systemd：宿主 ubuntu-24.04 镜像的 mysql 包
+    # root@localhost 默认走 auth_socket/caching_sha2，`sudo mysql` 无密码连接自
+    # 20260907 镜像起不再放行（ERROR 1045，见 fix/ci-mysql-bootstrap），
+    # 且宿主实例没有固定凭据契约。service container 用官方镜像 + MYSQL_ROOT_PASSWORD，
+    # 凭据确定、版本确定，也不再依赖 `sudo apt-get update` / `systemctl`。
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,12 +51,38 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Start MySQL / Redis (service containers 等价物)
+      - name: Wait for MySQL / Redis
         run: |
-          sudo apt-get update -qq || true
-          sudo systemctl start mysql || true
-          sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`order\`;CREATE DATABASE IF NOT EXISTS payment;CREATE DATABASE IF NOT EXISTS fulfillment;CREATE DATABASE IF NOT EXISTS entitlement;CREATE DATABASE IF NOT EXISTS ledger;CREATE DATABASE IF NOT EXISTS settlement;CREATE DATABASE IF NOT EXISTS reconciliation;CREATE DATABASE IF NOT EXISTS catalog;CREATE DATABASE IF NOT EXISTS merchant;"
-          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';FLUSH PRIVILEGES;"
+          for i in $(seq 1 60); do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot --silent && break || sleep 2
+          done
+          mysqladmin ping -h 127.0.0.1 -uroot -proot --silent \
+            || { echo "MySQL 未就绪"; exit 1; }
+          redis-cli -h 127.0.0.1 ping | grep -q PONG \
+            || { echo "Redis 未就绪"; exit 1; }
+          echo "MySQL / Redis 就绪"
+
+      # 建库 + 重放业务表 DDL。
+      # 两者原先都缺失：workflow 只 CREATE DATABASE，从不建表 → 服务起来后
+      # 首个业务请求即报 "Table doesn't exist"。
+      #
+      # 重放范围（与 demo/reset.sh 同口径 + 027）：
+      #   ① NN-*.sql（01–10）——「全量 schema」，各文件自带 CREATE DATABASE + USE，
+      #      已吸收 015/016/018/019 的变更（如 transaction_refunds、attempt_type、
+      #      order_item_no 均已在 01/03 内），故不再单独重放那批存量迁移脚本
+      #      （它们前置 USE、依赖 DATABASE()，无库时会报 1046）。
+      #   ② 027-user-payment-limit.sql——同样是自带 CREATE DATABASE 的幂等全量脚本，
+      #      其 3 张限额表尚未并入 03，必须显式重放（否则 spec 027 相关用例全红）。
+      - name: Create schemas & apply DDL
+        run: |
+          for f in deployment/schema/[0-9][0-9]-*.sql deployment/schema/027-*.sql; do
+            echo "applying $(basename "$f")"
+            mysql -h 127.0.0.1 -uroot -proot < "$f"
+          done
+          mysql -h 127.0.0.1 -uroot -proot -e \
+            "SELECT table_schema, COUNT(*) AS tables FROM information_schema.tables \
+             WHERE table_schema IN ('catalog','order','payment','fulfillment','entitlement', \
+             'reconciliation','settlement','ledger','merchant') GROUP BY table_schema ORDER BY table_schema;"
 
       - name: Start Nacos (standalone)
         run: |
