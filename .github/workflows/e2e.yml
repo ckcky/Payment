@@ -118,9 +118,24 @@ jobs:
 
       - name: Start 9 services + mock-channel-web
         env:
-          # e2e 的 paidOrder 依赖渠道内联同步 charge（建支付单即 SUCCEEDED，无收银台环节）；
-          # mock-cashier 默认已翻为 true（演示优先），CI 必须显式关闭（fix/024-mock-cashier-default-on）
-          PAYMENT_MOCK_CASHIER_ENABLED: "false"
+          # mock-cashier 置 true（与本地/演示默认一致）。原先显式置 false 是
+          # fix/024 的取舍（怕收银台环节打断 paidOrder），但 paidOrder 走的是
+          # ALIPAY 内联同步 charge（建支付单即 SUCCEEDED），本就不经收银台；
+          # 而置 false 会让 payUrl 恒为 null，CashierPayUrlReachabilityTest
+          # （2026-09-15 缺陷回归用例）必然失败。两相权衡取 true。
+          PAYMENT_MOCK_CASHIER_ENABLED: "true"
+          # 人工收敛端点的鉴权令牌。未设置时 /payments/{no}/resolve 直接 503
+          # （拒绝而非放行，ADR 原文如此），IdempotencyAndCallbackE2ETest 的
+          # 「丢回调经 resolve 收敛」用例必然失败。本地 start-all.sh 默认导出
+          # demo-admin-token，CI 此前遗漏——这里补齐同一演示值。
+          PAYMENT_ADMIN_TOKEN: "demo-admin-token"
+          # 冷启动放大出站 RPC 超时：10 JVM 首次调用常超硬编码的 1s（ADR-0012 口径），
+          # 触发 feign.RetryableException: Read timed out（createPayment 等 500），
+          # 故 CI 经环境变量放大——源码默认仍 1s，仅覆盖 CI 冷启动窗口。
+          PAYMENT_FEIGN_CONNECT_TIMEOUT_MS: "2000"
+          PAYMENT_FEIGN_READ_TIMEOUT_MS: "5000"
+          PAYMENT_FACTS_CONNECT_TIMEOUT_MS: "2000"
+          PAYMENT_FACTS_READ_TIMEOUT_MS: "8000"
         run: |
           mkdir -p logs
           for jar in deployment/output/jars/*.jar; do
