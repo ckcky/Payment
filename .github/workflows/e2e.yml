@@ -128,7 +128,22 @@ jobs:
             [ "$ok" = "1" ] && echo "all services healthy" && break
             sleep 2
           done
-          [ "$ok" = "1" ] || { tail -50 logs/*.log; exit 1; }
+          # 失败时打印每个服务的 health 码 + 各自日志尾部。
+          # 注意不要用 `tail -50 logs/*.log`——GNU coreutils 下多文件 + 数值选项
+          # 会报 "option used in invalid context"，真正的失败原因反而被这条吞掉
+          # （2026-09-17 实测：排障消息本身盖住了排障信息）。
+          if [ "$ok" != "1" ]; then
+            echo "==== health 汇总 ===="
+            for p in 8081 8082 8083 8084 8086 8087 8088 8089 8090 8091; do
+              code=$(curl -s --noproxy '*' -o /dev/null -w "%{http_code}" -m 2 "http://localhost:${p}/actuator/health" || true)
+              echo "  :${p} -> ${code}"
+            done
+            for f in logs/*.log; do
+              echo "==== ${f} (tail -60) ===="
+              tail -n 60 "$f" || true
+            done
+            exit 1
+          fi
 
       - name: Run E2E (-De2e.env=ci)
         run: ./mvnw -B -pl deployment/e2e-tests test -De2e.env=ci
