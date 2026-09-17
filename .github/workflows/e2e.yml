@@ -53,13 +53,24 @@ jobs:
 
       - name: Wait for MySQL / Redis
         run: |
+          # MySQL：service container 自带 mysql 客户端（runner 镜像预装 mysql-client）
           for i in $(seq 1 60); do
             mysqladmin ping -h 127.0.0.1 -uroot -proot --silent && break || sleep 2
           done
           mysqladmin ping -h 127.0.0.1 -uroot -proot --silent \
             || { echo "MySQL 未就绪"; exit 1; }
-          redis-cli -h 127.0.0.1 ping | grep -q PONG \
-            || { echo "Redis 未就绪"; exit 1; }
+          # Redis：runner 镜像**不预装 redis-cli**（2026-09-17 实测 command not found），
+          # 用 bash 内建 /dev/tcp 发 PING、读 PONG，零额外工具依赖。
+          ok=0
+          for i in $(seq 1 30); do
+            if exec 3<>/dev/tcp/127.0.0.1/6379 2>/dev/null; then
+              printf 'PING\r\n' >&3
+              if head -c 7 <&3 | grep -q PONG; then ok=1; exec 3<&-; break; fi
+              exec 3<&-
+            fi
+            sleep 2
+          done
+          [ "$ok" = "1" ] || { echo "Redis 未就绪"; exit 1; }
           echo "MySQL / Redis 就绪"
 
       # 建库 + 重放业务表 DDL。
