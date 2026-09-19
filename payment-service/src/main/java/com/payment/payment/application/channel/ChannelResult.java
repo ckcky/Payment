@@ -20,12 +20,23 @@ import com.payment.payment.domain.PaymentAttemptErrorType;
  * <p>{@link #status()} 由双码推导，不靠调用方自报；{@link #errorType()} 同样是派生值。</p>
  */
 public record ChannelResult(Status status, String channelReference, String reason,
-                            TransportCode transportCode, BusinessCode businessCode) {
+                            TransportCode transportCode, BusinessCode businessCode,
+                            PayCredential credential) {
 
     public enum Status {
         SUCCESS,
         FAILURE,
         UNKNOWN
+    }
+
+    /**
+     * 兼容构造（spec 030 前的既有 5 参形态）：无凭证。
+     *
+     * <p>既有 21 个引用 {@code ChannelResult} 的测试文件与全部既有工厂零改动（SC-A-02）。</p>
+     */
+    public ChannelResult(Status status, String channelReference, String reason,
+                         TransportCode transportCode, BusinessCode businessCode) {
+        this(status, channelReference, reason, transportCode, businessCode, null);
     }
 
     /**
@@ -62,7 +73,30 @@ public record ChannelResult(Status status, String channelReference, String reaso
      * 语义 = 通信成功 + 业务无结论（UNKNOWN，带渠道受理流水号），调用方据此保持待收敛态。
      */
     public static ChannelResult accepted(String channelReference, String reason) {
-        return of(TransportCode.SUCCESS, BusinessCode.UNKNOWN, channelReference, reason);
+        return accepted(channelReference, reason, null);
+    }
+
+    /**
+     * 渠道受理（spec 030 / FR-112）：<b>携带付款凭证</b>。
+     *
+     * <p>用于「渠道已受理、买家尚未付款」的支付场景——例如支付宝 {@code alipay.trade.page.pay}
+     * 返回跳转签名 URL。此时 payment <b>MUST 停在 {@code PROCESSING}</b>，
+     * <b>MUST NOT</b> 走成功收敛路径（INV-6）：钱还没到，记账与通知都不得发生。</p>
+     *
+     * @param channelReference 渠道受理流水号（可能为 {@code null}：下单阶段渠道常还没给交易号）
+     * @param reason           受理说明
+     * @param credential       付款凭证（可空；非空即代表「待买家付款」）
+     */
+    public static ChannelResult accepted(String channelReference, String reason,
+                                         PayCredential credential) {
+        ChannelResult base = of(TransportCode.SUCCESS, BusinessCode.UNKNOWN, channelReference, reason);
+        return new ChannelResult(base.status, base.channelReference, base.reason,
+                base.transportCode, base.businessCode, credential);
+    }
+
+    /** 是否携带付款凭证（非空即「渠道已受理、买家未付款」，INV-6）。 */
+    public boolean hasCredential() {
+        return credential != null;
     }
 
     /** 通信失败（含超时）→ 可重试（ADR-0012）；重试耗尽后保持本结果的 UNKNOWN 语义。 */
@@ -114,8 +148,15 @@ public record ChannelResult(Status status, String channelReference, String reaso
         return transportCode.isRetryable();
     }
 
-    /** 返回携带新 reason 的副本（重试耗尽时用它标注 {@code RETRY_EXHAUSTED}）。 */
+    /**
+     * 返回携带新 reason 的副本（重试耗尽时用它标注 {@code RETRY_EXHAUSTED}）。
+     *
+     * <p>spec 030 / FR-112：<b>MUST 保留 {@code credential}</b>——重试是同一笔渠道交互的延续，
+     * 凭证不应在改 reason 时被抹掉（抹掉会让「买家去哪儿付款」这个信息丢失，
+     * 而支付单还停在 PROCESSING 等着买家付款）。</p>
+     */
     public ChannelResult withReason(String newReason) {
-        return new ChannelResult(status, channelReference, newReason, transportCode, businessCode);
+        return new ChannelResult(status, channelReference, newReason, transportCode, businessCode,
+                credential);
     }
 }

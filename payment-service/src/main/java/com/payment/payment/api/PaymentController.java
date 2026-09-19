@@ -1,5 +1,6 @@
 package com.payment.payment.api;
 
+import com.payment.common.core.dye.DyeContext;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.payment.api.dto.PaymentResponse;
@@ -49,7 +50,10 @@ public class PaymentController {
         CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderNo(),
                 request.userId(), request.amountMinor(), request.currencyCode(),
                 request.idempotencyKey(), request.channelCode());
-        boolean defer = mockCashier.isEnabled();
+        // spec 030 / FR-167（T44）：**染色唯一消费点**。
+        // mock-cashier 语义收窄为「仅对 mock 模态生效」——沙箱**不延迟**：
+        // 延迟就不调 charge，不调 charge 就拿不到凭证，沙箱闭环直接断掉。
+        boolean defer = mockCashier.isEnabled() && !DyeContext.isSandbox();
         PaymentApplicationService.RoutedPayment routed =
                 applicationService.createPaymentIntentWithRouting(command, defer);
         Payment payment = routed.payment();
@@ -57,8 +61,14 @@ public class PaymentController {
         // 不得回显调用方请求里的原始值——请求未指定渠道时那是 null，回显既无意义、
         // 也会让收银台拿到错误渠道（演示与排障都会被误导）。
         String routedChannelCode = routed.channelCode();
-        String payUrl = defer ? buildPayUrl(payment, request.orderNo(), request.amountMinor(),
-                request.currencyCode(), routedChannelCode) : null;
+        // spec 030 / FR-114（T32）：payUrl **优先取渠道返回的付款凭证**，无凭证才回落
+        // 既有 mock 收银台链接。这样「真实渠道凭证 → 前端引导买家付款」的闭环才通：
+        // 凭证非空时 defer 通常为 false（沙箱染色下必须真调 charge 才拿得到凭证，FR-167），
+        // 但二者互不依赖——先凭证后回落的顺序保证任何组合下 payUrl 都正确。
+        String payUrl = routed.credential() != null
+                ? routed.credential().payload()
+                : (defer ? buildPayUrl(payment, request.orderNo(), request.amountMinor(),
+                request.currencyCode(), routedChannelCode) : null);
         return new CreatePaymentResponse(payment.getPaymentNo(), payment.getStatus().name(), payUrl,
                 payment.getAttemptSeq(), routedChannelCode);
     }
