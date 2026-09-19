@@ -153,7 +153,8 @@ Sync Impact Report:
 
 1. **Idempotency（幂等）**：支付、退款、结算等资金入口 MUST 有幂等键；相同幂等键的重复请求 MUST NOT 产生重复资金动作。幂等键由调用方提供，服务端持久化并唯一约束。
 2. **State Machine（状态机）**：Order / Payment / Refund / Fulfillment / Entitlement / Settlement 都 MUST 有**显式、单向**的状态机。禁止非法状态跳转；状态流转 MUST 通过集中状态转换函数，禁止散落直接 set 状态。
-3. **Eventual Consistency（最终一致）**：与外部系统（渠道、网关）的交互采用最终一致；单服务内部状态变更用本地事务保证原子；跨服务通过同步 RPC 编排和幂等重试实现最终一致，暂不引入 MQ 或跨服务异步事件。三者分层，不可混淆。
+3. **Eventual Consistency（最终一致）**：与外部系统（渠道、网关）的交互采用最终一致；单服务内部状态变更用本地事务保证原子；跨服务通过同步 RPC 编排和幂等重试实现最终一致。三者分层，不可混淆。
+   > **异步通知通道（2026-09-19 增补，[ADR-0074](../docs/adr/0074-redis-transactional-message.md#adr-0074)）**：不引入 MQ 中间件，改用已存在的 Redis（`redis:7`）Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 回查真相表）做跨服务**通知与解耦**。硬约束：① 仅用于通知，**不得承载资金事实的唯一真相**；② 消费端 MUST 幂等（at-least-once）；③ 记账链路（→ledger）维持同步；④ Redis 非数据源（全丢时系统仍正确，只是需人工重放）；⑤ **traceId MUST 跨异步边界连续**（写入信封 + 消费端恢复进 MDC）。
 4. **Retry（重试）**：对幂等的外部调用才允许自动重试，重试 MUST 有退避与上限；非幂等调用禁止盲目重试。
 5. **Duplicate Message / Callback（重复消息/回调）**：消费/处理侧 MUST 假设消息与回调会重复到达，靠幂等键 + 状态机幂等吸收，不重复入账。
 6. **Timeout（超时）**：所有外部调用 MUST 有超时；超时**不等于失败或成功**，需进入「未知状态」处理（见下条）。

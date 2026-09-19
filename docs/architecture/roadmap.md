@@ -52,18 +52,29 @@
   六场景 **22 条断言全过**——实跑并修出 5 处纯构建/单测不可见的缺陷（`channelCode` 漏改、
   YAML flow mapping 占位符、渠道码回显、下游 409 被压成 500、演示件与 demo profile），
   补记见 `docs/specs/028-channel-routing/tasks.md` T58~T63 与 CHANGELOG。
+- **`029-redis-transactional-mq` 已立项待实现（2026-09-19）**：用现有 `redis:7` 的 Streams 承载
+  **事务消息**语义（半消息 → 本地事务 → commit/rollback → 5s 回查真相表），替代 8 条「吞异常 + 靠对账兜底」
+  的同步通知链路；**不引入 RocketMQ / Kafka 等任何消息中间件**（个人项目不增组件）。
+  混合拓扑：`payment.succeeded` / `refund.result` 点对点；`order.paid` / `refund.succeeded` / `order.cancelled`
+  广播（多消费者组各自独立位点）；`fulfillment.completed` / `fulfillment.revoked` 点对点。
+  **记账三条链路（payment / refund / settlement → ledger）维持同步**。
+  顺带补齐「按订单号还原全链路」：trace 消费组订阅全部事件落 `order_event_log` + timeline API，
+  MDC 补 `bizNo` 维度，**traceId 跨异步边界连续**。
+  决策见 **ADR-0074**（`docs/adr/0074-redis-transactional-message.md`，🟡 Proposed，**Supersedes ADR-0031**）。
+  **文档已齐备**（spec/plan/tasks/acceptance），本轮只写文档未改代码。
+  实现期另开 `feature/029-redis-transactional-mq`。
 - **当前 Feature**：无进行中 Feature（`027-user-payment-limit` 立项待实现，等待 ADR-0071 核准；
   `028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`
   与 `docs/specs/028-channel-routing/spec.md`。
-- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` 立项待实现，等待 ADR-0071 核准；`028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md` 与 `docs/specs/028-channel-routing/spec.md`。
+- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` / `029-redis-transactional-mq` 立项待实现，分别等待 ADR-0071 / ADR-0074 核准；`028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`、`docs/specs/028-channel-routing/spec.md` 与 `docs/specs/029-redis-transactional-mq/spec.md`。
 - **⚠️ 已知偏离（SOP 偏离，已收口，待复盘）**：working tree 曾含**超前 roadmap 顺序（011→012→013→014）**落地的 `013-inventory-reservation` / `014-seckill-and-cache` 实质实现（catalog `Stock*` 聚合 + 三段式库存、order `OrderTimeoutScheduler` Redis ZSet 时间轮 + `SeckillResult` + 限流 + 幂等 + Lua）。代码先行、当时缺 spec/ADR，属 **ADR-0053** 记录的偏离。现已于 2026-08-31 补写 `docs/specs/013-*` / `014-*` 与 **ADR-0041~0046**（`0014-next-stage-decisions.md`）完成收口。**唯一遗留偏离**：014 的 Redis 引入**仍未经 roadmap §7「压测基线→论证引入」闸门**（ADR-0044 标注），k6 基线 + 论证证据列为 TODO。
-- **Feature 状态**：`001`~`028`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+- **Feature 状态**：`001`~`028`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现；`029` 已有完整四件套文档、**待实现**（2026-09-19 立项）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
   **非阻塞遗留**（均为「待补 Testcontainers 集成测试」，不影响功能）：`003` T016~T018（人工收敛，标记 Deferred，但代码已由 `023` 的 F2 修复实际落地——`POST /payments/{ref}/resolve` + `ResolveAuthorizationInterceptor`，003 的 tasks.md 未回头更新）；`006` T023（并发乐观锁）；`007` T013/T031/T039/T045（集成测试与最终 `/review`）。
 - **当前能力**：`./mvnw -o verify -fae` 全量 BUILD SUCCESS（15 个 Maven 子模块：3 common + 9 服务 + `mock-channel-web` + `e2e-tests` + `architecture-tests`，含 root 共 **16 个 reactor 条目**）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。**双运行模式**（宿主进程 / 容器）由 `deployment/lib-mode-guard.sh` 双向互斥守卫，端口契约 8081–8091 两模式一致。
 - **ADR 状态（2026-08-30 负责人已裁决，2026-08-31 全部落定）**：
   - ✅ **Accepted**：`0004`（0008~0011）、`0005`（0012~0015）、`0007`（0019~0021 对账）、`0010`（0029/0030/0032/0033 保持现状）、0006 的 `0017` / `0018`、0009 的 `0024`（实现=预留空函数）/ `0025`（实现=预留空函数）/ `0026`（明文 env）。
   - ❌ **Rejected**：`0016`（部分退款不做，代码已回退）。
-  - ⛔ **Not Implemented（不做 / 代码已删除或清理）**：`0027`（脱敏）、`0028`（风控）、`0031`（不使用 MQ）、`0034`~`0037`（出入站鉴权令牌）。
+  - ⛔ **Not Implemented（不做 / 代码已删除或清理）**：`0027`（脱敏）、`0028`（风控）、`0034`~`0037`（出入站鉴权令牌）。`0031`（不使用 MQ）已于 2026-09-19 **Superseded by ADR-0074**（不引 MQ 中间件，改用 Redis Streams 承载事务消息），其三条约束被原样继承。
   - 裁决总表见 `docs/adr/README.md` 与各 ADR 文档头部；裁剪落地形态见 `docs/architecture/technical-solution.md` §2.4。
 - **当前阻塞**：无 ADR 阻塞。已知遗留风险：① N1（对账事实无商户维度，可能跨商户串账）已在 ADR-0023 记录，待单独立项；② 鉴权/验签空实现带来的部署风险（payment-service 不得暴露公网、`/internal/**` 依赖网络层隔离），见 §2.4 与 `009-risk-security/spec.md` §6；③ **014 Redis 引入未经 roadmap §7 论证闸门**（ADR-0044 偏离，013/014 代码与 spec 已收口，见 ADR-0053）：k6 压测基线 + 引入论证证据待补；全栈压测（`performance/catalog-seckill-k6.js`）本环境未实跑（Docker/MySQL 不可用）。
 - **安全能力最终形态（2026-08-31）**：鉴权与验签**只保留接入点、校验为空实现**（`InternalServiceAuthInterceptor#verifyServiceToken` / `ChannelCallbackSignatureFilter#verifySignature` 恒放行）；脱敏、风控、出站令牌**代码已删除**。`009-risk-security` T013（出站令牌闭环）**整条已回退**，不再存在「开启顺序」，`docs/operations/runbook.md` §4 同步修订。
@@ -521,7 +532,7 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 - 服务独立扩缩容、发布和故障隔离。
 - 云部署路径评估。
 
-**落地情况（2026-08-30，状态 2026-09-09 核对）**：前置条件为「至少一个真实业务瓶颈或隔离需求 + 负责人确认」，因此 `010-distributed-evolution` 的**最简实现是「不拆服务，先立门禁」**——产物见 `docs/specs/010-distributed-evolution/`，决策见 `docs/adr/0010-distributed-evolution-decisions.md`（**ADR-0029~0033 已于 2026-08-30 由负责人裁决：0029/0030/0032/0033 Accepted，0031 ⛔ Not Implemented（不使用 MQ）**；本行原先残留的「Proposed 待确认」为未刷新的旧表述，2026-09-09 已订正）：
+**落地情况（2026-08-30，状态 2026-09-09 核对）**：前置条件为「至少一个真实业务瓶颈或隔离需求 + 负责人确认」，因此 `010-distributed-evolution` 的**最简实现是「不拆服务，先立门禁」**——产物见 `docs/specs/010-distributed-evolution/`，决策见 `docs/adr/0010-distributed-evolution-decisions.md`（**ADR-0029~0033 已于 2026-08-30 由负责人裁决：0029/0030/0032/0033 Accepted，0031 ⛔ Not Implemented（不使用 MQ）**；**2026-09-19 追加：0031 已被 ADR-0074 Superseded**（不引 MQ 中间件，改用 Redis Streams 承载事务消息，三条约束原样继承）；本行原先残留的「Proposed 待确认」为未刷新的旧表述，2026-09-09 已订正）：
 
 | Phase 10 范围 | 落地形态 |
 | --- | --- |

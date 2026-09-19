@@ -6,6 +6,26 @@
 
 ---
 
+## [2026-09-19] spec 029 立项：Redis 事务消息通道（仅文档）
+
+**范围**：跨服务异步解耦方案定稿（**ADR-0074**，Supersedes ADR-0031「不使用 MQ」）+ spec 029 四件套。
+本轮**只写文档，不改代码**；实现期另开 `feature/029-redis-transactional-mq`。
+
+- **通道形态**：用现有 `redis:7` 的 Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 5s 回查真相表），
+  **不引入 RocketMQ / Kafka 等任何消息中间件**（个人项目不增组件）。
+- **改造范围**：8 条通知链路（`payment.succeeded` / `refund.result` 点对点；`order.paid` / `refund.succeeded` /
+  `order.cancelled` 广播；`fulfillment.completed` / `fulfillment.revoked` 点对点）。
+  **记账三条链路（payment / refund / settlement → ledger）维持同步**——借贷平衡审计对顺序敏感且有 T+1 兜底。
+- **拓扑取舍**：广播点画在 `order.paid` 而非 `payment.succeeded`，因 `order_items` 是明细单一事实源（ADR-0066）
+  且 surplus 判定在 order 的 transaction 层。
+- **补齐缺口**：trace 消费组订阅全部事件落 `order_event_log` + `GET /api/orders/{orderNo}/timeline`，
+  实现「按订单号还原全链路状态变迁」；MDC 补 `bizNo` 维度，**traceId 跨异步边界连续**（ADR-0074 D14）。
+- **容灾**：Redis 补 `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction` + 数据卷（当前无持久化）。
+- **命名规则变更**：新建 ADR 文件的文件名前缀改为「文件内首个 ADR 的编号」（如 `0074-redis-transactional-message.md`
+  承载 ADR-0074），消除双编号心智负担；历史 0001~0034 保持不动以免全库断链。
+
+---
+
 ## [2026-09-16] v2.0.0 发布（tag `v2.0.0`）
 
 **范围**：自 v1.0.0（2026-09-07）以来 124 个提交 —— spec 018 / 019 / 020 / 021 / 022 / 023 / 026 落地，

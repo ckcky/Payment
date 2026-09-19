@@ -33,9 +33,12 @@
 | [0032](0032-user-payment-limit.md) | 用户支付限额——日月年周期额度与两阶段预占（ADR-0071） | 🟡 **Proposed**（2026-09-16 提出；D1~D13 已确认，待实现） | spec 027；三表模型（`user_payment_limits` / `user_limit_usage` / `limit_operations`）+ 两阶段预占（RESERVE → CONFIRM / RELEASE）+ 三道闸门（状态机终态吸收 / 幂等流水 UK / 以 payment 为事实源的补偿扫描）；与 ADR-0028「最小风控」切割（风控 ⛔ 不做，限额属业务合规能力）；在途占用 TTL=900s（D11，Redis 惰性回收，零调度器）+ 软超限口径（D12，新支出硬约束 / 已发生事实软记账）+ 允许 payment 使用 Redis（D13，**ADR-0044「payment 不用 Redis」的显式例外**，仅限 TTL 标记、不做计数） |
 | [0033](0033-two-layer-channel-architecture.md) | payment-service 两层结构：payment 支付层 / channelAttempt 渠道层（ADR-0072） | ✅ **Accepted → Implemented**（2026-09-16 裁决接受并随 spec 028 落地） | spec 028；确立两层**各拥自己的聚合与表写入口**（`payments` 只由 payment 层写、`payment_attempts` 只由渠道层写，写入口经 `ChannelAttemptRecorder` 端口）；`PaymentChannel` 补 `channelCode()` 渠道身份；渠道实现族＝抽象基类 `AbstractMockChannelAdapter` + Alipay/Wechat/Douyin/Mock 四实现；**退款 attempt 渠道取自原始支付记录**（消除 `PaymentRefundService` 硬编码 `"mock"`）；**分层 ≠ 拆事务**（两层共享本地事务）；ArchUnit INV-4/INV-5 门禁；明确不做：拆微服务 / 拆数据源 / 拆事务边界 |
 | [0034](0034-channel-routing.md) | 支付渠道路由：注册表 + 规则化确定性选路（ADR-0073） | ✅ **Accepted → Implemented**（2026-09-16 裁决接受并随 spec 028 落地） | spec 028；**依赖 ADR-0072 的渠道身份**（渠道没有身份，注册表没有 key 可挂）；`ChannelRegistry` / `ChannelRouter` 落 `application/channel` 层（守 `Payment ≠ Channel`）、`channelCode` 变可选且**显式优先**（保 INV-2）、**确定性选路**（禁随机/计数器，保幂等键稳定）、**前向选路与反向按记录解析严格分离**（退款/重试/查询禁止重新路由）；配置化 `enabled + priority` + 静态 `availability` 桩（不读 Resilience4j）；启动强校验不静默降级（`FR-032`）；只读端点 `GET /internal/channels` 与 `/internal/channels/route-preview`；**Supersedes spec 015 §8 第 1 条「不做注册表」**；明确不做：自动降级 failover（**与 INV-2 互斥**）/ 智能路由（无数据源）/ 多商户号 / 渠道真实探活 / 改枚举 |
+| [0074](0074-redis-transactional-message.md) | Redis 事务消息通道：Streams + 半消息协议（prepare → 本地事务 → commit/rollback → 回查）承载跨服务异步解耦（ADR-0074） | 🟡 **Proposed**（2026-09-19 提出并拍板；本轮只写文档，实现待 spec 029 开工） | spec 029；**Supersedes ADR-0031「不使用 MQ」**（以「Redis 不是 MQ 组件」满足其解耦证据要求，三条约束原样继承）；拓扑＝混合（`payment.succeeded` 点对点 / `order.paid`·`refund.succeeded`·`order.cancelled` 广播 / `fulfillment.completed` 点对点）；广播点画在 `order.paid`（ADR-0066 事实源）；消费语义 at-least-once + 消费端幂等；**记账三条链路维持同步**；trace 消费组落 `order_event_log` 供按订单号还原；明确不做：MQ 中间件 / Redisson / 延迟消息 / 严格一次 / 消息控制台 |
 
-## ADR 编号速查（0001–0073）
+## ADR 编号速查（0001–0074）
 
+| 编号 | 决策标题 | 承载文件 |
+|---|---|---|
 | [0054](0016-core-payment-correctness.md#adr-0054) | 核心支付正确性约束（确认性纪录） | 0016 |
 | [0055](0017-entry-and-infra-decisions.md#adr-0055) | 支付意图幂等键由 order-service 生成 | 0017 |
 | [0056](0017-entry-and-infra-decisions.md#adr-0056) | Nacos 启用（落实 ADR-0002，撤销「暂不启用」偏离，见 ADR-0059） | 0017 |
@@ -57,6 +60,7 @@
 | 0071 | 用户支付限额：日月年周期额度（daily / monthly / yearly 三档）+ 两阶段预占（RESERVE → CONFIRM / RELEASE）+ 三表模型 + 三道闸门；在途占用 TTL（Redis 惰性回收）+ 软超限口径 + payment 使用 Redis 例外（D11~D13）；与 ADR-0028「最小风控」切割（🟡 Proposed，2026-09-16 提出，D1~D13 已确认） | [0032](0032-user-payment-limit.md) |
 | [0072](0033-two-layer-channel-architecture.md#adr-0072) | payment-service 两层结构：payment 支付层 / channelAttempt 渠道层；表归属与写入口分离（`payments` 归 payment 层、`payment_attempts` 归渠道层）；`PaymentChannel` 补渠道身份 `channelCode()`；渠道实现族＝抽象基类 + 三渠道；退款 attempt 渠道取自原始支付记录（消除硬编码 `"mock"`）；分层 ≠ 拆事务（🟡 Proposed，2026-09-16 提出，待负责人确认） | 0033 |
 | [0073](0034-channel-routing.md#adr-0073) | 支付渠道路由：`ChannelRegistry` + `ChannelRouter`（`application/channel` 层端口）+ 三渠道 Adapter；`channelCode` 可选且显式优先；确定性选路；**前向选路与反向按记录解析分离**（退款禁重新路由）；配置化 enabled+priority + 静态 availability 桩；启动强校验；Supersedes spec 015 §8「不做注册表」（🟡 Proposed，2026-09-16 提出，待负责人确认） | 0034 |
+| [0074](0074-redis-transactional-message.md#adr-0074) | Redis 事务消息通道：Redis Streams + 半消息（prepare/commit/rollback + 5s 回查真相表）承载 8 条跨服务通知；混合拓扑（事实类广播、动作类点对点）；`blockMs=2000` 短阻塞避 Lettuce 池独占；DLQ + XAUTOCLAIM 接管；Redis 补 AOF + 数据卷 + noeviction；payment/fulfillment/entitlement 新增 Redis 依赖（payment 为 ADR-0044/G7 显式例外）（🟡 Proposed，2026-09-19 提出并拍板，待实现） | 0074 |
 
 > 决策 #2 落地：保留 33 个编号 ADR 文件不动，此处建立「ADR 编号 → 承载文件 → 锚点」跳转表，便于从任意编号直达正文。编号链接指向文件内 `<a id="adr-XXXX">` 锚点。
 
@@ -119,7 +123,9 @@
 ## 编号规则
 
 - 编号**只增不改、不复用**；一个 ADR 文档可容纳同一 Feature 的多条决策标签（如 0006 含 0016~0018 与 0047）。
-- **下一可用编号：ADR-0074**（ADR-0070 = 本地全栈容器化，见 `0031-containerized-local-stack.md`；ADR-0071 = 用户支付限额，见 `0032-user-payment-limit.md`；ADR-0072 = payment-service 两层结构，见 `0033-two-layer-channel-architecture.md`；ADR-0073 = 支付渠道路由，见 `0034-channel-routing.md`。⚠️ 0071 若 spec 027 被否决、0072/0073 若 spec 028 被否决或改号，此处水位随之回退）。
+- ✅ **文件命名规则（2026-09-19 起生效）**：**新建 ADR 文件的文件名前缀 = 该文件内第一个 ADR 的编号**——如 `0074-redis-transactional-message.md` 承载 ADR-0074。此举消除「目录序号 ↔ ADR 编号」的双编号心智负担（历史上 0031↔0070、0032↔0071、0033↔0072、0034↔0073 偏移不固定，必须查表才能对应）。
+  > **历史文件（0001~0034）保持原目录序号前缀不动**——统一重命名会波及 README 两张表、`traceability.md`、各 spec 与 systems 文档的全部引用，断链风险高。若日后决定统一，须一次性同步全库引用，不得逐个改。
+- **下一可用编号：ADR-0075**（ADR-0071 = 用户支付限额，见 `0032-user-payment-limit.md`；ADR-0072 = payment-service 两层结构，见 `0033-two-layer-channel-architecture.md`；ADR-0073 = 支付渠道路由，见 `0034-channel-routing.md`；ADR-0074 = Redis 事务消息通道，见 `0074-redis-transactional-message.md`。⚠️ 0071 若 spec 027 被否决、0072/0073 若 spec 028 被否决或改号、0074 若 spec 029 被否决，此处水位随之回退）。
 - ⚠️ **编号冲突备案（2026-09-06）**：`0016-core-payment-correctness.md` 与 `0025-order-payment-orchestration.md` **同时使用了 ADR-0054**（前者为确认性纪录「核心支付正确性约束」，后者为 016 编排职责归位）。速查表两行并存，引用时以「文件名 + 标题」消歧；后续如重排编号需全库同步引用（spec 016 / AGENTS.md / systems 文档多处引用 0025 的 ADR-0054，改动成本高，暂保持现状）。
 - ✅ **ADR-0038~0046 号段已全部落文（无空号）**，均收录于 `0014-next-stage-decisions.md`：
   - **0038**（演示形态）→ **Superseded by ADR-0048**（议题由 0048 处理，结论一致：做 `mock-channel-web` 收银台组件）；

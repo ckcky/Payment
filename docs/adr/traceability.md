@@ -26,6 +26,7 @@
 | ADR-0070 | 本地全栈容器化：Compose 编排 10 服务 + 双轨并存（宿主/容器）+ 宿主打 jar 镜像只 COPY | technical-solution §6（实施与部署策略之「双模式运行」）、deployment/README.md、runbook（🟢 Accepted / Implemented，2026-09-15；Supersedes ADR-0057） |
 | ADR-0072 | payment-service 两层结构（payment 支付层 / channelAttempt 渠道层）：表归属与写入口分离 | technical-solution §3.1.1（领域模型 + 两层说明）、§4.2（基数修订）、§4.3（链路时序）；payment-service.md §1.1、§2.1.1、§4.3（🟡 Proposed，实现期落地） |
 | ADR-0073 | 支付渠道路由：注册表 + 规则化确定性选路；前向选路与反向按记录解析严格分离 | payment-service.md §2.1.1、§3.2（channelCode 可选 + `ChannelRegistry`/`ChannelRouter`；🟡 Proposed，实现期落地） |
+| ADR-0074 | Redis 事务消息通道：Streams + 半消息协议（prepare → 本地事务 → commit/rollback → 5s 回查真相表）承载跨服务异步解耦；混合拓扑（事实类广播 / 动作类点对点）；traceId 跨异步边界连续；trace 消费组落 `order_event_log` | technical-solution §2.3（消息通道）、§4（链路时序改事件驱动）、§5（不引入 MQ 的例外清单）；order-service.md / payment-service.md / fulfillment-service.md / catalog-service.md / entitlement-service.md 各自的「生产·消费事件清单」（🟡 Proposed，2026-09-19 拍板，待实现） |
 
 ## 2. P1 决策索引（集中列出，避免散落漂移）
 

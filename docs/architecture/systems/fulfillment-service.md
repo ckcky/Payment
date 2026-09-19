@@ -149,6 +149,22 @@ PENDING --cancel--> CANCELLED
 
 ---
 
+### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
+
+| 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
+|---|---|---|---|---|
+| 消费 | `order.paid` | ← order | 广播组之一 | §3.1 支付成功触发履约的内部 RPC |
+| 消费 | `refund.succeeded` | ← order | 广播组之一 | 退款终止 / 撤销履约 |
+| 消费 | `order.cancelled` | ← order | 广播组之一 | 关单撤单（新增能力） |
+| 生产 | `fulfillment.completed` | entitlement | 点对点 | §3.3 出站 RPC（fulfillment → entitlement） |
+| 生产 | `fulfillment.revoked` | entitlement | 点对点 | 同上（退款回收权益） |
+
+**回查依据**：`fulfillment.completed` → `fulfillments` 是否 `DELIVERED`。
+
+**链路延续**：消费 `order.paid` 后若再生产 `fulfillment.completed`，**必须继承信封中的原始 traceId**（ADR-0074 D14），否则一笔订单的日志会被切成两截。
+
+**order 不直调 entitlement**：权益仍经 fulfillment → entitlement 既定链，本服务是权益的唯一下游触发方。
+
 ## 4. 关键流程链路剖析
 
 ### 4.1 接收支付成功并履约
