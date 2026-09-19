@@ -87,15 +87,15 @@
 
 ## Phase 6 —— 反向路径自足性（**查询 / 退款 / 超时扫描**）
 
-- [ ] **T60** 改 `payment-service/.../application/reliability/ChannelQueryService.java:95-96`：查询请求传 **`attempt.getChannelReference()`**（修 C-12 / S21）[FR-270]
-- [ ] **T61** 改 `.../application/reliability/ChannelQueryService.java`：渠道调用包裹在 `DyeContext.runWith(attempt.getChannelMode(), ...)` 内 [FR-271][FR-153]
-- [ ] **T62** 改 `.../application/reliability/ChannelQueryService.java:116-132`：`resolveRecordedChannel` 加**确定性排序**（修 S22 的无 `ORDER BY` `findFirst`）；**同时**解析 `channel_code` **列**与 `extra_json` 的 `channelMode` 键 [FR-272][FR-154]
-- [ ] **T63** 确认 `resolveRecordedChannel` **不回落默认渠道**（找不到即 `INTERNAL_ERROR`，不污染别的渠道事实）[FR-273]
-- [ ] **T64** 改 `payment-service/.../application/PaymentRefundService.java`：退款调用包裹在模态内 [FR-153]
-- [ ] **T65** 确认 `refund` 的**重试也在模态包裹内**（`DyeContext.runWith(...)`），**MUST NOT** 丢失模态 [FR-263]
-- [ ] **T66** 确认 `payment-service/.../application/reliability/TimeoutScanner.java` **未改动**：扫描对象仍**仅** `PROCESSING`；**MUST NOT** 改为扫 `UNKNOWN`；**MUST NOT** 写 `FAILED` [FR-280][FR-282][INV-9]
-- [ ] **T67** 改 `payment-service/.../application/PaymentUnknownResolutionService.java`：补 `payment.unknown_age` **分桶**指标（**只加指标、不加自动动作**；分级阈值属 H5 裁决）[FR-257]
-- [ ] **T68** 断言反向路径**未调用** `ChannelRouter`（渠道仍取自 attempt 记录）[INV-4][FR-121][SC-A-12]
+- [x] **T60** 改 `payment-service/.../application/reliability/ChannelQueryService.java:95-96`：查询请求传 **`attempt.getChannelReference()`**（修 C-12 / S21）[FR-270]
+- [x] **T61** 改 `.../application/reliability/ChannelQueryService.java`：渠道调用包裹在 `DyeContext.runWith(attempt.getChannelMode(), ...)` 内 [FR-271][FR-153]
+- [x] **T62** 改 `.../application/reliability/ChannelQueryService.java:116-132`：`resolveRecordedChannel` 加**确定性排序**（修 S22 的无 `ORDER BY` `findFirst`）；**同时**解析 `channel_code` **列**与 `extra_json` 的 `channelMode` 键 [FR-272][FR-154]
+- [x] **T63** 确认 `resolveRecordedChannel` **不回落默认渠道**（找不到即 `INTERNAL_ERROR`，不污染别的渠道事实）[FR-273]
+- [x] **T64** 改 `payment-service/.../application/PaymentRefundService.java`：退款调用包裹在模态内 [FR-153]
+- [x] **T65** 确认 `refund` 的**重试也在模态包裹内**（`DyeContext.runWith(...)`），**MUST NOT** 丢失模态 [FR-263]
+- [x] **T66** 确认 `payment-service/.../application/reliability/TimeoutScanner.java` **未改动**：扫描对象仍**仅** `PROCESSING`；**MUST NOT** 改为扫 `UNKNOWN`；**MUST NOT** 写 `FAILED` [FR-280][FR-282][INV-9]
+- [x] **T67** 改 `payment-service/.../application/PaymentUnknownResolutionService.java`：补 `payment.unknown_age` **分桶**指标（**只加指标、不加自动动作**；分级阈值属 H5 裁决）[FR-257]
+- [x] **T68** 断言反向路径**未调用** `ChannelRouter`（渠道仍取自 attempt 记录）[INV-4][FR-121][SC-A-12]
 
 ## Phase 7 —— 支付宝沙箱适配器 + Gateway + SDK
 
