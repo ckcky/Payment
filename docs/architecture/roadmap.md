@@ -30,13 +30,19 @@
   但严格遵守 ADR-0031 / 010 的「引入分布式基础设施须走闸门」约定——用 Compose 而非 K8s。
   **测试基线**：`./mvnw -o verify -fae` 全绿；`e2e-tests` 容器模式 24/25（唯一红为已知
   `MISSING_POSTING` 本地代理伪影，CI 环境为准）；`demo/run-all.sh` 双模式均退出码 0。
-- **`027-user-payment-limit` 已立项待实现（2026-09-16）**：用户支付限额——日 / 月 / 年
+- **`027-user-payment-limit` 已实现（2026-09-16）**：用户支付限额——日 / 月 / 年
   三档周期额度 + 两阶段预占（`RESERVE → CONFIRM / RELEASE`）+ 三表模型
-  （`user_payment_limits` / `user_limit_usage` / `limit_operations`）+ 三道幂等闸门；
-  在途占用 TTL（Redis 惰性回收）+ 软超限口径 + payment 使用 Redis 例外。
-  决策见 **ADR-0071**（`docs/adr/0032-user-payment-limit.md`，🟡 Proposed，D1~D13 已确认）。
-  **文档已齐备**（spec/plan/tasks/acceptance），**实现待负责人核准后开工**，本轮只写文档未改代码。
-  实现期另开 `feature/027-user-payment-limit`。
+  （`user_payment_limits` / `user_limit_usage` / `limit_operations`，UK = `(biz_no, op_type, period)`）
+  + 三道幂等闸门（状态机终态吸收 / 唯一键流水 / 补偿扫描）；
+  在途占用 TTL（Redis 惰性回收 `LimitPendingRecycler`）+ 软超限口径（新支出硬约束、已发生事实软记账）
+  + payment 使用 Redis 例外（仅作过期索引，不做计数）。
+  决策见 **ADR-0071**（`docs/adr/0032-user-payment-limit.md`，🟢 Accepted）。
+  交付：`deployment/schema/027-user-payment-limit.sql` + payment `limit` 子域
+  （domain / infra.persistence / application / web）+ `POST /internal/limits/**` 内部端点
+  + `deployment/demo/scenario-limit.sh` + demo 额度卡与 `/demo/trace` 限额分组
+  + `LIMIT_EXCEEDED`(409) 错误码。
+  **实现期修正**：`limit_operations` 唯一键由 `(biz_no, op_type)` 改为 `(biz_no, op_type, period)`
+  —— 原键会使 MONTH/YEAR 档在 DAY 首次 RESERVE 后静默失效（同付单跨三周期需各留一条流水）。
 - **`028-channel-routing` 已实现并完成 live 验证（2026-09-08）**：payment-service 两层结构重构
   （payment 支付层 / channelAttempt 渠道层，ADR-0072）+ 支付渠道路由
   （注册表 + 规则化确定性选路，ADR-0073），两份 ADR 已由 🟡 Proposed 转 ✅ Accepted。

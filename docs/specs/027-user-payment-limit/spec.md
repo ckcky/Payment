@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS limit_operations (
     expires_at DATETIME NULL COMMENT '仅 RESERVE 有值：在途占用到期时刻（FR-036），其余类型为 NULL',
     created_at DATETIME NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_limitop_biz_type (biz_no, op_type),
+    UNIQUE KEY uk_limitop_biz_type (biz_no, op_type, period),
     KEY idx_limitop_user_type (user_id, op_type),
     KEY idx_limitop_expiry (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='额度操作流水；UK 是幂等的数据库级兜底（INV-4）';
@@ -202,7 +202,8 @@ CREATE TABLE IF NOT EXISTS limit_operations (
 
   > **两个索引的分工**：`idx_limitop_user_type` 服务于**惰性回收**（FR-038 第 1 步，按用户查未结算在途，日常路径）；`idx_limitop_expiry` 仅服务于**运维兜底与审计**（FR-043），日常判定不依赖。
 
-  > `UK(biz_no, op_type)` 是本模型的**幂等核心**：一张支付单的每种操作只允许一条流水。撞键 = 已执行过，跳过。
+  > `UK(biz_no, op_type, period)` 是本模型的**幂等核心**：一张支付单在**每个周期**的每种操作只允许一条流水。撞键 = 该周期上已执行过，跳过。
+  > **`period` 是 UK 的必要组成部分**：一笔支付同时预占日 / 月 / 年三个周期，若 UK 不含 `period`，DAY 的 `RESERVE` 会把 MONTH / YEAR 一并判为「已执行」，后两个周期根本不会被占用（限额静默失效）。
   > `EXPIRED` 与 `CONFIRM` / `RELEASE` 互斥地占用同一 `biz_no` 的「结算位」——三者在扫描 SQL 的 `NOT EXISTS` 中并列（FR-038），任一存在即不再处理。
 
 - **FR-004** 全部金额一律 `BIGINT` 最小货币单位（ADR-0010），**禁止 `float` / `double`**。
@@ -232,7 +233,8 @@ CREATE TABLE IF NOT EXISTS limit_operations (
 ### 5.3 幂等与补偿（三道闸门，INV-4）
 
 - **FR-014** **第一道 — 状态机终态吸收**：额度结算 MUST 挂在 `PaymentResultApplier.apply` 返回 `changed=true` 之后。重复/乱序回调返回 `changed=false` → 不触发任何额度操作。
-- **FR-015** **第二道 — 幂等流水**：每次 `RESERVE` / `CONFIRM` / `RELEASE` MUST 先写 `limit_operations`，撞 `uk_limitop_biz_type` 即判定已执行并**跳过金额变更**（不得抛异常中断主流程）。
+- **FR-015** **第二道 — 幂等流水**：每次 `RESERVE` / `CONFIRM` / `RELEASE` MUST 先写 `limit_operations`，撞 `uk_limitop_biz_type`（= `biz_no + op_type + period`）即判定已执行并**跳过金额变更**（不得抛异常中断主流程）。
+  - 实施修正（2026-09-16）：初稿的 UK 只有 `(biz_no, op_type)`，与「三周期各自独立判定」（FR-010）矛盾——第一个周期（DAY）插入的 `RESERVE` 会让后两周期的同类插入全部撞键、被误判为「已执行」，**月 / 年额度永远不会被占用**（限额静默失效，且单测用单周期配置时完全看不出来）。UK 补入 `period` 后与周期模型严格对应。
 - **FR-016** **第三道 — 补偿扫描**：新增 `LimitSettlementScanner`（复用既有 Scheduler 模式，不引入调度框架），按固定间隔扫描：
 
   ```sql
@@ -334,7 +336,7 @@ CREATE TABLE IF NOT EXISTS limit_operations (
 
   1. 查该用户**未结算**的 `RESERVE` 流水（`op_type='RESERVE'` 且同 `biz_no` 无 `CONFIRM`/`RELEASE`/`EXPIRED`），走 `idx_limitop_user_type`；单用户在途通常 0~几条，成本可忽略；
   2. 对这批 `paymentNo` 批量判存（一次 `MGET` / pipeline）：Redis 中**不存在**即视为已过期；
-  3. 判定过期的，在同一短事务内插 `(paymentNo, EXPIRED)` 流水 + `pending_minor = GREATEST(0, pending_minor - ?)`（INV-7）；撞 `uk_limitop_biz_type` 即跳过（FR-015 天然幂等）。
+  3. 判定过期的，在同一短事务内插 `(paymentNo, EXPIRED, period)` 流水 + `pending_minor = GREATEST(0, pending_minor - ?)`（INV-7）；撞 `uk_limitop_biz_type` 即跳过（FR-015 天然幂等）。
 
   回收完成后**再**执行 FR-006 的超限判定，保证过期的在途不会误伤本人。
 

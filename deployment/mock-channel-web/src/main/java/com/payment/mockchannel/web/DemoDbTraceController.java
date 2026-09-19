@@ -109,6 +109,25 @@ public class DemoDbTraceController {
         List<Map<String, Object>> refunds = query(sections, "payment-service", "refunds",
                 "SELECT * FROM payment.refunds WHERE order_no = ?", new Object[]{orderNo}, "退款单");
         List<Object> refundNos = ids(refunds, "refund_no");
+
+        // ④-b 用户限额（spec 027 / ADR-0071）：usage 按 userId 查、operations 按 paymentNo 查。
+        //     paymentNo 与 orders.user_id 均取自上面已查得的订单事实，无需改签名。
+        query(sections, "payment-service", "user_limit_usage",
+                "SELECT * FROM payment.user_limit_usage WHERE user_id = ? ORDER BY period",
+                new Object[]{order.get("user_id")}, "额度累计（used / pending）");
+        query(sections, "payment-service", "user_payment_limits",
+                "SELECT * FROM payment.user_payment_limits WHERE user_id = ?",
+                new Object[]{order.get("user_id")}, "额度配置");
+        if (paymentNos.isEmpty()) {
+            sections.add(emptySection("payment-service", "limit_operations",
+                    "（该订单尚无支付单 —— 无额度流水，下单未支付不占额度）", "额度操作流水"));
+        } else {
+            query(sections, "payment-service", "limit_operations",
+                    "SELECT * FROM payment.limit_operations WHERE biz_no IN (" + placeholders(paymentNos)
+                            + ") ORDER BY id",
+                    paymentNos.toArray(), "额度操作流水");
+        }
+
         query(sections, "fulfillment-service", "fulfillments",
                 "SELECT * FROM fulfillment.fulfillments WHERE order_no = ?", new Object[]{orderNo}, "履约记录（按订单明细）");
         query(sections, "entitlement-service", "entitlements",

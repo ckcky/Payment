@@ -16,8 +16,8 @@ spring:
         config:
           default:
             # 出站 RPC 超时：connect/read 各 1s（ADR-0012 超时口径，全服务统一）
-            connect-timeout: 1000
-            read-timeout: 1000
+            connect-timeout: ${PAYMENT_FEIGN_CONNECT_TIMEOUT_MS:1000}
+            read-timeout: ${PAYMENT_FEIGN_READ_TIMEOUT_MS:1000}
       # 熔断：为所有 Feign 客户端包裹 circuit breaker（依赖 spring-cloud-starter-circuitbreaker-resilience4j）
       circuitbreaker:
         enabled: true
@@ -66,6 +66,23 @@ payment:
     # 留空 = 全部按 UP 处理；演示期可用 POST /internal/channels/{code}/status 覆盖（仅 demo profile）。
     # 注意：不复用 Resilience4j CircuitBreaker 状态（D6 / S11）。
     availability: {}
+  # 用户支付限额（spec 027 / ADR-0071）
+  limit:
+    # 灰度开关：false = 建单路径完全跳过限额，行为与引入限额之前逐字节一致（FR-024）。
+    # 「限额误伤既有链路」的第一道保险——一键退回今天的行为。
+    enabled: ${PAYMENT_LIMIT_ENABLED:true}
+    # 在途占用 TTL（D11/D13）。写 Redis key 的过期时间；到期即视为可释放（惰性回收）。
+    # ⚠️ 下界 105s = payment.reliability.timeout(30s) + query-max-attempts(5) × query-interval-ms(15s)，
+    #    低于它就会释放一笔正在被主动查询收敛的支付。配置低于下界时启动期 fail-fast。
+    # ⚠️ 需与 order.timeout.ttl-seconds 人工保持一致（订单超时已释放库存，再占额度无意义）——
+    #    跨服务配置无法自动校验，见 docs/operations/runbook.md 的告警条目。
+    reserve-ttl: ${PAYMENT_LIMIT_RESERVE_TTL:900s}
+    # 补偿扫描间隔（FR-016）：扫「payment 已终态但只有 RESERVE」的记录补结算，跳过 UNKNOWN（FR-017）。
+    compensation-interval-ms: ${PAYMENT_LIMIT_COMPENSATION_INTERVAL_MS:30000}
+    redis:
+      # 在途标记的 key 前缀；最终 key 形如 limit:pending:PM123...
+      # ⚠️ Redis 只作过期索引，**绝不**参与 used/pending 的权威计算（INV-9.1）。
+      key-prefix: "${PAYMENT_LIMIT_REDIS_KEY_PREFIX:limit:pending:}"
   # 出站 RPC 弹性参数（仅对幂等 sink 调用生效）
   fulfillment:
     retry:

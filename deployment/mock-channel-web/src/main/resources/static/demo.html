@@ -61,6 +61,25 @@
               <span class="pa-kv"><label>merchantId</label><input id="merchantId" value="1" style="width:72px"></span>
               <button class="pa-btn ghost pa-btn--sm" onclick="loadSkus()">刷新 SKU</button>
             </div>
+
+            <!-- spec 027 / ADR-0071 FR-029：用户限额（日/月/年，元 → 提交前转分） -->
+            <div class="pa-disc" style="margin-top:16px">
+              <button class="pa-disc__head" type="button"><span class="caret">›</span><span>用户限额（spec 027）</span><span class="cnt">日月年 · RESERVE 硬拒绝</span></button>
+              <div class="pa-disc__body"><div>
+                <div class="pa-note" style="padding:4px 12px 8px">留空 = 该周期不限额（查不到配置即不约束，FR-012/D8）。预占发生在建支付单时：超限 → 409 <span class="pa-mono">LIMIT_EXCEEDED</span> 且支付单<b>不创建</b>。</div>
+                <div class="pa-row">
+                  <span class="pa-kv"><label>日限额（元）</label><input type="number" id="limDay" placeholder="不限" step="0.01" min="0" style="width:96px"></span>
+                  <span class="pa-kv"><label>月限额（元）</label><input type="number" id="limMonth" placeholder="不限" step="0.01" min="0" style="width:96px"></span>
+                  <span class="pa-kv"><label>年限额（元）</label><input type="number" id="limYear" placeholder="不限" step="0.01" min="0" style="width:96px"></span>
+                </div>
+                <div class="pa-row" style="margin-top:12px">
+                  <button class="pa-btn" onclick="setLimit()">设置限额</button>
+                  <button class="pa-btn ghost" onclick="demoOverrun()">一键演示超限</button>
+                  <button class="pa-btn ghost" onclick="clearLimit()">清除限额</button>
+                </div>
+                <div class="pa-note" id="limitHint" style="margin-top:8px">默认不限额（FR-025：seed 不为 demo-user 播种限额，避免打断既有演示与 E2E）。</div>
+              </div></div>
+            </div>
           </div>
         </div>
 
@@ -144,6 +163,18 @@
           </div>
         </div>
 
+        <div class="pa-card" id="limitCard">
+          <h3>用户限额 <span class="pa-mono" id="limitUser" style="font-size:12px;font-weight:400;color:var(--pa-ink-3)">demo-user</span></h3>
+          <div class="pa-note" style="margin-top:4px">实心 = 已确认 <span class="pa-mono">used</span>，半透明 = 在途 <span class="pa-mono">pending</span>（spec 027 / ADR-0071）。未配置则不限额。</div>
+          <div id="limitBars" style="margin-top:10px"><div class="pa-note">（尚未加载 —— 下单或点「立即刷新」后拉取）</div></div>
+          <div id="limitOps" style="margin-top:10px"></div>
+          <div id="limitOverrun"></div>
+          <div class="pa-row" style="margin-top:12px">
+            <button class="pa-btn ghost pa-btn--sm" onclick="loadLimit()">刷新限额</button>
+            <span id="limitHintSide" style="font-size:12px;color:var(--pa-ink-3)"></span>
+          </div>
+        </div>
+
         <div class="pa-card">
           <h3>退款</h3>
           <div style="margin-top:8px">
@@ -185,7 +216,8 @@ const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED
 /* ---- 全链路 DB：9 张表按 5 个域分组（默认折叠，组头显示行数）---- */
 const DOMAINS = [
   { name: '订单与交易', match: (s) => s.system === 'order-service' && !/refund/.test(s.table) },
-  { name: '支付',       match: (s) => s.system === 'payment-service' && !/refund/.test(s.table) },
+  { name: '支付',       match: (s) => s.system === 'payment-service' && !/refund/.test(s.table) && !/limit/.test(s.table) },
+  { name: '用户限额',   match: (s) => /limit/.test(s.table) },
   { name: '退款',       match: (s) => /refund/.test(s.table) },
   { name: '履约与权益', match: (s) => s.system === 'fulfillment-service' || s.system === 'entitlement-service' },
   { name: '结算 · 对账 · 账本', match: (s) => ['settlement-service', 'reconciliation-service', 'ledger-service'].indexOf(s.system) >= 0 }
@@ -279,6 +311,14 @@ async function placeOrder(skuId) {
   log('>> POST /proxy/order/orders/' + currentOrderNo + '/payments  {"channelCode":"MOCK"}');
   const pr = await api('POST', '/order/orders/' + encodeURIComponent(currentOrderNo) + '/payments', { channelCode: 'MOCK' });
   log('<< HTTP ' + pr.status + '  ' + JSON.stringify(pr.data));
+  loadLimit();   // spec 027：建支付单即发生 RESERVE，额度卡需同步
+  if (pr.status === 409 && pr.data && pr.data.code === 'LIMIT_EXCEEDED') {
+    const msg = (pr.data.message || '已超出限额');
+    log('   ✗ 超限拒绝（409 LIMIT_EXCEEDED）：' + msg + ' —— 支付单未创建，订单保持 PENDING_PAYMENT（INV-3）');
+    PA.toast('超限拒绝：' + msg, 'bad');
+    startPoll();
+    return;
+  }
   if (pr.status !== 201 || !pr.data || !pr.data.paymentNo) {
     PA.toast('创建支付单失败：HTTP ' + pr.status, 'bad');
     startPoll();
@@ -389,6 +429,155 @@ function renderSvcLights(sections) {
   box.innerHTML = SERVICE_ORDER.map(sys =>
     '<span class="' + (on[sys] ? 'is-on' : '') + '">' + esc(sys.replace('-service', '')) + '</span>').join('');
 }
+
+/* ---- 用户限额（spec 027 / ADR-0071）：日/月/年三条进度条 + 最近流水 ---- */
+const PERIODS = ['DAY', 'MONTH', 'YEAR'];
+const PERIOD_CN = { DAY: '日', MONTH: '月', YEAR: '年' };
+let lastLimit = null;
+
+function yuanToMinor(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (s === '') return null;
+  const n = Number(s);
+  if (!isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
+async function setLimit() {
+  const userId = document.getElementById('userId').value || 'demo-user';
+  const payload = {
+    currencyCode: 'CNY',
+    dailyLimitMinor: yuanToMinor(document.getElementById('limDay').value),
+    monthlyLimitMinor: yuanToMinor(document.getElementById('limMonth').value),
+    yearlyLimitMinor: yuanToMinor(document.getElementById('limYear').value)
+  };
+  log('>> PUT /proxy/payment/internal/limits/users/' + userId + '  ' + JSON.stringify(payload));
+  const r = await api('PUT', '/payment/internal/limits/users/' + encodeURIComponent(userId), payload);
+  log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
+  if (r.status !== 200 && r.status !== 201) { PA.toast('设置限额失败：HTTP ' + r.status, 'bad'); return; }
+  PA.toast('限额已设置', 'ok');
+  await loadLimit();
+}
+
+async function clearLimit() {
+  const userId = document.getElementById('userId').value || 'demo-user';
+  log('>> DELETE /proxy/payment/internal/limits/users/' + userId);
+  const r = await api('DELETE', '/payment/internal/limits/users/' + encodeURIComponent(userId));
+  log('<< HTTP ' + r.status + '  ' + JSON.stringify(r.data));
+  ['limDay', 'limMonth', 'limYear'].forEach(id => document.getElementById(id).value = '');
+  if (r.status !== 200 && r.status !== 204 && r.status !== 404) { PA.toast('清除限额失败：HTTP ' + r.status, 'bad'); return; }
+  PA.toast('限额已清除（回到不限额行为，FR-025）', 'ok');
+  await loadLimit();
+}
+
+/** 一键演示超限：按当前日限额，连建 3 笔等额支付单，第 3 笔必然撞线（FR-029 步骤 3）。 */
+async function demoOverrun() {
+  const userId = document.getElementById('userId').value || 'demo-user';
+  log('>> 一键演示超限：先设日限额 ¥150.00，再连发 3 笔 ¥99.00');
+  document.getElementById('limDay').value = '150.00';
+  document.getElementById('limMonth').value = '';
+  document.getElementById('limYear').value = '';
+  await setLimit();
+  for (let i = 1; i <= 3; i++) {
+    const ord = await api('POST', '/order/orders', {
+      userId: userId, merchantId: document.getElementById('merchantId').value,
+      items: [{ skuId: 1, quantity: 1 }]
+    }, { 'Idempotency-Key': crypto.randomUUID() });
+    if (ord.status !== 201) { log('   第 ' + i + ' 笔下单失败：HTTP ' + ord.status); break; }
+    const pay = await api('POST', '/order/orders/' + encodeURIComponent(ord.data.orderNo) + '/payments', { channelCode: 'MOCK' });
+    log('   第 ' + i + ' 笔建支付单 → HTTP ' + pay.status + '  ' + JSON.stringify(pay.data));
+    if (pay.status === 409) {
+      PA.toast('第 ' + i + ' 笔被 409 LIMIT_EXCEEDED 拒绝 —— 支付单未创建（INV-3）', 'ok');
+      log('   ✓ 超限拒绝：第 ' + i + ' 笔支付单未创建（该订单保持 PENDING_PAYMENT）');
+      break;
+    }
+  }
+  await loadLimit();
+}
+
+/** 额度卡：日/月/年三条进度条（used 实心 + pending 半透明），超限红条。
+ *  权威口径来自 GET /internal/limits/users/{userId} 的 periods[]（DB），不读 Redis、不推算。 */
+function renderLimit(d) {
+  lastLimit = d;
+  const box = document.getElementById('limitBars');
+  const uel = document.getElementById('limitUser');
+  if (uel) uel.textContent = d.userId || '—';
+  const cfg = d.config || {};
+  if (!cfg.configured) {
+    box.innerHTML = '<div class="pa-note">（未配置限额 —— 该用户不受限，FR-012/D8）</div>';
+    return;
+  }
+  const rows = d.periods || [];
+  let overrun = null;
+  let html = '';
+  rows.forEach(r => {
+    const p = r.period;
+    const limited = !!r.limited;
+    const l = Number(r.limit) || 0;
+    const used = Number(r.used) || 0, pend = Number(r.pending) || 0;
+    if (!limited) {
+      html += '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--pa-ink-3)">'
+        + '<span>' + PERIOD_CN[p] + '限额</span><span>不限额</span></div>'
+        + '<div style="height:6px;border-radius:3px;background:var(--pa-hairline);margin-top:4px"></div></div>';
+      return;
+    }
+    const ov = Number(r.overrun) || 0;
+    if (ov > 0) overrun = { period: p, overrunMinor: ov };
+    const pw = Math.min(100, l > 0 ? (pend / l) * 100 : 0);
+    const uw = Math.min(100, l > 0 ? (used / l) * 100 : 0);
+    const avail = r.available == null ? Math.max(0, l - used - pend) : Number(r.available);
+    const bad = ov > 0 || used + pend > l;
+    html += '<div style="margin-bottom:12px">'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">'
+      + '<span>' + PERIOD_CN[p] + '限额</span>'
+      + '<span style="font-variant-numeric:tabular-nums">¥' + (used / 100).toFixed(2) + ' / ¥' + (l / 100).toFixed(2)
+      + (bad ? ' <b style="color:var(--pa-bad)">超限</b>' : '') + '</span></div>'
+      + '<div style="position:relative;height:8px;border-radius:4px;background:var(--pa-hairline);overflow:hidden" title="已用 ¥'
+      + (used / 100).toFixed(2) + ' + 在途 ¥' + (pend / 100).toFixed(2) + '">'
+      + '<div style="position:absolute;left:0;top:0;bottom:0;width:' + uw + '%;background:' + (bad ? 'var(--pa-bad)' : 'var(--pa-action)') + '"></div>'
+      + '<div style="position:absolute;top:0;bottom:0;left:' + uw + '%;width:' + pw + '%;background:rgba(0,102,204,.35)"></div>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--pa-ink-3);margin-top:4px;font-variant-numeric:tabular-nums">'
+      + '已用 ¥' + (used / 100).toFixed(2) + ' · 在途 ¥' + (pend / 100).toFixed(2) + ' · 剩余 ¥' + (avail / 100).toFixed(2) + '</div>'
+      + '</div>';
+  });
+  box.innerHTML = html;
+
+  document.getElementById('limitOverrun').innerHTML = overrun
+    ? '<div style="margin-top:10px;padding:8px 12px;border-radius:var(--pa-r-input);background:rgba(215,0,21,.08);color:var(--pa-bad);font-size:12px">'
+      + '⚠ ' + PERIOD_CN[overrun.period] + '限额已超 ¥' + (overrun.overrunMinor / 100).toFixed(2)
+      + ' —— 已发生事实如实入账（软超限，FR-039），下一笔支付将被 409 拒绝</div>'
+    : '';
+}
+
+/** 最近额度流水：按当前支付单查（GET /internal/limits/payments/{paymentNo}/operations）。 */
+async function loadLimitOps() {
+  const box = document.getElementById('limitOps');
+  if (!box) return;
+  if (!currentPaymentNo) { box.innerHTML = ''; return; }
+  const r = await api('GET', '/payment/internal/limits/payments/' + encodeURIComponent(currentPaymentNo) + '/operations');
+  const ops = (r.status === 200 && r.data && r.data.operations) || [];
+  box.innerHTML = ops.length === 0
+    ? '<div class="pa-note">（该支付单无额度流水）</div>'
+    : '<div style="font-size:12px;font-weight:600;margin-bottom:4px">额度流水 ' + esc(currentPaymentNo) + '</div>'
+      + ops.map(o => '<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;font-variant-numeric:tabular-nums">'
+        + '<span>' + esc(o.opType) + ' · ' + esc(o.period) + '</span>'
+        + '<span>¥' + ((Number(o.amountMinor) || 0) / 100).toFixed(2) + '</span></div>').join('');
+}
+
+async function loadLimit() {
+  const userId = document.getElementById('userId').value || 'demo-user';
+  const r = await api('GET', '/payment/internal/limits/users/' + encodeURIComponent(userId));
+  if (r.status !== 200) {
+    document.getElementById('limitBars').innerHTML = '<div class="pa-note">未能读取限额（HTTP ' + r.status + '）</div>';
+    return;
+  }
+  renderLimit(r.data);
+  loadLimitOps();
+  const hint = document.getElementById('limitHintSide');
+  if (hint) hint.textContent = '已刷新 ' + PA.now();
+}
+
 
 /* ---- ③ 退款流程（spec 019 / ADR-0067）---- */
 function resetRefunds() {
@@ -531,6 +720,7 @@ function stopPoll() {
   document.getElementById('pollHint').textContent = '已停止';
 }
 loadSkus();
+loadLimit();
 </script>
 </body>
 </html>

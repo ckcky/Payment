@@ -32,7 +32,9 @@ public enum BusinessNoType {
     /** 审计批次（spec 017：四核对作业批次） */
     AUDIT_BATCH("AB"),
     /** 审计调账单（spec 017 / ADR-0065：挂账、调账凭证号） */
-    AUDIT_ADJUSTMENT("AD");
+    AUDIT_ADJUSTMENT("AD"),
+    /** 额度操作流水（spec 027 / ADR-0071：RESERVE / CONFIRM / RELEASE / EXPIRED 的幂等流水号） */
+    LIMIT_OP("LO");
 
     private final String prefix;
 

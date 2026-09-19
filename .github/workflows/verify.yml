@@ -26,6 +26,31 @@ jobs:
   contract-snapshot:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 依赖同 e2e.yml：MySQL / Redis 用 service container，凭据与版本确定；
+    # 宿主 ubuntu-24.04 的 mysql 包 root@localhost 走 auth_socket，
+    # `sudo mysql` 无密码连接自 20260907 镜像起报 1045（fix/ci-mysql-bootstrap）。
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 21
@@ -35,20 +60,48 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Start MySQL
+      - name: Wait for MySQL / Redis
         run: |
-          sudo apt-get update -qq || true
-          sudo systemctl start mysql || true
-          sudo mysql -e "CREATE DATABASE IF NOT EXISTS \`order\`;CREATE DATABASE IF NOT EXISTS payment;CREATE DATABASE IF NOT EXISTS fulfillment;CREATE DATABASE IF NOT EXISTS entitlement;CREATE DATABASE IF NOT EXISTS ledger;CREATE DATABASE IF NOT EXISTS settlement;CREATE DATABASE IF NOT EXISTS reconciliation;CREATE DATABASE IF NOT EXISTS catalog;CREATE DATABASE IF NOT EXISTS merchant;"
-          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';FLUSH PRIVILEGES;"
+          for i in $(seq 1 60); do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot --silent && break || sleep 2
+          done
+          mysqladmin ping -h 127.0.0.1 -uroot -proot --silent \
+            || { echo "MySQL 未就绪"; exit 1; }
+          # runner 镜像不预装 redis-cli，用 bash 内建 /dev/tcp 探测（同 e2e.yml）
+          ok=0
+          for i in $(seq 1 30); do
+            if exec 3<>/dev/tcp/127.0.0.1/6379 2>/dev/null; then
+              printf 'PING\r\n' >&3
+              if head -c 7 <&3 | grep -q PONG; then ok=1; exec 3<&-; break; fi
+              exec 3<&-
+            fi
+            sleep 2
+          done
+          [ "$ok" = "1" ] || { echo "Redis 未就绪"; exit 1; }
+          echo "MySQL / Redis 就绪"
+
+      # 建库 + 重放业务表 DDL（与 e2e.yml 同路径，原先只建库不建表）
+      # NN-*.sql 为全量 schema（已吸收 015/016/018/019）；027 单独重放（限额表未并入 03）
+      - name: Create schemas & apply DDL
+        run: |
+          for f in deployment/schema/[0-9][0-9]-*.sql deployment/schema/027-*.sql; do
+            echo "applying $(basename "$f")"
+            mysql -h 127.0.0.1 -uroot -proot < "$f"
+          done
 
       - name: Start Nacos (standalone)
         run: |
+          # 必须同时发布 9848/9849（Nacos 2.x 客户端 gRPC，主端口 +1000/+1001）；
+          # 只映射 8848 会导致服务注册 "ErrCode:-401 Client not connected"。
+          # 详见 e2e.yml 同步骤与 docker-compose.yml 的 nacos.ports 注释。
           docker run -d --name nacos -e MODE=standalone -e NACOS_AUTH_ENABLE=false \
-            -p 8848:8848 nacos/nacos-server:v2.3.2
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8848/nacos/ && break || sleep 2
+            -p 8848:8848 -p 9848:9848 -p 9849:9849 nacos/nacos-server:v2.3.2
+          for i in $(seq 1 45); do
+            curl -fsS http://127.0.0.1:8848/nacos/v1/ns/operator/metrics 2>/dev/null | grep -q UP && break || sleep 2
           done
+          curl -fsS http://127.0.0.1:8848/nacos/v1/ns/operator/metrics 2>/dev/null | grep -q UP \
+            || { echo "Nacos 未就绪"; docker logs --tail 50 nacos; exit 1; }
+          echo "Nacos 就绪"
 
       - name: Package (skip tests)
         run: ./mvnw -B -DskipTests package
@@ -73,7 +126,21 @@ jobs:
             [ "$ok" = "1" ] && echo "all services healthy" && break
             sleep 2
           done
-          [ "$ok" = "1" ] || { tail -50 logs/*.log; exit 1; }
+          # 失败时打印 health 汇总 + 各日志尾部（勿用 `tail -50 logs/*.log`：
+          # GNU coreutils 下多文件 + 数值选项报 "option used in invalid context"，
+          # 会把真正的失败原因盖掉）
+          if [ "$ok" != "1" ]; then
+            echo "==== health 汇总 ===="
+            for p in 8081 8082 8083 8084 8086 8087 8088 8089 8090 8091; do
+              code=$(curl -s --noproxy '*' -o /dev/null -w "%{http_code}" -m 2 "http://localhost:${p}/actuator/health" || true)
+              echo "  :${p} -> ${code}"
+            done
+            for f in logs/*.log; do
+              echo "==== ${f} (tail -60) ===="
+              tail -n 60 "$f" || true
+            done
+            exit 1
+          fi
 
       - name: Run L3 API snapshot contract tests
         run: ./mvnw -B -pl deployment/e2e-tests test -De2e.env=ci -Dtest='InternalApiSnapshotTest' -Dsurefire.failIfNoSpecifiedTests=false

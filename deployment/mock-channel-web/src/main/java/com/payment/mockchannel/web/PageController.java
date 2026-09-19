@@ -35,4 +35,10 @@ public class PageController {
     public String routing() {
         return "forward:/routing.html";
     }
+
+    /** 对账 / 审计控制台页（Feature 023），与 {@code /demo} 等保持无后缀语义路径一致。 */
+    @GetMapping("/audit")
+    public String audit() {
+        return "forward:/audit.html";
+    }
 }

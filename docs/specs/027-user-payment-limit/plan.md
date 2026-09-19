@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS limit_operations (
     expires_at DATETIME NULL COMMENT '仅 RESERVE：在途到期时刻（审计/兜底），日常判定走 Redis',
     created_at DATETIME NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_limitop_biz_type (biz_no, op_type),
+    UNIQUE KEY uk_limitop_biz_type (biz_no, op_type, period),
     KEY idx_limitop_user_type (user_id, op_type),
     KEY idx_limitop_expiry (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='额度操作流水；UK 是幂等的数据库级兜底（INV-4）';

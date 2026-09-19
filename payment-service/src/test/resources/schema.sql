@@ -52,6 +52,10 @@ DROP TABLE IF EXISTS refund_items;
 DROP TABLE IF EXISTS refund_intake_locks;
 DROP TABLE IF EXISTS refund_post_process_attempts;
 DROP TABLE IF EXISTS refunds;
+-- spec 027 / ADR-0071：用户支付限额三表（DDL 与 deployment/schema/027-user-payment-limit.sql 对齐）
+DROP TABLE IF EXISTS limit_operations;
+DROP TABLE IF EXISTS user_limit_usage;
+DROP TABLE IF EXISTS user_payment_limits;
 
 CREATE TABLE refunds (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -106,3 +110,56 @@ CREATE TABLE refund_post_process_attempts (
     version INT NOT NULL DEFAULT 1,
     CONSTRAINT uk_rppa_refund_target UNIQUE (refund_id, target)
 );
+
+-- =============================================================================
+-- spec 027 / ADR-0071：用户支付限额（H2 方言；与 deployment/schema/027-user-payment-limit.sql 同构）
+-- 周期重置靠 period_start 现算（D10）；limit_operations 的 UK 是幂等的数据库级兜底（INV-4）。
+-- =============================================================================
+
+CREATE TABLE user_payment_limits (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    currency_code VARCHAR(8) NOT NULL,
+    daily_limit_minor BIGINT NOT NULL DEFAULT 0,
+    monthly_limit_minor BIGINT NOT NULL DEFAULT 0,
+    yearly_limit_minor BIGINT NOT NULL DEFAULT 0,
+    status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    CONSTRAINT uk_uplimit_user_ccy UNIQUE (user_id, currency_code)
+);
+
+CREATE TABLE user_limit_usage (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    currency_code VARCHAR(8) NOT NULL,
+    period VARCHAR(8) NOT NULL,
+    period_start DATE NOT NULL,
+    used_minor BIGINT NOT NULL DEFAULT 0,
+    pending_minor BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    created_by VARCHAR(64),
+    updated_by VARCHAR(64),
+    version INT NOT NULL DEFAULT 1,
+    CONSTRAINT uk_ulusage_user_ccy_period UNIQUE (user_id, currency_code, period)
+);
+
+CREATE TABLE limit_operations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    operation_no VARCHAR(32) NOT NULL,
+    biz_no VARCHAR(32) NOT NULL,
+    op_type VARCHAR(16) NOT NULL,
+    user_id VARCHAR(64) NOT NULL,
+    currency_code VARCHAR(8) NOT NULL,
+    period VARCHAR(8) NOT NULL,
+    amount_minor BIGINT NOT NULL,
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL,
+    CONSTRAINT uk_limitop_biz_type UNIQUE (biz_no, op_type, period)
+);
+CREATE INDEX idx_limitop_user_type ON limit_operations (user_id, op_type);
+CREATE INDEX idx_limitop_expiry ON limit_operations (expires_at);

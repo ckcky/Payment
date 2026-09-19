@@ -2,7 +2,7 @@
 
 # ADR-0071: 用户支付限额——日月年周期额度与两阶段预占（spec 027 立项）
 
-- 状态：🟡 **Proposed**（2026-09-16 提出；D1~D8 已由负责人确认，D9~D10 待确认，见 [spec 027 §9](../specs/027-user-payment-limit/spec.md)）
+- 状态：🟢 **Accepted**（2026-09-16 提出，同日随 spec 027 实现完成转为 Accepted；D1~D13 全部确认）
 - 关联：ADR-0028（**最小风控 ⛔ Not Implemented，本 ADR 与其切割**）、ADR-0064（一交易多支付单）、ADR-0009（记账失败不回滚事实、靠对账收敛——补偿扫描的哲学依据）、ADR-0044（Redis 引入，**payment-service 明确不使用**）、ADR-0048（演示组件同源代理只读——本 ADR 提出显式例外）、ADR-0062/0063（业务单号、跨系统引用）、ADR-0010（金额只用 `long` 分）、spec 019（退款双层单）
 - 需求源头：负责人 2026-09-16「我想在项目里加上限额这个功能，比如针对用户进行日月年限额」。
 
@@ -41,9 +41,12 @@
 
 - `user_payment_limits`：配置。`UK(user_id, currency_code)`，一行存 `daily/monthly/yearly` 三个限额。
 - `user_limit_usage`：累计。`UK(user_id, currency_code, period)`，双金额 `used_minor`（已确认）+ `pending_minor`（**在途占用**）。
-- `limit_operations`：幂等流水，`UK(biz_no = paymentNo, op_type)`，`op_type ∈ {RESERVE, CONFIRM, RELEASE}`。
+- `limit_operations`：幂等流水，`UK(biz_no = paymentNo, op_type, period)`，`op_type ∈ {RESERVE, CONFIRM, RELEASE, EXPIRED}`。
 
 > **为什么必须双金额**：只统计 `SUCCEEDED` 的话，并发 N 笔同日请求会同时读到「未超限」再全部放行，日限额被直接击穿。`pending` 是在途保守占用，与退款域 `RefundPolicy`「按申请额累计防超退」同口径。
+
+> **唯一键含 `period` 的实现修正**（2026-09-16，实现期发现）：原 `UK(biz_no, op_type)` 使**同一支付单跨三周期只能留一条流水**——首笔 `RESERVE(DAY)` 落库后，`RESERVE(MONTH)` / `RESERVE(YEAR)` 全部撞键被当作「重复」跳过。后果是 **MONTH / YEAR 两档额度从不累加**，即限额静默失效（正是 D4 第 1 条要防的那类错误）。
+> 因「一笔支付同时占用日 / 月 / 年三档」是设计本意，故唯一键必须扩为 `(biz_no, op_type, period)`；幂等语义不变（同一支付单在同一周期的同一操作仍只允许一条）。
 
 **D3. 两阶段：预占 → 确认 / 释放，判定靠一条原子 UPDATE。**（负责人已确认）
 
@@ -65,7 +68,7 @@ WHERE user_id = ? AND currency_code = ? AND period = ?
 因此三层：
 
 1. **状态机终态吸收**：重复/乱序回调 `changed=false`，不触发额度操作（挡「回调重发」）；
-2. **幂等流水 `UK(biz_no, op_type)`**：一张支付单每种操作只允许一条流水，撞键即跳过（挡「事务外重试」与「补偿重跑」）；
+2. **幂等流水 `UK(biz_no, op_type, period)`**：一张支付单在同一周期的每种操作只允许一条流水，撞键即跳过（挡「事务外重试」与「补偿重跑」）；
 3. **补偿扫描**：以 **payment 为事实源**，扫「payment 已终态但只有 `RESERVE`、无 `CONFIRM`/`RELEASE`」的记录补结算。`UNKNOWN` **不处理**（保守占用，守「未知状态不猜成败」）。
 
 第 3 条沿用 ADR-0009 的既有哲学：副作用失败不回滚事实，靠对账收敛。不新造概念。
@@ -87,15 +90,20 @@ WHERE user_id = ? AND currency_code = ? AND period = ?
 
 否则 `deployment/demo/traffic-gen.sh` 的持续流量与 nightly E2E 会被 409 打断。这条是**兼容性的硬要求**。
 
-**D9. 演示：`/internal/limits/**` 走读写代理。**（待确认，推荐）
+**D9. 演示：`/internal/limits/**` 走读写代理。**（已采纳方案 ②，2026-09-16）
 
 ADR-0048 定「演示组件代理只读接口」（G8），而设置限额是写操作。备选：① 只由 `demo/seed.sh` 播种 SQL、演示页只读（严格守 ADR-0048，但演示是死的）；② 开放读写代理并在本 ADR 写明边界；③ 复用 ADR-0049 场景注入。
 
-推荐 ②，理由：**限额配置不产生资金动作**，与「禁止演示页伪造业务事实」是两回事。若采纳，本 ADR 即作为 ADR-0048 的显式例外登记，例外范围仅限 `/internal/limits/**`。
+**采纳 ②**，理由：**限额配置不产生资金动作**，与「禁止演示页伪造业务事实」是两回事。本 ADR 即作为 ADR-0048 的显式例外登记，**例外范围仅限 `/internal/limits/**`**。
 
-**D10. 周期重置不用定时任务。**（待确认，推荐）
+> 实现落点：复用 `DemoProxyController` 的既有透明代理 `/proxy/{service}/**`，路径为
+> `/proxy/payment/internal/limits/**`（`payment` 本就在 `MockChannelProperties` 服务映射中，
+> 无需新增白名单代码）。代理本身不区分读写，故「只读」约束的例外只需在此登记 + 集中在这一路径下。
+> 既有的「演示页禁止写业务事实」纪律不变：限额配置表以外的任何表仍无写路径。
 
-`period_start` 存当前周期起始日（今天 / 本月 1 号 / 1 月 1 号），请求进来现算，查不到就建行；跨周期旧行自然闲置。零调度器、零跨天临界问题。
+**D10. 周期重置不用定时任务。**（已采纳，2026-09-16）
+
+`period_start` 存当前周期起始日（今天 / 本月 1 号 / 1 月 1 号），请求进来现算（`LimitPeriod.periodStart(Instant)`，UTC），查不到就建行；跨周期旧行自然闲置。零调度器、零跨天临界问题。已实现于 `LimitPeriod` + `MybatisLimitUsageRepository.ensureRow`。
 
 **D11. 在途占用加 TTL 自动释放。**（2026-09-16 负责人拍板）
 
@@ -104,7 +112,7 @@ D4（UNKNOWN 保守占用）单独存在时，在 `deferChannel=true` 演示收�
 
 TTL 下界 = 支付侧最大自动收敛窗口 = `payment.reliability.timeout`(30s) + `query-max-attempts × query-interval-ms`(5×15s) = **105s**，否则会释放一笔正在被主动查询收敛的支付。默认取 **900s**，与 `order.timeout.ttl-seconds` 对齐（订单超时已被取消并释放库存，再占额度无意义）。
 
-实现走 DB 扫描 + `@Scheduled`（复用 `TimeoutScanScheduler` 既有模式），**不用 Redis 时间轮**：payment-service 当前**无 Redis 依赖**，为 TTL 引入它违反「无理由新增中间件」，且额度需与支付事实同库强一致。
+> ⚠️ 本段原文曾写「实现走 DB 扫描 + `@Scheduled`」，**已被 D13 取代**（D13 判定该路径「太重」，改为 Redis TTL + 惰性回收）。此处保留原文仅作决策演进留痕，**最终实现以 D13 为准**：`LimitPendingRecycler`（无调度器）+ `RedisLimitExpiryIndex`。
 
 **D12. 软超限口径：新支出硬约束，已发生事实软记账。**（2026-09-16 负责人拍板）
 
@@ -160,6 +168,6 @@ TTL 下界 = 支付侧最大自动收敛窗口 = `payment.reliability.timeout`(3
 ## 影响
 
 - **正影响**：平台首次具备「用户维度资金约束」能力，且判定为单条原子 SQL，无新中间件、无新服务；幂等与补偿沿用项目既有哲学（状态机吸收 + 唯一键 + 对账收敛），可解释性强；demo 可现场演示「在途占用」与「超限拒绝」两个过去看不见的中间态。
-- **代价**：payment-service 新增 3 张表 + 限额子域（约 8~10 个类型）+ 2 个扫描任务（补偿扫描 FR-016 + 在途占用 TTL 扫描 FR-038，均为复用既有 `@Scheduled` 模式）；`payments` 建单路径新增一次 DB 往返（预占）与终态时一次（结算）；需新增 `LIMIT_EXCEEDED` 错误码与 `limit.*` 指标。
-- **对既有决策的影响**：**不改变** ADR-0028 的结论（风控仍不做）；补充 ADR-0048 一条显式例外（若 D9 采纳 ②）；`payment-service.md` 需新增限额章节（实现期同步，防文档漂移）。
+- **代价**：payment-service 新增 3 张表 + 限额子域（约 20 个类型）+ **1 个补偿扫描**（FR-016 `LimitCompensationScheduler`）+ **惰性回收**（FR-038 `LimitPendingRecycler`，无调度器、无全表轮询——经 D13 取代原扫描方案后实际成本更低）；`payments` 建单路径新增一次 DB 往返（预占）与终态时一次（结算）；新增 `LIMIT_EXCEEDED` 错误码与 `limit.*` 指标；payment-service 首次依赖 Redis（`spring-boot-starter-data-redis`，仅作过期索引且 fail-open）。
+- **对既有决策的影响**：**不改变** ADR-0028 的结论（风控仍不做）；**补充 ADR-0048 一条显式例外**（D9 采纳 ②，范围仅 `/internal/limits/**`）；**对 ADR-0044「payment 不使用 Redis」构成限用途反转**（D13，仅作过期索引）；`payment-service.md` 需新增限额章节（实现期同步，防文档漂移）。
 - **不做**：单笔限额、商户/渠道维度限额、多币种折算（roadmap 明确不做多币种清分）、风控评分、额度冻结/解冻、白名单、人工提额审批流、额度变更审计台。
