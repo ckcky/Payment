@@ -16,7 +16,9 @@ spring:
       host: localhost
       port: 6379
       # Redis 用作 SKU 读缓存（cache-aside）与秒杀配额预扣（Lua 原子），非数据源、fail-open。
-      timeout: 1000ms
+      # ⚠️ spec 029：catalog 亦订阅 3 个广播事件（CatalogMqConfig）。必须
+      #    > payment.mq.block-ms(默认 2000ms)，否则阻塞读超时致消费端空转不消费。
+      timeout: 5000ms
       lettuce:
         # 连接池（ADR-0060）：默认单连接多路复用，秒杀 Lua 高并发下串行排队
         # （2026-09-04 实测 500 VU p95 528ms → 池化后大幅下降）。需 commons-pool2 依赖。

@@ -12,7 +12,8 @@ spring:
       port: 6379
       # spec 029 / FR-305：Redis 作事务消息通道载体（非数据源，INV-5）。
       # 通道不可用时回落同步 Feign（mq.enabled=false）。
-      timeout: 1000ms
+      # ⚠️ 必须 > payment.mq.block-ms(默认 2000ms)：阻塞读超时会致消费端空转不消费。
+      timeout: 5000ms
       lettuce:
         pool:
           # 消费端 XREADGROUP 为短阻塞读（blockMs=2000），连接池避免与生产者争抢单连接

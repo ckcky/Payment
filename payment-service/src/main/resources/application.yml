@@ -1,6 +1,14 @@
 spring:
   application:
     name: payment-service
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      # spec 029 / ADR-0074 D11：Redis 仅作消息通道载体（不做计数/缓存，ADR-0044 显式例外）。
+      # ⚠️ 必须 > payment.mq.block-ms(默认 2000ms)，否则 XREADGROUP 阻塞读会被客户端判超时，
+      #    消费端空转、消息永不被处理。启动期由 MqTimeoutGuard fail-fast 校验。
+      timeout: 5000ms
   datasource:
     url: jdbc:mysql://localhost:3306/payment?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root

@@ -16,7 +16,14 @@ public class MqProperties {
     /** 总开关：false 时生产方走同步 Feign 回落路径，不 prepare 任何消息（FR-306）。 */
     private boolean enabled = true;
 
-    /** 消费端 XREADGROUP 阻塞时长（ADR-0074 D8：短阻塞避 Lettuce 池独占）。 */
+    /**
+     * 消费端 XREADGROUP 阻塞时长（ADR-0074 D8：短阻塞避 Lettuce 池独占）。
+     *
+     * <p><b>不变量</b>：本值必须**严格小于** Redis 客户端命令超时
+     * （{@code spring.data.redis.timeout}），否则每轮 {@code XREADGROUP} 都会在服务端
+     * 阻塞等待中被客户端判定超时，消费循环空转、消息永不被处理（spec 029 回归缺陷）。
+     * 由 {@code MqTimeoutGuard} 在启动期 fail-fast 校验。</p>
+     */
     private Duration blockMs = Duration.ofMillis(2000);
 
     /** 单次 XREADGROUP 拉取条数。 */
