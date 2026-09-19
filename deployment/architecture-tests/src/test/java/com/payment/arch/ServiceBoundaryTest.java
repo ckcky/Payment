@@ -24,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>服务之间零编译期耦合</b>：跨服务只能走 HTTP/Feign + {@code common-dto}，不能 import 对方的类。</li>
  *   <li><b>领域层不依赖基础设施</b>：{@code domain..} 不得碰 Spring 与 {@code infra..}（否则拆分时领域会被持久化实现绑架）。</li>
  *   <li><b>接入层不直达持久化</b>：{@code api..} / {@code web..} 不得依赖 {@code infra.persistence..}。</li>
- *   <li><b>不预先引入分布式基础设施</b>：不得出现 MQ、JTA/XA 等依赖（ADR-0031：MQ 只在有证据时才评估）。</li>
+ *   <li><b>不预先引入分布式基础设施</b>：不得出现 MQ、JTA/XA 等外部消息中间件依赖
+ *       （ADR-0031：MQ 只在有证据时才评估）。<b>禁令清单本身不变</b>——见
+ *       {@link #distributedInfrastructureMustNotBeIntroducedWithoutEvidence()} 的通道定位说明。</li>
  * </ol>
  *
  * <p><b>导入方式说明</b>：各服务经 {@code spring-boot-maven-plugin} 重打包，类位于 {@code BOOT-INF/classes}，
@@ -118,6 +120,22 @@ class ServiceBoundaryTest {
         rule.check(serviceClasses);
     }
 
+    /**
+     * 「不预先引入分布式基础设施」门禁——<b>禁用清单自 Phase 10 起从未放宽</b>。
+     *
+     * <p><b>通道定位（spec 029 / ADR-0074）</b>：spec 029 引入的跨服务异步通道是
+     * <b>Redis Streams</b>，不是消息中间件：它复用已在技术栈内、且本就被用作缓存的 Redis，
+     * 没有带来新的<b>运维实体</b>（无新 broker / 新集群 / 新部署单元 / 新运维手册），
+     * 因此不构成 ADR-0031 所要防的「为了像微服务而引入 MQ」。</p>
+     *
+     * <p><b>因此本规则的禁用清单维持原样</b>：Kafka / RabbitMQ / RocketMQ / JMS / JTA-XA
+     * 一律继续禁止，Redis 通道也不在禁用清单里——它由 {@code common-redis-mq} 的包结构
+     * （{@code com.payment.common.mq}）与 {@link #servicesMustNotDependOnEachOtherAtCompileTime()}
+     * 共同约束，无需在此新开规则。</p>
+     *
+     * <p>若将来有人把通道换成上述任一 MQ 实现，本测试会立即变红——这正是它存在的意义：
+     * 换 MQ 是一个<b>需要 ADR 的架构决策</b>，不该由一次依赖升级悄悄完成。</p>
+     */
     @Test
     void distributedInfrastructureMustNotBeIntroducedWithoutEvidence() {
         ArchRule rule = noClasses()
@@ -126,7 +144,9 @@ class ServiceBoundaryTest {
                         "org.apache.rocketmq..", "jakarta.transaction..", "javax.transaction..",
                         "com.atomikos..", "org.springframework.jms..")
                 .because("Phase 10 明确禁止「看起来像微服务」就引入 MQ / JTA-XA；"
-                        + "当前一致性由幂等 + Saga + 对账收敛保证，引入异步基础设施必须有真实瓶颈证据（ADR-0031）");
+                        + "当前一致性由幂等 + Saga + 对账收敛保证，引入异步基础设施必须有真实瓶颈证据（ADR-0031）。"
+                        + "spec 029 选择的 Redis Streams 通道不在清单内：它复用既有 Redis，"
+                        + "未新增运维实体，故清单保持不变（ADR-0074）");
         rule.check(serviceClasses);
     }
 

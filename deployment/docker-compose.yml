@@ -71,6 +71,26 @@ services:
     networks:
       - pay-arch
 
+  # Redis 指标导出（spec 029 / FR-504）：「消息通道」面板的消费延迟与各组位点
+  # 不在 JVM 侧（客户端拦截器无法感知服务端 PEL），必须由 redis_exporter 暴露
+  #   redis_streams_pending_messages / redis_streams_entries_processed_total 等系列。
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: payment-redis-exporter
+    environment:
+      # 与 redis 服务同网络，直连容器名 + 默认端口
+      REDIS_ADDR: "redis://redis:6379"
+      # 只导出 stream 相关，减少基数（本大盘只用到 streams 系列）
+      REDIS_EXPORTER_CHECK_STREAMS: "payment:*"
+      REDIS_EXPORTER_CHECK_STREAM_GROUPS: "payment:*"
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - pay-arch
+
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: payment-prometheus

@@ -149,7 +149,7 @@ PENDING --cancel--> CANCELLED
 
 ---
 
-### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
+### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
 | 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
 |---|---|---|---|---|
@@ -164,6 +164,16 @@ PENDING --cancel--> CANCELLED
 **链路延续**：消费 `order.paid` 后若再生产 `fulfillment.completed`，**必须继承信封中的原始 traceId**（ADR-0074 D14），否则一笔订单的日志会被切成两截。
 
 **order 不直调 entitlement**：权益仍经 fulfillment → entitlement 既定链，本服务是权益的唯一下游触发方。
+
+**实现实况**（spec 029 批次 D，`com.payment.fulfillment.mq`）：
+
+| 项 | 值 |
+|---|---|
+| 配置类 | `FulfillmentMqConfig`（`payment.mq.enabled=false` 回落同步 Feign） |
+| 生产 | `FulfillmentEventPublisher`（`fulfillment.completed` / `fulfillment.revoked`，点对点 → entitlement） |
+| 业务消费组 | `fulfillment`（消费名 `ff-op` / `ff-rs` / `ff-oc`） |
+| 回查 checker | `fulfillment.completed` → 履约单是否 DELIVERED；`fulfillment.revoked` → 履约单是否 CANCELLED 或不存在 |
+| 注入说明 | `FulfillmentApplicationService` 主构造器 `@Autowired` 收 `ObjectProvider<FulfillmentEventPublisher>`；另留 3 参 / 4 参构造器给测试 |
 
 ## 4. 关键流程链路剖析
 

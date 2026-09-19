@@ -58,25 +58,27 @@
   六场景 **22 条断言全过**——实跑并修出 5 处纯构建/单测不可见的缺陷（`channelCode` 漏改、
   YAML flow mapping 占位符、渠道码回显、下游 409 被压成 500、演示件与 demo profile），
   补记见 `docs/specs/028-channel-routing/tasks.md` T58~T63 与 CHANGELOG。
-- **`029-redis-transactional-mq` 已立项待实现（2026-09-19）**：用现有 `redis:7` 的 Streams 承载
+- **`029-redis-transactional-mq` 已实现（2026-09-19 立项 → 2026-09-20 落地）**：用现有 `redis:7` 的 Streams 承载
   **事务消息**语义（半消息 → 本地事务 → commit/rollback → 5s 回查真相表），替代 8 条「吞异常 + 靠对账兜底」
   的同步通知链路；**不引入 RocketMQ / Kafka 等任何消息中间件**（个人项目不增组件）。
   混合拓扑：`payment.succeeded` / `refund.result` 点对点；`order.paid` / `refund.succeeded` / `order.cancelled`
   广播（多消费者组各自独立位点）；`fulfillment.completed` / `fulfillment.revoked` 点对点。
   **记账三条链路（payment / refund / settlement → ledger）维持同步**。
-  顺带补齐「按订单号还原全链路」：trace 消费组订阅全部事件落 `order_event_log` + timeline API，
+  顺带补齐「按订单号还原全链路」：trace 消费组订阅全部 7 个事件落 `order_event_log` + `GET /api/orders/{orderNo}/timeline`，
   MDC 补 `bizNo` 维度，**traceId 跨异步边界连续**。
-  决策见 **ADR-0074**（`docs/adr/0074-redis-transactional-message.md`，🟡 Proposed，**Supersedes ADR-0031**）。
-  **文档已齐备**（spec/plan/tasks/acceptance），本轮只写文档未改代码。
-  实现期另开 `feature/029-redis-transactional-mq`。
-- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` 立项待实现，等待 ADR-0071 核准；
-  `028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`
-  与 `docs/specs/028-channel-routing/spec.md`。
-- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` / `029-redis-transactional-mq` 立项待实现，分别等待 ADR-0071 / ADR-0074 核准；`028-channel-routing` 已合入 master 闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`、`docs/specs/028-channel-routing/spec.md` 与 `docs/specs/029-redis-transactional-mq/spec.md`。
+  决策见 **ADR-0074**（`docs/adr/0074-redis-transactional-message.md`，🟢 Accepted，**Supersedes ADR-0031**）。
+  实现于 `feature/029-redis-transactional-mq`（批次 A→G 增量提交）。
+  交付：`common/common-redis-mq` starter（Envelope / 事务生产者 / 半消息扫描器 / Stream 消费者 /
+  DLQ / 审计 / 8 项 `mq.*` 指标）+ 五服务生产消费侧改造（`{service}/mq` 包）
+  + `order_event_log` 表与 timeline API + Redis 容灾参数（AOF + `noeviction` + 数据卷）
+  + Grafana「⑥ 消息通道」面板（11 图，含 dead-letter / PEL 积压 / 各组位点）
+  + `redis-exporter` 抓取 + 演示脚本 D1~D6。
+  **`payment.mq.enabled=false` 回落同步 Feign**（FR-306），两种模式既有集成测试均通过。
+- **当前 Feature**：无进行中 Feature（`027-user-payment-limit` / `028-channel-routing` / `029-redis-transactional-mq` 均已实现并闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`、`docs/specs/028-channel-routing/spec.md` 与 `docs/specs/029-redis-transactional-mq/spec.md`。
 - **⚠️ 已知偏离（SOP 偏离，已收口，待复盘）**：working tree 曾含**超前 roadmap 顺序（011→012→013→014）**落地的 `013-inventory-reservation` / `014-seckill-and-cache` 实质实现（catalog `Stock*` 聚合 + 三段式库存、order `OrderTimeoutScheduler` Redis ZSet 时间轮 + `SeckillResult` + 限流 + 幂等 + Lua）。代码先行、当时缺 spec/ADR，属 **ADR-0053** 记录的偏离。现已于 2026-08-31 补写 `docs/specs/013-*` / `014-*` 与 **ADR-0041~0046**（`0014-next-stage-decisions.md`）完成收口。**唯一遗留偏离**：014 的 Redis 引入**仍未经 roadmap §7「压测基线→论证引入」闸门**（ADR-0044 标注），k6 基线 + 论证证据列为 TODO。
-- **Feature 状态**：`001`~`028`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现；`029` 已有完整四件套文档、**待实现**（2026-09-19 立项）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+- **Feature 状态**：`001`~`029`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现；`029` 已于 2026-09-20 实现落地（批次 A~G 增量提交于 `feature/029-redis-transactional-mq`）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
   **非阻塞遗留**（均为「待补 Testcontainers 集成测试」，不影响功能）：`003` T016~T018（人工收敛，标记 Deferred，但代码已由 `023` 的 F2 修复实际落地——`POST /payments/{ref}/resolve` + `ResolveAuthorizationInterceptor`，003 的 tasks.md 未回头更新）；`006` T023（并发乐观锁）；`007` T013/T031/T039/T045（集成测试与最终 `/review`）。
-- **当前能力**：`./mvnw -o verify -fae` 全量 BUILD SUCCESS（15 个 Maven 子模块：3 common + 9 服务 + `mock-channel-web` + `e2e-tests` + `architecture-tests`，含 root 共 **16 个 reactor 条目**）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。**双运行模式**（宿主进程 / 容器）由 `deployment/lib-mode-guard.sh` 双向互斥守卫，端口契约 8081–8091 两模式一致。
+- **当前能力**：`./mvnw -o verify -fae` 全量 BUILD SUCCESS（16 个 Maven 子模块：**4 common**（新增 `common-redis-mq`）+ 9 服务 + `mock-channel-web` + `e2e-tests` + `architecture-tests`，含 root 共 **17 个 reactor 条目**）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。**双运行模式**（宿主进程 / 容器）由 `deployment/lib-mode-guard.sh` 双向互斥守卫，端口契约 8081–8091 两模式一致。
 - **ADR 状态（2026-08-30 负责人已裁决，2026-08-31 全部落定）**：
   - ✅ **Accepted**：`0004`（0008~0011）、`0005`（0012~0015）、`0007`（0019~0021 对账）、`0010`（0029/0030/0032/0033 保持现状）、0006 的 `0017` / `0018`、0009 的 `0024`（实现=预留空函数）/ `0025`（实现=预留空函数）/ `0026`（明文 env）。
   - ❌ **Rejected**：`0016`（部分退款不做，代码已回退）。
