@@ -16,14 +16,14 @@
 
 | 维度 | 说明 |
 |---|---|
-| **负责** | 接收支付成功事件、履约聚合与自有状态机、交付执行（当前 Mock）、幂等（同支付只建一条履约）、履约完成后触发权益授予 RPC；自身失败记录与终态 |
+| **负责** | 接收 order-service 的支付成功 RPC、按订单明细创建履约聚合与自有状态机、交付执行（当前 Mock）、明细粒度幂等、履约完成后触发权益授予 RPC；自身失败记录与终态 |
 | **不负责** | 支付金额/渠道/退款决策（归属 payment-service 退款域）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
 
 ### 1.2 硬约束（Constitution / ADR）
 
 - **Fulfillment 不强耦合 Payment（Constitution #6）**：履约有**自己的状态机**，不被支付状态反向阻塞；入站 RPC 只接收 common-dto `PaymentSucceededRequest`（携带原始事实），不访问 payment 模块内部实体。支付成功只**触发**履约，不决定履约最终状态。
 - **状态机铁律**：状态只能通过 `domain.Fulfillment` 的领域方法（`start/deliver/fail/cancel`）推进，禁止外部直接 `setStatus`；非法迁移抛 `STATE_TRANSITION_VIOLATION`（`Fulfillment.java:73`）。
-- **幂等**：同一支付成功事件只创建一条履约，`source_payment_no` 唯一约束兜底（`04-fulfillment-schema.sql:21`，ADR-0063 业务单号）。
+- **幂等**：按 `(source_payment_no, order_item_id)` 唯一确定一条明细履约；同一支付可因多个订单明细创建多条履约，重复通知由该复合键吸收。
 - **终态不反写前序事实**：履约失败/权益失败**不回写支付为失败**，履约 DELIVERED 事实独立保留（technical-solution §4.3.4）。
 - **UNKNOWN 不臆断**：交付异常视为失败并记录，绝不臆断为成功（`FulfillmentApplicationService.java:49-55`）。
 - **Database-per-Service**：自有 `fulfillment` Schema，绝不直连他服务表（Constitution 数据所有权）。
@@ -53,7 +53,7 @@
 | 值对象 | `FulfillmentAcceptedResponse` | [common-dto](../../../common/common-dto/src/main/java/com/payment/common/dto/rpc/FulfillmentAcceptedResponse.java) | 入站受理响应（fulfillmentId + 状态枚举名） |
 | 值对象 | `FulfillmentCompletedRequest` / `EntitlementGrantedResponse` | [common-dto](../../../common/common-dto/src/main/java/com/payment/common/dto/rpc/) | 出站权益授予请求/响应 |
 
-**基数关系（MVP）**：`Payment (1) ── (1) Fulfillment`（按 `source_payment_no` 唯一约束，同一支付只对应一条履约）。当前无 `FulfillmentItem`/`Delivery` 子实体（technical-solution §4.1 提及但本服务未建模，`[待定]`）。
+**基数关系（当前）**：`Payment (1) ── (N) Fulfillment`，每个 `OrderItem` 对应一条履约；`Fulfillment` 本身承载订单项引用，不另设 `FulfillmentItem` / `Delivery` 子实体。
 
 ### 2.2 状态机
 
@@ -83,15 +83,15 @@ PENDING --cancel--> CANCELLED
 |---|---|---|
 | id | BIGINT PK AUTO_INCREMENT | 履约 ID |
 | order_id | VARCHAR(64) NOT NULL | 订单引用 |
-| order_item_id | VARCHAR(64) | 订单项引用（当前写入 null，`[待定]`） |
+| order_item_id | VARCHAR(64) NOT NULL | 订单项业务单号（`OI+雪花`），由 order-service 在支付成功通知中提供 |
 | delivery_content | VARCHAR(255) NOT NULL | 交付内容（当前 "mock delivery"） |
-| source_payment_no | VARCHAR(32) NOT NULL | 来源支付业务单号（paymentNo，PM+雪花，ADR-0063），唯一 `uk_fulfillments_source_payment_no` |
+| source_payment_no | VARCHAR(32) NOT NULL | 来源支付业务单号（paymentNo，PM+雪花，ADR-0063） |
 | status | VARCHAR(32) NOT NULL | 状态机枚举名 |
 | failure_reason | VARCHAR(255) | 失败原因 |
 | created_at / updated_at / created_by / updated_by / version | — | 审计 + 乐观锁（BaseEntity，`@Version`） |
 
 **索引策略（已实现）**：
-- `uk_fulfillments_source_payment_no`（幂等兜底，保证同支付只一条履约）。
+- `uk_fulfillments_source_payment_item (source_payment_no, order_item_id)`（明细粒度幂等兜底）。
 - 普通索引：`findById` 走 PK；`findBySourcePaymentId` 走唯一约束（无独立二级索引，命中 UK 即可）。
 
 **分库分表键**：`[Phase 10 延后]` 当前单库单表；候选分片键 `order_id`，留待有真实负载证据后评估。
@@ -135,7 +135,7 @@ PENDING --cancel--> CANCELLED
 **请求** `FulfillmentCompletedRequest`：`{ fulfillmentId, orderNo, userId }`
 **响应** `EntitlementGrantedResponse`：`{ entitlementId, status }`
 
-**规则**：仅履约 DELIVERED 后触发一次；权益失败不反写履约为失败（履约事实已落库，保留可重试/人工补发），`[待定]` 自动重试/补偿机制。
+**规则**：仅履约 DELIVERED 后触发一次；权益失败不反写履约为失败（履约事实已落库）。当前没有自动重试/补偿机制，失败交由人工补发。
 
 ### 3.4 错误码枚举（全局，common-core `ErrorCodes`）
 
@@ -149,21 +149,9 @@ PENDING --cancel--> CANCELLED
 
 ---
 
-### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
+### 3.5 当前调用边界
 
-| 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
-|---|---|---|---|---|
-| 消费 | `order.paid` | ← order | 广播组之一 | §3.1 支付成功触发履约的内部 RPC |
-| 消费 | `refund.succeeded` | ← order | 广播组之一 | 退款终止 / 撤销履约 |
-| 消费 | `order.cancelled` | ← order | 广播组之一 | 关单撤单（新增能力） |
-| 生产 | `fulfillment.completed` | entitlement | 点对点 | §3.3 出站 RPC（fulfillment → entitlement） |
-| 生产 | `fulfillment.revoked` | entitlement | 点对点 | 同上（退款回收权益） |
-
-**回查依据**：`fulfillment.completed` → `fulfillments` 是否 `DELIVERED`。
-
-**链路延续**：消费 `order.paid` 后若再生产 `fulfillment.completed`，**必须继承信封中的原始 traceId**（ADR-0074 D14），否则一笔订单的日志会被切成两截。
-
-**order 不直调 entitlement**：权益仍经 fulfillment → entitlement 既定链，本服务是权益的唯一下游触发方。
+支付成功后的当前调用方是 order-service；order 使用自身 `order_items` 事实源补齐明细后，通过 `PaymentSucceededRequest.items` 调用本服务。履约完成后仍由 fulfillment-service 调用 entitlement-service，order 不直接修改权益。
 
 ## 4. 关键流程链路剖析
 
@@ -171,11 +159,9 @@ PENDING --cancel--> CANCELLED
 
 `PaymentSuccessRpcController.onPaymentSucceeded` → `FulfillmentApplicationService.acceptPaymentSucceeded`（`FulfillmentApplicationService.java:35`）：
 
-> **迁移标注（ADR-0054 / spec 016，Proposed 未实施）**：本端点的**调用方**将由 payment-service 变为 **order-service**（支付成功后由 order 层驱动履约；`fulfillment → entitlement` 链保留不变）。端点契约与下方 1~6 步语义均不变，实施完成后本节随代码更新。
-
 1. `sourcePaymentNo = request.paymentNo()`；`repository.findBySourcePaymentNo` 回查（幂等）。
 2. 命中 → 直接返回已有履约（**不重复创建、不重复交付、不重复触发权益**）。
-3. 未命中 → `newFulfillment(orderNo, sourcePaymentNo)`（状态 PENDING）→ `fulfillment.start()`（PENDING → PROCESSING）。
+3. 未命中 → 按 `orderItemNo` 调用 `newFulfillment(orderNo, orderItemNo, sourcePaymentNo)`（状态 PENDING）→ `fulfillment.start()`（PENDING → PROCESSING）。
 4. 同步 Mock 交付：`try { fulfillment.deliver(); } catch (RuntimeException ex) { fulfillment.fail(ex.getMessage()); metrics.counter("fulfillment.failed"); save; return; }`（PROCESSING → DELIVERED 或 FAILED，异常绝不臆断成功）。
 5. `metrics.counter("fulfillment.completed")` → `repository.save(fulfillment)`（DELIVERED 落库）。
 6. `entitlementGateway.notifyFulfillmentCompleted(...)` 触发权益授予（同步 RPC）；权益失败抛异常，不反写履约 DELIVERED 事实。
@@ -211,7 +197,7 @@ sequenceDiagram
 ### 5.1 存储读写策略
 
 - **写路径**：`MybatisFulfillmentRepository`（`MybatisFulfillmentRepository.java:42`）`save`：新对象 `insert` 并回填 id/version；已存在对象 `updateById`，0 行命中抛 `CONFLICT`（乐观锁）。
-- **读路径**：`findById`（PK）、`findBySourcePaymentId`（UK 查询）。
+- **读路径**：`findById`（PK）、`findBySourcePaymentNoAndOrderItemId`（复合唯一键）、`findByOrderNo`（退款撤销遍历）。
 - **映射**：领域 `Fulfillment` ↔ PO `FulfillmentEntity`（`@TableName("fulfillments")`）双向映射，状态机逻辑只在领域层，持久化只存枚举名（`MybatisFulfillmentRepository.java:58-75`）。
 - **缓存**：`[已评估·本期不引入]` 当前无 Redis/本地缓存，直连 MySQL；履约状态需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
 - **@Transactional**：应用服务方法未显式标注事务（`[待定]` 建议补 `@Transactional` 以明确写边界与可回滚语义）。
@@ -220,30 +206,28 @@ sequenceDiagram
 
 | 作用域 | 机制 |
 |---|---|
-| 支付成功触发履约 | `uk_fulfillments_source_payment_no` 唯一约束 + `findBySourcePaymentNo` 先回查（`FulfillmentApplicationService.java:39`） |
-| 并发重复插入 | 检查-插入存在 TOCTOU 窗口：并发重复会撞 UK 抛 `DuplicateKeyException`，**当前未捕获回查返回**，而是向上抛 500（`[待定]` 建议加 `DuplicateKeyException` 捕获兜底，对齐 payment-service 的 DB 级幂等） |
+| 支付成功触发履约 | `(source_payment_no, order_item_id)` 复合唯一约束 + `findBySourcePaymentNoAndOrderItemId` 先回查 |
+| 请求契约 | `items` 为空直接返回 `INVALID_ARGUMENT`；order-service 必须先以自身 `order_items` 富化明细 |
 | 权益授予「最多一次」 | 仅在新建且 DELIVERED 后触发一次（幂等命中路径不触发） |
 
 ### 5.3 分布式事务方案
 
 - 单服务内：`save(fulfillment)` 为单次 MySQL 写（当前未包 `@Transactional`，`[待定]`）。
-- 跨服务：权益授予 RPC 为后置副作用，**失败不回滚履约 DELIVERED 事实**（各自独立；payment 侧也 catch 忽略履约 RPC 失败）。靠重试/人工补发最终一致（Saga 语义，禁 2PC/XA）。
-- **权益补偿缺口**：代码未实现重试/补偿/Outbox（`[待定]`）。若 entitlement-service 不可用，履约已 DELIVERED 但权益未授予，无自动重放，依赖人工（technical-solution §4.3.4 承诺的"可重试/人工补发"中"重试"尚未落地）。
+- 跨服务：权益授予 RPC 为后置副作用，**失败不回滚履约 DELIVERED 事实**；当前实现保留履约事实并将失败交由人工补发处理（禁 2PC/XA）。
 
 ### 5.4 异常与边界场景
 
 | 场景 | 处理 | 阈值/规则 |
 |---|---|---|
 | 交付异常（Mock 抛 RuntimeException） | `fail(reason)` 记录 FAILED，不触发权益 | 不臆断成功 |
-| 幂等重复（同 paymentNo） | 回查命中直接返回已有履约 | 不重复创建/交付 |
-| 并发重复插入撞 UK | 抛 `DuplicateKeyException`（未捕获→500） | `[待定]` 应捕获回查返回 |
+| 幂等重复（同 paymentNo + orderItemNo） | 回查命中直接返回已有明细履约 | 不重复创建/交付 |
 | 乐观锁冲突更新 | `updateById` 0 行 → `CONFLICT` | 并发状态迁移保护 |
 | 权益 RPC 失败 | 异常透传，履约 DELIVERED 保留 | 不反写支付/履约失败 |
-| `PARTIALLY_DELIVERED` 不可达 | 枚举已声明但无 `partiallyDeliver()` 领域方法 | 与 technical-solution §4.1「部分交付」矛盾，`[待定]` 建模 FulfillmentItem 后再实现 |
+| `PARTIALLY_DELIVERED` | 枚举存在但当前没有可达迁移方法 | 当前 Mock 交付只产生 DELIVERED 或 FAILED |
 
 **超时/重试/降级阈值（`[目标]`，待确认）**：
 - 出站 Feign（entitlement）超时：未显式配置（OpenFeign 默认值）；`[目标]` connectTimeout=1s、readTimeout=3s。
-- 重试：权益授予 `[待定]` 有限退避重试（如 3 次），耗尽转人工补偿。
+- 重试：当前无自动退避重试；权益 RPC 失败后保留履约事实并由人工补发。
 - 熔断/降级：`[Phase 按需延后]` Resilience4j/Sentinel 延迟引入。
 
 ---

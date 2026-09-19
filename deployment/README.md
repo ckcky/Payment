@@ -43,7 +43,7 @@
 | Catalog（目录） | `catalog-service` | 8082 | `/actuator/health` |
 | Order（订单） | `order-service` | 8083 | `/actuator/health` |
 | Payment（支付） | `payment-service` | 8084 | `/actuator/health` |
-| Refund（退款） | `refund-service` | 8085 | `/actuator/health` |
+| （退款域已并入 Payment） | `payment-service` | 8084 | `/actuator/health` |
 | Fulfillment（履约） | `fulfillment-service` | 8086 | `/actuator/health` |
 | Entitlement（权益） | `entitlement-service` | 8087 | `/actuator/health` |
 | Reconciliation（对账） | `reconciliation-service` | 8088 | `/actuator/health` |
@@ -59,13 +59,16 @@
 
 本地开发用同一个 MySQL 实例承载多个逻辑库（Database-per-Service），服务间不共享表。
 
-## Docker Compose（本地 MySQL + 可观测）
+## Docker Compose（本地全栈 + 可观测）
 
-Compose 提供 MySQL 8、Prometheus 与 Grafana（各微服务镜像与编排在 Dockerfile 就绪后补齐）：
+Compose 提供 MySQL、Redis、Nacos、Prometheus、Grafana、Loki、Promtail，以及 `full` profile 下的 9 个领域服务和 `mock-channel-web` 演示组件。
 
 ```sh
-# 启动 MySQL（首次会执行 initdb/01-create-databases.sql，只建空库）
-docker compose -f deployment/docker-compose.yml up -d
+  # 宿主模式：仅启动基础设施
+  docker compose -f deployment/docker-compose.yml --profile infra up -d
+
+  # 容器模式：启动基础设施和应用（入口脚本会先准备 fat jar）
+  docker compose -f deployment/docker-compose.yml --profile full up -d
 
 # 校验 Compose 配置
 docker compose -f deployment/docker-compose.yml config
@@ -86,7 +89,7 @@ docker compose -f deployment/docker-compose.yml down
 docker compose -f deployment/docker-compose.yml down -v
 ```
 
-- 首次 `up -d` 时，`./initdb/01-create-databases.sql` 只创建 8 个**空数据库**：`catalog / order / payment / refund / fulfillment / entitlement / reconciliation / settlement`（`merchant` 无库）。**不创建任何业务表**。
+- 首次 `up -d` 时，`./initdb/01-create-databases.sql` 只创建服务所需的**空数据库**；**不创建任何业务表**。
 - 完整业务表 DDL 参考见 [`schema/`](schema/)（不挂载、不自动执行）；表结构由后续各服务自己的 migration 负责。
 - MySQL 实例：`mysql:8.0`，容器名 `payment-mysql`，宿主机端口 `3306`，命名卷 `mysql-data` 持久化数据。
 
@@ -118,7 +121,7 @@ bash deployment/build-images.sh
 （`PAYMENT_SKIP_BUILD=1` 可跳过）→ `docker compose --profile full build` → `--profile full up -d`
 → 等待 10 个服务 `/actuator/health` 全部 200（超时即 exit 1，不做假成功）。
 
-应用镜像由 `deployment/docker/Dockerfile` 生成（**一份通用 Dockerfile 服务 10 个模块**）：
+应用镜像由 `deployment/docker/Dockerfile` 生成（**一份通用 Dockerfile 服务 9 个领域服务和演示组件**）：
 采用「宿主打 jar，镜像只 COPY」策略（ADR-0070 D3）——fat jar 由父 POM repackage 到
 `deployment/output/jars/`，镜像内**不执行 Maven 构建**（否则 10 个服务会把 3 个 common 模块重复编译 10 次）。
 基础镜像 `eclipse-temurin:21-jre-jammy`（对应 `<java.version>21</java.version>`）。

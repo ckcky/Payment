@@ -190,22 +190,6 @@ PENDING --cancel--> CANCELLED
 
 ---
 
-### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
-
-| 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
-|---|---|---|---|---|
-| 生产 | `order.paid` | catalog、fulfillment、trace | 广播 | `onPaymentSucceeded` 中串行调 confirmStock / 驱动履约 |
-| 生产 | `refund.succeeded` | catalog、fulfillment、trace | 广播 | `onRefundResult` 中串行调秒杀回补 / 终止履约 |
-| 生产 | `order.cancelled` | catalog、payment、fulfillment、trace | 广播 | 关单后**当前无任何外部通知**（新增能力） |
-| 消费 | `payment.succeeded` | ← payment | 点对点 | 支付成功回调（含 surplus 判定在 transaction 层） |
-| 消费 | `refund.result` | ← payment | 点对点 | 退款结果回调 |
-
-**广播点画在 `order.paid` 的理由**（ADR-0066）：`order_items` 是明细单一事实源，「绝不信任上游快照」；且「正常到账 vs surplus」判定在本服务 transaction 层。两项只能在 order 完成，故由 order 以订单域名义发布事实。
-
-**回查依据**（半消息超时后判定本地事务是否成功）：`order.paid` → `orders` 是否 PAID；`refund.succeeded` → `transaction_refunds` 是否 SUCCEEDED；`order.cancelled` → `orders` 是否 CANCELLED / CLOSED。
-
-**本服务不生产记账事件**：payment/refund → ledger 的记账链路维持同步（ADR-0074 D2）。
-
 ## 4. 关键流程链路剖析
 
 ### 4.1 创建订单（两步式：建单与建支付单分离，spec 015 / 016）
@@ -276,6 +260,13 @@ sequenceDiagram
 ```
 
 > **历史标注（已实施）**：ADR-0054 的 transaction 层拆分与「surplus 自动退款」已随 spec 016 落地；事务收窄（出站 RPC 移出事务）由 spec 023 完成。本节描述与代码同步。
+
+### 4.3 当前退款编排（TXRF / PMRF）
+
+- order/transaction 生成交易层退款单 `TXRF`，以 `transaction_refunds` 持久化并作为幂等键；同一 TXRF 重试回放原退款单。
+- payment 生成支付层执行单 `PMRF`，并在 `transaction_refunds.payment_refund_no` 与 payment 退款记录之间互记双号。
+- payment 负责渠道退款尝试、REFUND attempt 事实和成功后的 ledger 冲正；退款终态通过 `on-refund-result` 通知 order。
+- order 按 TXRF 幂等收口交易/订单退款金额与状态，并触发已实现的库存回补和履约终止路径；原支付成功事实不被回滚。
 
 ---
 

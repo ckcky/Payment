@@ -33,6 +33,7 @@
 | 11 | 🟡 Med | `RefundStatus.PARTIALLY_SUCCEEDED` + `Refund.partiallySucceed()` | **ADR-0016 回退不彻底**：枚举值、状态转换方法与三处 Javadoc 仍在，但 `partiallySucceed()` **零调用**（死方法） | `refund-service/.../domain/Refund.java:91-96`、`domain/RefundStatus.java:13`；`RefundPostProcessOrchestrator:20`、`LedgerPostingGateway:6`、`Refund:15/86/120/145` 引用该状态 | 删除枚举值 + 死方法 + 相关 Javadoc（需先确认无外部序列化依赖，如已落库的状态字符串）；或保留枚举值但加 `@Deprecated` 并写明「不可达」 | 待裁决 |
 | 12 | 🟡 Med | `docs/specs/014-seckill-and-cache/acceptance.md` | §1 仍写「k6 压测 —— 本机不可用」，§3 仍把压测列为未验证项，但**实测数据已存在** | 2026-09-02 已实跑（Node 负载生成器），证据在 `deployment/performance/results/`；ADR-0044 已补 | Phase 5 阶段⑤ 按新证据更新该文件：验收方式补「Node 等价实跑」，未验证项保留「不超卖并发断言」 | 待处理（已排期） |
 | 13 | 🟡 Med | `deployment/schema/016-refund-channel-attempt.sql` | 迁移脚本使用 `ADD COLUMN IF NOT EXISTS`（**MariaDB 方言**），MySQL 8 直接报语法错误，存量库无法重放 | spec 018 plan.md §「禁用 016 的 ADD COLUMN IF NOT EXISTS（MariaDB 方言，MySQL 8 报错）」；018 迁移已改用 information_schema 守卫 + PREPARE 动态 SQL | 按 018 的幂等模式重写该脚本；涉及 refund 库存量环境时优先 | 待裁决（spec 018 T016 登记，2026-09-07） |
+| 14 | 🟡 Med | `fulfillment-service` 权益授予后处理 | 权益 RPC 失败后履约事实保留，但当前没有自动重试 / Outbox / 补偿扫描 | `FulfillmentApplicationService.acceptPaymentSucceeded`：履约落库后同步调用 entitlement；失败不回滚，当前依赖人工补发 | 后续单独评估幂等补偿方案；涉及跨服务一致性时先立 ADR，不在文档治理阶段实现 | 已登记（Phase 4.6，未实现） |
 
 ---
 

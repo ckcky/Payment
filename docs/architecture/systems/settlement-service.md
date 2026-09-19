@@ -7,7 +7,7 @@
 **下游依赖**：ledger-service（收敛为 SUCCEEDED 且净额 > 0 时记账，只读/写 RPC，不真实出款）；不调用银行 / 支付渠道
 
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。
-> 架构决策见 [ADR-0022~0023](../../adr/0008-settlement-decisions.md)（2026-08-29 提出，状态 Proposed，待负责人确认；代码已按「最简单实现」落地，决策后无需改实现）。
+> 结算当前基于已确认事实和 reconciliation audit gate；ADR 仅作为历史决策依据，当前行为以本设计和代码为准。
 
 ---
 
@@ -34,6 +34,12 @@
 - **结算侧记账（Constitution §II.3）**：仅收敛为 `SUCCEEDED` 且 `netMinor > 0` 时经 `LedgerPostingGateway` 发起；`netMinor <= 0` 不发起；RPC 失败**不回滚**批次状态（禁 2PC/XA），递增 `ledger.posting_failed` 交对账/重试兜底。
 - **显式状态机**：批次状态流转集中在 `SettlementBatch` 转换函数，禁止散落 `set`。
 - **无跨服务 SQL**：Database-per-Service，只读写自有 `settlement` schema；商户/对账/账本数据经 Feign RPC 获取。
+
+### 1.4 Audit Gate（当前结算前置）
+
+创建结算批次前，settlement-service 通过 `GET /internal/audit/settlement-gate?period=` 查询 reconciliation-service。`BLOCK` 时拒绝建批；`ALLOW` 表示不存在未隔离的阻塞差异，已挂账的差异可在留痕条件下继续。随后仍由 `ConfirmedFactGate` 逐条校验事实类型、币种、金额和周期。
+
+Audit 的挂账/调账只通过 ledger 标准记账通道产生平衡、append-only 调整分录；不修改 Payment、Refund 或 Settlement 原始事实。`SUSPENSE` 是 reconciliation audit 使用的待处理差错款过渡科目，结算只消费审计门禁允许的已确认事实。
 
 ### 1.3 技术指标（`[目标]`，待确认）
 

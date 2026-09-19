@@ -2,7 +2,7 @@
 
 **版本**：1.0
 **日期**：2026-09-16
-**状态**：Draft（**文档已齐备**：[spec.md](spec.md) / [plan.md](plan.md) / [tasks.md](tasks.md) / [acceptance.md](acceptance.md)；**实现待负责人核准两份 ADR 后开工**。本轮只写文档，不改代码）
+**状态**：Implemented（[spec.md](spec.md) / [plan.md](plan.md) / [tasks.md](tasks.md) / [acceptance.md](acceptance.md) 已闭环；ADR-0072/0073 已 Accepted，代码已实现）
 **分支**：`docs/spec-028-channel-routing`（纯文档）→ 实现期另开 `feature/028-channel-routing`
 **决策**：
 - [ADR-0072](../../adr/0033-two-layer-channel-architecture.md)（🟡 Proposed）—— payment-service 两层结构：payment 支付层 / channelAttempt 渠道层

@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-06
 
-**Status**: Draft（架构决策见 `docs/adr/0025-order-payment-orchestration.md`（ADR-0054，Proposed）；Supersedes ADR-0064 §决策#4）
+**Status**: Implemented（架构决策见 `docs/adr/0025-order-payment-orchestration.md`（ADR-0054）；Supersedes ADR-0064 §决策#4）
 
 **Input**: 负责人裁决：「重复支付 / 超额支付的处理归属订单 / 交易编排层，用 `transaction_no + payment_no` 去发起自动退款；支付成功回调通知到 order-service 这层，再由 order-service 去通知履约和权益。order-service 内含 order 层（订单创建 / 商品 / 金额）与 transaction 层（交易动作含重复支付自动退款），order-no 与 transaction-no 一比一；payment 层负责支付流程编排（调用 payment_attempts 各渠道支付 + 记账），transaction-no 与 payment-no 一比多。保留 `fulfillment → entitlement` 链。」
 

@@ -148,19 +148,6 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 ---
 
-### 3.5 事件通道（消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
-
-| 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
-|---|---|---|---|---|
-| 消费 | `fulfillment.completed` | ← fulfillment | 点对点 | §3.1 履约完成 → 授予权益（内部 RPC） |
-| 消费 | `fulfillment.revoked` | ← fulfillment | 点对点 | §3.2 退款成功 → 撤销权益（内部 RPC） |
-
-**幂等**：授予按 `sourceFulfillmentId` 唯一；回收为 AVAILABLE → REVOKED 终态迁移，已终态则 NOOP。重复投递安全。
-
-**触发方不变**：权益仍只由 fulfillment 触发，order 不直调本服务；改为事件后这一点保持不变。
-
-**Redis 依赖**：本服务需新增 `spring-boot-starter-data-redis`（ADR-0074 D11），仅用于消费，不做缓存 / 计数。
-
 ## 4. 关键流程链路剖析
 
 ### 4.1 履约完成授予权益

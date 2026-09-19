@@ -34,19 +34,23 @@
 ## 层级与优先级
 
 ```
-Constitution（.specify/memory/constitution.md，最高宪法）
-   ├── ADR（docs/adr/，记录重要决策，不自动取代宪法）
-   ├── 总体技术方案（docs/architecture/technical-solution.md，当前有效基线）
-   │       └── 每服务系统设计（docs/architecture/systems/<service>-service.md）
-   ├── Roadmap（docs/architecture/roadmap.md，阶段边界）
-   └── Feature（docs/specs/<feature>/）
-          ├── spec.md（要什么）
-          ├── plan.md（怎么设计）
-          ├── tasks.md（怎么执行）
-          └── 代码 / 测试（实现结果）
+Constitution（.specify/memory/constitution.md，最高约束）
+   ├── L0 Current System Facts
+   │     ├── 总体技术方案（docs/architecture/technical-solution.md，当前有效基线）
+   │     └── 每服务系统设计（docs/architecture/systems/<service>-service.md）
+   ├── L1 Current Constraints & Engineering Rules
+   │     └── docs/guides/*.md（按任务读取相关规范）
+   ├── L2 Active Feature Work
+   │     └── Feature（docs/specs/<feature>/，仅当前 Feature 默认读取）
+   │           ├── spec.md（要什么）
+   │           ├── plan.md（怎么设计）
+   │           ├── tasks.md（怎么执行）
+   │           └── 代码 / 测试（实现结果）
+   └── L3 Historical / On-Demand
+         └── ADR（docs/adr/）与 archive（按需读取）
 ```
 
-冲突时按 Constitution 的优先级处理。ADR 不能自行取代宪法；若决策改变宪法原则，必须先修订 Constitution，再更新 ADR。
+普通代码任务默认从 L0 和相关代码 / 测试开始，按任务补充 L1；L2 仅用于明确的 Active Feature，L3 仅按需读取。文档引用是导航，不自动形成读取依赖。冲突时按 Constitution 的约束处理；若代码、当前架构和 Feature / ADR 之间存在事实冲突，必须报告 `DOCUMENTATION_DRIFT`，不得静默改写架构文档。
 
 ## 工作流（Spec Kit）
 
