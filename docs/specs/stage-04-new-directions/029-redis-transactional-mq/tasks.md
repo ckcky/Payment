@@ -83,9 +83,10 @@
 - [x] T60 `CHANGELOG.md` + `roadmap.md` 登记
 - [x] T61 演示脚本 D1~D6（spec §5）：回滚不投递 / 崩溃回查 / 下游宕机自愈 / 广播隔离 / 轨迹 / 死信
 - [x] T62 全量门禁：`mvn -o clean verify -fae` 全绿 + 新增通道测试 ≥30 用例（SC-9）
-      —— 2026-09-19 补跑：17 模块全 SUCCESS（6m22s），MQ 模块 19 用例全过。
-      合并前未跑测试导致阻塞读超时缺陷漏网（见 T74），此处复核并补记。
-      —— 2026-09-19 补跑：17 模块全 SUCCESS（6m22s），MQ 模块 19 用例全过。
+      —— 2026-09-19 补跑：17 reactor 条目全 SUCCESS（5m26s），**667 tests / 0 failures / 0 errors / 0 skipped**
+      （139 份 surefire 报告聚合）；通道相关测试 84 例 ≫ 30 阈值，逐类：
+      `MqBlockingReadTimeoutTest` 4、`CatalogMqHandlersTest` 6、`FulfillmentMqHandlersTest` 4、
+      `EntitlementMqHandlersTest` 5、`PaymentMqHandlersTest` 12、`ChannelCallbackProxyTest` 5 等。
       合并前未跑测试导致阻塞读超时缺陷漏网（见 T74），此处复核并补记。
 
 ## 批次 G：链路追踪连续性 + 架构文档同步（2026-09-19 追加）
@@ -105,6 +106,14 @@
 - [x] T73 断言：一笔完整链路（下单→支付→履约→权益）的所有日志**同一 traceId**，且可按 bizNo 检索出全链路（SC-11）
       —— 2026-09-19 实跑核验：order=OR226990801450889217 全链路 traceId=9e74c16b-… 贯通，
       `MQ commit topic=order.paid` 日志携带同一 traceId，consumer lag=0。
+      —— 2026-09-19 全栈复测（`run-all.sh` 末段 scenario-mq D1~D6 全绿，PASS=15 SKIP=1）：
+      order=**OR227024975809409025**，单一 traceId=**3f818561-2791-486c-a0df-d29cfbdf7398** 贯穿
+      5 个服务——order-service 发布 `order.paid` → catalog-service 消费 confirm →
+      fulfillment-service 消费建履约并发布 `fulfillment.completed` → entitlement-service 消费授予权益；
+      payment-service 经 `/internal/orders/on-payment-succeeded` 触发链路（同一 traceId）。
+      timeline API（`GET /api/orders/{orderNo}/timeline`）按 bizNo 还原 2 条事件
+      （`order.paid` + `fulfillment.completed`），两条 traceId 一致；
+      `trace-grep.sh <traceId>` 跨服务日志聚合验证 traceId + bizNo 双维度可检索。
 
 ## 批次 H：回归修复（2026-09-19，spec 029 合并后 CI 暴露）
 

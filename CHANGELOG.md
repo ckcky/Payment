@@ -30,8 +30,18 @@ job 随即暴露两处缺陷。本次修复二者，并补上此前遗留的 T62
   ——表现为 `paymentResponseSchemaIsStable` 稳定失败（9/17 起多次运行同点复现，与 MQ 无关）。
   同仓 `e2e.yml` 早已用 `PAYMENT_FEIGN_*_TIMEOUT_MS` 规避并留有注释，`verify.yml` 的该 job 漏配。
   修复：补齐四个超时变量 + `PAYMENT_ADMIN_TOKEN`，与 `e2e.yml` 对齐；源码默认值不动。
-- **验收补记**：T62（全量门禁）补跑 `./mvnw -o -B clean verify -fae` → 17 模块全 SUCCESS；
-  T73（SC-11 traceId 连续性）实跑核验 order=OR226990801450889217 全链路 traceId 贯通、consumer lag=0。
+- **验收补记**：
+  - **T62（全量门禁 / SC-9）**：补跑 `./mvnw -o -B clean verify -fae` → 17 reactor 条目全 **BUILD SUCCESS**
+    （5m26s），**667 tests / 0 failures / 0 errors / 0 skipped**（139 份 surefire 报告聚合）；
+    通道相关测试 **84 例**（≫ SC-9 要求的 ≥30）。
+  - **T73（SC-11 traceId 连续性）**：全栈复测，`run-all.sh` 末段 `scenario-mq.sh` D1~D6 **全绿（PASS=15 SKIP=1）**；
+    单据 OR227024975809409025 的 traceId `3f818561-2791-486c-a0df-d29cfbdf7398` 贯穿 order / catalog /
+    fulfillment / entitlement / payment 五段日志，timeline 按 bizNo 还原 2 条事件且 traceId 一致。
+  - **INV / SC live 演练**：`scenario-mq.sh` D1~D6 实跑覆盖 SC-2/3/4/5（回滚不投递 / 崩溃回查补投 /
+    下游宕机自愈 / 广播隔离）；`run-all.sh` 七段（主链 / 渠道路由 / 退款 / UNKNOWN 收敛 / 每日对账 /
+    审计闭环 / 消息通道）**EXIT_CODE=0 全通过**。
+  - **演示脚本修复**：`scenario-mq.sh` 原用 `$2` 解析 `redis-cli XINFO GROUPS`（管道输出为一行一 token，
+    键值分行 → 基线恒 `-1`，断言平凡成立）——改为状态机解析并抽为 `deployment/demo/mq-group-entries.sh`。
 
 ---
 
