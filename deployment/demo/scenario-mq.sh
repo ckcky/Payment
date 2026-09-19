@@ -40,9 +40,14 @@ xlen() { # xlen <topic>
   case "$v" in ''|*[!0-9]*) echo 0;; *) echo "$v";; esac
 }
 # 指定组已消费条数（entries-read）
+# 注意：redis-cli 经管道（非 TTY）输出为「一行一个 token」——
+#   name\n<catalog>\nconsumers\n1\n...\nentries-read\n10\n
+#   故键与其值分行；需用「上一行是键」的状态机取值，不能直接 $2。
 group_entries() { # group_entries <topic> <group>
   rcli XINFO GROUPS "mq:stream:$1" 2>/dev/null | awk -v g="$2" '
-    $1=="name" {cur=$2} cur==g && $1=="entries-read" {print $2; found=1}
+    prev=="name" {cur=$1}
+    cur==g && prev=="entries-read" {print $1; found=1}
+    {prev=$1}
     END {if (!found) print "-1"}'
 }
 assert_ge() { # assert_ge <actual> <floor> <label>
@@ -120,7 +125,7 @@ if [ "$REDIS_OK" = 1 ]; then
   BEFORE_D1="$(xlen "$D1_TOPIC")"
   BEFORE_D1_IDX="$(rcli ZCARD "mq:half:idx" || echo 0)"
   case "$BEFORE_D1_IDX" in ''|*[!0-9]*) BEFORE_D1_IDX=0;; esac
-  info "D1 基线：$D1_TOPIC 队列 = $BEFORE_D1，半消息索引 = $BEFORE_D1_IDX"
+  info "D1 基线：$D1_TOPIC 队列 = ${BEFORE_D1}，半消息索引 = ${BEFORE_D1_IDX}"
 else
   BEFORE_D1=0; BEFORE_D1_IDX=0
 fi
@@ -129,12 +134,12 @@ fi
 http POST "$ORDER_URL/orders" \
   "{\"userId\":\"demo-user\",\"merchantId\":\"1\",\"items\":[{\"skuId\":999999999,\"quantity\":1}]}"
 if [ "$STATUS" -ge 400 ] 2>/dev/null; then
-  pass "D1：非法下单被拒（HTTP $STATUS），本地事务未提交"
+  pass "D1：非法下单被拒（HTTP ${STATUS}），本地事务未提交"
 else
-  warn "D1：建单未被拒（HTTP $STATUS）——改用「缺少 items」触发参数校验失败"
+  warn "D1：建单未被拒（HTTP ${STATUS}）——改用「缺少 items」触发参数校验失败"
   http POST "$ORDER_URL/orders" '{"userId":"demo-user","merchantId":"1","items":[]}'
-  [ "$STATUS" -ge 400 ] && pass "D1：空明细下单被拒（HTTP $STATUS）" \
-                        || fail "D1：无法构造失败的建单请求（HTTP $STATUS）"
+  [ "$STATUS" -ge 400 ] && pass "D1：空明细下单被拒（HTTP ${STATUS}）" \
+                        || fail "D1：无法构造失败的建单请求（HTTP ${STATUS}）"
 fi
 
 if [ "$REDIS_OK" = 1 ]; then
@@ -146,7 +151,7 @@ if [ "$REDIS_OK" = 1 ]; then
   assert_le "$AFTER_D1" "$BEFORE_D1" "D1：失败请求后 $D1_TOPIC 队列未增长（无幽灵消息）"
   # 半消息索引不增长（要么没 prepare，要么已 rollback/回查清掉）
   assert_le "$AFTER_D1_IDX" "$BEFORE_D1_IDX" "D1：半消息索引未增长（无悬挂半消息）"
-  info "D1：可见队列 $BEFORE_D1 → $AFTER_D1，半消息索引 $BEFORE_D1_IDX → $AFTER_D1_IDX"
+  info "D1：可见队列 ${BEFORE_D1} → ${AFTER_D1}，半消息索引 ${BEFORE_D1_IDX} → ${AFTER_D1_IDX}"
 else
   skip "D1：Redis 不可访问，跳过队列/索引断言"
 fi
@@ -188,7 +193,7 @@ else
     occurredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     payload '{"orderNo":"'"$ORDER_NO"'","paymentNo":"'"$PAYMENT_NO"'","userId":"demo-user","items":[]}' >/dev/null
   rcli ZADD "mq:half:idx" "$OLD_SCORE" "order.paid:$MSG_OK" >/dev/null
-  info "D2：已植入应判 COMMIT 的半消息 msgId=$MSG_OK（bizNo=$ORDER_NO）"
+  info "D2：已植入应判 COMMIT 的半消息 msgId=${MSG_OK}（bizNo=${ORDER_NO}）"
 
   # ② 应判 ROLLBACK 的半消息（bizNo = 不存在的订单）
   rcli HSET "mq:half:order.paid:$MSG_NO" \
@@ -196,7 +201,7 @@ else
     bizNo "ORDER-DOES-NOT-EXIST" traceId "trace-d2-rollback" producer "demo-scenario-mq" \
     occurredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" payload '{"orderNo":"ORDER-DOES-NOT-EXIST"}' >/dev/null
   rcli ZADD "mq:half:idx" "$OLD_SCORE" "order.paid:$MSG_NO" >/dev/null
-  info "D2：已植入应判 ROLLBACK 的半消息 msgId=$MSG_NO（bizNo 不存在）"
+  info "D2：已植入应判 ROLLBACK 的半消息 msgId=${MSG_NO}（bizNo 不存在）"
 
   # 扫描器 fixedDelay=5s；给足两个周期
   info "D2：等待回查扫描（≤15s）…"
@@ -215,7 +220,7 @@ else
   jget "d['status']"; assert_eq "$VALUE" "PAID" "D2：补投后订单状态仍为 PAID（幂等，未产生第二笔副作用）"
 
   QUEUE_AFTER="$(xlen "order.paid")"
-  info "D2：$D1_TOPIC 队列 $QUEUE_BEFORE → $QUEUE_AFTER（含本次补投）"
+  info "D2：$D1_TOPIC 队列 ${QUEUE_BEFORE} → ${QUEUE_AFTER}（含本次补投）"
 fi
 
 # ===========================================================================
@@ -239,9 +244,9 @@ else
   assert_eq "$O_STATUS" "PAID" "D3：下游无关，订单状态已 PAID"
 
   # fulfillment 组应追平（默认在线时 5~10s 内消费完）
-  wait_until 20 1 "fulfillment 组追平 order.paid" bash -c "
-    now=\$(docker exec $REDIS_CONTAINER redis-cli XINFO GROUPS 'mq:stream:order.paid' 2>/dev/null | awk '\$1==\"name\"{c=\$2} c==\"fulfillment\" && \$1==\"entries-read\"{print \$2}')
-    [ -n \"\$now\" ] && [ \"\$now\" -gt ${FF_GROUP_BEFORE:-0} ]"
+  wait_until 20 1 "fulfillment 组追平 order.paid" bash -c '
+    now=$(bash "'"$HERE"'/mq-group-entries.sh" order.paid fulfillment)
+    [ -n "$now" ] && [ "$now" != "-1" ] && [ "$now" -gt '"${FF_GROUP_BEFORE:-0}"' ]'
   pass "D3：fulfillment 组 entries-read 已增长（消费侧追平）"
 fi
 
@@ -266,9 +271,9 @@ else
     case "$g" in
       catalog) B="$CAT_B";; fulfillment) B="$FF_B";; trace) B="$TR_B";;
     esac
-    wait_until 20 1 "组 $g 位点增长" bash -c "
-      now=\$(docker exec $REDIS_CONTAINER redis-cli XINFO GROUPS 'mq:stream:order.paid' 2>/dev/null | awk '\$1==\"name\"{c=\$2} c==\"$g\" && \$1==\"entries-read\"{print \$2}')
-      [ -n \"\$now\" ] && [ \"\$now\" -gt ${B:--1} ]"
+    wait_until 20 1 "组 $g 位点增长" bash -c '
+      now=$(bash "'"$HERE"'/mq-group-entries.sh" order.paid "'"$g"'")
+      [ -n "$now" ] && [ "$now" != "-1" ] && [ "$now" -gt '"${B:--1}"' ]'
     pass "D4：$g 组独立位点已推进（广播各得一份）"
   done
 fi
@@ -294,7 +299,7 @@ info "D5：轨迹事件数 = $T_COUNT"
 if [ "${T_COUNT:-0}" -ge 1 ] 2>/dev/null; then
   pass "D5：轨迹含 ≥1 条事件"
   jget "d['events'][0]['traceId']"; TRACE0="$VALUE"
-  [ -n "$TRACE0" ] && pass "D5：事件携带 traceId（$TRACE0）" \
+  [ -n "$TRACE0" ] && pass "D5：事件携带 traceId（${TRACE0}）" \
                    || fail "D5：事件缺 traceId（traceId 连续性被破坏）"
   jget "d['events'][0]['topic']"; info "D5：首条事件 topic = $VALUE"
   # 轨迹是只读投影：再查一次条数不减少、业务状态不变
@@ -313,9 +318,9 @@ http GET "$ORDER_URL/actuator/prometheus"
 assert_status 200 "order Prometheus 端点"
 for m in mq_consumed_total mq_committed_total mq_prepared_total; do
   if echo "$BODY" | grep -q "$m"; then
-    pass "D6：order 暴露 $m（FR-502 指标在位）"
+    pass "D6：order 暴露 ${m}（FR-502 指标在位）"
   else
-    fail "D6：缺少指标 $m（消息通道埋点缺失）"
+    fail "D6：缺少指标 ${m}（消息通道埋点缺失）"
   fi
 done
 if echo "$BODY" | grep -q 'mq_dead_letter_total'; then
