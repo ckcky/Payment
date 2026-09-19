@@ -90,3 +90,20 @@ CREATE TABLE IF NOT EXISTS transaction_refunds (
     KEY idx_transaction_refunds_transaction_no (transaction_no),
     KEY idx_transaction_refunds_payment_refund_no (payment_refund_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- spec 029 / FR-401、T51：订单事件轨迹（只读投影，业务正确性 MUST NOT 依赖它，INV-5）
+CREATE TABLE IF NOT EXISTS order_event_log (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    order_no VARCHAR(32) NOT NULL COMMENT '所属订单（OR+雪花）',
+    event_type VARCHAR(64) NOT NULL COMMENT '事件类型（topic 名，如 order.paid）',
+    topic VARCHAR(64) NOT NULL COMMENT '消息主题',
+    msg_id VARCHAR(64) NOT NULL COMMENT '信封 msgId（重复投递去重）',
+    trace_id VARCHAR(64) NULL COMMENT '链路 traceId（跨异步边界连续）',
+    producer VARCHAR(64) NULL COMMENT '生产方服务名',
+    payload_json TEXT NULL COMMENT '事件负载 JSON',
+    occurred_at DATETIME NOT NULL COMMENT '事件发生时刻（生产端 occurredAt）',
+    created_at DATETIME NOT NULL COMMENT '轨迹落表时刻',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_order_event_log_msg_id (msg_id),
+    KEY idx_order_event_log_order_occurred (order_no, occurred_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

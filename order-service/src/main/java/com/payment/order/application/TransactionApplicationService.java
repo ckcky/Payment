@@ -21,8 +21,10 @@ import com.payment.order.domain.RefundOrderStatus;
 import com.payment.order.domain.Transaction;
 import com.payment.order.domain.TransactionRefundRepository;
 import com.payment.order.domain.TransactionRepository;
+import com.payment.order.mq.OrderEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -60,6 +62,7 @@ public class TransactionApplicationService {
     private final CatalogClient catalogClient;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
+    private final ObjectProvider<OrderEventPublisher> mqProvider;
 
     public TransactionApplicationService(OrderRepository orderRepository,
                                          TransactionRepository transactionRepository,
@@ -69,7 +72,8 @@ public class TransactionApplicationService {
                                          FulfillmentGateway fulfillmentGateway,
                                          CatalogClient catalogClient,
                                          BusinessMetrics metrics,
-                                         StructuredAuditLogger auditLogger) {
+                                         StructuredAuditLogger auditLogger,
+                                         ObjectProvider<OrderEventPublisher> mqProvider) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.transactionRefundRepository = transactionRefundRepository;
@@ -79,6 +83,7 @@ public class TransactionApplicationService {
         this.catalogClient = catalogClient;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
+        this.mqProvider = mqProvider;
     }
 
     /**
@@ -275,24 +280,29 @@ public class TransactionApplicationService {
             metrics.counter("order.refund_succeeded", 1.0, "module", MODULE,
                     "orderStatus", order.getStatus().name());
 
-            // 秒杀回补（幂等键 refund:{TXRF}:sku:{skuId}；首次终态迁移才触发，普通商品
-            // catalog 侧无配额键自动跳过——SeckillStockService.rollback 的 exists 守卫）
-            for (OrderItem item : order.getItems()) {
-                String restockKey = "refund:" + refundOrder.getRefundNo() + ":sku:" + item.getSkuId();
-                log.debug("seckill restock key={} quantity={}", restockKey, item.getQuantity());
-                catalogRestock(item.getSkuId(), item.getQuantity(), restockKey);
-            }
-
-            // 履约终止（下游按 item 撤全部 PENDING；失败不阻断退款成功事实，可重入重放）
-            try {
-                RefundFulfillmentResponse resp = fulfillmentGateway.onRefund(new RefundFulfillmentRequest(
-                        refundOrder.getRefundNo(), refundOrder.getPaymentNo(), order.getOrderNo(),
-                        order.getUserId(), refundOrder.getReason()));
-                log.info("fulfillment terminated on refund txrf={} fulfillmentStatus={}",
-                        refundOrder.getRefundNo(), resp.status());
-            } catch (RuntimeException ex) {
-                log.warn("fulfillment termination failed (retry by replay) txrf={}", refundOrder.getRefundNo(), ex);
-                metrics.counter("order.refund_fulfillment_terminate_failed", 1.0, "module", MODULE);
+            // spec 029 / T34-T35：退款成功事实经 MQ 异步扇出（catalog 回补秒杀配额 +
+            // fulfillment 终止履约，后者再沿 fulfillment → entitlement 撤权益）。
+            // 本方法已提交订单/交易状态，属 INV-3「本地事务提交后」publish 场景。
+            OrderEventPublisher mq = mqProvider.getIfAvailable();
+            if (mq != null) {
+                mq.publishRefundSucceeded(refundOrder, order);
+            } else {
+                // FR-306 回落：mq.enabled=false 时保持既有同步语义
+                for (OrderItem item : order.getItems()) {
+                    String restockKey = "refund:" + refundOrder.getRefundNo() + ":sku:" + item.getSkuId();
+                    log.debug("seckill restock key={} quantity={}", restockKey, item.getQuantity());
+                    catalogRestock(item.getSkuId(), item.getQuantity(), restockKey);
+                }
+                try {
+                    RefundFulfillmentResponse resp = fulfillmentGateway.onRefund(new RefundFulfillmentRequest(
+                            refundOrder.getRefundNo(), refundOrder.getPaymentNo(), order.getOrderNo(),
+                            order.getUserId(), refundOrder.getReason()));
+                    log.info("fulfillment terminated on refund txrf={} fulfillmentStatus={}",
+                            refundOrder.getRefundNo(), resp.status());
+                } catch (RuntimeException ex) {
+                    log.warn("fulfillment termination failed (retry by replay) txrf={}", refundOrder.getRefundNo(), ex);
+                    metrics.counter("order.refund_fulfillment_terminate_failed", 1.0, "module", MODULE);
+                }
             }
             // entitlement 撤销沿 fulfillment → entitlement 既定链（order 不直调 entitlement）
         } else {

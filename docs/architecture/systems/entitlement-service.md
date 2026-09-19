@@ -148,7 +148,7 @@ PENDING_GRANT --fail(reason)--> FAILED
 
 ---
 
-### 3.5 事件通道（消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
+### 3.5 事件通道（消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
 | 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
 |---|---|---|---|---|
@@ -160,6 +160,16 @@ PENDING_GRANT --fail(reason)--> FAILED
 **触发方不变**：权益仍只由 fulfillment 触发，order 不直调本服务；改为事件后这一点保持不变。
 
 **Redis 依赖**：本服务需新增 `spring-boot-starter-data-redis`（ADR-0074 D11），仅用于消费，不做缓存 / 计数。
+
+**实现实况**（spec 029 批次 D，`com.payment.entitlement.mq`）：
+
+| 项 | 值 |
+|---|---|
+| 配置类 | `EntitlementMqConfig`（`payment.mq.enabled=false` 回落同步 Feign） |
+| 业务消费组 | `entitlement`（消费名 `et-fc` / `et-fr`） |
+| 处理动作 | `EntitlementMqHandlers`：`onFulfillmentCompleted` → `grantOnFulfillmentCompleted`；`onFulfillmentRevoked` → `revokeOnRefund` |
+| 无 checker | 本服务只消费、不生产事件，故无需回查 checker |
+| traceId 继承 | 消费时 MDC 恢复信封 traceId；本服务不生产新事件，链路止于权益（FR-604 的链路延续在 fulfillment → entitlement 段） |
 
 ## 4. 关键流程链路剖析
 

@@ -133,6 +133,31 @@ bash deployment/demo/stop-stack.sh
 - 结算门禁：审计批有未收口差异时，settlement 建批被 `BLOCK`（fail-closed）；「已挂账」视为留痕放行，结算仍可继续（分级门禁，plan §6.1）。
 - `AUDIT_FULL=1 bash deployment/demo/scenario-audit.sh` 追加 ALL scope（账账科目勾稽 / 账实渠道核对 / 账表回算）。
 
+## 消息通道演示（spec 029 / ADR-0074）
+
+- 入口：`bash deployment/demo/scenario-mq.sh`（或经 run-all）。需 `payment-redis` 容器可访问（`docker exec payment-redis redis-cli ping`）；
+  容器不可达时脚本自动降级为「只跑业务层断言」，队列/位点断言标记 SKIP 而非 FAIL。
+- 六个场景（对齐 spec 029 §5）：
+
+  | # | 场景 | 观测点 |
+  |---|---|---|
+  | D1 | 回滚不投递 | 失败请求后 `mq:stream:order.paid` 队列与 `mq:half:idx` 索引**均不增长**（INV-3） |
+  | D2 | 崩溃回查补投 | 手工植入断言半消息 → 5s 内扫描器按真相表分派 COMMIT 补投 / ROLLBACK 仅清索引 |
+  | D3 | 下游宕机自愈 | 订单 PAID 不受下游影响；消费组 `entries-read` 追平积压 |
+  | D4 | 广播隔离 | `catalog` / `fulfillment` / `trace` 三组各自独立位点，一笔支付各 +1 |
+  | D5 | 订单轨迹 | `GET /api/orders/{orderNo}/timeline` 返回含 traceId 的完整时序 |
+  | D6 | 死信与告警 | `mq.*` 指标在位；`mq:dlq:{topic}` 长度与 Grafana 面板可见 |
+
+- 手工排障（只读）：
+  ```bash
+  docker exec payment-redis redis-cli XLEN   mq:stream:order.paid
+  docker exec payment-redis redis-cli XINFO GROUPS mq:stream:order.paid
+  docker exec payment-redis redis-cli ZCARD  mq:half:idx
+  docker exec payment-redis redis-cli XLEN   'mq:dlq:order.paid'
+  ```
+- 键名约定集中在 `common-redis-mq` 的 `MqKeys`：`mq:stream:{topic}` / `mq:half:{topic}:{msgId}` /
+  `mq:half:idx` / `mq:dlq:{topic}` / `mq:half:checks:{topic}:{msgId}`。
+
 ## Mock 渠道场景切换（ADR-0049）
 
 `payment.channel.mock-scenario` 是**构造期注入**的，运行期不可热切换。需要换场景时重启支付服务：

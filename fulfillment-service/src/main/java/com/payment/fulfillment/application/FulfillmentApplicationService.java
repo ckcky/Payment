@@ -11,8 +11,11 @@ import com.payment.common.dto.rpc.RefundPostProcessRequest;
 import com.payment.fulfillment.domain.Fulfillment;
 import com.payment.fulfillment.domain.FulfillmentRepository;
 import com.payment.fulfillment.domain.FulfillmentStatus;
+import com.payment.fulfillment.mq.FulfillmentEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -35,13 +38,36 @@ public class FulfillmentApplicationService {
     private final FulfillmentRepository repository;
     private final EntitlementGateway entitlementGateway;
     private final BusinessMetrics metrics;
+    /** spec 029 / FR-206/207 / T44、T46：`mq.enabled=true` 时存在；否则回落同步 Feign（FR-306）。 */
+    private final FulfillmentEventPublisher mq;
 
+    @Autowired
     public FulfillmentApplicationService(FulfillmentRepository repository,
                                          EntitlementGateway entitlementGateway,
-                                         BusinessMetrics metrics) {
+                                         BusinessMetrics metrics,
+                                         ObjectProvider<FulfillmentEventPublisher> mqProvider) {
         this.repository = repository;
         this.entitlementGateway = entitlementGateway;
         this.metrics = metrics;
+        this.mq = mqProvider.getIfAvailable();
+    }
+
+    /** 便捷构造（测试用，MQ 关闭）：回落同步 Feign（FR-306）。 */
+    public FulfillmentApplicationService(FulfillmentRepository repository,
+                                         EntitlementGateway entitlementGateway,
+                                         BusinessMetrics metrics) {
+        this(repository, entitlementGateway, metrics, (FulfillmentEventPublisher) null);
+    }
+
+    /** 显式指定发布器（测试用；生产走 {@code ObjectProvider} 主构造）。 */
+    public FulfillmentApplicationService(FulfillmentRepository repository,
+                                         EntitlementGateway entitlementGateway,
+                                         BusinessMetrics metrics,
+                                         FulfillmentEventPublisher mq) {
+        this.repository = repository;
+        this.entitlementGateway = entitlementGateway;
+        this.metrics = metrics;
+        this.mq = mq;
     }
 
     public List<Fulfillment> acceptPaymentSucceeded(PaymentSucceededRequest request) {
@@ -82,9 +108,29 @@ public class FulfillmentApplicationService {
             Fulfillment saved = repository.save(fulfillment);
             result.add(saved);
 
-            // 每条履约完成后各自触发权益授予（同步 RPC）；权益失败不反写履约成功事实。
-            entitlementGateway.notifyFulfillmentCompleted(
-                    new FulfillmentCompletedRequest(saved.getId(), saved.getOrderNo(), request.userId()));
+            // 每条履约完成后各自触发权益授予；权益失败不反写履约成功事实。
+            // spec 029 / T46、FR-206：fulfillment.completed 改事务消息（点对点 → entitlement），
+            // 替代同步 EntitlementGateway.notifyFulfillmentCompleted。SC-1：同步通知点清零。
+            FulfillmentCompletedRequest completed = new FulfillmentCompletedRequest(
+                    saved.getId(), saved.getOrderNo(), request.userId());
+            if (mq != null) {
+                try {
+                    mq.publishFulfillmentCompleted(completed);
+                } catch (RuntimeException ex) {
+                    // commit 失败不回滚履约成功事实（INV-1）；半消息由回查按 fulfillments 表补投
+                    metrics.counter("fulfillment.entitlement_grant_failed", 1.0, "module", MODULE);
+                    log.warn("MQ 发布 fulfillment.completed 失败（事实不回滚，回查补投）orderNo={} reason={}",
+                            saved.getOrderNo(), ex.getMessage());
+                }
+            } else {
+                try {
+                    entitlementGateway.notifyFulfillmentCompleted(completed);
+                } catch (RuntimeException ex) {
+                    metrics.counter("fulfillment.entitlement_grant_failed", 1.0, "module", MODULE);
+                    log.warn("entitlement grant failed (reconciliation fallback) orderNo={} reason={}",
+                            saved.getOrderNo(), ex.getMessage());
+                }
+            }
         }
         return result;
     }
@@ -120,10 +166,17 @@ public class FulfillmentApplicationService {
             }
         }
         // 权益撤销（幂等）：只要订单存在权益即触发（含 DELIVERED 履约已授予的权益）
+        // spec 029 / T44、FR-207：fulfillment.revoked 改事务消息（点对点 → entitlement），
+        // 替代同步 EntitlementGateway.revokeOnRefund。SC-1：同步通知点清零。
+        RefundPostProcessRequest revoke = new RefundPostProcessRequest(
+                request.refundNo(), request.paymentNo(), request.orderNo(),
+                request.userId(), request.reason());
         try {
-            entitlementGateway.revokeOnRefund(new RefundPostProcessRequest(
-                    request.refundNo(), request.paymentNo(), request.orderNo(),
-                    request.userId(), request.reason()));
+            if (mq != null) {
+                mq.publishFulfillmentRevoked(revoke);
+            } else {
+                entitlementGateway.revokeOnRefund(revoke);
+            }
         } catch (RuntimeException ex) {
             metrics.counter("fulfillment.entitlement_revoke_failed", 1.0, "module", MODULE);
             log.warn("entitlement revocation failed (reconciliation fallback) orderNo={} refundNo={} reason={}",

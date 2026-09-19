@@ -51,7 +51,8 @@ class SuccessfulPurchaseScenarioTest {
     private OrderApplicationService service(CatalogClient client) {
         return new OrderApplicationService(orderRepository, transactionRepository, client, paymentGateway,
                 new NoopBusinessMetrics(), org.mockito.Mockito.mock(OrderTimeoutScheduler.class),
-                fulfillmentGateway, new com.payment.order.application.NoopTransactionManager());
+                fulfillmentGateway, new com.payment.order.application.NoopTransactionManager(),
+                com.payment.order.application.MqTestSupport.off());
     }
 
     /** 记录型 fake：捕获创建支付意图请求并返回固定响应。 */

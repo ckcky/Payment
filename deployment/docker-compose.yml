@@ -53,13 +53,41 @@ services:
   redis:
     image: redis:7
     container_name: payment-redis
+    # spec 029 / FR-501：Redis 由「纯缓存」升级为事务消息通道载体后，必须持久化与防驱逐——
+    #   --appendonly yes：AOF 落盘，进程/容器重启后消息与消费位点不丢（L2 已诚实标注落盘窗口）
+    #   --maxmemory 512mb + noeviction：容量触顶时**拒绝写入而非驱逐**，避免半消息/位点被
+    #     无声淘汰导致消息凭空消失（INV-5：Redis 全丢时系统仍正确，但绝不能主动丢）
+    #   数据卷 redis-data：容器重建后 AOF 与数据保留
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - pay-arch
+
+  # Redis 指标导出（spec 029 / FR-504）：「消息通道」面板的消费延迟与各组位点
+  # 不在 JVM 侧（客户端拦截器无法感知服务端 PEL），必须由 redis_exporter 暴露
+  #   redis_streams_pending_messages / redis_streams_entries_processed_total 等系列。
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: payment-redis-exporter
+    environment:
+      # 与 redis 服务同网络，直连容器名 + 默认端口
+      REDIS_ADDR: "redis://redis:6379"
+      # 只导出 stream 相关，减少基数（本大盘只用到 streams 系列）
+      REDIS_EXPORTER_CHECK_STREAMS: "payment:*"
+      REDIS_EXPORTER_CHECK_STREAM_GROUPS: "payment:*"
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - pay-arch
 
@@ -551,4 +579,5 @@ networks:
 
 volumes:
   mysql-data:
+  redis-data:
   loki-data:

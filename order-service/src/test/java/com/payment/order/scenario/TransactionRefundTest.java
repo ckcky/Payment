@@ -49,13 +49,15 @@ class TransactionRefundTest {
     private OrderApplicationService orderLayer(SuccessfulPurchaseScenarioTest.FakeCatalogClient client) {
         return new OrderApplicationService(orderRepository, transactionRepository, client, paymentGateway,
                 new NoopBusinessMetrics(), Mockito.mock(OrderTimeoutScheduler.class), fulfillmentGateway,
-                new com.payment.order.application.NoopTransactionManager());
+                new com.payment.order.application.NoopTransactionManager(),
+                com.payment.order.application.MqTestSupport.off());
     }
 
     private TransactionApplicationService transactionLayer(SuccessfulPurchaseScenarioTest.FakeCatalogClient client) {
         return new TransactionApplicationService(orderRepository, transactionRepository, refundRepository,
                 orderLayer(client), paymentGateway, fulfillmentGateway, client,
-                new NoopBusinessMetrics(), new StructuredAuditLogger());
+                new NoopBusinessMetrics(), new StructuredAuditLogger(),
+                com.payment.order.application.MqTestSupport.off());
     }
 
     /** 已支付订单（SKU-A x2 = 200 分），返回 orderNo。 */

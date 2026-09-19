@@ -15,6 +15,7 @@ import com.payment.order.domain.OrderStatus;
 import com.payment.order.domain.Transaction;
 import com.payment.order.domain.TransactionRepository;
 import com.payment.order.domain.TransactionStatus;
+import com.payment.order.mq.OrderEventPublisher;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -49,6 +50,11 @@ public class OrderApplicationService {
      * 仅包裹本地 DB 段（markPaid + transaction 落库），出站 Feign 一律在事务提交后执行。
      */
     private final TransactionTemplate tx;
+    /**
+     * spec 029 / FR-202/306：事务消息发布器。{@code mq.enabled=true} 时存在，走异步广播；
+     * 不存在（disabled）时回落既有同步 Feign（confirmStock + 履约驱动）。
+     */
+    private final OrderEventPublisher mq;
 
     public OrderApplicationService(OrderRepository orderRepository,
                                    TransactionRepository transactionRepository,
@@ -57,7 +63,8 @@ public class OrderApplicationService {
                                    BusinessMetrics metrics,
                                    OrderTimeoutScheduler timeoutScheduler,
                                    FulfillmentGateway fulfillmentGateway,
-                                   PlatformTransactionManager transactionManager) {
+                                   PlatformTransactionManager transactionManager,
+                                   org.springframework.beans.factory.ObjectProvider<OrderEventPublisher> mqProvider) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.catalogClient = catalogClient;
@@ -66,6 +73,7 @@ public class OrderApplicationService {
         this.timeoutScheduler = timeoutScheduler;
         this.fulfillmentGateway = fulfillmentGateway;
         this.tx = new TransactionTemplate(transactionManager);
+        this.mq = mqProvider.getIfAvailable();
     }
 
     public CreateOrderResult createOrder(String userId, String merchantId, List<OrderLine> lines, String reservationKey) {
@@ -246,6 +254,16 @@ public class OrderApplicationService {
             return; // 幂等重复回调：同一支付单的重复通知整体吸收（confirm/履约均已做过，不重放）
         }
 
+        // spec 029 / FR-202 / T32-T33：本地事实已 PAID（事务已提交）→ 发布 order.paid 广播，
+        // 由 catalog（confirm 库存）与 fulfillment（驱动履约）各自订阅执行。
+        // 串行 Feign 通知（原 confirmStockQuietly + fulfillmentGateway）从主流程摘除——
+        // 下游临时不可用时消息可重投，而非被 catch 吞掉（SC-1：同步 Feign 通知点清零）。
+        if (mq != null) {
+            mq.publishOrderPaid(order);
+            return;
+        }
+
+        // FR-306 回落：mq.enabled=false 时保持既有同步语义（灰度 / 回滚通道）。
         // 支付成功：确认扣减库存（幂等键 paymentNo，ADR-0063）。事务外执行（spec 023 / M1）。
         confirmStockQuietly(order, request);
 

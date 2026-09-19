@@ -20,6 +20,10 @@
         </dependency>
         <dependency>
             <groupId>com.payment</groupId>
+            <artifactId>common-redis-mq</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
             <artifactId>common-dto</artifactId>
         </dependency>
         <dependency>

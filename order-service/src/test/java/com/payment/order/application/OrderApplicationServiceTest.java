@@ -33,7 +33,8 @@ class OrderApplicationServiceTest {
     private OrderApplicationService service() {
         // 时间轮登记为空操作：单测不接 Redis（schedule 之外无其他 Redis 依赖）
         OrderTimeoutScheduler noopScheduler = new OrderTimeoutScheduler(
-                null, orders, catalog, new OrderTimeoutProperties(), new NoopBusinessMetrics()) {
+                null, orders, catalog, new OrderTimeoutProperties(), new NoopBusinessMetrics(),
+                MqTestSupport.off()) {
             @Override
             public void schedule(Long orderId) {
                 // no-op
@@ -41,7 +42,8 @@ class OrderApplicationServiceTest {
         };
         return new OrderApplicationService(orders, transactions, catalog,
                 new StubPaymentGateway(), new NoopBusinessMetrics(), noopScheduler,
-                new RecordingFulfillmentGateway(), new NoopTransactionManager());
+                new RecordingFulfillmentGateway(), new NoopTransactionManager(),
+                MqTestSupport.off());
     }
 
     private String newPendingPaymentOrder(OrderApplicationService service) {
@@ -120,7 +122,8 @@ class OrderApplicationServiceTest {
     void inlineChargeCallbackDoesNotConflictWithLocalWriteBack() {
         OrderApplicationService[] holder = new OrderApplicationService[1];
         OrderTimeoutScheduler noopScheduler = new OrderTimeoutScheduler(
-                null, orders, catalog, new OrderTimeoutProperties(), new NoopBusinessMetrics()) {
+                null, orders, catalog, new OrderTimeoutProperties(), new NoopBusinessMetrics(),
+                MqTestSupport.off()) {
             @Override
             public void schedule(Long orderId) {
                 // no-op
@@ -143,7 +146,7 @@ class OrderApplicationServiceTest {
         };
         OrderApplicationService service = new OrderApplicationService(orders, transactions, catalog,
                 inlineGateway, new NoopBusinessMetrics(), noopScheduler,
-                new RecordingFulfillmentGateway(), new NoopTransactionManager());
+                new RecordingFulfillmentGateway(), new NoopTransactionManager(), MqTestSupport.off());
         holder[0] = service;
         String orderNo = newPendingPaymentOrder(service);
 

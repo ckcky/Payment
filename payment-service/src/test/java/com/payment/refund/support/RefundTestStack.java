@@ -38,7 +38,8 @@ public final class RefundTestStack {
 
     public RefundResultProcessor resultProcessor() {
         return new RefundResultProcessor(refunds, order, ledger, attemptSettlement,
-                new NoopBusinessMetrics(), new StructuredAuditLogger());
+                new NoopBusinessMetrics(), new StructuredAuditLogger(),
+                com.payment.payment.mq.MqTestSupport.off());
     }
 
     public RefundApplicationService appService() {

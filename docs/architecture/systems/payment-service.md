@@ -280,7 +280,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ---
 
-### 3.10 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
+### 3.10 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
 | 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
 |---|---|---|---|---|
@@ -293,6 +293,16 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 **记账链路维持同步**：payment → ledger 的记账**不改异步**（ADR-0074 D2）——已有 T+1 账证核对兜底，且借贷平衡审计对顺序敏感。
 
 **Redis 依赖**：本服务原**刻意不使用 Redis**（ADR-0044/G7）。引入消息通道构成该约束的**显式例外**（ADR-0074 D11，写法参照 ADR-0071 D13）：仅作消息通道，不做缓存 / 计数。
+
+**实现实况**（spec 029 批次 C，`com.payment.payment.mq`）：
+
+| 项 | 值 |
+|---|---|
+| 配置类 | `PaymentMqConfig`（`payment.mq.enabled=false` 回落同步 Feign） |
+| 生产 | `PaymentEventPublisher`（`PaymentApplicationService` / `PaymentResultProcessor` / `RefundResultProcessor` 事务提交后 publish；另暴露 `sendInTransaction*` 供未来同事务场景） |
+| 业务消费组 | `payment`（消费名 `payment-oc`，仅订阅 `order.cancelled`） |
+| 回查 checker | `payment.succeeded` → `payments` 是否 SUCCEEDED / CLOSED；`refund.result` → `refunds` 该 PMRF 是否终态 |
+| 消费动作 | `PaymentMqHandlers.onOrderCancelled`：按 `orderNo` 查 `payments`，`PENDING/PROCESSING/UNKNOWN → CLOSED`（`closeByOrderCancelled()`），SUCCEEDED 不动（钱已收，surplus 归 order 处置） |
 
 ## 4. 关键流程链路剖析
 
