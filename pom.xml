@@ -154,6 +154,12 @@
                 <artifactId>common-mybatis</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- spec 029 / ADR-0074：Redis 事务消息通道 starter -->
+            <dependency>
+                <groupId>com.payment</groupId>
+                <artifactId>common-redis-mq</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

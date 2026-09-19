@@ -5,9 +5,11 @@ import com.payment.order.domain.Order;
 import com.payment.order.domain.OrderItem;
 import com.payment.order.domain.OrderRepository;
 import com.payment.order.domain.OrderStatus;
+import com.payment.order.mq.OrderEventPublisher;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -31,14 +33,17 @@ public class OrderTimeoutScheduler {
     private final CatalogClient catalogClient;
     private final OrderTimeoutProperties props;
     private final BusinessMetrics metrics;
+    private final ObjectProvider<OrderEventPublisher> mqProvider;
 
     public OrderTimeoutScheduler(StringRedisTemplate redis, OrderRepository orderRepository,
-                                CatalogClient catalogClient, OrderTimeoutProperties props, BusinessMetrics metrics) {
+                                CatalogClient catalogClient, OrderTimeoutProperties props, BusinessMetrics metrics,
+                                ObjectProvider<OrderEventPublisher> mqProvider) {
         this.redis = redis;
         this.orderRepository = orderRepository;
         this.catalogClient = catalogClient;
         this.props = props;
         this.metrics = metrics;
+        this.mqProvider = mqProvider;
     }
 
     /** 下单后登记超时（时间轮：score = 当前时间 + ttl）。 */
@@ -97,6 +102,15 @@ public class OrderTimeoutScheduler {
             return; // 已支付/已取消等，跳过
         }
         // 释放预占库存（幂等：无预占或已确认均吸收）+ 回补秒杀配额（漏了会永久少卖）
+        // spec 029 / T36：order.cancelled 走 MQ 让 catalog / payment / fulfillment 各自消费；
+        // mq.enabled=false 时回落既有同步 catalog 调用（FR-306）。
+        OrderEventPublisher mq = mqProvider.getIfAvailable();
+        if (mq != null) {
+            order.cancel();
+            orderRepository.save(order);
+            mq.publishOrderCancelled(order, "TIMEOUT");
+            return;
+        }
         for (OrderItem item : order.getItems()) {
             Long skuId = Long.parseLong(item.getSkuId());
             catalogClient.releaseStock(new ReleaseStockCommand(
