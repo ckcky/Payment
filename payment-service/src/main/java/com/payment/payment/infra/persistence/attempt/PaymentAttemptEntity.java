@@ -30,6 +30,14 @@ public class PaymentAttemptEntity extends BaseEntity {
     private Integer retryCount;
     /** 错误分类枚举名（TRANSIENT/HARD/UNKNOWN）：由双响应码派生，仅用于观测（ADR-0012/0013）。 */
     private String errorType;
+    /**
+     * 渠道扩展属性 JSON 文本（spec 030 / FR-301①，列 {@code extra_json}）。
+     *
+     * <p>当前承载 {@code channelMode}（{@code MOCK}/{@code SANDBOX}）。<b>TEXT 存 JSON</b>，
+     * 刻意不用 MySQL 原生 JSON 类型（沿用 {@code payload_json} 先例，避免方言绑定）。
+     * JSON 编解码在 {@link AttemptExtraCodec}，本实体只搬字符串。</p>
+     */
+    private String extraJson;
 
     public String getPaymentNo() {
         return paymentNo;
@@ -125,5 +133,13 @@ public class PaymentAttemptEntity extends BaseEntity {
 
     public void setErrorType(String errorType) {
         this.errorType = errorType;
+    }
+
+    public String getExtraJson() {
+        return extraJson;
+    }
+
+    public void setExtraJson(String extraJson) {
+        this.extraJson = extraJson;
     }
 }

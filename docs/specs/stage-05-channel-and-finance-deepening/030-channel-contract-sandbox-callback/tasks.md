@@ -62,7 +62,7 @@
 - [x] **T38** 新增 `.../common/core/dye/DyeRequestInterceptor.java`：Feign `RequestInterceptor`，`DyeContext` **非空才写**出站头（**空则不写**，不把缺省语义硬编码进协议）[FR-163]
 - [x] **T39** 改 `.../common/core/config/CommonCoreAutoConfiguration.java`：加 `dyeFilter` + `dyeFilterRegistration(order = -190)` [FR-164][FR-165]
 - [x] **T40** 改 `.../common/core/config/FeignTraceAutoConfiguration.java`：加 `dyeRequestInterceptor`（`@ConditionalOnMissingBean`）[FR-164]
-- [ ] **T41** ⚠️ **成对性自查**：确认 T37 与 T38 在**同一次提交**内（`git show --stat <commit>` 中 `DyeFilter.java` 与 `DyeRequestInterceptor.java` **同时出现**）[INV-5][SC-A-10]
+- [x] **T41** ⚠️ **成对性自查**：确认 T37 与 T38 在**同一次提交**内（`git show --stat <commit>` 中 `DyeFilter.java` 与 `DyeRequestInterceptor.java` **同时出现**）[INV-5][SC-A-10]
 - [x] **T42** 确认 `META-INF/spring/...AutoConfiguration.imports` **未被修改**（新增的是已有自动配置类中的 Bean）[FR-166]
 - [x] **T43** 确认过滤链定序为 `TraceIdFilter(-200)` → `DyeFilter(-190)` → `AccessLogFilter(-100)` [FR-165]
 - [x] **T44** 改 `payment-service/.../api/PaymentController.java`：`deferChannel = mockCashier.isEnabled() && !DyeContext.isSandbox()`（**染色唯一消费点**；沙箱**不延迟**，必须真调 `charge` 才拿得到凭证）[FR-167]
@@ -70,20 +70,20 @@
 
 ## Phase 5 —— 模态落库（**schema + domain + recorder**）
 
-- [ ] **T46** 改 `deployment/schema/03-payment-schema.sql`：`payment_attempts` 建表语句补 **`extra_json TEXT NULL`**（**TEXT 存 JSON**，沿用 `payload_json` 先例；**MUST NOT** 用 MySQL 原生 `JSON` 类型）[FR-301①][FR-300]
-- [ ] **T47** 新增 `deployment/schema/030-payment-attempt-extra-json.sql`：`ALTER TABLE payment_attempts ADD COLUMN extra_json TEXT NULL COMMENT '...'`（存量库迁移）；**MUST 可重复执行且幂等**（本 Feature 不引入 Flyway）[FR-301②][FR-308]
-- [ ] **T48** 改 `payment-service/src/test/resources/schema.sql`：H2 测试 schema 同步（**无 `ENGINE` 子句**，与既有风格一致）[FR-301③]
-- [ ] **T49** 改 `payment-service/src/main/java/com/payment/payment/domain/PaymentAttempt.java`：新增 `extra`（`Map<String,String>`，**可空**）+ **只读派生访问器 `getChannelMode()`**（由 `extra` 解析，缺失/非法一律 `MOCK`——**反向路径读取模态的唯一入口**）；全部工厂方法 / `rehydrate` 同步 [FR-302][FR-304]
-- [ ] **T50** JSON 编解码落在 `payment-service/src/main/java/com/payment/payment/infra/persistence/`；**领域对象 MUST NOT 依赖 Jackson** [FR-302]
-- [ ] **T51** 改 `.../infra/persistence/ChannelAttemptRecorderImpl.java`：创建 attempt 时读 `DyeContext`（空 → `MOCK`）**写入 `channelMode` 键**；**接口方法签名不变**（调用点零改动）[FR-151][FR-303]
-- [ ] **T52** 改 `payment-service/src/test/java/com/payment/payment/infra/InMemoryPaymentAttemptRepository.java`：同步 `extra` 字段 [FR-302]
-- [ ] **T53** ⚠️ **写入侧强制验证**：断言「新建 attempt 行解析后 `channelMode` **存在**且取值合法」——**新写入行 MUST NOT 缺失该键** [FR-303]
-- [ ] **T54** ⚠️ **读取侧 fail-safe 验证**：`NULL` / 非法 JSON / 缺 `channelMode` 键 / 值不在 `{MOCK,SANDBOX}` **四类坏数据** ⇒ **一律 `MOCK`**；**MUST NOT** 抛异常中断反向路径；**MUST NOT** 误判为 `SANDBOX` [FR-304][SC-A-11]
-- [ ] **T55** 幂等重复路径：命中已存在支付单时返回**库内**值，**MUST NOT** 用当前请求染色值覆盖 [FR-152][FR-306]
-- [ ] **T56** 存量行：`extra_json` 为 `NULL` ⇒ 读为 `MOCK`，**不回填、不修正** [FR-155][FR-307]
-- [ ] **T57** 确认 `extra_json` **未被用于渠道归属判定**（归属恒读 `payment_attempts.channel_code` **列**）[FR-305]
-- [ ] **T58** 确认**未**为 `extra_json` 建索引、**未**做按模态的 SQL 统计 [FR-309]
-- [ ] **T59** 双路径验证：**全新库**（reset 重放）与**存量库 + 迁移脚本**两条路径均可用 [SC-A-11]
+- [x] **T46** 改 `deployment/schema/03-payment-schema.sql`：`payment_attempts` 建表语句补 **`extra_json TEXT NULL`**（**TEXT 存 JSON**，沿用 `payload_json` 先例；**MUST NOT** 用 MySQL 原生 `JSON` 类型）[FR-301①][FR-300]
+- [x] **T47** 新增 `deployment/schema/030-payment-attempt-extra-json.sql`：`ALTER TABLE payment_attempts ADD COLUMN extra_json TEXT NULL COMMENT '...'`（存量库迁移）；**MUST 可重复执行且幂等**（本 Feature 不引入 Flyway）[FR-301②][FR-308]
+- [x] **T48** 改 `payment-service/src/test/resources/schema.sql`：H2 测试 schema 同步（**无 `ENGINE` 子句**，与既有风格一致）[FR-301③]
+- [x] **T49** 改 `payment-service/src/main/java/com/payment/payment/domain/PaymentAttempt.java`：新增 `extra`（`Map<String,String>`，**可空**）+ **只读派生访问器 `getChannelMode()`**（由 `extra` 解析，缺失/非法一律 `MOCK`——**反向路径读取模态的唯一入口**）；全部工厂方法 / `rehydrate` 同步 [FR-302][FR-304]
+- [x] **T50** JSON 编解码落在 `payment-service/src/main/java/com/payment/payment/infra/persistence/`；**领域对象 MUST NOT 依赖 Jackson** [FR-302]
+- [x] **T51** 改 `.../infra/persistence/ChannelAttemptRecorderImpl.java`：创建 attempt 时读 `DyeContext`（空 → `MOCK`）**写入 `channelMode` 键**；**接口方法签名不变**（调用点零改动）[FR-151][FR-303]
+- [x] **T52** 改 `payment-service/src/test/java/com/payment/payment/infra/InMemoryPaymentAttemptRepository.java`：同步 `extra` 字段 [FR-302]
+- [x] **T53** ⚠️ **写入侧强制验证**：断言「新建 attempt 行解析后 `channelMode` **存在**且取值合法」——**新写入行 MUST NOT 缺失该键** [FR-303]
+- [x] **T54** ⚠️ **读取侧 fail-safe 验证**：`NULL` / 非法 JSON / 缺 `channelMode` 键 / 值不在 `{MOCK,SANDBOX}` **四类坏数据** ⇒ **一律 `MOCK`**；**MUST NOT** 抛异常中断反向路径；**MUST NOT** 误判为 `SANDBOX` [FR-304][SC-A-11]
+- [x] **T55** 幂等重复路径：命中已存在支付单时返回**库内**值，**MUST NOT** 用当前请求染色值覆盖 [FR-152][FR-306]
+- [x] **T56** 存量行：`extra_json` 为 `NULL` ⇒ 读为 `MOCK`，**不回填、不修正** [FR-155][FR-307]
+- [x] **T57** 确认 `extra_json` **未被用于渠道归属判定**（归属恒读 `payment_attempts.channel_code` **列**）[FR-305]
+- [x] **T58** 确认**未**为 `extra_json` 建索引、**未**做按模态的 SQL 统计 [FR-309]
+- [x] **T59** 双路径验证：**全新库**（reset 重放）与**存量库 + 迁移脚本**两条路径均可用 [SC-A-11]
 
 ## Phase 6 —— 反向路径自足性（**查询 / 退款 / 超时扫描**）
 

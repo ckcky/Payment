@@ -2,6 +2,8 @@ package com.payment.payment.infra.persistence;
 
 import com.payment.payment.application.channel.ChannelAttemptRecorder;
 import com.payment.payment.application.channel.ChannelResult;
+import com.payment.common.core.dye.DyeContext;
+import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.payment.domain.PaymentAttempt;
@@ -28,18 +30,43 @@ public class ChannelAttemptRecorderImpl implements ChannelAttemptRecorder {
         this.attemptRepository = attemptRepository;
     }
 
+    /**
+     * 开支付尝试并<b>落本次的渠道模态</b>（spec 030 / FR-151 / FR-303）。
+     *
+     * <p>模态取入站染色 {@link DyeContext}（未染色 ⇒ {@link DyeMode#MOCK}），写进
+     * {@code extra} 的 {@value PaymentAttempt#CHANNEL_MODE_KEY} 键，随行落 {@code extra_json}。
+     * 这里是<b>唯一写入点</b>：反向路径（查询 / 退款 / 超时扫描）没有入站请求，ThreadLocal 为空，
+     * 只能靠这一刻落下的值还原模态。</p>
+     *
+     * <p><b>为什么必须在开尝试时写</b>：attempt 行是「这次渠道交互」的事实载体，
+     * 模态是这次交互的属性；等反向路径要用时再补就补不回来了。</p>
+     */
     @Override
     public PaymentAttempt openPaymentAttempt(String paymentNo, String channelCode,
                                              long amountMinor, String currencyCode) {
-        return attemptRepository.save(
-                new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode));
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode);
+        stampChannelMode(attempt);
+        return attemptRepository.save(attempt);
     }
 
     @Override
     public PaymentAttempt openRefundAttempt(String paymentNo, String channelCode,
                                             long amountMinor, String currencyCode) {
-        return attemptRepository.save(
-                PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode));
+        PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
+        stampChannelMode(attempt);
+        return attemptRepository.save(attempt);
+    }
+
+    /**
+     * 把当前染色模态盖进 attempt 的 {@code extra}（FR-151）。
+     *
+     * <p>{@code DyeContext.current() == null}（未染色）⇒ 写 {@code MOCK} 而非留空——
+     * 新写入行 <b>MUST NOT 缺失该键</b>（FR-303）：留空会让「未染色」与「读不出来」
+     * 在读取侧变得无法区分，两类完全不同的事实被压成同一个结果。</p>
+     */
+    private void stampChannelMode(PaymentAttempt attempt) {
+        DyeMode mode = DyeContext.current();
+        attempt.putExtra(PaymentAttempt.CHANNEL_MODE_KEY, (mode == null ? DyeMode.MOCK : mode).name());
     }
 
     /**

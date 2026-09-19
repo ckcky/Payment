@@ -44,6 +44,7 @@ CREATE TABLE payment_attempts (
     requested_at TIMESTAMP NOT NULL,
     responded_at TIMESTAMP,
     version INT NOT NULL DEFAULT 1,
+    extra_json TEXT NULL,
     CONSTRAINT uk_attempts_channel_reference UNIQUE (channel_reference)
 );
 
