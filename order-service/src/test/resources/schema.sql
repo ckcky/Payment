@@ -77,3 +77,17 @@ CREATE TABLE transaction_refunds (
     CONSTRAINT uk_transaction_refunds_refund_no UNIQUE (refund_no),
     CONSTRAINT uk_transaction_refunds_idempotency_key UNIQUE (idempotency_key)
 );
+
+CREATE TABLE order_event_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_no VARCHAR(32) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    topic VARCHAR(64) NOT NULL,
+    msg_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NULL,
+    producer VARCHAR(64) NULL,
+    payload_json TEXT NULL,
+    occurred_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    CONSTRAINT uk_order_event_log_msg_id UNIQUE (msg_id)
+);

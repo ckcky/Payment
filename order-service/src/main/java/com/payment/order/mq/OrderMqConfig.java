@@ -29,6 +29,9 @@ public class OrderMqConfig {
     /** 消费组名（order 侧订阅 payment.* 两个点对点 topic）。 */
     private static final String GROUP = "order";
 
+    /** trace 消费组名（订阅全部 topic，落轨迹表，FR-402）。 */
+    private static final String TRACE_GROUP = "trace";
+
     /** order 消费 {@code payment.succeeded} 与 {@code refund.result}（点对点）。 */
     @Bean
     public MqConsumerRuntime orderMqConsumerRuntime(StringRedisTemplate redis, MqProperties props,
@@ -40,6 +43,21 @@ public class OrderMqConfig {
                 MqTopics.REFUND_RESULT, GROUP, "order-rr",
                 handlers::onRefundResult, null);
         return new MqConsumerRuntime().register(paymentSucceeded).register(refundResult);
+    }
+
+    /**
+     * trace 消费组（spec 029 / T52、FR-402）：订阅全部 7 个 topic，各自独立位点与独立组名，
+     * 落 {@code order_event_log}（只读投影，INV-5）。trace 组故障不影响业务组。
+     */
+    @Bean
+    public MqConsumerRuntime traceMqConsumerRuntime(StringRedisTemplate redis, MqProperties props,
+                                                    BusinessMetrics metrics, OrderTraceHandler traceHandler) {
+        MqConsumerRuntime runtime = new MqConsumerRuntime();
+        for (String topic : MqTopics.ALL) {
+            runtime.register(new StreamConsumer(redis, props, metrics,
+                    topic, TRACE_GROUP, "trace-" + topic, traceHandler::onEvent, null));
+        }
+        return runtime;
     }
 
     /**
