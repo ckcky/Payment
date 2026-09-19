@@ -2,7 +2,7 @@
 
 # ADR-0076: 全链路染色分流（mock / 沙箱）+ 渠道模态落库 + 支付宝沙箱接入
 
-- 状态：🟡 **Proposed**（2026-09-19 提出，2026-09-19 负责人拍板 D1~D11；**本轮只写文档，不改代码**）
+- 状态：🟢 **Accepted**（2026-09-19 提出并拍板 D1~D11；**2026-09-19 负责人确认：由 Proposed 升级为 Accepted**。实现由 [spec 030](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md) 承接。⚠️ **落库形态修订（2026-09-19，H2）**：`payment_attempts.channel_mode` 专用列**不再采用**，改为通用 JSON 列 `extra_json` 的 `channelMode` 键承载——**决策语义不变**（模态仍「落库 + 反向读库」），仅载体形态不同，详见下方「修订记录」；`alipay-sdk-java` 新依赖已由负责人裁决**引入**（H3））
 - 关联：
   - **部分取代 [ADR-0072](0072-two-layer-channel-architecture.md)**（payment-service 两层结构）：
     - 其决策 4「渠道实现族：抽象基类承载横切行为，**子类只声明身份与差异**」被本 ADR **修订**为
@@ -19,9 +19,31 @@
   - [ADR-0049](0048-demo-showcase-decisions.md)（**配错不许静默走默认**——染色非法值与「开关未开」一律 fail fast）
   - [ADR-0024](0024-risk-security-decisions.md) / [ADR-0034](0034-internal-token-decisions.md)（内部令牌**先例教训**：入站校验上线但出站头未同步补 → 全线 403 → 整体删除）
   - [ADR-0012](0012-payment-reliability-impl-decisions.md)（`ChannelResult` 双响应码——沙箱适配器 MUST 沿用同一错误分类）
-  - spec 019（退款异步回调）、spec 028（两层结构 + 路由）、spec 030
+  - spec 019（退款异步回调）、spec 028（两层结构 + 路由）、spec 030（本 ADR 的**实现轮**，落在 stage-05）
 - 需求源头：负责人 2026-09-19「**你就只在 AlipayChannelAdapter 上实现就行啊，不需要专门搞 SandboxChannelAdapter。通过链路染色的方式区分是走本地的 mock**」；
   同日追加「简单来说就是**到底是走本地 mock 还是走 sandbox 的 mock 是由 demo 演示页面下单的时候选的环境，全链路染色传过来的**。demo 页面要把这个开关选择加上」。
+
+## 修订记录
+
+### 2026-09-19 · 落库形态修订（H2 裁决，负责人拍板）
+
+| 项 | 原表述（本 ADR 定稿时） | 修订后 | 性质 |
+|---|---|---|---|
+| 模态落库载体 | `payment_attempts` **新增专用列** `channel_mode VARCHAR(16) NOT NULL DEFAULT 'MOCK'` | `payment_attempts` **新增通用 JSON 列** `extra_json TEXT NULL`，模态以键 **`channelMode`** 承载（`MOCK` / `SANDBOX`） | **载体形态修订**——决策语义**不变**：模态仍以「**落库 + 反向读库**」实现 |
+| 迁移脚本文件名 | `030-payment-attempt-channel-mode.sql` | `030-payment-attempt-extra-json.sql` | 随载体与 Spec 编号同步（Spec 编号已由 `031` 定为 `030`） |
+| JSON 存法 | — | **`TEXT` 存 JSON**（沿用项目既有 `payload_json` / `matches_json` / `differences_json` 先例），**不使用 MySQL 原生 `JSON` 类型**（H2 测试库兼容） | 新增约束 |
+
+**修订理由（原文摘要）**：负责人在 spec 030 门 2 裁决中要求「**不新增专用列，用通用 JSON 列承载**」，
+使 `payment_attempts` 未来新增渠道交互扩展字段无需再动 schema。
+**决策语义未被破坏**：本 ADR 的 R4「为什么必须落库」、K3「反向路径 MUST 读库」、K6「schema 三处齐备」
+**全部继续有效**，仅把「专用列」替换为「通用 JSON 列的固定键」。
+
+**新增两条实现期约束（由 spec 030 FR-303 / FR-304 补充，本 ADR 原文未覆盖）**：
+
+- **写入侧强制**：`ChannelAttemptRecorder` 新建 attempt 时 **MUST** 写入 `channelMode` 键（**新写入行 MUST NOT 缺失**）；
+- **读取侧 fail-safe**：`extra_json` 为 `NULL` / 非法 JSON / 缺键 / 值非法 ⇒ **一律按 `MOCK`**（安全方向，**MUST NOT** 误连真实渠道）。
+
+> 载体与约束的完整定义见 [spec 030 §14.1](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)（FR-300~FR-309）。
 
 ## 背景
 
@@ -89,20 +111,23 @@
 选路规则（ADR-0073）逐字不变；`channelCode` 仍为 String、不改枚举、注册表仍一 code 一实例（G14）。
 反向三条路径同样 MUST NOT 因染色而改换渠道（继承 spec 028 INV-6：退款换渠道＝钱退错地方）。
 
-**R4. 渠道模态落进 `payment_attempts.channel_mode`，反向路径据它还原。**
+**R4. 渠道模态落进 `payment_attempts`，反向路径据它还原。**（⚠️ 载体已按 **H2** 修订：见「修订记录」）
 
-- 列定义：`channel_mode VARCHAR(16) NOT NULL DEFAULT 'MOCK'`；取值 `MOCK` / `SANDBOX`。
-- **写入**：`ChannelAttemptRecorder` 创建 attempt 时读 `DyeContext`（空 → `MOCK`）落库，**方法签名不变**（调用点零改动）；
-  幂等重复命中已存在支付单时**返回库内值，不被当前请求覆盖**。
+- **列定义（2026-09-19 修订）**：~~`channel_mode VARCHAR(16) NOT NULL DEFAULT 'MOCK'`~~ →
+  **`extra_json TEXT NULL`**（通用 JSON 列，**TEXT 存 JSON**），模态以键 **`channelMode`** 承载；取值 `MOCK` / `SANDBOX`。
+- **写入**：`ChannelAttemptRecorder` 创建 attempt 时读 `DyeContext`（空 → `MOCK`）写入 `channelMode` 键，**方法签名不变**（调用点零改动）；
+  **新写入行 MUST NOT 缺失该键**（spec 030 FR-303）；幂等重复命中已存在支付单时**返回库内值，不被当前请求覆盖**。
 - **schema 三处齐备**（G17：建表语句不会给存量库补列）：① `03-payment-schema.sql` 建表语句补列；
-  ② 新增增量迁移 `030-payment-attempt-channel-mode.sql`；③ 测试 H2 schema 同步。
+  ② 新增增量迁移 `030-payment-attempt-extra-json.sql`（~~`030-payment-attempt-channel-mode.sql`~~）；③ 测试 H2 schema 同步。
 - **反向还原**：`PaymentRefundService` / `ChannelQueryService`（覆盖 `TimeoutScanScheduler`）取到 PAYMENT attempt 后
   用 `DyeContext.runWith(attempt.getChannelMode(), () -> channel.xxx(req))` 包裹渠道调用。
+  `getChannelMode()` 是领域对象的**只读派生访问器**（由 `extra` 解析），也是读取模态的**唯一入口**。
 - **为什么必须落库**：G10——调度器不经入站 Filter，ThreadLocal 为空；不落库则反向路径**只能固定走 mock**，
   沙箱单的退款是假的（比不做更危险）。
 - **为什么不用「解析 `channel_reference` 前缀」**：spec 028 已明确「渠道归属读列，**禁止解析引用字符串**」；
   且 G19 下沙箱 `charge` 时渠道引用为 `null`，前缀根本不存在。
-- **存量行**：靠 `DEFAULT 'MOCK'` 向后兼容，**不回填、不修正**（历史事实）。
+- **存量行**：`extra_json` 为 `NULL` ⇒ 读为 `MOCK`，**不回填、不修正**（历史事实）。
+  ⚠️ 因载体改为**可空 JSON**，缺失 / 损坏成为可能，故必须配 **读取侧 fail-safe**（`NULL` / 非法 JSON / 缺键 / 值非法 ⇒ 一律 `MOCK`，spec 030 FR-304）。
 
 **R5. 单 Adapter 双模态：不新建 Sandbox Adapter；`ALIPAY` 升级为双模态特例，`MOCK` 分支必须 `super` 委托。**
 
@@ -179,10 +204,11 @@ AlipayChannelAdapter.charge(req):
 - **K1**：染色入站读（`DyeFilter`）与出站写（`DyeRequestInterceptor`）MUST **同一批落地**。
   依据 G11：只做一半会重演「全线 403」。**这是本 ADR 最容易被漏做、后果最严重的一条。**
 - **K2**：`ChannelRouter` 实现 MUST NOT 引用 `DyeContext`（R3）。
-- **K3**：反向路径 MUST 用 `payment_attempts.channel_mode` 还原模态，MUST NOT 依赖 ThreadLocal、MUST NOT 解析渠道引用字符串。
+- **K3**：反向路径 MUST 用 `payment_attempts` 落库的模态（**H2 修订后 = `extra_json.channelMode`，经 `attempt.getChannelMode()` 读取**）还原，MUST NOT 依赖 ThreadLocal、MUST NOT 解析渠道引用字符串。
 - **K4**：`AlipayChannelAdapter` 的 `MOCK` 分支 MUST `super` 委托，MUST NOT 复制或改写基类 4 件横切行为。
 - **K5**：`application/**` MUST NOT 依赖 `com.alipay.sdk`；SDK 相关类型 MUST NOT 出现在任何端口签名中。
-- **K6**：`payment_attempts.channel_mode` 的 schema 变更 MUST 三处齐备（建表语句 + 增量迁移 + 测试 schema）。
+- **K6**：`payment_attempts` 的模态列（**H2 修订后 = `extra_json` 的 `channelMode` 键**）的 schema 变更 MUST 三处齐备（建表语句 + 增量迁移 + 测试 schema）。
+- **K6b**（**2026-09-19 新增，随 H2 载体修订**）：`extra_json` 写入侧 MUST 强制含 `channelMode` 键；读取侧 MUST fail-safe（`NULL` / 非法 JSON / 缺键 / 值非法 ⇒ 一律 `MOCK`，**MUST NOT** 误判为 `SANDBOX`）。
 - **K7**：`notify` 端点 MUST 返回**恰好**纯文本 `success`；MUST NOT 打印完整通知报文；MUST NOT 在验签失败时触达收敛服务。
 - **K8**：密钥与凭证 MUST NOT 入库、MUST NOT 进 git、MUST NOT 进明文日志。
 
@@ -216,13 +242,15 @@ AlipayChannelAdapter.charge(req):
   - **跨 9 个服务的行为面扩大**：染色 Filter 会进入所有服务的过滤链。缓解：缺省语义为 `MOCK`（不改既有行为）、
     非法值 fail fast、`finally` 清理 ThreadLocal 与 MDC；
   - **DB 结构变更**：新增列 + 迁移脚本（已获批，非破坏性）；
-  - **反向路径依赖落库值**：若 attempt 行缺 `channel_mode`（极端：手工改库），会退回 `MOCK`，属可接受的保守失效。
+  - **反向路径依赖落库值**：若 attempt 行缺模态（极端：手工改库），会退回 `MOCK`，属可接受的保守失效。
+    ⚠️ **H2 修订后**该风险面**变大**（`extra_json` 为可空 TEXT，可能缺失 / 非法 JSON / 缺键 / 值非法），
+    故由 spec 030 补足**写入侧强制**与**读取侧 fail-safe** 双保险（见「修订记录」）。
 - **明确不做**：不改支付状态机；不改渠道路由规则；不改退款语义；不做流量灰度分流（染色只用于协议分流）；
   不做渠道真实健康探测；不新增渠道码；不改 `mock-channel-web` 的代理与收银台页；不回填存量 attempt 行。
 
 ## 落地
 
-- 实现计划：`docs/specs/stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/plan.md` 批次 C（染色）/ D（落库）/ E（反向还原）/
-  F（沙箱适配器）/ G（notify 端点）/ H（demo 开关）；
+- 实现计划：[spec 030 的 plan.md](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/plan.md) **批次 4**（染色骨架）/ **批次 5**（模态落库）/ **批次 6**（反向自足）/
+  **批次 7**（沙箱适配器）/ **批次 8**（回调三段式）/ **批次 9**（demo 开关）；
 - 接口与配置落点：`docs/architecture/systems/payment-service.md` §3.11 / §3.12 / §7；
 - 运维落点：`docs/operations/runbook.md`（沙箱密钥、染色开关、`notify_url` 公网可达与内网穿透）。

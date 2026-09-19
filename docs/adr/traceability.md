@@ -28,6 +28,9 @@
 | ADR-0073 | 支付渠道路由：注册表 + 规则化确定性选路；前向选路与反向按记录解析严格分离 | payment-service.md §2.1.1、§3.2（channelCode 可选 + `ChannelRegistry`/`ChannelRouter`；✅ Accepted → Implemented） |
 | ADR-0074 | Redis 事务消息通道：Streams + 半消息协议（prepare → 本地事务 → commit/rollback → 5s 回查真相表）承载跨服务异步解耦；混合拓扑（事实类广播 / 动作类点对点）；traceId 跨异步边界连续；trace 消费组落 `order_event_log` | technical-solution §1.2/§2.3/§3.4 仅作 Active Proposal 导航；当前服务契约不依赖其事件拓扑（🟡 Proposed，待实现） |
 
+| ADR-0075 | 聚合支付统一渠道契约：四组结构化字段（`Goods` / `CallbackUrls` / `Payer` / `PaymentScene`）+ `channelExtra` 扩展袋 + 类型化 `PayCredential`（6 种 Kind）+ `ChannelResult.credential` 与 `accepted(ref, reason, credential)`；金额保持扁平；保留兼容构造器与 `default` 方法保证零中断编译；凭证不落库 | payment-service.md §3.11 **待实现**（⚠️ 该锚点当前**悬空**：`payment-service.md:52` 已引用 `#311-渠道内部契约spec-030--adr-0075`，但正文尚无 `### 3.11`，且同文件存在两个重复的 `### 3.10`——属待收口漂移）；L0 回写须待 **spec 030** 实现完成后（🟢 Accepted，2026-09-19 由 Proposed 升级，**待实现**） |
+| ADR-0076 | 全链路染色分流（mock / 沙箱）+ 渠道模态落库 + 支付宝沙箱接入：`X-Dye-Tag` 三段式透传（common-core，入站读与出站写同批）+ `payment_attempts` 模态落库与反向三路径还原（⚠️ **落库载体已按 H2 修订**：~~专用列 `channel_mode`~~ → 通用 JSON 列 **`extra_json`** 的 **`channelMode`** 键，**TEXT 存 JSON**，语义不变）+ 单 Adapter 双模态（`AlipayGateway` 收口 SDK）+ `POST /internal/channels/alipay/notify`（RSA2，纯文本 `success`） | payment-service.md §2.5 / §3.2 / §3.11 **待实现**；technical-solution §2.4 / §3.5 / §4.3 / §5.2 **待实现**；`deployment/schema/03-payment-schema.sql`（三处 schema 齐备）+ 增量迁移 **`030-payment-attempt-extra-json.sql`**（~~`030-payment-attempt-channel-mode.sql`~~）**待实现**（🟢 Accepted，2026-09-19 由 Proposed 升级，**待实现**；H3 SDK 依赖**已裁决引入**；H2 载体**已裁决为通用 JSON 列**） |
+
 ## 2. P1 决策索引（集中列出，避免散落漂移）
 
 | ADR | 决策要点 | technical-solution 落点 | systems 落点 |
