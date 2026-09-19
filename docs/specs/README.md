@@ -58,3 +58,11 @@
 - [028-channel-routing](stage-04-new-directions/028-channel-routing/)
 - [029-redis-transactional-mq](stage-04-new-directions/029-redis-transactional-mq/)
 - [030-channel-contract-dye-alipay-sandbox](stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/)
+
+## stage-05-channel-and-finance-deepening — 渠道与资金纵深（🟡 提案中，待负责人确认）
+
+> 本阶段总目标设计书：**[stage-design.md](stage-05-channel-and-finance-deepening/stage-design.md)（Draft，2026-09-19）**——
+> 现状评估 + 总体架构 + 渠道接入 / 账务总账 / 对账结算 / 可靠性 / 可观测性 / 测试策略六面目标态 + Feature 拆分建议。
+>
+> ⚠️ **状态说明**：该阶段为**提案**，尚未分配 Feature 编号、未同步 `roadmap.md`；阶段命名与 Feature 编号属
+> 宪法 §Governance 人类决策边界，须负责人确认后本索引与 roadmap 才视为生效。

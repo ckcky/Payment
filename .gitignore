@@ -11,6 +11,7 @@ target/
 .classpath
 .project
 .settings/
+.trae/
 
 # Logs
 *.log
