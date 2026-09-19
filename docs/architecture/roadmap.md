@@ -67,7 +67,8 @@
   顺带补齐「按订单号还原全链路」：trace 消费组订阅全部 7 个事件落 `order_event_log` + `GET /api/orders/{orderNo}/timeline`，
   MDC 补 `bizNo` 维度，**traceId 跨异步边界连续**。
   决策见 **ADR-0074**（`docs/adr/0074-redis-transactional-message.md`，🟢 Accepted，**Supersedes ADR-0031**）。
-  实现于 `feature/029-redis-transactional-mq`（批次 A→G 增量提交）。
+  实现于 `feature/029-redis-transactional-mq`（批次 A→G 增量提交），
+  2026-09-20 以 `--no-ff` 合入 master（合并点 `5e2c00d`）。
   交付：`common/common-redis-mq` starter（Envelope / 事务生产者 / 半消息扫描器 / Stream 消费者 /
   DLQ / 审计 / 8 项 `mq.*` 指标）+ 五服务生产消费侧改造（`{service}/mq` 包）
   + `order_event_log` 表与 timeline API + Redis 容灾参数（AOF + `noeviction` + 数据卷）
@@ -76,7 +77,7 @@
   **`payment.mq.enabled=false` 回落同步 Feign**（FR-306），两种模式既有集成测试均通过。
 - **当前 Feature**：无进行中 Feature（`027-user-payment-limit` / `028-channel-routing` / `029-redis-transactional-mq` 均已实现并闭环）——详见 `docs/specs/027-user-payment-limit/spec.md`、`docs/specs/028-channel-routing/spec.md` 与 `docs/specs/029-redis-transactional-mq/spec.md`。
 - **⚠️ 已知偏离（SOP 偏离，已收口，待复盘）**：working tree 曾含**超前 roadmap 顺序（011→012→013→014）**落地的 `013-inventory-reservation` / `014-seckill-and-cache` 实质实现（catalog `Stock*` 聚合 + 三段式库存、order `OrderTimeoutScheduler` Redis ZSet 时间轮 + `SeckillResult` + 限流 + 幂等 + Lua）。代码先行、当时缺 spec/ADR，属 **ADR-0053** 记录的偏离。现已于 2026-08-31 补写 `docs/specs/013-*` / `014-*` 与 **ADR-0041~0046**（`0014-next-stage-decisions.md`）完成收口。**唯一遗留偏离**：014 的 Redis 引入**仍未经 roadmap §7「压测基线→论证引入」闸门**（ADR-0044 标注），k6 基线 + 论证证据列为 TODO。
-- **Feature 状态**：`001`~`029`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现；`029` 已于 2026-09-20 实现落地（批次 A~G 增量提交于 `feature/029-redis-transactional-mq`）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+- **Feature 状态**：`001`~`029`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现；`029` 已于 2026-09-20 实现落地（批次 A~G 增量提交于 `feature/029-redis-transactional-mq`，同日 `--no-ff` 合入 master `5e2c00d`）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
   **非阻塞遗留**（均为「待补 Testcontainers 集成测试」，不影响功能）：`003` T016~T018（人工收敛，标记 Deferred，但代码已由 `023` 的 F2 修复实际落地——`POST /payments/{ref}/resolve` + `ResolveAuthorizationInterceptor`，003 的 tasks.md 未回头更新）；`006` T023（并发乐观锁）；`007` T013/T031/T039/T045（集成测试与最终 `/review`）。
 - **当前能力**：`./mvnw -o verify -fae` 全量 BUILD SUCCESS（16 个 Maven 子模块：**4 common**（新增 `common-redis-mq`）+ 9 服务 + `mock-channel-web` + `e2e-tests` + `architecture-tests`，含 root 共 **17 个 reactor 条目**）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。**双运行模式**（宿主进程 / 容器）由 `deployment/lib-mode-guard.sh` 双向互斥守卫，端口契约 8081–8091 两模式一致。
 - **ADR 状态（2026-08-30 负责人已裁决，2026-08-31 全部落定）**：
