@@ -72,9 +72,9 @@
 - 退款 / 重试 / 主动查询走**反向路径**：以 `payment_attempts.channel_code` 记下的渠道解析实现，**禁止重新路由**（退款换渠道＝钱退错地方）。
 - **分层 ≠ 拆事务**：两层共享同一本地事务——`payments` 与 `payment_attempts` 状态必须同时迁移，否则出现 `payment=SUCCEEDED / attempt=PENDING` 之类的永久不一致。
 
-> 现状与目标差距、实施成本见 [ADR-0072](../../adr/0072-two-layer-channel-architecture.md)；渠道身份、注册表与选路规则见 [ADR-0073](../../adr/0073-channel-routing.md) 与 [spec 028](../../specs/028-channel-routing/spec.md)。
+> 现状与目标差距、实施成本见 [ADR-0072](../../adr/0072-two-layer-channel-architecture.md)；渠道身份、注册表与选路规则见 [ADR-0073](../../adr/0073-channel-routing.md) 与 [spec 028](../../specs/stage-04-new-directions/028-channel-routing/spec.md)。
 
-**渠道模态（spec 030 / [ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)）**：同一 `channelCode` 下可以有**两种协议实现**——本地 mock 与真实渠道。二者由**链路染色**（`X-Dye-Tag`）在**单次请求**维度决定，并落进 `payment_attempts.channel_mode`：
+**渠道模态（spec 030 / [ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)）**：同一 `channelCode` 下可以有**两种协议实现**——本地 mock 与真实渠道。二者由**链路染色**（`X-Dye-Tag`）在**单次请求**维度决定，并落进 `payment_attempts.extra_json` 的 **`channelMode`** 键（H2 裁决：不用专用列）：
 
 | 模态 | 含义 | 当前实现 |
 |---|---|---|
@@ -82,7 +82,7 @@
 | `SANDBOX` | 走**真实渠道协议**（当前仅支付宝） | 仅 `AlipayChannelAdapter`（`supportsRealMode()=true`） |
 
 - 染色**只决定协议实现**，**不参与选路**（`ChannelRouter` 不读染色上下文，ADR-0073 规则不变）；
-- **反向路径**（退款 / 主动查询 / 超时扫描）没有入口请求，据 `payment_attempts.channel_mode` **落库值还原**模态，禁止依赖 ThreadLocal、禁止解析渠道引用字符串；
+- **反向路径**（退款 / 主动查询 / 超时扫描）没有入口请求，据 `payment_attempts.extra_json` 的 **`channelMode` 落库值还原**模态（经 `PaymentAttempt.getChannelMode()` 只读派生访问器，fail-safe 缺省 `MOCK`），禁止依赖 ThreadLocal、禁止解析渠道引用字符串；
 - 染色为 `SANDBOX` 但渠道 `supportsRealMode()=false`（或沙箱未启用）→ **`400 INVALID_ARGUMENT`**，不静默回落（ADR-0049 纪律）。
 
 ### 2.2 状态机
@@ -144,15 +144,26 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 | status | VARCHAR(32) NOT NULL | 尝试状态机枚举名 |
 | failure_reason | VARCHAR(255) | 失败原因 |
 | retry_count | INT NOT NULL DEFAULT 0 | 重试计数 |
-| **channel_mode** | VARCHAR(16) NOT NULL DEFAULT 'MOCK' | **渠道模态** `MOCK` / `SANDBOX`（spec 030 / [ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)）；反向路径据此还原协议实现。存量行靠默认值向后兼容，**不回填** |
+| **extra_json** | TEXT NULL | **通用扩展 JSON 列**（spec 030 / [ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)）；**渠道模态**以键 **`channelMode`**（`MOCK` / `SANDBOX`）承载。反向路径据此还原协议实现。**TEXT 存 JSON**，沿用本项目 `payload_json` / `matches_json` 先例（不用 MySQL 原生 `JSON` 类型，避开 H2 方言差异） |
 
-> **`channel_mode` 的迁移（spec 030）**：本列由 `deployment/schema/030-payment-attempt-channel-mode.sql` **增量迁移**引入，
+> **`extra_json` 的迁移（spec 030）**：本列由 `deployment/schema/030-payment-attempt-extra-json.sql` **增量迁移**引入，
 > 同时写进 `03-payment-schema.sql` 的建表语句与测试 H2 schema——**三处必须齐备**，因为建表语句用
 > `CREATE TABLE IF NOT EXISTS`，**存量库不会自动补列**（按 `ALTER TABLE ADD COLUMN` 语义追加在表末）。
+>
+> **载体裁决（H2，2026-09-19）**：模态**不新增专用列**（`channel_mode` 专用列方案已废弃），改由通用
+> `extra_json` 的 `channelMode` 键承载——**决策语义不变**（模态仍「落库 + 反向读库」），**仅载体形态不同**。
+> 读取侧 **MUST** 为 fail-safe：`NULL` / 非法 JSON / 缺 `channelMode` 键 / 值不在 `{MOCK,SANDBOX}`
+> 这四类坏数据一律读作 `MOCK`，**MUST NOT** 抛异常中断反向路径、**MUST NOT** 误判为 `SANDBOX`
+> （缺省语义「不染色 = MOCK」是安全默认，绝不误连真实渠道）。存量行 `NULL` **不回填、不修正**（历史事实）。
 
 **索引策略（已实现）**：
 - `payments`：`uk_payments_idempotency_key`（幂等兜底）、`uk_payments_transaction_id`（1:1 交易）。
 - `payment_attempts`：`uk_attempts_channel_reference`（重复回调映射同一渠道交互）、`idx_attempts_payment_id`（按支付查尝试）。
+
+**基数口径（与 [technical-solution.md](../technical-solution.md) 同源，MUST 同步修改）**：
+`Payment : PaymentAttempt = 1:1（支付尝试）+ 1:N（退款尝试）`——`payment_attempts` 以 **`attempt_type`** 区分
+`PAYMENT` / `REFUND`（Feature 016 / FR-017），同一 `payment_no` 可有 **1 条 PAYMENT 尝试 + N 条 REFUND 尝试**；
+渠道重试在同一 attempt 行内 `retry_count` 递增、**不新建行**（ADR-0054）。
 
 **分库分表键**：`[Phase 10 延后]` 当前单库单表，不引入分库分表；候选分片键为 `order_id` 或 `user_id`，留待有真实负载证据后再评估（Constitution §3.4 决策门槛）。
 
@@ -188,7 +199,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 | amountMinor | long | 是 | 金额（分，`> 0`） |
 | currencyCode | String | 是 | `^[A-Z]{3}$`，如 `CNY` |
 | idempotencyKey | String | **否** | 由 payment-service 服务端生成 `payment:{orderNo}:{channelCode}:{attemptSeq}`（Feature 015 起）；调用方传 `null` 即可 |
-| channelCode | String | **否**（spec 028 起） | 未传 → 由 `ChannelRouter` 按配置规则选路；传了 → **显式优先**（仅校验已注册，不校验 `enabled`）。`ChannelRegistry` / `ChannelRouter` 由 [spec 028](../../specs/028-channel-routing/spec.md) 引入——此前该处描述的组件在代码中并不存在 |
+| channelCode | String | **否**（spec 028 起） | 未传 → 由 `ChannelRouter` 按配置规则选路；传了 → **显式优先**（仅校验已注册，不校验 `enabled`）。`ChannelRegistry` / `ChannelRouter` 由 [spec 028](../../specs/stage-04-new-directions/028-channel-routing/spec.md) 引入——此前该处描述的组件在代码中并不存在 |
 
 **响应** `CreatePaymentResponse`：`{ paymentNo: String, status: String, payUrl: String|null, attemptSeq: int, channelCode: String }`。
 
@@ -299,7 +310,33 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ---
 
-### 3.10 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
+### 3.11 渠道内部契约（spec 030 / ADR-0075）
+
+> **本节为契约权威定义**（[ADR-0075](../../adr/0075-unified-channel-contract.md) 🟢 Accepted）。
+> 字段级需求的**验收**见 [spec 030](../../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)，本节只承载**契约本身**。
+
+**请求侧**（平台 → 渠道，`application/channel/`）：
+
+| 类型 | 字段 | 说明 |
+|---|---|---|
+| `ChargeRequest` | `paymentNo` / `attemptId` / `amountMinor` / `currencyCode` / `channelCode` / `scene` / `goods` / `callbackUrls` / `expireAt` / `payer` / `attach` / `channelExtra` | 扩为 12 字段（spec 030 FR-105）；**保留 5 参兼容构造器** |
+| `RefundRequest` | 原 5 字段 + `channelTransactionId` / `outRequestNo` / `reason` / `refundNotifyUrl` | 扩为 9 字段（FR-106）；真实渠道退款 **MUST** 带渠道交易号 |
+| `QueryStatusRequest` | 原 3 字段 + `channelTransactionId` | 扩为 4 字段（FR-107）；**`transactionId` 是平台侧交易号，不是渠道交易号** |
+
+**响应侧**（渠道 → 平台）：
+
+| 类型 | 说明 |
+|---|---|
+| `ChannelResult` | `Status`（SUCCESS / FAILURE / UNKNOWN）+ `channelReference` + `reason` + `transportCode` / `businessCode` + **可空 `credential`**（FR-112） |
+| `PayCredential` | `(Kind kind, String payload, Instant expiresAt)`；`Kind ∈ {REDIRECT_URL, FORM_HTML, QR_CODE, H5_URL, JSAPI_PARAMS, CLIENT_SECRET}`（FR-111）；**不落库**（INV-2） |
+
+**端口能力声明**：`PaymentChannel` 新增两个 `default` 方法——`supportedScenes()`（默认全支持）、`supportsRealMode()`（默认 `false`）；**不新增 `close` / `callback`**（FR-109）。
+
+**凭证语义（INV-6）**：`credential != null` ⇒ 渠道仅**受理**、买家尚未付款 ⇒ payment **MUST** 停 `PROCESSING`，**MUST NOT** 走成功收敛路径。凭证经 `RoutedPayment` 透传至 `CreatePaymentResponse.payUrl`（`payUrl` 优先取凭证，无凭证回落 mock 收银台链接，FR-114）。
+
+> ⚠️ **本节状态**：spec 030 **实现完成后**由 T138 补齐「实现实况」表（配置类 / 双模态分发 / 沙箱适配器）。当前契约条款已由 ADR-0075 定稿，**先于实现登记，不代表代码已具备**。
+
+### 3.12 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
 | 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
 |---|---|---|---|---|

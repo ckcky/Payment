@@ -10,12 +10,12 @@
 
 ## Phase 0 —— 门 0 文档收口（**docs-only，可直推 master**）
 
-- [ ] **T1** 改 `docs/architecture/systems/payment-service.md`：修 `:52` 悬空锚点 `#311-渠道内部契约spec-030--adr-0075`；消除 `:281`/`:302` **两个重复的 `### 3.10`**（合并为一节）[SC-A-16]
-- [ ] **T2** 改 `docs/architecture/systems/payment-service.md:146-150`：当前把 `channel_mode` 列与 `deployment/schema/030-payment-attempt-channel-mode.sql` 写成「已实现」——**该列与文件均不存在**。**MUST 按 H2 新载体改写**为 `extra_json` 的 `channelMode` 键 + `030-payment-attempt-extra-json.sql`，**不得只删旧列名** [FR-150][FR-300]
-- [ ] **T3** 改 `docs/architecture/technical-solution.md`：统一 `Payment:PaymentAttempt` 基数表述（与 `systems/payment-service.md` 一致）[C-02/C-03]
-- [ ] **T4** 改 `docs/architecture/technical-solution.md`：写入「**渠道事实 / 平台事实可合法不一致**」口径（终态吸收的解释）[§6.1]
+- [x] **T1** 改 `docs/architecture/systems/payment-service.md`：修 `:52` 悬空锚点 `#311-渠道内部契约spec-030--adr-0075`；消除 `:281`/`:302` **两个重复的 `### 3.10`**（合并为一节）[SC-A-16]
+- [x] **T2** 改 `docs/architecture/systems/payment-service.md:146-150`：当前把 `channel_mode` 列与 `deployment/schema/030-payment-attempt-channel-mode.sql` 写成「已实现」——**该列与文件均不存在**。**MUST 按 H2 新载体改写**为 `extra_json` 的 `channelMode` 键 + `030-payment-attempt-extra-json.sql`，**不得只删旧列名** [FR-150][FR-300]
+- [x] **T3** 改 `docs/architecture/technical-solution.md`：统一 `Payment:PaymentAttempt` 基数表述（与 `systems/payment-service.md` 一致）[C-02/C-03]
+- [x] **T4** 改 `docs/architecture/technical-solution.md`：写入「**渠道事实 / 平台事实可合法不一致**」口径（终态吸收的解释）[§6.1]
 - [x] **T5** ~~给旧 030 余件加 `Superseded by 030` 横幅~~ → **改为「删除旧 030 四件套」**，**已于 2026-09-19 完成**（负责人裁决：整目录删除，见 [plan.md §5](plan.md)）。理由：旧 030 的 T31/T32 是**旧 `channel_mode` 专用列**口径，与 H2 裁决冲突，保留即误用风险。**复核口径**：全仓 `030-channel-contract-dye-alipay-sandbox` **0 残留引用**
-- [ ] **T6** 复核 `docs/adr/README.md`（索引表 + 编号速查表 `0001–0076` + `下一可用编号：ADR-0077`）与 `docs/adr/traceability.md` 的 0075/0076 登记；**全部相对链接可达、0 断链** [SC-A-16]
+- [x] **T6** 复核 `docs/adr/README.md`（索引表 + 编号速查表 `0001–0076` + `下一可用编号：ADR-0077`）与 `docs/adr/traceability.md` 的 0075/0076 登记；**全部相对链接可达、0 断链** [SC-A-16]
 
 ## Phase 1 —— B1 账本幂等键口径统一（**payment-service，🔴**）
 

@@ -309,7 +309,13 @@ Order (1) ───── (1) Transaction (1) ───── (N) Payment ──
    └─ Order Items / Price Snapshots        PAYMENT 1 + REFUND N；每次尝试 ≤ 1 个渠道引用
 ```
 
-> **基数修订**：`Transaction : Payment = 1:N`（ADR-0064：一交易多支付单，用户每选一个支付方式即新建一张支付单，`payments.attempt_seq` 区分）；`Payment : PaymentAttempt = 1:1（支付尝试）+ 1:N（退款尝试）`——`payment_attempts` 以 `attempt_type` 区分 `PAYMENT` / `REFUND`（Feature 016 / FR-017），同一 `payment_no` 可有 **1 条 PAYMENT 尝试 + N 条 REFUND 尝试**。渠道重试在同一 attempt 行内 `retry_count` 递增、不新建行（ADR-0054）。
+> **基数修订**：`Transaction : Payment = 1:N`（ADR-0064：一交易多支付单，用户每选一个支付方式即新建一张支付单，`payments.attempt_seq` 区分）；
+> `Payment : PaymentAttempt = 1:1（支付尝试）+ 1:N（退款尝试）`——`payment_attempts` 以 `attempt_type` 区分 `PAYMENT` / `REFUND`
+> （Feature 016 / FR-017），同一 `payment_no` 可有 **1 条 PAYMENT 尝试 + N 条 REFUND 尝试**，故整体记为 **`1+N`**
+> （图式中 `Payment ── (1+N) PaymentAttempt` 即此意）。渠道重试在同一 attempt 行内 `retry_count` 递增、**不新建行**（ADR-0054）。
+>
+> **口径一致性**：本表述与 [systems/payment-service.md §2.3](systems/payment-service.md#23-表结构与索引策略) 的
+> `payment_attempts` 说明同源——**`attempt_type` 是两类尝试的唯一区分维度**；任一侧修改基数口径时另一侧 **MUST** 同步。
 >
 > ⚠️ **ADR-0054 原文的「`payment_no : payment_attempts = 1:1`」已过时**：该约定写于退款尝试复用本表（Feature 016）之前，只覆盖支付尝试。引用时须按本行的修订口径理解。
 
@@ -491,6 +497,25 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 | **重复消息/回调** | 处理侧假设消息与回调会重复，靠幂等键 + 状态机幂等吸收，不重复入账 |
 | **超时** | 所有外部调用有超时；超时 ≠ 失败/成功，进入未知状态 |
 | **UNKNOWN** | 结果不确定时不猜成败直接落账，靠查询/对账/人工收敛 —— 支付系统最核心的正确性保障 |
+
+**「渠道事实 / 平台事实可合法不一致」口径**（终态吸收的解释）：
+
+渠道侧事实（`payment_attempts` 记录的渠道结果、渠道交易号、渠道状态）与平台侧事实（`payments.status`）是
+**两套不同主体各自认定**的事实，**允许在一段时间内不一致**，这不是数据缺陷而是**分布式协作的固有形态**：
+
+| 场景 | 渠道事实 | 平台事实 | 是否合法 | 处置 |
+|---|---|---|---|---|
+| 渠道受理、买家未付款 | 已受理（`WAIT_BUYER_PAY`） | `PROCESSING` | ✅ 合法 | 等回调（凭证非空即停 `PROCESSING`，INV-6） |
+| 回调先于主动查询到达 | 成功 | `PROCESSING` → `SUCCEEDED` | ✅ 合法 | 回调收敛 |
+| 渠道成功但平台记账未完成 | 成功 | `SUCCEEDED` | ✅ 合法 | 记账失败**不回滚**支付成功事实（只记指标 + ERROR 日志，ADR-0009） |
+| 渠道返回 `UNKNOWN` | 未知 | 维持 `UNKNOWN` | ✅ 合法 | **不推进**；等主动查询 / 人工 `resolve` |
+| 终态后再收到相反回调 | 失败（迟到） | 仍 `SUCCEEDED` | ✅ 合法 | **终态吸收**：终态成功不被后到的失败回调覆盖 |
+
+**纪律**：一致性**不靠「让两边立刻相同」达成**，而靠
+① **单向收敛**（只从非终态 → 终态，终态不可逆）；
+② **权威来源优先**（渠道明确结果 > 平台推测）；
+③ **差异可发现**（对账 / 审计 / 指标），而非「静默抹平」。
+**MUST NOT** 为了让两边「看起来一致」而回退已确认的平台终态，也 **MUST NOT** 把渠道超时自动终态化为 `FAILED`（INV-9 / 宪法 §V.7）。
 
 ### 4.4.1 Payment Limit（当前支付入口能力）
 
