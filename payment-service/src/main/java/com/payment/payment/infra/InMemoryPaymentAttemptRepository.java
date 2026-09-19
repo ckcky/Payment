@@ -92,7 +92,13 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
                 }
                 yield attempt.fail(result.reason());
             }
-            case UNKNOWN -> attempt.markUnknown(result.reason());
+            case UNKNOWN -> {
+                // spec 030 / B4（T97）：与 ChannelAttemptRecorderImpl 同口径——UNKNOWN
+                // 分支补渠道引用回填（守卫在 backfillChannelReference 内）。测试桩口径必须与
+                // 生产一致，否则单测覆盖不到回填行为。
+                attempt.backfillChannelReference(result.channelReference());
+                yield attempt.markUnknown(result.reason());
+            }
         };
     }
 

@@ -93,7 +93,16 @@ public class ChannelAttemptRecorderImpl implements ChannelAttemptRecorder {
                 }
                 yield attempt.fail(result.reason());
             }
-            case UNKNOWN -> attempt.markUnknown(result.reason());
+            case UNKNOWN -> {
+                // spec 030 / B4（T97 / FR-205）：**补渠道引用回填**。
+                // 受理阶段渠道常常还没给交易号（channel_reference 落 NULL），
+                // 后来的一次 UNKNOWN 通知/查询响应里才带上——不回填就等于把这个
+                // 观测链断了：后续主动查询拿通道号去问渠道会查不到。
+                // backfillChannelReference 自带守卫（仅在引用为空、且行在途时生效，
+                // 终态行不动），故这里无需额外判断。
+                attempt.backfillChannelReference(result.channelReference());
+                yield attempt.markUnknown(result.reason());
+            }
         };
     }
 
