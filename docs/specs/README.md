@@ -64,5 +64,11 @@
 > 本阶段总目标设计书：**[stage-design.md](stage-05-channel-and-finance-deepening/stage-design.md)（Draft，2026-09-19）**——
 > 现状评估 + 总体架构 + 渠道接入 / 账务总账 / 对账结算 / 可靠性 / 可观测性 / 测试策略六面目标态 + Feature 拆分建议。
 >
+> 正式审查（以代码为事实来源）：**[design-review.md](stage-05-channel-and-finance-deepening/design-review.md)（2026-09-19）**——
+> 14 节审查（领域模型 / 两个状态机 / 渠道架构 / 回调 / 账本 / 对账 / 结算 / 可靠性 11 类故障走查）+
+> **17 项设计冲突**（1 项 🔴 阻断、13 项 🟠）+ 必需变更分级 + **16 项人类决策** + 自 `030` 起的 Feature 实施矩阵。
+> 结论：**stage-design 方向通过，需修订后生效**；进入实现前须先完成「文档收口 + 030 前置一致性收口」两个门。
+>
 > ⚠️ **状态说明**：该阶段为**提案**，尚未分配 Feature 编号、未同步 `roadmap.md`；阶段命名与 Feature 编号属
 > 宪法 §Governance 人类决策边界，须负责人确认后本索引与 roadmap 才视为生效。
+> 上述两份文件均为 **Draft / 提案**，**不是** L0 当前系统事实源，**不产生**任何已生效决策。
