@@ -264,7 +264,7 @@
 | `docs/adr/README.md` | 索引表 + 编号速查表登记 0074；补 B1 缺失表头行；登记「文件名前缀 = 首个 ADR 编号」新规则 |
 | `docs/adr/0074-redis-transactional-message.md` | 新建（ADR-0074） |
 | `docs/adr/traceability.md` | 登记落点 |
-| `docs/adr/0010-distributed-evolution-decisions.md` | ADR-0031 标记 **Superseded by ADR-0074** |
+| `docs/adr/0029-distributed-evolution-decisions.md` | ADR-0031 标记 **Superseded by ADR-0074** |
 | **`docs/architecture/technical-solution.md`** | **总体技术方案必须同步**：`:53` 不引入 MQ 的例外清单追加 Redis 通道、`:193` 异步事件现状、架构总览补消息通道、§4 各链路时序改为事件驱动 |
 | **`docs/architecture/systems/order-service.md`** | 生产 `order.paid` / `refund.succeeded` / `order.cancelled`；消费 `payment.succeeded` / `refund.result` |
 | **`docs/architecture/systems/payment-service.md`** | 生产 `payment.succeeded` / `refund.result`；消费 `order.cancelled` |

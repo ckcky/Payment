@@ -32,7 +32,7 @@
 - 账单 fixture：`reconciliation-service/src/main/resources/fixtures/channel-statements/`
 - Schema DDL：`deployment/schema/07-reconciliation-schema.sql`
 - 配置：`reconciliation-service/src/main/resources/application.yml`
-- ADR：`docs/adr/0007-reconciliation-decisions.md`
+- ADR：`docs/adr/0019-reconciliation-decisions.md`
 
 ---
 
@@ -40,7 +40,7 @@
 
 **Purpose**: 确认决策与 schema 基线
 
-- [x] T001 负责人确认 ADR-0019~0021（`docs/adr/0007-reconciliation-decisions.md`），更新状态为 Accepted —— **核实**：三份 ADR 文件内状态均为「✅ Accepted（2026-08-30 负责人裁决 accept；实现已落地）」（见该文件 `:12` / `:79` / `:137`），`roadmap.md` 亦登记 `006-reconciliation（ADR-0019~0021 Accepted）`；本项此前仅因勾选滞后未回填。
+- [x] T001 负责人确认 ADR-0019~0021（`docs/adr/0019-reconciliation-decisions.md`），更新状态为 Accepted —— **核实**：三份 ADR 文件内状态均为「✅ Accepted（2026-08-30 负责人裁决 accept；实现已落地）」（见该文件 `:12` / `:79` / `:137`），`roadmap.md` 亦登记 `006-reconciliation（ADR-0019~0021 Accepted）`；本项此前仅因勾选滞后未回填。
 - [x] T002 [P] 修改 `deployment/schema/07-reconciliation-schema.sql`：新增 `statement_source VARCHAR(255) NULL`、`closed_at DATETIME NULL`、`closed_by VARCHAR(64) NULL` 三列 —— **核实**：三列就位（`:16-18`）。
 - [x] T003 [P] 新增账单 fixture —— **本次补齐**：新增 `2026-09-30.csv`（4 条 + 1 条单边差异），与既有 `2026-08-31.csv` 内容不同，用于验证「不同周期产出不同差异集合」（T012/T014）。**命名偏差已接受**：spec 原文写月格式 `2026-08.csv`/`2026-09.csv`，代码先行为**日期**格式，按既有约定对齐（语义等价，且 E2E 已依赖 `2026-08-31.csv`，改名风险大于收益）。
 - [x] T004 [P] 新增错误码 `UNRESOLVED_DIFFERENCES` —— **核实**：`ErrorCodes.UNRESOLVED_DIFFERENCES` 已存在，`ReconciliationBatch.close()` 关闭门禁在用（`:102`）。
@@ -164,7 +164,7 @@
 - [x] T044 [P] 对照 spec SC-001~SC-008 / FR-001~FR-021 回检缺口，更新 `acceptance.md` —— **本次执行**。
 - [x] T045 [P] 更新 `docs/architecture/systems/reconciliation-service.md`：状态机「已接线」、三列、close 端点、账单按周期、超时/重试阈值、新增指标 —— **本次执行**。
 - [x] T046 [P] 修正文档状态漂移（缺口 G4）：`technical-solution.md:105` 与 `roadmap.md` Current Status / Feature 状态 —— **本次执行**（roadmap 已登记 `006-reconciliation（ADR-0019~0021 Accepted）`；本轮补 spec 状态与 2026-09-09 收口记录）。
-- [x] T047 [P] 在 `docs/adr/README.md` 索引中登记 `0007-reconciliation-decisions.md`（ADR-0019~0021）—— **核实已登记**：`README.md:15`（决策集合表）与 `:73-75`（逐条 ADR 索引）。
+- [x] T047 [P] 在 `docs/adr/README.md` 索引中登记 `0019-reconciliation-decisions.md`（ADR-0019~0021）—— **核实已登记**：`README.md:15`（决策集合表）与 `:73-75`（逐条 ADR 索引）。
 - [x] T048 Review：运行 `/review`；涉及对账/资金路径运行 `/payment-review`（SOP 第 8 步）—— **本次等价核查**：模块边界（reconciliation 不写 payment/refund，T024 锁定 INV-6）、状态机集中（`ReconciliationBatch` 四方法唯一入口，无 `setStatus`）、金额全 `long`（无 float/double）、幂等（周期唯一约束 + `beginProcessing`/`close` 幂等）、RPC 契约（`@FeignClient` 仅服务名，`FactsClientConfig` 局部绑定不污染全局）。
 
 ---

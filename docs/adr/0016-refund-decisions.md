@@ -5,8 +5,8 @@
 > **ADR-0047 的编号说明**：它产生于 ADR-0016 回退后的文档同步阶段（2026-08-31），主题仍属退款领域，故并入本文件而非新开文档。之所以跳到 0047，是因为 `docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §9 已把 **ADR-0038~0046 整段预留**给下一阶段提案清单（Mock 收银台 / 幂等键 / 库存域 / Redis 等）；为避免编号冲突，新提案自 **ADR-0047** 起。
 > 涉及 Constitution §8「人类决策边界」的决策，均**待负责人确认**（2026-08-29）。
 
-> ✅ **编号冲突已解决（2026-08-29）**：本文件最初位于 `docs/adr/0005-refund-decisions.md` 并使用 ADR-0012~0014，与既有的 `docs/adr/0005-payment-reliability-impl-decisions.md`（Feature 003 实现期决策，占用 **ADR-0012~0015**）**冲突**。
-> 已采用推荐方案 ① 解决：文件重命名为 `0006-refund-decisions.md`，标签重编号为 **ADR-0016~0018**，既有 `0005-payment-reliability-impl-decisions.md` 与其 ADR-0012~0015 **保持不变**，全局引用已同步更新。编号现已唯一，无歧义。
+> ✅ **编号冲突已解决（2026-08-29）**：本文件最初位于 `docs/adr/0005-refund-decisions.md` 并使用 ADR-0012~0014，与既有的 `docs/adr/0012-payment-reliability-impl-decisions.md`（Feature 003 实现期决策，占用 **ADR-0012~0015**）**冲突**。
+> 已采用推荐方案 ① 解决：文件重命名为 `0016-refund-decisions.md`，标签重编号为 **ADR-0016~0018**，既有 `0012-payment-reliability-impl-decisions.md` 与其 ADR-0012~0015 **保持不变**，全局引用已同步更新。编号现已唯一，无歧义。
 
 > **负责人裁决（2026-08-30，落地 2026-08-31）**
 > - **ADR-0016 部分退款** → ❌ **Rejected（不做）**。本期只支持**全额退款**：`PARTIALLY_SUCCEEDED` 枚举保留但**无调用方、不可达**；渠道侧若返回部分成功按 `UNKNOWN` 处理走对账收敛；累计口径一律按**申请额**占位（在途保守占用，防并发超退 H1）。已实现的 `refundedAmountMinor` 全链路**已回退**，清单见 ADR-0016 内的「回退落地记录」。重新开放时须同步解决：退款单拆分模型、多次退累计口径、权益/履约按比例回收、Ledger 部分冲正分录（Constitution §8 边界，须重新确认）。
@@ -216,7 +216,7 @@
 
 - Constitution §II.3、§IV、§V.7、§8.4
 - `docs/specs/stage-01-core-mvp/004-ledger/`（US2 / FR-006 / T013~T014 / `contracts/post-refund.md`）
-- `docs/adr/0004-ledger-design-decisions.md`（ADR-0008~0011，其中 ADR-0009 记账触发与一致性、ADR-0011 MVP 记账范围）
+- `docs/adr/0008-ledger-design-decisions.md`（ADR-0008~0011，其中 ADR-0009 记账触发与一致性、ADR-0011 MVP 记账范围）
 - `005-refund` spec：US4、FR-009~FR-010；contracts/refund-orchestration.md §4
 - `ledger-service/.../api/LedgerController.java`、`payment-service/.../infra/client/FeignLedgerPostingGateway.java`、`common/common-dto/.../rpc/PostingRequest.java`
 

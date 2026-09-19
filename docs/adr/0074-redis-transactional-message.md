@@ -4,10 +4,10 @@
 
 - 状态：🟢 **Accepted → Implemented**（2026-09-19 提出并拍板；2026-09-20 随 spec 029 批次 A~G 落地，`--no-ff` 合入 master `5e2c00d`）
 - 关联：
-  - **Supersedes [ADR-0031](0010-distributed-evolution-decisions.md)**（⛔ Not Implemented「不使用 MQ」——本 ADR 以「Redis 不是 MQ 组件」的方式满足其解耦证据要求，并把其三条约束原样继承）
-  - [ADR-0043](0014-next-stage-decisions.md)（订单超时用 **Redis ZSet 时间轮**顶替 MQ 延迟消息——本 ADR 的先例与可复用骨架）
-  - [ADR-0044](0014-next-stage-decisions.md) / [ADR-0045](0014-next-stage-decisions.md)（Redis 引入与「**Redis 非数据源**」定位；本 ADR 对 payment 用 Redis 构成显式例外）
-  - [ADR-0060](0020-redis-lettuce-pool.md)（Lettuce 池化，本 ADR 的消费者连接方案受其约束）
+  - **Supersedes [ADR-0031](0029-distributed-evolution-decisions.md)**（⛔ Not Implemented「不使用 MQ」——本 ADR 以「Redis 不是 MQ 组件」的方式满足其解耦证据要求，并把其三条约束原样继承）
+  - [ADR-0043](0038-next-stage-decisions.md)（订单超时用 **Redis ZSet 时间轮**顶替 MQ 延迟消息——本 ADR 的先例与可复用骨架）
+  - [ADR-0044](0038-next-stage-decisions.md) / [ADR-0045](0038-next-stage-decisions.md)（Redis 引入与「**Redis 非数据源**」定位；本 ADR 对 payment 用 Redis 构成显式例外）
+  - [ADR-0060](0060-redis-lettuce-pool.md)（Lettuce 池化，本 ADR 的消费者连接方案受其约束）
   - [ADR-0066](0029-column-and-fulfillment-granularity.md)（`order_items` 为明细单一事实源——决定广播点画在哪里）
   - [ADR-0054](0019-payment-and-order-responsibility.md)（支付成功事实不回滚、surplus 判定在 transaction 层）
   - [ADR-0063](0026-cross-system-business-no.md)（跨系统一律业务单号，事件信封沿用）
@@ -31,7 +31,7 @@
 
 | # | 事实 | 证据 |
 |---|---|---|
-| G7 | ADR-0031 裁决「**不使用 MQ**」（⛔ Not Implemented），并要求引入前必须有**性能 / 解耦 / 削峰**三类证据之一；即使引入也 MUST 遵守：只用于通知与解耦、不得承载资金事实真相、消费端 MUST 幂等、不引 2PC/XA | `0010-distributed-evolution-decisions.md:71` |
+| G7 | ADR-0031 裁决「**不使用 MQ**」（⛔ Not Implemented），并要求引入前必须有**性能 / 解耦 / 削峰**三类证据之一；即使引入也 MUST 遵守：只用于通知与解耦、不得承载资金事实真相、消费端 MUST 幂等、不引 2PC/XA | `0029-distributed-evolution-decisions.md:71` |
 | G8 | Constitution `:156`「跨服务通过同步 RPC 编排和幂等重试实现最终一致，**暂不引入 MQ 或跨服务异步事件**」；`:145` 禁止为体现复杂度引入中间件 | `.specify/memory/constitution.md` |
 | G9 | `ServiceBoundaryTest:121-131` 禁 `kafka / amqp / rabbitmq / rocketmq / jms / jta`——**Redis 不在禁列** | `deployment/architecture-tests` |
 | G10 | 负责人明确：**个人项目不想搞太多组件** | 2026-09-18 需求源头 |
@@ -40,7 +40,7 @@
 
 | # | 事实 | 证据 |
 |---|---|---|
-| G11 | **ADR-0043 已用 Redis ZSet 时间轮顶替 MQ 延迟消息**，原文认可「ZSet 时间轮是无 MQ 下的合理替代」——**本项目已有「Redis 顶替 MQ 能力」的 accepted 先例** | `0014-next-stage-decisions.md:100-102` |
+| G11 | **ADR-0043 已用 Redis ZSet 时间轮顶替 MQ 延迟消息**，原文认可「ZSet 时间轮是无 MQ 下的合理替代」——**本项目已有「Redis 顶替 MQ 能力」的 accepted 先例** | `0038-next-stage-decisions.md:100-102` |
 | G12 | 只有 catalog、order 两个服务有 `spring-boot-starter-data-redis`；**payment 刻意不用**（ADR-0044/G7） | 各服务 pom |
 | G13 | `redis:7` 单实例，**无 volume、无 appendonly、无 maxmemory**——容器重建全丢 | `docker-compose.yml:54` |
 | G14 | Lettuce 池 `max-active:16`（ADR-0060）；客户端只有 `StringRedisTemplate`，无 Redisson | 各服务 application.yml |

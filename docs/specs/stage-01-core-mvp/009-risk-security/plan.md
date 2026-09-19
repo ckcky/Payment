@@ -1,7 +1,7 @@
 # Plan: 009-risk-security
 
 **对应 Spec**：`spec.md`
-**决策**：见 `docs/adr/0009-risk-security-decisions.md`（ADR-0024~0028）与 `docs/adr/0011-internal-token-decisions.md`（ADR-0034~0037）
+**决策**：见 `docs/adr/0024-risk-security-decisions.md`（ADR-0024~0028）与 `docs/adr/0034-internal-token-decisions.md`（ADR-0034~0037）
 **负责人裁决（2026-08-30）**：
 
 | ADR | 裁决 | 实现形态 |

@@ -12,7 +12,7 @@ Sync Impact Report:
 Sync Impact Report:
 - Version: 2.0.0 → 2.1.0（MINOR：解决 D1 自相矛盾，将 Ledger 从前置依赖「延后 Phase 8」改为「当前 Feature 004 实现」，并补充 MVP 过渡条款）
 - 修订：§II.3 增加过渡说明（MVP 阶段在 ledger-service 落地前以状态机事实模拟资金；Ledger 已前置到 Feature 004，落地后所有真实资金变动改走 ledger-service）
-- 关联：docs/adr/0004-ledger-design-decisions.md（ADR-0008~0011）；docs/specs/stage-01-core-mvp/004-ledger/
+- 关联：docs/adr/0008-ledger-design-decisions.md（ADR-0008~0011）；docs/specs/stage-01-core-mvp/004-ledger/
 - 决策来源：2026-08-28 负责人确认（审计 D1：§II.3 与 Roadmap 延后 Ledger 的矛盾）
 - TODO: 无
 -->
@@ -37,9 +37,9 @@ Sync Impact Report:
 - 修订：§Engineering Standards.1 / .3、§Observability.3 —— Checkstyle+Spotless / Testcontainers /
   Micrometer Tracing 标注「[目标] 未落地」，避免被误读为现行强制要求
 - 细化：Governance §提交与合并节奏 ④ —— 「文档无漂移」的判定依据指向 engineering-standards 漂移检查清单
-- 关联：docs/adr/0004-ledger-design-decisions.md（ADR-0010）、
-  docs/adr/0009-risk-security-decisions.md（ADR-0027）、
-  docs/adr/0014-next-stage-decisions.md（ADR-0044 / ADR-0045）、
+- 关联：docs/adr/0008-ledger-design-decisions.md（ADR-0010）、
+  docs/adr/0024-risk-security-decisions.md（ADR-0027）、
+  docs/adr/0038-next-stage-decisions.md（ADR-0044 / ADR-0045）、
   docs/operations/code-debt-backlog.md
 - 决策来源：2026-09-03 负责人确认（Phase 5 文档治理；用户即负责人，已批准）
 - Rationale：ADR-0010 / ADR-0027 / ADR-0044 均为负责人已裁决且代码已落地的 Accepted 决策，

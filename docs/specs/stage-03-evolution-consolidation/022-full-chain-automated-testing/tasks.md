@@ -9,7 +9,7 @@
 ## 批次 A — 文档与决策（已完成）
 
 - [x] **T401** 编写 spec 022 四件套：spec.md（现状 G1~G6 / 两个控制台功能盘点 / 三个假绿陷阱 / 业内对比 / 决策 D1~D8 / US1~US5 / FR-001~015 / NFR / SC-001~007 / 明确不做七项）
-- [x] **T402** 立项 [ADR-0069](../../adr/0030-end-to-end-automated-testing.md)（全链路自动化测试体系）+ `docs/adr/README.md` 注册（跳转表 + 编号速查 + 下一可用编号）
+- [x] **T402** 立项 [ADR-0069](../../adr/0069-end-to-end-automated-testing.md)（全链路自动化测试体系）+ `docs/adr/README.md` 注册（跳转表 + 编号速查 + 下一可用编号）
 
 ## 批次 B — E2E 模块骨架（依赖：无）
 

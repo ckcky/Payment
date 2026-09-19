@@ -25,7 +25,7 @@
 ### A1 决策与文档同步
 
 ADR-0074 落 `docs/adr/0074-redis-transactional-message.md` 并标 Proposed；同步修订：
-- `0010-distributed-evolution-decisions.md`：ADR-0031 标 **Superseded by ADR-0074**（保留原文，不改判据）；
+- `0029-distributed-evolution-decisions.md`：ADR-0031 标 **Superseded by ADR-0074**（保留原文，不改判据）；
 - `docs/adr/README.md` 两张表（B1 缺表头行，顺手补）；
 - `traceability.md`；
 - `technical-solution.md:53`（不引入 MQ 的例外清单追加 Redis 通道）、`:193`（异步事件现状）；

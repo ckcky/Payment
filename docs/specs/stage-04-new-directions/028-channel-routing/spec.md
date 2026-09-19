@@ -5,8 +5,8 @@
 **状态**：Implemented（[spec.md](spec.md) / [plan.md](plan.md) / [tasks.md](tasks.md) / [acceptance.md](acceptance.md) 已闭环；ADR-0072/0073 已 Accepted，代码已实现）
 **分支**：`docs/spec-028-channel-routing`（纯文档）→ 实现期另开 `feature/028-channel-routing`
 **决策**：
-- [ADR-0072](../../adr/0033-two-layer-channel-architecture.md)（🟡 Proposed）—— payment-service 两层结构：payment 支付层 / channelAttempt 渠道层
-- [ADR-0073](../../adr/0034-channel-routing.md)（🟡 Proposed）—— 支付渠道路由：注册表 + 规则化确定性选路
+- [ADR-0072](../../adr/0072-two-layer-channel-architecture.md)（🟡 Proposed）—— payment-service 两层结构：payment 支付层 / channelAttempt 渠道层
+- [ADR-0073](../../adr/0073-channel-routing.md)（🟡 Proposed）—— 支付渠道路由：注册表 + 规则化确定性选路
 
 > 本 Spec 承载**两项互相依赖**的结构变更。ADR-0072 定结构（渠道层成为真正的层 + 渠道身份），ADR-0073 定选路规则；
 > 两者必须有同一份 spec 落地——先拆三渠道再回头收口，等于把同一批文件动两遍，中间态比现状更别扭。
@@ -340,8 +340,8 @@
 
 | 类型 | 对象 | 动作 |
 |---|---|---|
-| 新增 ADR | `docs/adr/0033-two-layer-channel-architecture.md`（ADR-0072，🟡 Proposed） | 本轮已创建 |
-| 新增 ADR | `docs/adr/0034-channel-routing.md`（ADR-0073，🟡 Proposed） | 本轮已创建。⚠️ **编号避让**：ADR-0071 已被同日立项的 spec 027「用户支付限额」（`0032-user-payment-limit.md`，worktree `docs/spec-027-user-payment-limit`，未 merge）占用，故渠道路由 ADR 顺延为 **0072**、文件号 **0033**。水位 → **ADR-0073** |
+| 新增 ADR | `docs/adr/0072-two-layer-channel-architecture.md`（ADR-0072，🟡 Proposed） | 本轮已创建 |
+| 新增 ADR | `docs/adr/0073-channel-routing.md`（ADR-0073，🟡 Proposed） | 本轮已创建。⚠️ **编号避让**：ADR-0071 已被同日立项的 spec 027「用户支付限额」（`0071-user-payment-limit.md`，worktree `docs/spec-027-user-payment-limit`，未 merge）占用，故渠道路由 ADR 顺延为 **0072**、文件号 **0033**。水位 → **ADR-0073** |
 | 新增 Spec | `docs/specs/stage-04-new-directions/028-channel-routing/`（本文档） | 本轮已定稿 |
 | **Supersede** | spec 015 §8 第 1 条「不做 `Map<ChannelCode, PaymentChannel>` 注册表」 | 实现期在 015 spec 加注「已于 2026-09-16 由 ADR-0073 取代」 |
 | **消除漂移** | `payment-service.md` §2.1「必须已注册到渠道 Registry/Router」（悬空描述） | 实现期同步（SC-013） |

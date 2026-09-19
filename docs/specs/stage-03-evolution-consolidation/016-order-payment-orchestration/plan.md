@@ -126,7 +126,7 @@ RefundAttemptRequest {
 
 **文档**
 - `docs/specs/stage-01-core-mvp/001-core-business-model/data-model.md`：Transaction 1:1 → 1:N（FR-011）。
-- `docs/adr/0024-multi-payment-per-transaction.md`（ADR-0064）：#4 标注 `Superseded by ADR-0054`。
+- `docs/adr/0064-multi-payment-per-transaction.md`（ADR-0064）：#4 标注 `Superseded by ADR-0054`。
 - `docs/adr/README.md`：注册 ADR-0054、下一可用编号改 0055。
 
 ## 6. 依赖顺序 / 落地阶段（实现期 Task 拆分参考）

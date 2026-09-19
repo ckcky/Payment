@@ -24,7 +24,7 @@
 - **决策**：10 个服务**均无 Dockerfile**，未容器化；本地以 `deployment/start-all.sh` + 各 `application.yml` 端口（8081–8090 + 8091 mock-channel-web）启动。
 - **理由**：学习项目，容器化非当时目标（Constitution Anti-Goals 亦未要求 K8s）。
 - **后果**：无镜像构建流水线；部署形态以 `docker-compose.yml`（仅 MySQL/Redis 依赖）为准，应用进程在宿主机运行。
-- **⚠️ 已被取代（2026-09-15）**：`Superseded by ADR-0070`（见 [0031-containerized-local-stack.md](0031-containerized-local-stack.md)）。
+- **⚠️ 已被取代（2026-09-15）**：`Superseded by ADR-0070`（见 [0070-containerized-local-stack.md](0070-containerized-local-stack.md)）。
   宿主 JDK 版本绑架启动（`RunMojo` 要求 Java 17+，本机默认 java 11 → `UnsupportedClassVersionError`）
   与宿主进程生命周期脆弱（任务回收致 payment 8084=000，压测数据作废）两个真实痛点出现后，
   「容器化非目标」这一判断不再成立。ADR-0070 改采**双轨并存**（保留本决策的宿主模式，新增容器模式）。

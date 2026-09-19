@@ -15,7 +15,7 @@
 > | **ADR-0018 refund→ledger 记账** | ✅ **Accepted** | US4（Phase 6）按计划落地；记账金额取 `amountMinor`（全额退款恒为申请额） |
 >
 > 标记约定：`[x]` 已完成 · `[ ]` 未开始 · `[-]` **不做（延后/已回退）**。
-> US1 的回退清单见 [ADR-0016 回退落地记录](../../adr/0006-refund-decisions.md)。
+> US1 的回退清单见 [ADR-0016 回退落地记录](../../adr/0016-refund-decisions.md)。
 
 **Tests**: 本 Feature 资金正确性敏感，按 Constitution §VII 与 spec FR-017，**MUST** 包含测试任务（已内联到各 US 阶段）；**MUST NOT** 删测试或改测试迎合错误实现。
 
@@ -41,7 +41,7 @@
 
 **Purpose**: 确认决策与 schema 基线
 
-- [x] T001 负责人确认 ADR-0016~0018（`docs/adr/0006-refund-decisions.md`）—— **实现门禁（Constitution §8）** ✅ 2026-08-30 裁决：ADR-0016 **Rejected（部分退款不做）**；ADR-0017 / ADR-0018 **Accepted**
+- [x] T001 负责人确认 ADR-0016~0018（`docs/adr/0016-refund-decisions.md`）—— **实现门禁（Constitution §8）** ✅ 2026-08-30 裁决：ADR-0016 **Rejected（部分退款不做）**；ADR-0017 / ADR-0018 **Accepted**
 - [-] T002 [P] ~~`refunds` 增列 `refunded_amount_minor`~~ ⛔ **ADR-0016 裁决不做；曾加列，2026-08-31 已回退删除**（DDL / 测试 schema 均已移除；已部署环境需手工 `ALTER TABLE ... DROP COLUMN`）
 - [x] T003 [P] `deployment/schema/06-refund-schema.sql` 新建 `refund_post_process_attempts` 表 + 索引 ✅
 

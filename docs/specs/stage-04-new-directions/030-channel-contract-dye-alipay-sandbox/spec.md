@@ -60,7 +60,7 @@ Nacos 只做服务发现、无配置中心、0 处 `@RefreshScope`）。演示�
 | S14 | schema **无 Flyway / 无 ddl-auto**，靠 `deployment/demo/reset.sh` 重放建表；建表语句用 `CREATE TABLE IF NOT EXISTS`（**存量库不会补列**） | `deployment/schema/`、`deployment/demo/reset.sh` |
 | S15 | payment-service pom **无 alipay-sdk / okhttp / httpclient**；根 pom `dependencyManagement` 也无 | `payment-service/pom.xml` |
 | S16 | 支付回调入站只有 **HMAC 占位**：`ChannelCallbackSignatureFilter#verifySignature` **恒 `return true`**，预设 JSON body + `X-Channel-Signature`/`X-Channel-Timestamp` | `web/ChannelCallbackSignatureFilter.java`（ADR-0025 / ADR-0052） |
-| S17 | **先例教训**：`InternalTokenRequestInterceptor` + 入站校验曾因「入站校验上线但调用方未同步补出站头」导致**全线 403**，被整体删除（ADR-0024/0034） | `0011-internal-token-decisions.md` |
+| S17 | **先例教训**：`InternalTokenRequestInterceptor` + 入站校验曾因「入站校验上线但调用方未同步补出站头」导致**全线 403**，被整体删除（ADR-0024/0034） | `0034-internal-token-decisions.md` |
 
 > **S17 是本 Spec 最重要的一条约束来源**：染色是「入站读 + 出站写」的成对能力，**只做一半必然造成全线故障**。
 

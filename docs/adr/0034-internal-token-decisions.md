@@ -20,10 +20,10 @@
 > | `payment-service/web/InternalServiceAuthInterceptorTest.java` | 入站单测（鉴权已为空实现，无行为可断言） |
 > | 5 个服务 `application.yml` 的 `platform.security.*` 配置块 | payment / refund / settlement / reconciliation / fulfillment |
 >
-> **保留**：`InternalServiceAuthInterceptor` 空实现骨架（ADR-0024 的接入点，见 `0009-risk-security-decisions.md`）。
+> **保留**：`InternalServiceAuthInterceptor` 空实现骨架（ADR-0024 的接入点，见 `0024-risk-security-decisions.md`）。
 >
 > 启用条件：需要服务间网络边界防护时，将 0034 + 0035 **成对**立项启用，本文件所记的四条决策即为实施方案。
-**关联**：`0009-risk-security-decisions.md`（ADR-0024 入站鉴权 / ADR-0026 密钥管理）
+**关联**：`0024-risk-security-decisions.md`（ADR-0024 入站鉴权 / ADR-0026 密钥管理）
 
 > 背景一句话：ADR-0024 给 `payment-service` 的 `/internal/**` 加了 `X-Service-Token` 入站守卫，但**调用方没有地方带令牌**，所以 `payment.security.internal-auth-enabled` 只能默认 `false`——一开就全线 403。本集合补上「出站」这一半，把闭环合上。
 

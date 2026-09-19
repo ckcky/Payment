@@ -1,6 +1,6 @@
 # Plan: 018-schema-normalization-item-fulfillment
 
-> 技术方案版。状态：✅ Accepted（2026-09-07 负责人拍板 D1~D4，见 [ADR-0066](../../adr/0027-schema-normalization-and-item-granular-fulfillment.md)）。代码未实施。
+> 技术方案版。状态：✅ Accepted（2026-09-07 负责人拍板 D1~D4，见 [ADR-0066](../../adr/0066-schema-normalization-and-item-granular-fulfillment.md)）。代码未实施。
 
 ## 1. 方案总览
 

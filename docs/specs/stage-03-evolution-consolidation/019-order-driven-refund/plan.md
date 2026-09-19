@@ -1,6 +1,6 @@
 # Plan: 019-order-driven-refund
 
-> 技术方案版。状态：✅ Accepted（2026-09-07 负责人拍板 D1~D8，见 [ADR-0067](../../adr/0028-order-driven-refund-two-layer-refund-order.md)）。代码已实施（批次 A~D，2026-09-07）。§3.3 编排归属定稿见下文。
+> 技术方案版。状态：✅ Accepted（2026-09-07 负责人拍板 D1~D8，见 [ADR-0067](../../adr/0067-order-driven-refund-two-layer-refund-order.md)）。代码已实施（批次 A~D，2026-09-07）。§3.3 编排归属定稿见下文。
 
 ## 1. 架构总览
 

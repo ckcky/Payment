@@ -18,7 +18,7 @@
 ### US1 · 部分退款（缺口 G1）—— ⛔ 整节不做
 
 > **ADR-0016 已裁决「部分退款不做」。** 本节条目全部**不适用**，保留仅作历史对照。
-> 回退清单见 [ADR-0016 回退落地记录](../../adr/0006-refund-decisions.md)。
+> 回退清单见 [ADR-0016 回退落地记录](../../adr/0016-refund-decisions.md)。
 
 - [-] ~~渠道部分退回 → 落 `PARTIALLY_SUCCEEDED` 且记录 `refundedAmountMinor`~~
 - [-] ~~渠道全额退回 → 落 `SUCCEEDED`，`refundedAmountMinor == amountMinor`~~ → **实际：全额退回落 `SUCCEEDED`** ✅
@@ -77,7 +77,7 @@
 - [x] 新增表 `refund_post_process_attempts` 经确认（§8.3）
 - [x] 跨服务接口变更（新增 fulfillment 端点）经确认（§8.4）；~~`RefundAttemptResponse` 增字段~~ 已回退
 - [-] ~~退款状态机变更（`PARTIALLY_SUCCEEDED` 可达）~~ → **裁决不做**，枚举保留但无调用方
-- [x] ADR 编号冲突已处理（本包重编号为 `0006-refund-decisions.md` / ADR-0016~0018）
+- [x] ADR 编号冲突已处理（本包重编号为 `0016-refund-decisions.md` / ADR-0016~0018）
 
 ## 验收结论
 

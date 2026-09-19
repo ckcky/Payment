@@ -4,21 +4,21 @@
 
 - 状态：🟡 **Proposed**（2026-09-19 提出，2026-09-19 负责人拍板 D1~D11；**本轮只写文档，不改代码**）
 - 关联：
-  - **部分取代 [ADR-0072](0033-two-layer-channel-architecture.md)**（payment-service 两层结构）：
+  - **部分取代 [ADR-0072](0072-two-layer-channel-architecture.md)**（payment-service 两层结构）：
     - 其决策 4「渠道实现族：抽象基类承载横切行为，**子类只声明身份与差异**」被本 ADR **修订**为
       「**`ALIPAY` 升级为双模态特例**：子类可覆写『协议实现的分发』，但 **`MOCK` 分支必须 `super` 委托**，
       基类 4 件横切行为口径 100% 不变」；
     - 其「❌ **不接入真实渠道 SDK**」被本 ADR 取代；
     - **其余条款全部保持不变**（两层职责切分、表归属与写入口、分层 ≠ 拆事务、退款渠道取自原始支付记录）。
-  - **部分取代 [ADR-0073](0034-channel-routing.md)**（渠道路由）：其影响章「**不做**：……真实渠道 SDK 接入」被本 ADR 取代；
+  - **部分取代 [ADR-0073](0073-channel-routing.md)**（渠道路由）：其影响章「**不做**：……真实渠道 SDK 接入」被本 ADR 取代；
     **路由规则本身、`channelCode` 仍为 String 不改枚举、确定性选路、前向/反向严格分离** 全部保持不变。
   - [ADR-0075](0075-unified-channel-contract.md)（同期决策：统一渠道契约与类型化凭证——本 ADR 是凭证的**消费方**）
-  - [ADR-0025](0009-risk-security-decisions.md)（渠道回调 HMAC 验签**预留空实现**——本 ADR **不改其口径**，HMAC 占位保留给本地 mock 路径）
-  - [ADR-0052](0013-channel-callback-signature-decisions.md)（⛔ Not Implemented，原文留下「待用户后续裁决：是否接入真实验签」——**本 ADR 给出裁决**）
-  - [ADR-0026](0009-risk-security-decisions.md)（密钥明文 env 注入、禁硬编码/禁入库——沙箱密钥沿用）
-  - [ADR-0049](0012-demo-showcase-decisions.md)（**配错不许静默走默认**——染色非法值与「开关未开」一律 fail fast）
-  - [ADR-0024](0009-risk-security-decisions.md) / [ADR-0034](0011-internal-token-decisions.md)（内部令牌**先例教训**：入站校验上线但出站头未同步补 → 全线 403 → 整体删除）
-  - [ADR-0012](0005-payment-reliability-impl-decisions.md)（`ChannelResult` 双响应码——沙箱适配器 MUST 沿用同一错误分类）
+  - [ADR-0025](0024-risk-security-decisions.md)（渠道回调 HMAC 验签**预留空实现**——本 ADR **不改其口径**，HMAC 占位保留给本地 mock 路径）
+  - [ADR-0052](0052-channel-callback-signature-decisions.md)（⛔ Not Implemented，原文留下「待用户后续裁决：是否接入真实验签」——**本 ADR 给出裁决**）
+  - [ADR-0026](0024-risk-security-decisions.md)（密钥明文 env 注入、禁硬编码/禁入库——沙箱密钥沿用）
+  - [ADR-0049](0048-demo-showcase-decisions.md)（**配错不许静默走默认**——染色非法值与「开关未开」一律 fail fast）
+  - [ADR-0024](0024-risk-security-decisions.md) / [ADR-0034](0034-internal-token-decisions.md)（内部令牌**先例教训**：入站校验上线但出站头未同步补 → 全线 403 → 整体删除）
+  - [ADR-0012](0012-payment-reliability-impl-decisions.md)（`ChannelResult` 双响应码——沙箱适配器 MUST 沿用同一错误分类）
   - spec 019（退款异步回调）、spec 028（两层结构 + 路由）、spec 030
 - 需求源头：负责人 2026-09-19「**你就只在 AlipayChannelAdapter 上实现就行啊，不需要专门搞 SandboxChannelAdapter。通过链路染色的方式区分是走本地的 mock**」；
   同日追加「简单来说就是**到底是走本地 mock 还是走 sandbox 的 mock 是由 demo 演示页面下单的时候选的环境，全链路染色传过来的**。demo 页面要把这个开关选择加上」。
@@ -49,7 +49,7 @@
 
 | # | 事实 | 证据 |
 |---|---|---|
-| G11 | **先例教训**：`InternalTokenRequestInterceptor` + 入站鉴权曾是一套完整的「出站 header 透传 + 入口校验」实现，因**入站校验上线但调用方未同步补出站头**导致**全线 403**，被 ADR-0024/0034 决议**整体删除**（代码已删，注释残留） | `0011-internal-token-decisions.md` |
+| G11 | **先例教训**：`InternalTokenRequestInterceptor` + 入站鉴权曾是一套完整的「出站 header 透传 + 入口校验」实现，因**入站校验上线但调用方未同步补出站头**导致**全线 403**，被 ADR-0024/0034 决议**整体删除**（代码已删，注释残留） | `0034-internal-token-decisions.md` |
 | G12 | 支付回调入站只有 **HMAC 占位**：`ChannelCallbackSignatureFilter#verifySignature` **恒 `return true`**，urlPatterns = `/internal/payments/*` + `/internal/refunds/*`，预设 **JSON body** + `X-Channel-Signature`/`X-Channel-Timestamp` | `web/ChannelCallbackSignatureFilter.java`、`web/WebConfig.java` |
 | G13 | 支付宝通知是 **form-urlencoded 表单** + **RSA2（支付宝公钥）验签**，与 G12 的 HMAC+JSON **方向与算法都不同** | 支付宝开放平台文档 |
 | G14 | 渠道码 `ALIPAY` **已被 mock 三兄弟之一占用**（`AlipayChannelAdapter` 返回 `"ALIPAY"`），而注册表是 `Map<String, PaymentChannel>`，**一个 code 只能一个实例** | ADR-0073 / `SpringChannelRegistry` |
@@ -79,7 +79,7 @@
 
 **R2. 染色值非法 → 400 fail fast，绝不静默回落。**
 
-依据 G + [ADR-0049](0012-demo-showcase-decisions.md) 第 2 条纪律。静默回落的后果是「**选了沙箱却走了 mock**」——
+依据 G + [ADR-0049](0048-demo-showcase-decisions.md) 第 2 条纪律。静默回落的后果是「**选了沙箱却走了 mock**」——
 这是最难查的一类假绿（演示看起来成功，实际没调过真实渠道）。同理，**染色 `SANDBOX` 而
 `sandbox.enabled=false` 也 MUST 明确失败**，不静默改走 mock。
 

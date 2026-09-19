@@ -1,6 +1,6 @@
 # Acceptance: 分布式演进门禁（010-distributed-evolution）
 
-**Feature**: `010-distributed-evolution` | **Date**: 2026-08-30 | **Spec**: [spec.md](spec.md) | **ADR**: [0010-distributed-evolution-decisions.md](../../adr/0010-distributed-evolution-decisions.md)
+**Feature**: `010-distributed-evolution` | **Date**: 2026-08-30 | **Spec**: [spec.md](spec.md) | **ADR**: [0029-distributed-evolution-decisions.md](../../adr/0029-distributed-evolution-decisions.md)
 
 > 实现已完成（最简方案），`mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS。功能项全部勾选；**决策验收仍需负责人确认**（Constitution §8）。
 

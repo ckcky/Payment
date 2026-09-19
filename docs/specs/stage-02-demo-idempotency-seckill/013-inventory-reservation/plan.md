@@ -2,7 +2,7 @@
 
 **Feature**：`013-inventory-reservation`
 **状态**：已实现（**收口型 plan**，2026-09-02 补写，代码先行）
-**关联**：`spec.md` ｜ ADR-0041~0043、ADR-0045、ADR-0053（`docs/adr/0014-next-stage-decisions.md`、`0015-wip-ahead-of-roadmap.md`）
+**关联**：`spec.md` ｜ ADR-0041~0043、ADR-0045、ADR-0053（`docs/adr/0038-next-stage-decisions.md`、`0053-wip-ahead-of-roadmap.md`）
 
 > 本 plan 记录**已落地实现的既有设计**，不是前瞻方案。凡与已归档的 `next-stage-design.md`（`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md`）§6 草案不一致处，一律以代码为准并在 spec 中标注差异。
 

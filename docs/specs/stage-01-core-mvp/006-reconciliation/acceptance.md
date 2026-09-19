@@ -51,7 +51,7 @@
 
 ## 决策验收（Constitution §8）
 
-- [x] ADR-0019~0021 经负责人确认并更新状态为 Accepted —— `docs/adr/0007-reconciliation-decisions.md` 三份均为「✅ Accepted（2026-08-30 负责人裁决 accept；实现已落地）」
+- [x] ADR-0019~0021 经负责人确认并更新状态为 Accepted —— `docs/adr/0019-reconciliation-decisions.md` 三份均为「✅ Accepted（2026-08-30 负责人裁决 accept；实现已落地）」
 - [x] `reconciliation_batches` 新增三列经确认（§8.3）—— `deployment/schema/07-reconciliation-schema.sql:16-18`（非破坏性 NULL 列）
 - [x] 新增 `POST .../batches/{id}/close` 端点经确认（§8.4，向后兼容新增）—— `ReconciliationController:53-57`，仅增端点不改既有契约
 - [x] 批次状态机幂等扩展与关闭门禁经确认（§8.8）—— `beginProcessing`/`close` 幂等 + `UNRESOLVED_DIFFERENCES` 门禁

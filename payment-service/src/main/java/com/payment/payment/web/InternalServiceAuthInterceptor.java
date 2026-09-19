@@ -16,7 +16,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 不匹配 {@code 403}、{@code payment.internal_auth_rejected} 埋点，以及出站侧的
  * {@code InternalTokenRequestInterceptor}、{@code FeignInternalTokenAutoConfiguration}
  * 与 {@code platform.security.internal-token} 配置。取舍记录见
- * {@code docs/adr/0011-internal-token-decisions.md}。</p>
+ * {@code docs/adr/0034-internal-token-decisions.md}。</p>
  *
  * <p><b>未来接入真实鉴权时只需改 {@link #verifyServiceToken}</b>：读取 {@code X-Service-Token}
  * 与配置令牌做常数时间比对，未配置返回 {@code 503}、缺失或不匹配返回 {@code 403}；

@@ -6,7 +6,7 @@
 **输入**：`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §7（F4）
 
 > ⚠️ **收口说明（ADR-0053）**：同 013，源码在 Spec 之前已落地，超前 roadmap 顺序且缺文档，
-> 见 **`docs/adr/0015-wip-ahead-of-roadmap.md`（ADR-0053）**。
+> 见 **`docs/adr/0053-wip-ahead-of-roadmap.md`（ADR-0053）**。
 > 本文件以 2026-09-02 的真实代码为准补写，目的是**让文档等于代码**，不做"应当如此"的宣称。
 
 > 🔴 **最大偏离：Redis 未经论证闸门**。roadmap §7 要求「**压测基线 → 论证引入**」——先有 k6 基线证据再引入 Redis。
@@ -205,4 +205,4 @@ OrderTimeoutScheduler.processExpired()
 | ADR-0043 | 订单超时释放机制（ZSet） | 与 013 共用时间轮 |
 | ADR-0053 | 超前落地偏离处置 | 保留代码 + 补写文档 |
 
-均收录于 `docs/adr/0014-next-stage-decisions.md` 与 `docs/adr/0015-wip-ahead-of-roadmap.md`。
+均收录于 `docs/adr/0038-next-stage-decisions.md` 与 `docs/adr/0053-wip-ahead-of-roadmap.md`。

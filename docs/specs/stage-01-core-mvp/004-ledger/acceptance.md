@@ -41,7 +41,7 @@
 ## 决策验收（Constitution §8）
 
 - [x] ADR-0008~0011 经负责人确认并更新状态为 Accepted
-      —— `docs/adr/0004-ledger-design-decisions.md`：ADR-0008 / 0009 / 0010（已修订）/ 0011 均为 **Accepted**（2026-08-29 负责人确认）
+      —— `docs/adr/0008-ledger-design-decisions.md`：ADR-0008 / 0009 / 0010（已修订）/ 0011 均为 **Accepted**（2026-08-29 负责人确认）
 - [x] 新增 `ledger-service` 模块与 `ledger` Schema 经确认（§8.2/§8.3）
       —— 模块与 Schema 已随实现落地并长期运行
 - [x] Roadmap / Constitution / technical-solution 的 D1 矛盾已消除

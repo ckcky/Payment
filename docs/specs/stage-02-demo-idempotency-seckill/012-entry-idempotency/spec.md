@@ -8,7 +8,7 @@
 > ⚠️ **收口说明（ADR-0053）**：同 013/014，本 Feature 的代码在 Spec 之前已写入 working tree。
 > 更严重的是：代码中（`OrderController` / `OrderEntryIdempotencyService` / `IdempotencyDecision` /
 > `deployment/docker-compose.yml`）大量引用 **ADR-0039 / ADR-0040，但这两个 ADR 从未成文**——
-> 属**悬空引用**型文档漂移。本 Spec 与 `docs/adr/0014-next-stage-decisions.md` 中补写的 ADR-0039/0040 一同消除该漂移。
+> 属**悬空引用**型文档漂移。本 Spec 与 `docs/adr/0038-next-stage-decisions.md` 中补写的 ADR-0039/0040 一同消除该漂移。
 
 ---
 
@@ -126,4 +126,4 @@
 | ADR-0039 | 下单幂等键的签发与存储位置 | 客户端生成 + 仅 Redis 防重，**不建 DB 幂等表** |
 | ADR-0040 | 并发幂等「超时接管」策略 | **不接管 + 轮询**（409 + Retry-After）；IN_PROGRESS TTL 30s |
 
-均收录于 `docs/adr/0014-next-stage-decisions.md`。
+均收录于 `docs/adr/0038-next-stage-decisions.md`。

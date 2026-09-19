@@ -7,7 +7,7 @@
 
 > ⚠️ **收口说明（ADR-0053）**：本 Feature 的源码在 Spec 之前已写入 working tree——超前 roadmap 顺序
 > （应为 011 → 012 → 013 → 014），且落地时缺 spec/plan/tasks/acceptance 与 ADR-0041~0043。
-> 该偏离已记录在 **`docs/adr/0015-wip-ahead-of-roadmap.md`（ADR-0053）**，处置为「保留代码 + 补写文档」。
+> 该偏离已记录在 **`docs/adr/0053-wip-ahead-of-roadmap.md`（ADR-0053）**，处置为「保留代码 + 补写文档」。
 > 本文件与同目录 `plan.md` / `tasks.md` / `acceptance.md` 即该补写动作，目的只有一个：
 > **让文档重新等于代码**。文中所有契约均以 2026-09-02 的真实代码为准，不做任何"应当如此"的宣称。
 
@@ -269,4 +269,4 @@ OrderTimeoutScheduler.processExpired()        // @Scheduled，poll-millis 默认
 | ADR-0045 | Redis 用途边界 | Redis 非数据源，可全部丢失 |
 | ADR-0053 | 超前落地偏离处置 | 保留代码 + 补写文档 |
 
-均收录于 `docs/adr/0014-next-stage-decisions.md`（0041~0046）与 `docs/adr/0015-wip-ahead-of-roadmap.md`（0053）。
+均收录于 `docs/adr/0038-next-stage-decisions.md`（0041~0046）与 `docs/adr/0053-wip-ahead-of-roadmap.md`（0053）。

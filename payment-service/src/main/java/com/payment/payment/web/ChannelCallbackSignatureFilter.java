@@ -26,7 +26,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * {@code X-Channel-Timestamp}，用 {@code common-core} 的 {@code SignatureVerifier}
  * （HMAC-SHA256，验签串 {@code timestamp + "." + rawBody}，常数时间比对，防重放窗口）校验，
  * 失败返回 {@code false} 即走下方拒绝分支。算法与踩坑记录见
- * {@code docs/adr/0009-risk-security-decisions.md} ADR-0025。</p>
+ * {@code docs/adr/0024-risk-security-decisions.md} ADR-0025。</p>
  *
  * <p><b>注册方式</b>：由 {@link WebConfig} 以 {@code FilterRegistrationBean} 显式注册
  * （url pattern 用 Servlet 前缀匹配 {@code /internal/payments/*}，具体路径在本过滤器内用

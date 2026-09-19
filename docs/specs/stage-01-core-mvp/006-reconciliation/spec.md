@@ -243,7 +243,7 @@
 
 - **编号约定**：spec 目录采用顺序编号 `006-reconciliation`，与 Roadmap 阶段标签「004 Reconciliation / Phase 6」**解耦**（Roadmap 标签为阶段描述，非 spec ID；同 `003-payment-reliability`「Roadmap 002」、`004-ledger`「Roadmap 006」、`005-refund`「Roadmap 003」的既定约定）。
 - **Spec 性质**：本 Spec 为**缺口补齐型**（gap-closing / completion），非绿地构建。四项缺口 G1~G4 见文首表格，均已核实到 `file:line`；另发现 N1~N5 一并记录。
-- **分歧点 → ADR**（`docs/adr/0007-reconciliation-decisions.md`，状态 **Proposed**，待负责人决策）：
+- **分歧点 → ADR**（`docs/adr/0019-reconciliation-decisions.md`，状态 **Proposed**，待负责人决策）：
   - 批次差异处理生命周期（如何接线 `beginProcessing`/`close`、「处理中/关闭」的语义与门禁）→ **ADR-0019**。
   - 渠道账单来源（按周期 fixture + 显式回退 vs 参数化加载器 vs 维持全局 fixture）→ **ADR-0020**。
   - 事实读取 RPC 的弹性（超时/有限重试/错误归一化 vs 引入熔断中间件）→ **ADR-0021**。

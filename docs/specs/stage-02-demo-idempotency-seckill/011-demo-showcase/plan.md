@@ -74,7 +74,7 @@
 | 类型 | 文件 |
 |---|---|
 | Spec | `docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/{spec,plan,tasks,acceptance}.md` |
-| ADR | `docs/adr/0012-demo-showcase-decisions.md`（ADR-0048~0051） |
+| ADR | `docs/adr/0048-demo-showcase-decisions.md`（ADR-0048~0051） |
 | 生产代码 | `MockChannelAdapter`、`FulfillmentController`、`EntitlementController`（+ 测试） |
 | 演示资产 | `demo/{lib,env,seed,reset,start-stack,stop-stack,run-all}.sh`、`demo/scenario-*.sh`、`demo/cashier/index.html`、`demo/tools/DbQuery.java` |
 | 文档同步 | `roadmap.md`、已归档的 `next-stage-design.md`（`docs/archive/design/2026-09-19-next-stage-011-014/`）、`docs/README.md`、`docs/operations/runbook.md`、`docs/adr/README.md` |

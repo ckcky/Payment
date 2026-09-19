@@ -188,5 +188,5 @@ Roadmap Phase 7「包含的 Feature」写的是「收入、退款和**调整项*
 
 - Constitution §II.1、§II.3、§III 边界 #4、§IV、§V.4、§V.6、§V.7、§VII、§8.3、§8.4、§8.8
 - `007-settlement` spec：US2、US3、FR-007~FR-009、FR-012、FR-017~FR-019、FR-022；data-model.md INV-6、INV-9、INV-13、INV-14、INV-17
-- `docs/adr/0004-ledger-design-decisions.md`（ADR-0008~0011）、`docs/adr/0006-refund-decisions.md`（ADR-0018 退款记账先例）
+- `docs/adr/0008-ledger-design-decisions.md`（ADR-0008~0011）、`docs/adr/0016-refund-decisions.md`（ADR-0018 退款记账先例）
 - 代码：`settlement-service/.../application/SettlementApplicationService.java:49-52/62-68/70-84`、`infra/client/FeignReconciliationClient.java:23-29`、`payment-service/.../infra/client/FeignLedgerPostingGateway.java`

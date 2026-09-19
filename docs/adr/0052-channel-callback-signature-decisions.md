@@ -3,7 +3,7 @@
 **Feature**：`011-demo-showcase` 前置（收银台演示「签名 / 伪造签名 / 重放」的候选方案）
 **日期**：2026-08-31
 **状态**：⛔ **Not Implemented（2026-08-31 用户确认回退到 ADR-0025 空实现）** —— 本 ADR 描述的真实验签**不落地**，代码维持 `ChannelCallbackSignatureFilter#verifySignature` 恒返回 `true`（占位放行）。
-**关联**：`0009-risk-security-decisions.md`（ADR-0025，本 ADR 曾被草稿标为 Supersede 其占位形态，现撤回）、`0012-demo-showcase-decisions.md`（ADR-0048 收银台形态）、`docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/`
+**关联**：`0024-risk-security-decisions.md`（ADR-0025，本 ADR 曾被草稿标为 Supersede 其占位形态，现撤回）、`0048-demo-showcase-decisions.md`（ADR-0048 收银台形态）、`docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/`
 
 ---
 

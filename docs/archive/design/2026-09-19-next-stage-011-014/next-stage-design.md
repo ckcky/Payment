@@ -6,7 +6,7 @@
 
 **版本**：Draft 0.1 ｜ **日期**：2026-08-30 ｜ **状态**：规划草案（011~014 已交付）
 
-> **编号说明**：spec 物理目录采用顺序编号，`008` 为历史缺口（保留，不补号）。ADR 编号以 [docs/adr/README.md](../../../adr/README.md) 为准；本文件原「ADR 提案清单（§9）」的预留号段 ADR-0038~0046 **已全部落文**（见 `docs/adr/0014-next-stage-decisions.md`），该节已删除。
+> **编号说明**：spec 物理目录采用顺序编号，`008` 为历史缺口（保留，不补号）。ADR 编号以 [docs/adr/README.md](../../../adr/README.md) 为准；本文件原「ADR 提案清单（§9）」的预留号段 ADR-0038~0046 **已全部落文**（见 `docs/adr/0038-next-stage-decisions.md`），该节已删除。
 
 ---
 
@@ -354,6 +354,6 @@ total = available + reserved + sold
 > 原「待负责人决策（阻塞项）」4 项已全部裁决并落地执行，此处仅留档：
 
 1. **演示定位：接受** —— 真实链路 + 脚本编排 + 新增 `mock-channel-web` 收银台组件（见 ADR-0048 修订版）。
-2. **ADR-0038~0046 九项决策：全部 Accepted** —— 关键裁决：下单幂等只走 Redis（不建幂等表）、Stock 聚合放 catalog、下单预占+支付成功才扣、ZSet 时间轮、快速失败且拒绝不可重试、不接管+轮询。正式落 ADR 集合文档 `docs/adr/0014-next-stage-decisions.md`（Phase 5）。
+2. **ADR-0038~0046 九项决策：全部 Accepted** —— 关键裁决：下单幂等只走 Redis（不建幂等表）、Stock 聚合放 catalog、下单预占+支付成功才扣、ZSet 时间轮、快速失败且拒绝不可重试、不接管+轮询。正式落 ADR 集合文档 `docs/adr/0038-next-stage-decisions.md`（Phase 5）。
 3. **Redis：引入**（通过 IV.6 五问门禁，ADR-0044），014 按完整方案执行。
 4. **既有缺陷：核验后失实** —— 对账 `beginProcessing/close` 已接线（`ReconciliationApplicationService.java:151`）、`load(period)` 已按期次加载（`:164-173`），无需修复；详见 §4.3 核验更正。

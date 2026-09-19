@@ -11,7 +11,7 @@
 | T003 | `OrderEntryIdempotencyService.complete`（覆盖写 DONE + 序列化 + 静默失败） | `OrderEntryIdempotencyServiceTest#firstAttemptProceedsAndStoresDone` | ✅ |
 | T004 | 日志脱敏 `mask(key)` | 代码评审 | ✅ |
 | T005 | `OrderController` 接线：`Idempotency-Key` 头 → 409 + `Retry-After: 1` / 200 重放 / 201 新建 | `OrderControllerIdempotencyTest` 四用例 | ✅ |
-| T006 | **补写 ADR-0039 / ADR-0040**（消除代码中的悬空引用） | `docs/adr/0014-next-stage-decisions.md` | ✅ |
+| T006 | **补写 ADR-0039 / ADR-0040**（消除代码中的悬空引用） | `docs/adr/0038-next-stage-decisions.md` | ✅ |
 | T007 | **补写 012 的 spec / plan / tasks / acceptance** | 本目录四文件 | ✅ |
 | T008 | 清理 `OrderApplicationService` 中由幂等键派生的死变量 `stableKey` | 编译 + 全量测试 | ✅ |
 

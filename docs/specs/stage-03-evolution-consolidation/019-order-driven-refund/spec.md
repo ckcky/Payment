@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Implemented（2026-09-07 负责人逐项拍板 8 项决策，见 [ADR-0067](../../adr/0028-order-driven-refund-two-layer-refund-order.md)；代码已实施，任务见 [tasks.md](tasks.md)）
+**Status**: ✅ Implemented（2026-09-07 负责人逐项拍板 8 项决策，见 [ADR-0067](../../adr/0067-order-driven-refund-two-layer-refund-order.md)；代码已实施，任务见 [tasks.md](tasks.md)）
 
 **Input**: 负责人 2026-09-07 退款链路讨论（原文归纳）：
 

@@ -2,7 +2,7 @@
 
 **用途**：Phase 10（分布式演进）的准入门禁。任何一次服务拆分、数据库实例拆分、或引入新的分布式基础设施（MQ / 容器编排 / Service Mesh），**必须先填完本模板并通过负责人评审**。
 
-**依据**：`docs/adr/0010-distributed-evolution-decisions.md`（ADR-0029~0033）；Roadmap Phase 10「不因『看起来像微服务』而默认引入…」；Constitution §8 人类决策边界（服务边界、领域边界、Schema 变更 MUST 由人确认）。
+**依据**：`docs/adr/0029-distributed-evolution-decisions.md`（ADR-0029~0033）；Roadmap Phase 10「不因『看起来像微服务』而默认引入…」；Constitution §8 人类决策边界（服务边界、领域边界、Schema 变更 MUST 由人确认）。
 
 **四段必填，缺一不予评审**：问题（证据） → 收益 → 成本 → 回滚方案。
 

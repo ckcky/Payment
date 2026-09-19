@@ -37,7 +37,7 @@
 
 | # | 漂移 | 处置 |
 | --- | --- | --- |
-| D1 | 代码注释引用 **ADR-0039/0040，但两编号从未成文**（`OrderController`、`OrderEntryIdempotencyService`、`IdempotencyDecision`、`docker-compose.yml`） | **已补写**于 `docs/adr/0014-next-stage-decisions.md` |
+| D1 | 代码注释引用 **ADR-0039/0040，但两编号从未成文**（`OrderController`、`OrderEntryIdempotencyService`、`IdempotencyDecision`、`docker-compose.yml`） | **已补写**于 `docs/adr/0038-next-stage-decisions.md` |
 | D2 | 本 Feature 有实现、无 spec/plan/tasks/acceptance | **已补写**本目录四文件 |
 | D3 | `OrderApplicationService` 中 `stableKey` 死变量（暗示库存键随客户端 key 变化，与 013 三处构造公式矛盾） | **已删除**并补注释 |
 

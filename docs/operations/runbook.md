@@ -24,7 +24,7 @@
 | —（演示） | `mock-channel-web` | 8091 | 无（演示组件，不进服务边界） | —（被 payment 收银台同源代理 `/proxy/**` 调用） | `/actuator/health` |
 
 - 全部服务暴露 `/actuator/health`、`/actuator/info`、`/actuator/metrics`、`/actuator/prometheus` 与 Swagger UI。
-- 关键等级（T0~T3）定义见 `docs/adr/0010-distributed-evolution-decisions.md` ADR-0032。
+- 关键等级（T0~T3）定义见 `docs/adr/0029-distributed-evolution-decisions.md` ADR-0032。
 - ⚠️ **`mock-channel-web`（8091）是 Feature 011 的演示组件，不是生产服务**：它**不进入** `architecture-tests` 的 `ServiceBoundaryTest.SERVICES` 边界（构建期门禁已验证），不承担任何资金/业务事实，仅用于演示收银台跳转、回调转发与演示控制台。舰队规模 = 9 个服务（`refund` 域已并入 `payment-service`，端口 8085 退役） + 1 个演示组件 = 10 个 JVM 进程。
 
 ## 2. 启动顺序
@@ -236,4 +236,4 @@ docker exec payment-prometheus promtool check rules /tmp/check.yml
   - **容器模式**：compose 已把该值暴露为 `PAYMENT_CHANNEL_MOCK_SCENARIO`，用
     `PAYMENT_CHANNEL_MOCK_SCENARIO=BUSINESS_UNKNOWN docker compose -f deployment/docker-compose.yml --profile full up -d --force-recreate payment-service`
     重建 payment 容器即可（等价手段，FR-009）。注意真实配置键在 **channel** 层（`payment.channel.mock-scenario`）。
-- **013/014 库存与秒杀（Redis 依赖）**：catalog `Stock` 三段式库存 + order `OrderTimeoutScheduler`（Redis ZSet 时间轮）+ 014 的 Redis 缓存 / 秒杀预扣 / 限流均已落地（spec/ADR 见 `docs/specs/stage-02-demo-idempotency-seckill/013-*` / `014-*` 与 `docs/adr/0014-next-stage-decisions.md`）。**需 Redis 可用**：Redis 不可用时超时取消降级（仅记日志跳过）、秒杀预扣 fail-closed 拒绝保护库存。
+- **013/014 库存与秒杀（Redis 依赖）**：catalog `Stock` 三段式库存 + order `OrderTimeoutScheduler`（Redis ZSet 时间轮）+ 014 的 Redis 缓存 / 秒杀预扣 / 限流均已落地（spec/ADR 见 `docs/specs/stage-02-demo-idempotency-seckill/013-*` / `014-*` 与 `docs/adr/0038-next-stage-decisions.md`）。**需 Redis 可用**：Redis 不可用时超时取消降级（仅记日志跳过）、秒杀预扣 fail-closed 拒绝保护库存。

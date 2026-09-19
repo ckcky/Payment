@@ -1,7 +1,7 @@
 # Plan: 027-user-payment-limit
 
 > 技术方案版。状态：🟡 **Proposed**（spec 已定稿，代码未实施）。
-> 决策 D1~D13 见 [ADR-0071](../../adr/0032-user-payment-limit.md)；需求与验收见 [spec.md](spec.md)；
+> 决策 D1~D13 见 [ADR-0071](../../adr/0071-user-payment-limit.md)；需求与验收见 [spec.md](spec.md)；
 > 任务清单见 [tasks.md](tasks.md)；验收记录见 [acceptance.md](acceptance.md)。
 
 ## 1. 架构总览

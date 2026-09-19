@@ -8,7 +8,7 @@
 
 **历史修订**：2026-08-31（2026-08-30 负责人裁决的**落地同步**：鉴权 / 验签 = 预留空函数；出站令牌 / 风控 / 脱敏 = 代码已删除；部分退款 = 代码已回退；退款金额校验口径新增 ADR-0047 —— 见 §2.4、§4.3.3）
 
-**关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)、[ADR-0006](../adr/0006-refund-decisions.md)、[ADR-0009](../adr/0009-risk-security-decisions.md)、[ADR-0011](../adr/0011-internal-token-decisions.md)
+**关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)、[ADR-0006](../adr/0016-refund-decisions.md)、[ADR-0009](../adr/0024-risk-security-decisions.md)、[ADR-0011](../adr/0034-internal-token-decisions.md)
 
 **权威来源**：本文是 Constitution（最高约束）、ADR（决策日志）、Spec 001（业务模型）在「当前系统」层面的**落地化综合**。本文不得与 [Constitution](../../.specify/memory/constitution.md) 冲突；若需调整领域边界、服务边界、状态机或数据层，属于 Constitution §8 人类决策边界，须另立 ADR / 提案并经人类确认。
 
@@ -105,7 +105,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 #### 3.1.1 领域模型
 
-模型按**聚合根（Aggregate Root）**组织：每个聚合根是不变式与事务的边界，聚合内一致性由本地事务保证；**跨聚合只经业务单号引用或公开 RPC**，禁止共享表 / 共享实体（[ADR-0023](../adr/0023-cross-service-reference-by-business-no.md)）。
+模型按**聚合根（Aggregate Root）**组织：每个聚合根是不变式与事务的边界，聚合内一致性由本地事务保证；**跨聚合只经业务单号引用或公开 RPC**，禁止共享表 / 共享实体（[ADR-0023](../adr/0063-cross-service-reference-by-business-no.md)）。
 
 ```mermaid
 graph LR
@@ -144,7 +144,7 @@ graph LR
 
 > 各领域「负责 / 不负责」见 [§4.1](#41-领域职责)；**基数关系、状态机与金额铁律**见 [§4.2](#42-核心基数关系与状态机)。
 
-**payment-service 内部的两层结构**（[ADR-0072](../adr/0033-two-layer-channel-architecture.md)）：payment-service 内部分 **payment 支付层**与 **channelAttempt 渠道层**，各有自己的聚合、表与写入口——`payments` 表只由 payment 层写（支付单生命周期 + 支付指令编排：选路 → 调渠道 → 记账 → 扇出 order）；`payment_attempts` 表只由渠道层写（渠道交互生命周期 + 渠道实现族 Alipay / Wechat / Douyin / Mock）。payment 层经 `PaymentChannel` 端口调用渠道层，**不关心渠道如何实现**（`Payment ≠ Channel`）。两层**共享同一本地事务**——分层是**职责切分**，不是分布式拆分、不是拆数据源。
+**payment-service 内部的两层结构**（[ADR-0072](../adr/0072-two-layer-channel-architecture.md)）：payment-service 内部分 **payment 支付层**与 **channelAttempt 渠道层**，各有自己的聚合、表与写入口——`payments` 表只由 payment 层写（支付单生命周期 + 支付指令编排：选路 → 调渠道 → 记账 → 扇出 order）；`payment_attempts` 表只由渠道层写（渠道交互生命周期 + 渠道实现族 Alipay / Wechat / Douyin / Mock）。payment 层经 `PaymentChannel` 端口调用渠道层，**不关心渠道如何实现**（`Payment ≠ Channel`）。两层**共享同一本地事务**——分层是**职责切分**，不是分布式拆分、不是拆数据源。
 
 #### 3.1.2 依赖方向与数据所有权
 
@@ -175,7 +175,7 @@ graph LR
 | catalog-service | Product / SKU | 商品、SKU、价格、可售性 | 已实现 |
 | order-service | Order / Transaction | 订单、明细、价格快照、交易状态机 | 已实现 |
 | payment-service | Payment + Channel | 支付编排、幂等、渠道适配、回调、UNKNOWN 收敛 | 已实现 |
-| ~~refund-service~~ | Refund | **Feature 015 已并入 `payment-service`**（`com.payment.refund` 包，端口 8085 退役）；退款编排（渠道退款 + 权益撤销 + 对账）由 payment-service 提供 | 已并入（ADR-0016/0017/0018，[ADR-0064](../adr/0024-multi-payment-per-transaction.md)） |
+| ~~refund-service~~ | Refund | **Feature 015 已并入 `payment-service`**（`com.payment.refund` 包，端口 8085 退役）；退款编排（渠道退款 + 权益撤销 + 对账）由 payment-service 提供 | 已并入（ADR-0016/0017/0018，[ADR-0064](../adr/0064-multi-payment-per-transaction.md)） |
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
 | ledger-service | Ledger | 复式记账（资金核心） | 已实现（`004-ledger` 前置，8090） |
@@ -429,7 +429,7 @@ flowchart LR
 
 - **单笔退款只有两种终局：全额成功或失败**。渠道只回 `SUCCEEDED / FAILED / UNKNOWN` 三态，成功即视为该笔申请额全额退回；若真实发生部分退回，按 `UNKNOWN` 处理并走对账收敛，**不得**落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`。
 - **不做**「申请额 = 可退全额」的等值校验（ADR-0047 决策）：`RefundPolicy.decide` 只做三条校验——币种一致 / 金额为正 / **累计申请额 + 本次申请额 ≤ 已支付金额**（H1 防超退，超额 `REJECTED` 且不发起渠道尝试）。同一支付**允许多笔退款**（每笔独立幂等键），由 `refund_intake_locks` 行锁串行化受理。
-  > **为何不强制全额等值**：`001-core-business-model/spec.md` 第 66–67、289 行明确「退款默认支持部分退款和多次退款，累计不得超过已支付且尚未退款金额」，强制等值会与这条已 Accepted 的基线冲突，并使现有防超退测试（300 + 400 + 400 / paid=1000）失效。取舍全记录见 [ADR-0047](../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
+  > **为何不强制全额等值**：`001-core-business-model/spec.md` 第 66–67、289 行明确「退款默认支持部分退款和多次退款，累计不得超过已支付且尚未退款金额」，强制等值会与这条已 Accepted 的基线冲突，并使现有防超退测试（300 + 400 + 400 / paid=1000）失效。取舍全记录见 [ADR-0047](../adr/0016-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
 - `RefundStatus.PARTIALLY_SUCCEEDED` 与 `partiallySucceed()` 仅作为**状态机枚举/方法保留**，本期无任何入口可到达该状态（枚举删除会导致历史行 `valueOf` 抛异常，故保留）。
 - 后续若要开放**单笔退款的部分成功追踪**，须先解决：退款单与支付尝试的拆分模型、多次退的累计口径、权益/履约的按比例回收、Ledger 冲正的部分金额分录 —— 属 Constitution §8 人类决策边界，须另立 ADR。
 
@@ -459,7 +459,7 @@ flowchart LR
 - **结算**：settlement-service 只消费「已确认且差异可解释」的财务事实（校验商户结算资格 → 净额计算 → 生成结算批次）。同一商户周期不重复生成批次；未知执行结果不等于成功。
 - **分录不可变**：已提交分录禁止 UPDATE/DELETE，更正只能新增反向分录（冲正）。
 
-> **注**：`ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），设计决策见 [ADR-0004](../adr/0004-ledger-design-decisions.md)；§2.3 非目标中「不实现 Ledger 复式记账」的表述应以 Roadmap Current Status 为准。
+> **注**：`ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），设计决策见 [ADR-0004](../adr/0008-ledger-design-decisions.md)；§2.3 非目标中「不实现 Ledger 复式记账」的表述应以 Roadmap Current Status 为准。
 
 #### 4.3.6 典型跨服务调用
 

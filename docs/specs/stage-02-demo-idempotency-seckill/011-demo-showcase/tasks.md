@@ -9,7 +9,7 @@
 
 - [x] **T001** 编写 `spec.md`（含现状核实，修正已归档的 next-stage-design 三处偏差）
 - [x] **T002** 编写 `plan.md` / `tasks.md`
-- [x] **T003** `docs/adr/0012-demo-showcase-decisions.md`（ADR-0048~0051）+ `README.md` 同步
+- [x] **T003** `docs/adr/0048-demo-showcase-decisions.md`（ADR-0048~0051）+ `README.md` 同步
 - [x] **T003b** ADR-0048 按裁决修订（推翻「不做收银台」）→ `spec.md` v0.2 / ADR-0012 状态 Accepted
 
 ## 批次 B — 生产改动（带测试）

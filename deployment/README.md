@@ -158,7 +158,7 @@ docker compose -f deployment/docker-compose.yml --profile full  up -d   # 全栈
 ```
 
 
-> **Redis 依赖（2026-09-03 补充）**：`014-seckill-and-cache` 已引入 Redis 7（端口 6379），由 `docker-compose.yml` 一并拉起。用途边界见 `docs/adr/0014-next-stage-decisions.md`（ADR-0044/0045）：仅入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，**非数据源**；秒杀预扣 fail-closed，其余 fail-open。
+> **Redis 依赖（2026-09-03 补充）**：`014-seckill-and-cache` 已引入 Redis 7（端口 6379），由 `docker-compose.yml` 一并拉起。用途边界见 `docs/adr/0038-next-stage-decisions.md`（ADR-0044/0045）：仅入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，**非数据源**；秒杀预扣 fail-closed，其余 fail-open。
 
 ## 日志在哪看
 

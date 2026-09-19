@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-29
 
-**Status**: Draft（设计决策见 `docs/adr/0008-settlement-decisions.md`，ADR-0022~0023 待负责人决策）
+**Status**: Draft（设计决策见 `docs/adr/0022-settlement-decisions.md`，ADR-0022~0023 待负责人决策）
 
 **Input**: 用户描述：为 Roadmap Phase 7 · Settlement 建立 Spec Kit 产物。本 Feature **不是从零构建**——`settlement-service`（端口 8089，Schema `settlement`）已有**可运行 MVP**，本 Spec 是**缺口补齐 / 收口**型 Spec。
 
@@ -251,7 +251,7 @@
 
 - **编号约定**：spec 目录采用顺序编号 `007-settlement`，与 Roadmap 阶段标签「**005 Settlement** / Phase 7」**解耦**（Roadmap 标签为阶段描述，非 spec ID；同 `003-payment-reliability`「Roadmap 002」、`004-ledger`「Roadmap 006」、`005-refund`「Roadmap 003」、`006-reconciliation`「Roadmap 004」的既定约定）。
 - **Spec 性质**：本 Spec 为**缺口补齐型**（gap-closing / completion），非绿地构建。五项缺口 G1~G5 见文首表格，均已核实到 `file:line`；另发现 N1~N6 一并记录。
-- **分歧点 → ADR**（`docs/adr/0008-settlement-decisions.md`，状态 **Proposed**，待负责人决策）：
+- **分歧点 → ADR**（`docs/adr/0022-settlement-decisions.md`，状态 **Proposed**，待负责人决策）：
   - 调整项（Adjustment / ADJUSTMENT 明细）如何变真实 + 谁可以创建（方向语义、持久化形态、登记门禁、权限与审计）→ **ADR-0022**。
   - 「仅已确认事实可结算」闸门：继续委托 reconciliation vs 本地强制校验（含跨服务契约缺口 N1 的归属）→ **ADR-0023**。
   - （附带，同一 ADR 内）settlement → ledger-service 记账的归属与时机 vs `004-ledger` US3 → **ADR-0023**。
@@ -260,4 +260,4 @@
   2. **`adjustment` 恒 0 与 Roadmap 的直接冲突（G1）**：Roadmap Phase 7「包含：收入、退款和**调整项**的最小净额计算」，而 `SettlementApplicationService.java:80` 硬编码 `0`、`Adjustment.java:6` 全项目零引用。这是 Roadmap 与代码之间**已存在的、未记录的矛盾**，本 Spec 首次显式记录。
   3. **「不实现 Ledger」与 Constitution §II.3 的新矛盾（G4）**：Roadmap Phase 7「不包含：…不实现 Ledger」，但 ledger-service 已实现且 Constitution §II.3 要求一切资金变动 MUST 经 ledger-service。二者需在 ADR-0023 中由负责人裁定（本 Spec 默认方案 A：本 Feature 接入记账；备选方案 B：遵循 Roadmap 延后）。
   4. **幂等键跨商户/周期静默错配（N5）**：`SettlementApplicationService.java:49-52` 命中即返回，不校验 `merchantId`/`period`，复用错键会返回他商户批次——与 Constitution §V.1「相同幂等键 MUST NOT 产生重复资金动作」的风险面相关，本 Spec 以 FR-012 收口（属**行为变更**，需确认）。
-  5. **文档与索引漂移（G5 细节）**：`technical-solution.md:106` 标 settlement「骨架」、`:101` 仍标 ledger-service「延后 Phase 8」（实际已运行）、`roadmap.md:11` 称已落地、`settlement-service.md:91` 写 `adjustment_minor（MVP=0）`；此外 `docs/adr/README.md:11-13` 的索引**止于 0005**，未收录已存在的 `0006-refund-decisions.md` / `0007-reconciliation-decisions.md`，且 0004 仍标注「全 Proposed」（ledger 已实现）。本 Spec 不修改 `README.md`（超出授权范围），仅在此报告，由负责人在 FR-024 文档收口时一并处置。
+  5. **文档与索引漂移（G5 细节）**：`technical-solution.md:106` 标 settlement「骨架」、`:101` 仍标 ledger-service「延后 Phase 8」（实际已运行）、`roadmap.md:11` 称已落地、`settlement-service.md:91` 写 `adjustment_minor（MVP=0）`；此外 `docs/adr/README.md:11-13` 的索引**止于 0005**，未收录已存在的 `0016-refund-decisions.md` / `0019-reconciliation-decisions.md`，且 0004 仍标注「全 Proposed」（ledger 已实现）。本 Spec 不修改 `README.md`（超出授权范围），仅在此报告，由负责人在 FR-024 文档收口时一并处置。

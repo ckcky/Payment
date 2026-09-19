@@ -7,7 +7,7 @@
 ## 批次 A — 文档与决策（已完成）
 
 - [x] **T301** 编写 spec 021 四件套：spec.md（业内对比 / 目标链路 / US1~US4 / FR-001~006 / NFR / SC / 决策 D1~D7）
-- [x] **T302** 立项 [ADR-0068](../../adr/0029-unified-access-logging.md)（统一访问日志与固定格式）+ `docs/adr/README.md` 注册
+- [x] **T302** 立项 [ADR-0068](../../adr/0068-unified-access-logging.md)（统一访问日志与固定格式）+ `docs/adr/README.md` 注册
 
 ## 批次 B — common-core 访问日志（依赖：无）
 

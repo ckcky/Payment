@@ -3,7 +3,7 @@
 - 日期：2026-09-04
 - 分支：`feature/015-multi-channel-payment`
 - 依据：`docs/specs/stage-03-evolution-consolidation/015-multi-channel-payment/spec.md`（INV-1/INV-2、C1~C10、SC-001~007）、
-  `docs/adr/0024-multi-payment-per-transaction.md`（ADR-0064）
+  `docs/adr/0064-multi-payment-per-transaction.md`（ADR-0064）
 - 结论：**开发完成，全量门禁绿色**（细节与遗留项见文末）
 
 ---

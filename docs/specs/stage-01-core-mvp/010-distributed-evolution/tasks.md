@@ -1,6 +1,6 @@
 # Tasks: 010-distributed-evolution
 
-**Current Progress（2026-08-30）**：实现完成，`mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS。ADR-0029~0033 写入 `docs/adr/0010-distributed-evolution-decisions.md`（均 Proposed，待负责人确认）。
+**Current Progress（2026-08-30）**：实现完成，`mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS。ADR-0029~0033 写入 `docs/adr/0029-distributed-evolution-decisions.md`（均 Proposed，待负责人确认）。
 
 ## Implementation
 
@@ -13,11 +13,11 @@
 - [x] T007 `ServiceBoundaryTest`：防空转门禁 —— 每个服务被真正导入的类数 > 5，否则否定式规则会「0 个类全通过」。
 - [x] T008 `docs/operations/runbook.md`：10 服务端口 / 依赖 / 启动顺序 / Schema / 环境变量 / 关键指标 / 故障处置 / 回滚。
 - [x] T009 `docs/operations/split-proposal-template.md`：问题（证据）/ 收益 / 成本 / 回滚四段必填 + 契约兼容性检查。
-- [x] T010 `docs/adr/0010-distributed-evolution-decisions.md`：ADR-0029~0033 合并一文档。
+- [x] T010 `docs/adr/0029-distributed-evolution-decisions.md`：ADR-0029~0033 合并一文档。
 
 ## Verification
 
 - [x] T011 用一次性探针验证规则有效性：注入一条已知会被违反的规则（settlement 依赖 common），确认报错并列出具体类名与方法位置；验证后移除探针。
 - [x] T012 `mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS，0 失败 0 错误。
 - [x] T013 更新 `docs/architecture/roadmap.md`：Current Status 推进 010，Phase 10 章节补落地情况。
-- [x] T014 负责人确认 ADR-0029~0033 状态为 Accepted（代码已按最简实现，确认后无需改实现）—— **核实（2026-09-09）**：`docs/adr/0010-distributed-evolution-decisions.md:5-13` 状态表已载 ADR-0029/0030/0032/0033 = ✅ Accepted、ADR-0031 = ⛔ Not Implemented（不使用 MQ），均为 2026-08-30 负责人裁决；`roadmap.md` 亦登记 `010-distributed-evolution（ADR-0029~0033 Accepted / 0031 不使用 MQ）`。**roadmap §7 处「Proposed 待确认」为未刷新的旧表述**，本次一并确认与实际状态不符，属文档滞后。
+- [x] T014 负责人确认 ADR-0029~0033 状态为 Accepted（代码已按最简实现，确认后无需改实现）—— **核实（2026-09-09）**：`docs/adr/0029-distributed-evolution-decisions.md:5-13` 状态表已载 ADR-0029/0030/0032/0033 = ✅ Accepted、ADR-0031 = ⛔ Not Implemented（不使用 MQ），均为 2026-08-30 负责人裁决；`roadmap.md` 亦登记 `010-distributed-evolution（ADR-0029~0033 Accepted / 0031 不使用 MQ）`。**roadmap §7 处「Proposed 待确认」为未刷新的旧表述**，本次一并确认与实际状态不符，属文档滞后。

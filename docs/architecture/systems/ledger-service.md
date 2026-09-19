@@ -33,7 +33,7 @@
 
 | 指标 | 现状 |
 |---|---|
-| 记账吞吐 / 延迟 | 随系统压测基线（见 `docs/adr/0018-performance-baseline.md` ADR-0058） |
+| 记账吞吐 / 延迟 | 随系统压测基线（见 `docs/adr/0058-performance-baseline.md` ADR-0058） |
 | 多币种 | 当前仅 CNY；`currency` 维度已建模，按币种隔离借贷 |
 
 ---
@@ -151,7 +151,7 @@ Database-per-Service：账本服务自有 `ledger` 库（单机开发由 docker-
 - **ADR-0008**：账本作为资金单一事实源，预置固定科目表。
 - **ADR-0009**：payment → ledger 同步 RPC，禁 2PC，记账失败不回滚支付事实。
 - **ADR-0018**：refund → ledger 冲正记账，同取舍。
-- **ADR-0054**（确认性）：回调与资金约束（含账本强一致要求）见 `docs/adr/0016-core-payment-correctness.md`。
+- **ADR-0054**（确认性）：回调与资金约束（含账本强一致要求）见 `docs/adr/0054-core-payment-correctness.md`。
 - **功能需求标签（代码中标注）**：FR-001/002（Posting 聚合根与平衡门禁）、FR-003（分录不可变）、FR-004（幂等回查）、FR-005（仅内部端点）、FR-006/010（支付成功记账）、FR-007（全局平衡校验）、FR-008（来源追溯）、FR-011（资金审计）。
 
 ---

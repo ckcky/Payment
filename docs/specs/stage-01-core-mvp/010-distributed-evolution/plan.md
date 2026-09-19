@@ -1,7 +1,7 @@
 # Plan: 010-distributed-evolution
 
 **对应 Spec**：`spec.md`
-**决策**：见 `docs/adr/0010-distributed-evolution-decisions.md`（ADR-0029~0033，均 Proposed）
+**决策**：见 `docs/adr/0029-distributed-evolution-decisions.md`（ADR-0029~0033，均 Proposed）
 
 ## 总体方案
 

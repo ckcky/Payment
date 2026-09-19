@@ -2,7 +2,7 @@
 
 **版本**：0.1
 **日期**：2026-08-31
-**关联**：`spec.md`、`tasks.md`、`docs/adr/0012-demo-showcase-decisions.md`（ADR-0048~0051）、`docs/adr/0013-channel-callback-signature-decisions.md`（ADR-0052 ⛔ Not Implemented）、`docs/adr/0015-wip-ahead-of-roadmap.md`（ADR-0053）
+**关联**：`spec.md`、`tasks.md`、`docs/adr/0048-demo-showcase-decisions.md`（ADR-0048~0051）、`docs/adr/0052-channel-callback-signature-decisions.md`（ADR-0052 ⛔ Not Implemented）、`docs/adr/0053-wip-ahead-of-roadmap.md`（ADR-0053）
 
 ## 1. 构建门禁（已通过 ✅）
 

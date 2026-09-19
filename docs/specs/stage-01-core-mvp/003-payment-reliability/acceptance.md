@@ -53,7 +53,7 @@
 ## 4. 实现期决策（需负责人确认）
 
 实现过程中出现的分歧点已按「最简方式」实现并记录于
-`docs/adr/0005-payment-reliability-impl-decisions.md`，状态 **Proposed**：
+`docs/adr/0012-payment-reliability-impl-decisions.md`，状态 **Proposed**：
 
 | ADR | 决策 | 影响面 |
 |---|---|---|

@@ -7,7 +7,7 @@
 ## 批次 A：决策落地 + Redis 容灾 + 依赖铺路
 
 - [x] T1 ADR-0074 落 `docs/adr/0074-redis-transactional-message.md`，状态 Proposed（ADR-0074）
-- [x] T2 `0010-distributed-evolution-decisions.md`：ADR-0031 标记 **Superseded by ADR-0074**（保留原文判据不改）
+- [x] T2 `0029-distributed-evolution-decisions.md`：ADR-0031 标记 **Superseded by ADR-0074**（保留原文判据不改）
 - [x] T3 `docs/adr/README.md`：索引表 + 编号速查表登记 0035 / ADR-0074（顺手补 B1 缺失的表头行）
 - [x] T4 `docs/adr/traceability.md` 登记落点
 - [x] T5 `docker-compose.yml`：redis 服务补 `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction` + 数据卷（FR-501）

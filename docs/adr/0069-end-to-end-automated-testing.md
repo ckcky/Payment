@@ -64,5 +64,5 @@
 
 ## 编号与注册
 
-- ADR 编号：**ADR-0069**；文件 `docs/adr/0030-end-to-end-automated-testing.md`；对应 spec **022**（`docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/`）。
+- ADR 编号：**ADR-0069**；文件 `docs/adr/0069-end-to-end-automated-testing.md`；对应 spec **022**（`docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/`）。
 - 下一可用编号：ADR-0070。

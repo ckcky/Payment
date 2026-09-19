@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-29
 
-**Status**: Draft（设计决策见 `docs/adr/0006-refund-decisions.md`，ADR-0016~0018 待负责人决策）
+**Status**: Draft（设计决策见 `docs/adr/0016-refund-decisions.md`，ADR-0016~0018 待负责人决策）
 
 **Input**: 用户描述：为 Roadmap Phase 5 · Refund 建立 Spec Kit 产物。本 Feature **不是从零构建**——`refund-service`（端口 8085，Schema `refund`）核心链路已实现，本 Spec 是**缺口补齐 / 收口**型 Spec。
 
@@ -20,9 +20,9 @@
 > | **ADR-0018 refund→ledger** | ✅ **Accepted** | US4 全量落地，记账金额 = `amountMinor` |
 >
 > - 裁决口径：**单笔退款没有「部分成功」**。渠道只回三态（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功即视为该笔申请额全额退回；若真实发生部分退回，走 `UNKNOWN` + 对账收敛，**不落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`**。
-> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../../adr/0006-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
+> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../../adr/0016-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
 > - ⚠️ **落地补充说明（2026-08-31）**：ADR-0016 曾按最简实现落地过（`refundedAmountMinor` 全链路），裁决后**已整体回退**。
->   回退清单见 [ADR-0016 回退落地记录](../../adr/0006-refund-decisions.md)。
+>   回退清单见 [ADR-0016 回退落地记录](../../adr/0016-refund-decisions.md)。
 > - US2 / US3 中涉及 `PARTIALLY_SUCCEEDED` 的验收条款**一并移除**；**全额路径的条款全部保持有效**。
 > - 落地口径见 [technical-solution §2.4](../../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
 
@@ -69,7 +69,7 @@
 
 ### ~~User Story 1 - 部分退款可追踪且累计金额不超限 (Priority: P1)~~ ⛔ 不做（ADR-0016 Rejected）
 
-> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../../adr/0006-refund-decisions.md) 的「回退落地记录」即为准绳。
+> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../../adr/0016-refund-decisions.md) 的「回退落地记录」即为准绳。
 >
 > ⭐ **替代口径（当前生效）**：累计额度一律按**申请额 `amountMinor`** 计（含在途 `PROCESSING`/`UNKNOWN` 保守占位），
 > 超额申请 `REJECTED` 且不发起渠道尝试——防超退不变量（H1）不受影响。用例见
@@ -259,12 +259,12 @@
 
 - **编号约定**：spec 目录采用顺序编号 `005-refund`，与 Roadmap 阶段标签「003 Refund / Phase 5」**解耦**（Roadmap 标签为阶段描述，非 spec ID；同 `003-payment-reliability`「Roadmap 002」、`004-ledger`「Roadmap 006」的既定约定）。
 - **Spec 性质**：本 Spec 为**缺口补齐型**（gap-closing / completion），非绿地构建。三项缺口 G1/G2/G3 见文首表格，均已核实到 `file:line`。
-- **分歧点 → ADR**（`docs/adr/0006-refund-decisions.md`，状态 **Proposed**，待负责人决策）：
+- **分歧点 → ADR**（`docs/adr/0016-refund-decisions.md`，状态 **Proposed**，待负责人决策）：
   - ~~部分退款支持模型~~ → **ADR-0016** ❌ **Rejected（不做）**。
   - refund → fulfillment 编排（补齐缺失 RPC vs 修改文档声明）→ **ADR-0017**。
   - refund → ledger 记账接入（与 spec `004-ledger` US2 的归属与时机）→ **ADR-0018**。
 - **新发现的矛盾（未写入 ADR，供负责人知悉）**：
-  1. **ADR 编号冲突（已解决）**：本包 ADR 原为 `0005-refund-decisions.md` + ADR-0012~0014，与既有 `0005-payment-reliability-impl-decisions.md`（ADR-0012~0015）冲突。**已于 2026-08-29 解决**：文件重命名为 `0006-refund-decisions.md`，标签重编号为 ADR-0016~0018，既有文件与其编号保持不变。
+  1. **ADR 编号冲突（已解决）**：本包 ADR 原为 `0005-refund-decisions.md` + ADR-0012~0014，与既有 `0012-payment-reliability-impl-decisions.md`（ADR-0012~0015）冲突。**已于 2026-08-29 解决**：文件重命名为 `0016-refund-decisions.md`，标签重编号为 ADR-0016~0018，既有文件与其编号保持不变。
   2. **004-ledger 文档状态过期**：`ledger-service`（8090）与 payment 侧 `LedgerPostingGateway`/`FeignLedgerPostingGateway` **已实现**，但 `roadmap.md:13/16` 与 `004-ledger/acceptance.md` 仍描述为「待 ADR 确认 / 未完成」；且 spec `004-ledger` US2（退款记账 T013/T014）在退款侧未落地——本 Feature 的 US4/FR-009 承接该缺口（待 ADR-0018 裁定归属）。
   3. **契约文档漂移**：`004-ledger/contracts/post-refund.md` 使用 `accountCode`，而实际 `common-dto` 的 `PostingRequest.EntryRequest` 字段为 `accountId`（`common/common-dto/.../PostingRequest.java`）。
   4. **成熟度标注过期**：`technical-solution.md:101` 仍将 refund-service 标为「骨架」（`payment-service.md` §8.1 已指出）。

@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-28
 
-**Status**: Draft（设计决策见 `docs/adr/0004-ledger-design-decisions.md`，ADR-0008~0011 待负责人决策）
+**Status**: Draft（设计决策见 `docs/adr/0008-ledger-design-decisions.md`，ADR-0008~0011 待负责人决策）
 
 **Input**: 用户描述：审计发现 Constitution §II.3（一切资金变动 MUST 经 `ledger-service` 复式记账）与 Roadmap（Ledger 延后到 Phase 8）自相矛盾（审计 D1）。用户决策：**先把 ledger 前置实现**，按 Spec Kit 流程「文档先行」。本 Spec 解决该矛盾，把 Ledger 从「延后」改为「当前 Feature」。
 
@@ -130,7 +130,7 @@
 
 ### Session 2026-08-28
 
-本 Feature 由审计 D1（Constitution §II.3 与 Roadmap 延后 Ledger 的矛盾）驱动，负责人决策：**前置实现 Ledger，文档先行**。分歧点已落到 `docs/adr/0004-ledger-design-decisions.md`：
+本 Feature 由审计 D1（Constitution §II.3 与 Roadmap 延后 Ledger 的矛盾）驱动，负责人决策：**前置实现 Ledger，文档先行**。分歧点已落到 `docs/adr/0008-ledger-design-decisions.md`：
 
 - **ADR-0008**（Ledger 数据模型：复式记账 + 科目/分录结构）→ **Proposed**，建议 Accepted。
 - **ADR-0009**（记账触发与一致性：同步 RPC 幂等记账 + 失败重试/对账兜底）→ **Proposed**，建议 Accepted。

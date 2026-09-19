@@ -44,7 +44,7 @@
       重新开放时须一并解决：退款单拆分模型、多次退累计口径、权益/履约按比例回收、Ledger 部分冲正分录
 - [x] CHK022 ADR-0017（refund→fulfillment 编排）→ ✅ **Accepted**（§8.4 跨服务接口变更）
 - [x] CHK023 ADR-0018（refund→ledger 接入）→ ✅ **Accepted**（spec 004 与 005 归属已划分）
-- [x] CHK024 ADR 编号冲突已解决（本包重编号为 `0006-refund-decisions.md` / ADR-0016~0018；既有 `0005-payment-reliability-impl-decisions.md` 的 ADR-0012~0015 不变），全局引用已同步
+- [x] CHK024 ADR 编号冲突已解决（本包重编号为 `0016-refund-decisions.md` / ADR-0016~0018；既有 `0012-payment-reliability-impl-decisions.md` 的 ADR-0012~0015 不变），全局引用已同步
 - [ ] CHK025 `technical-solution.md:101` 与 `roadmap.md` 的成熟度/状态标注过期，需按 ADR 结论统一修正
 
 ## Notes

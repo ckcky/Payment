@@ -264,7 +264,7 @@ idempotencyKey = "payment:" + orderNo + ":" + <路由后 channelCode> + ":" + at
 | `docs/architecture/technical-solution.md` | §3.1/§3.6 两层描述、§4.3 时序图与基数（ADR-0054 的 `1:1` 已过时） |
 | `docs/operations/runbook.md` | 新增 `payment.routing.*` 配置项与排障入口（`/internal/channels`） |
 | `docs/specs/stage-03-evolution-consolidation/015-multi-channel-payment/spec.md` | §8 第 1 条加注「已于 2026-09-16 由 ADR-0073 取代」（**本轮已加注**） |
-| `docs/adr/0033-two-layer-channel-architecture.md`、`0034-channel-routing.md` | Proposed → Accepted（实现完成时） |
+| `docs/adr/0072-two-layer-channel-architecture.md`、`0073-channel-routing.md` | Proposed → Accepted（实现完成时） |
 
 ---
 

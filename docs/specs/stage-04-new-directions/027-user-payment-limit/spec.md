@@ -4,7 +4,7 @@
 **日期**：2026-09-16
 **状态**：Implemented（D1~D13 已确认并已由 payment-service 实现；当前事实见 `payment-service.md` §9）
 **分支**：`docs/spec-027-user-payment-limit`（纯文档，经 `./spec-worktree.sh`）→ 实现期另开 `feature/027-user-payment-limit`
-**决策**：ADR-0071（[0032-user-payment-limit.md](../../adr/0032-user-payment-limit.md)，🟡 Proposed）
+**决策**：ADR-0071（[0071-user-payment-limit.md](../../adr/0071-user-payment-limit.md)，🟡 Proposed）
 
 > ⚠️ **与 ADR-0028 的切割（必读）**：ADR-0028「最小风控」已于 2026-08-30 裁决 ⛔ **Not Implemented**，代码已删除。
 > 那是「阈值评分 + 命中**只记录不阻断**」；本 Spec 是「确定性额度比较 + 命中**硬拒绝**」。
@@ -420,7 +420,7 @@ CREATE TABLE IF NOT EXISTS limit_operations (
 
 | 类型 | 对象 | 动作 |
 |---|---|---|
-| 新增 ADR | `docs/adr/0032-user-payment-limit.md`（ADR-0071，🟡 Proposed） | 已创建 |
+| 新增 ADR | `docs/adr/0071-user-payment-limit.md`（ADR-0071，🟡 Proposed） | 已创建 |
 | 新增 Spec | `docs/specs/stage-04-new-directions/027-user-payment-limit/`（本文档） | 已创建 |
 | 新增 Spec 三件套 | `plan.md`（技术方案：架构 / DDL / 流程 / Redis 设计 / 包结构论证 / 挂点清单）、`tasks.md`（T101~T130，批次 A~J）、`acceptance.md`（SC 逐条验收清单） | 已创建（2026-09-16） |
 | **切割声明** | ADR-0028「最小风控」⛔ Not Implemented | **不改变**其结论；本 Spec §0 与 ADR-0071 背景段均显式切割，避免被误读为翻案 |

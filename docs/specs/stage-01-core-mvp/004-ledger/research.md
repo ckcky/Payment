@@ -2,7 +2,7 @@
 
 **Feature**: `004-ledger` | **Date**: 2026-08-28 | **Plan**: [plan.md](plan.md)
 
-> 本文件汇总 Ledger 的设计分歧点，正式决策见 `docs/adr/0004-ledger-design-decisions.md`（ADR-0008~0011，状态 Proposed，待负责人确认）。
+> 本文件汇总 Ledger 的设计分歧点，正式决策见 `docs/adr/0008-ledger-design-decisions.md`（ADR-0008~0011，状态 Proposed，待负责人确认）。
 
 ## 决策 1：数据模型 —— 复式记账 + 科目/分录结构（ADR-0008）
 

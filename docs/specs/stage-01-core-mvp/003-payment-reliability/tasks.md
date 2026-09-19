@@ -10,7 +10,7 @@
 - US3（有限重试与耗尽）：T003/T013/T014/T015 ✅（按 ADR-0012~0014 最简实现：`errorType`/`nextRetryAt` 两列 + `PaymentRetryService`/`PaymentRetryScheduler` + `PaymentRetryTest`）
 - US5（指标与真实收敛时长）：T019/T020 ✅（`ReliabilityMetricsTest` + `enteredUnknownAt` 真实时长，ADR-0015）；T021（告警面板）交 009 Observability Baseline
 - T022（终态冲突 ADR-0007）✅ `TerminalConflictTest`
-- US4/ADR-0006 保持 Deferred（Phase 9）；实现期新决策见 `docs/adr/0005-payment-reliability-impl-decisions.md`（ADR-0012~0015，Proposed 待确认）
+- US4/ADR-0006 保持 Deferred（Phase 9）；实现期新决策见 `docs/adr/0012-payment-reliability-impl-decisions.md`（ADR-0012~0015，Proposed 待确认）
 
 **Tests**: 本 Feature 资金正确性敏感，按 Constitution §VII 与 spec 要求，**MUST** 包含测试任务（已内联到各 US 阶段）。
 

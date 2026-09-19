@@ -1,6 +1,6 @@
 # Plan: 021-unified-access-logging
 
-> 技术方案。决策依据见 [spec.md](spec.md)（D1~D7）与 [ADR-0068](../../adr/0029-unified-access-logging.md)。
+> 技术方案。决策依据见 [spec.md](spec.md)（D1~D7）与 [ADR-0068](../../adr/0068-unified-access-logging.md)。
 
 ## 1. 组件设计（common-core `accesslog` 包）
 

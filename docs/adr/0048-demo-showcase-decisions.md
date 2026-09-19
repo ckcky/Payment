@@ -3,7 +3,7 @@
 **Feature**：`011-demo-showcase`
 **日期**：2026-08-31
 **状态**：✅ **Accepted**（2026-08-31 负责人裁决；**ADR-0048 已按裁决修订**——推翻本文原「不做收银台」结论，改为新增 `mock-channel-web` 组件）
-**关联**：`docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/spec.md`、`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §4、`0009-risk-security-decisions.md`（ADR-0025）、`0013-channel-callback-signature-decisions.md`（ADR-0052）
+**关联**：`docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/spec.md`、`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §4、`0024-risk-security-decisions.md`（ADR-0025）、`0052-channel-callback-signature-decisions.md`（ADR-0052）
 
 > **编号说明**：ADR-0038~0046 是 `next-stage-design.md` §9 的**预留号段**，ADR-0047 已用于退款金额校验口径。
 > 本集合从 **ADR-0048** 起编号，与 `docs/adr/README.md` 的「下一可用编号」一致。
@@ -46,7 +46,7 @@
 > **⚠️ 例外登记（2026-09-16，spec 027 实现期）**：本 ADR「演示组件同源代理仅代理**只读**接口」
 > 的约束，**对 `/internal/limits/**` 显式豁免**（路径为 `/proxy/payment/internal/limits/**`），
 > 理由：限额**配置**不产生资金动作，与「禁止演示页伪造业务事实」是两回事；详见
-> [ADR-0071](0032-user-payment-limit.md#adr-0071) D9。**例外范围严格限于该路径**——
+> [ADR-0071](0071-user-payment-limit.md#adr-0071) D9。**例外范围严格限于该路径**——
 > 限额配置表（`user_payment_limits`）以外的任何业务事实表仍无写路径。
 >
 > 下文为原决策记录（历史）。

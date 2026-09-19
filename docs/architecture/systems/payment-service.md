@@ -72,7 +72,7 @@
 - 退款 / 重试 / 主动查询走**反向路径**：以 `payment_attempts.channel_code` 记下的渠道解析实现，**禁止重新路由**（退款换渠道＝钱退错地方）。
 - **分层 ≠ 拆事务**：两层共享同一本地事务——`payments` 与 `payment_attempts` 状态必须同时迁移，否则出现 `payment=SUCCEEDED / attempt=PENDING` 之类的永久不一致。
 
-> 现状与目标差距、实施成本见 [ADR-0072](../../adr/0033-two-layer-channel-architecture.md)；渠道身份、注册表与选路规则见 [ADR-0073](../../adr/0034-channel-routing.md) 与 [spec 028](../../specs/028-channel-routing/spec.md)。
+> 现状与目标差距、实施成本见 [ADR-0072](../../adr/0072-two-layer-channel-architecture.md)；渠道身份、注册表与选路规则见 [ADR-0073](../../adr/0073-channel-routing.md) 与 [spec 028](../../specs/028-channel-routing/spec.md)。
 
 **渠道模态（spec 030 / [ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)）**：同一 `channelCode` 下可以有**两种协议实现**——本地 mock 与真实渠道。二者由**链路染色**（`X-Dye-Tag`）在**单次请求**维度决定，并落进 `payment_attempts.channel_mode`：
 
@@ -182,7 +182,7 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 | 字段 | 类型 | 必填 | 约束/说明 |
 |---|---|---|---|
-| orderNo | String | 是 | 订单业务单号（OR+雪花，[ADR-0063](../../adr/0023-cross-service-reference-by-business-no.md)） |
+| orderNo | String | 是 | 订单业务单号（OR+雪花，[ADR-0063](../../adr/0063-cross-service-reference-by-business-no.md)） |
 | transactionId | String | 是 | 交易单号 |
 | userId | String | 是 | 用户 ID |
 | amountMinor | long | 是 | 金额（分，`> 0`） |
@@ -509,7 +509,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 ## 8. 退款域设计（原 refund-service，Feature 015 并入）
 
-> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0024-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/refund/`，原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/stage-01-core-mvp/005-refund/` 与 git 历史。
+> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0064-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/refund/`，原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/stage-01-core-mvp/005-refund/` 与 git 历史。
 
 ### 8.1 职责边界
 

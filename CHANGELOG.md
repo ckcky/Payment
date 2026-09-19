@@ -60,7 +60,7 @@
 ## [2026-09-16] feat：spec 027 用户支付限额（ADR-0071 落地）
 
 **范围**：payment-service 新增**用户支付限额**子域（`com.payment.payment.limit.*`），加上 common-core
-错误码、schema 与演示组件，跨 4 个模块。ADR-0071（`docs/adr/0032-user-payment-limit.md`）
+错误码、schema 与演示组件，跨 4 个模块。ADR-0071（`docs/adr/0071-user-payment-limit.md`）
 状态 🟡 Proposed → 🟢 **Accepted → Implemented**。
 
 - **能力**：按 `userId` + `currencyCode` 的**日 / 月 / 年**三档周期额度；建支付单前**原子预占**
@@ -114,8 +114,8 @@ spec 027 / 028 立项（仅文档）。**完整发布说明见 [docs/releases/v2
 ## [2026-09-08] feat：spec 028 支付两层结构 + 渠道路由（ADR-0072/0073 落地）
 
 **范围**：payment-service 由「单渠道硬编码」改为**两层结构 + 确定性路由**；跨 common / order / payment /
-mock-channel-web / arch-tests 六个模块，53 个文件。ADR-0072（`0033-two-layer-channel-architecture.md`）
-与 ADR-0073（`0034-channel-routing.md`）状态 🟡 Proposed → ✅ Accepted。
+mock-channel-web / arch-tests 六个模块，53 个文件。ADR-0072（`0072-two-layer-channel-architecture.md`）
+与 ADR-0073（`0073-channel-routing.md`）状态 🟡 Proposed → ✅ Accepted。
 
 **核心不变式（INV-1~INV-6，均有门禁或测试兜底）**
 
@@ -213,7 +213,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
   登记 `003`/`006`/`007` 的非阻塞遗留测试项。
 - **新增 spec 027（用户支付限额，纯文档）**：`docs/specs/stage-04-new-directions/027-user-payment-limit/`
   （`spec.md` / `plan.md` / `tasks.md` / `acceptance.md`）+
-  `docs/adr/0032-user-payment-limit.md`（ADR-0071，🟡 Proposed，D1~D13 已确认）。
+  `docs/adr/0071-user-payment-limit.md`（ADR-0071，🟡 Proposed，D1~D13 已确认）。
   三表模型（`user_payment_limits` / `user_limit_usage` / `limit_operations`）+ 两阶段预占
   （`RESERVE → CONFIRM / RELEASE`）+ 三道幂等闸门（终态吸收 / 流水 UK / 以 payment 为事实源的补偿扫描）；
   在途占用 TTL=900s（D11，Redis 惰性回收，零调度器）+ 软超限口径（D12，新支出硬约束、已发生事实软记账）
@@ -325,7 +325,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 022（立项·待实施）：全链路自动化测试体系
 
-**状态**：仅落地文档（spec 四件套 + [ADR-0069](docs/adr/0030-end-to-end-automated-testing.md)），**代码未开发**；决策 D1~D8 见 [spec 022](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/spec.md)，任务清单见 [tasks.md](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/tasks.md)（批次 A 已完成，B~G 待实施）。
+**状态**：仅落地文档（spec 四件套 + [ADR-0069](docs/adr/0069-end-to-end-automated-testing.md)），**代码未开发**；决策 D1~D8 见 [spec 022](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/spec.md)，任务清单见 [tasks.md](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/tasks.md)（批次 A 已完成，B~G 待实施）。
 
 **范围**：把「在 demo 控制台发起支付/退款 → 观察各系统状态与 DB 数据」变成可重复、可报告、可进 CI 的自动化测试，覆盖**退款功能正常 / 超退能拦截 / 对账准确 / 单号记对**四件事。
 
@@ -351,7 +351,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 021：统一访问日志——结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 修复
 
-**范围**：全服务可观测性基建。决策见 [ADR-0068](docs/adr/0029-unified-access-logging.md)，实施见 [spec 021](docs/specs/stage-03-evolution-consolidation/021-unified-access-logging/tasks.md)。
+**范围**：全服务可观测性基建。决策见 [ADR-0068](docs/adr/0068-unified-access-logging.md)，实施见 [spec 021](docs/specs/stage-03-evolution-consolidation/021-unified-access-logging/tasks.md)。
 
 ### 核心变更
 - **AccessLogFilter**（common-core `accesslog` 包）：`OncePerRequestFilter` + ContentCaching 包装，每请求结束落一条 `ACCESS_LOG` INFO——`method/uri/status/costMs/req/resp` 全字段单行（D2）；异常路径 try/finally 必打；`copyBodyToResponse()` 保证响应完整（NFR-002）。
@@ -368,7 +368,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 019：order 驱动的两层退款单（TXRF/PMRF）+ 渠道退款异步回调闭环
 
-**范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0028-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/stage-03-evolution-consolidation/019-order-driven-refund/tasks.md)。
+**范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0067-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/stage-03-evolution-consolidation/019-order-driven-refund/tasks.md)。
 
 ### 核心变更
 - **两层退款单**：order 库新增 `transaction_refunds`（TXRF+雪花，幂等键=TXRF 可重入）；payment 库 `refunds.refund_no` 改自生成 PMRF+雪花（存量 RF 保留），加 `transaction_refund_no` 双向互记。
@@ -388,7 +388,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 018：表结构列序规范化 + payment_attempts 金额留痕 + 按 order_item 粒度履约
 
-**范围**：全项目 22 张表列序规范化 + 履约粒度升级 + 演示可观测性。决策见 [ADR-0066](docs/adr/0027-schema-normalization-and-item-granular-fulfillment.md)，实施记录见 [spec 018](docs/specs/stage-03-evolution-consolidation/018-schema-normalization-item-fulfillment/spec.md)。
+**范围**：全项目 22 张表列序规范化 + 履约粒度升级 + 演示可观测性。决策见 [ADR-0066](docs/adr/0066-schema-normalization-and-item-granular-fulfillment.md)，实施记录见 [spec 018](docs/specs/stage-03-evolution-consolidation/018-schema-normalization-item-fulfillment/spec.md)。
 
 ### 变更
 - **列序规范化（FR-001）**：统一为「自增 id → 业务主键 → 唯一索引列 → 业务列 → 审计列」；违规 5 张表（payment_attempts / payments / refunds / fulfillments / entitlements 等）经幂等迁移脚本 `deployment/schema/018-schema-normalization.sql`（information_schema 守卫 + PREPARE 动态 SQL，存量库重放两次验证幂等）归位，基线 CREATE TABLE 与 H2 测试 schema 同步。
@@ -427,9 +427,9 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ### 新增
 - 宪法 `.specify/memory/constitution.md` 升级 **v2.3.0**：固化 2026-08-30 裁决（§II.2 金额=long 分+currencyCode、Money VO 不启用；§Security.4/§Obs.2 脱敏加本期例外；§ES.1/3/§Obs.3 Checkstyle/Testcontainers/Tracing 标 `[目标]`；§Anti-Goals 撤「不引入 Redis」；新增「文档与代码同步」提交纪律）。顶部追加 Sync Impact Report。
-- `docs/adr/0016-core-payment-correctness.md` → **ADR-0054**（确认性：002-payment-order-callback 资金约束）。
-- `docs/adr/0017-entry-and-infra-decisions.md` → **ADR-0055/0056/0057**（幂等键由 order 生成 / Nacos 暂不启用·偏离 ADR-0002·待 R1 / 服务未容器化）。
-- `docs/adr/0018-performance-baseline.md` → **ADR-0058**（性能基线；Phase 4 实测：读 p99 16.83ms、命令 seckill p99 434ms、DB 卸载 99.98%）。
+- `docs/adr/0054-core-payment-correctness.md` → **ADR-0054**（确认性：002-payment-order-callback 资金约束）。
+- `docs/adr/0055-entry-and-infra-decisions.md` → **ADR-0055/0056/0057**（幂等键由 order 生成 / Nacos 暂不启用·偏离 ADR-0002·待 R1 / 服务未容器化）。
+- `docs/adr/0058-performance-baseline.md` → **ADR-0058**（性能基线；Phase 4 实测：读 p99 16.83ms、命令 seckill p99 434ms、DB 卸载 99.98%）。
 - `docs/architecture/systems/ledger-service.md`：补齐第 10 篇系统设计（复式记账、4 预置科目、借贷平衡门禁、幂等、FR-001~011、三来源记账接入点）。
 - `docs/architecture/technical-solution.md` §9 **ADR 追溯索引**（9.1 P0 内联 / 9.2 P1 索引 / 9.3 ADR 文件三组，全部 `ADR-` 前缀，便于 grep 审计）。
 - `docs/architecture/systems/payment-service.md` §7 回调与出站安全；`order-service.md` §8 超时与库存释放（ADR-0043）。

@@ -69,7 +69,7 @@
 - [x] T46 `payment-service.md` 同步：§2.1 Registry/Router 变事实、§3 渠道抽象补实现族、§3.2 `channelCode` 可选、§4.3 退款渠道口径（SC-013）
 - [x] T47 `technical-solution.md` 同步：§3.1/§3.6 两层描述、§4.3 时序图与基数（SC-013）
 - [x] T48 `runbook.md` 补 `payment.routing.*` 配置项与 `/internal/channels` 排障入口（SC-013）
-- [x] T49 两份 ADR（`0033-two-layer-channel-architecture.md` / `0034-channel-routing.md`）Proposed → Accepted（实现完成时）
+- [x] T49 两份 ADR（`0072-two-layer-channel-architecture.md` / `0073-channel-routing.md`）Proposed → Accepted（实现完成时）
 
 ## 批次 G：演示件
 

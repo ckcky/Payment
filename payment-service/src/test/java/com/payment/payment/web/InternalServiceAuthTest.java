@@ -36,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * </ol>
  *
  * <p>实现真实鉴权后，本类用例须整体反转为「缺失/错误令牌 403、未配置 503」，
- * 反转清单见 ADR-0024 与 {@code docs/adr/0011-internal-token-decisions.md}。</p>
+ * 反转清单见 ADR-0024 与 {@code docs/adr/0034-internal-token-decisions.md}。</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc

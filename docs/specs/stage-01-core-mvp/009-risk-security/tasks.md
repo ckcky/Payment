@@ -43,7 +43,7 @@
   - [-] T013e 鉴权失败埋点（ADR-0037）`payment.internal_auth_rejected` —— ❌ 已移除。
   - [-] T013f 测试 `InternalTokenRequestInterceptorTest`(6)、`InternalTokenOutboundTest`(3)、`InternalServiceAuthInterceptorTest`(6)、`InternalServiceAuthTest$PlatformTokenFallback`(2) —— ❌ 前三个文件**已删除**；`$PlatformTokenFallback` 内置嵌套类改写为空实现放行断言。
   - [-] T013g `mvn -o clean verify -fae` —— 🔄 已按**回退后**的代码重跑，BUILD SUCCESS。
-  - [x] T013h ADR-0034~0037 写入 `docs/adr/0011-internal-token-decisions.md` —— ✅ 文档保留，但状态由 Proposed 改为 **⛔ Not Implemented（不做，代码已清理）**；`docs/adr/README.md` 索引同步。
+  - [x] T013h ADR-0034~0037 写入 `docs/adr/0034-internal-token-decisions.md` —— ✅ 文档保留，但状态由 Proposed 改为 **⛔ Not Implemented（不做，代码已清理）**；`docs/adr/README.md` 索引同步。
   - [-] T013i `docs/operations/runbook.md` 补充 `PLATFORM_INTERNAL_TOKEN` 与「内部端点 403」处置 —— ⛔ 待随架构文档同步修订（令牌链已不存在）。
 - [x] T014 负责人确认 ADR-0034~0037 状态 —— ✅ **已裁决**（2026-08-30）：出入站鉴权令牌都先不做。代码已清理。
 - [-] T015（ADR-0035）决定是否把入站鉴权推广到其余 7 个暴露 `/internal/**` 的服务 —— ⛔ **本期不立项**，随 ADR-0035 一并搁置。
