@@ -1,6 +1,7 @@
 package com.payment.common.mq;
 
 import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.core.trace.TraceContext;
 import com.payment.common.core.trace.TraceIdFilter;
 import org.slf4j.Logger;
@@ -43,6 +44,8 @@ public class StreamConsumer {
     private final String consumerName;
     private final RouteHandler handler;
     private final TransactionalProducer producer;
+    /** FR-503 / T56：消费结果审计（可空）。 */
+    private final StructuredAuditLogger audit;
     private final AtomicBoolean started = new AtomicBoolean(false);
     private volatile boolean running = false;
 
@@ -55,6 +58,13 @@ public class StreamConsumer {
     public StreamConsumer(StringRedisTemplate redis, MqProperties props, BusinessMetrics metrics,
                           String topic, String group, String consumerName,
                           RouteHandler handler, TransactionalProducer producer) {
+        this(redis, props, metrics, topic, group, consumerName, handler, producer, null);
+    }
+
+    public StreamConsumer(StringRedisTemplate redis, MqProperties props, BusinessMetrics metrics,
+                          String topic, String group, String consumerName,
+                          RouteHandler handler, TransactionalProducer producer,
+                          StructuredAuditLogger audit) {
         this.redis = redis;
         this.props = props;
         this.metrics = metrics;
@@ -63,6 +73,15 @@ public class StreamConsumer {
         this.consumerName = consumerName;
         this.handler = handler;
         this.producer = producer;
+        this.audit = audit;
+    }
+
+    /** FR-503：消费结果审计（action = mq.consumed / mq.dead_letter）。 */
+    private void audit(String action, EventEnvelope e, String toStatus) {
+        if (audit != null) {
+            audit.audit(action, e.bizNo(), null, null, e.topic(), toStatus,
+                    "message", e.msgId());
+        }
     }
 
     /** T20：启动时建组（MKSTREAM，忽略 BUSYGROUP）。 */
@@ -167,6 +186,7 @@ public class StreamConsumer {
                 if (metrics != null) {
                     metrics.counter("mq.consumed", 1, "topic", topic, "group", group);
                 }
+                audit("mq.consumed", envelope, group);
                 ack(id);
                 return;
             } catch (RuntimeException e) {
@@ -178,6 +198,7 @@ public class StreamConsumer {
                     if (metrics != null) {
                         metrics.counter("mq.dead_letter", 1, "topic", topic, "group", group);
                     }
+                    audit("mq.dead_letter", envelope, "DLQ");
                     return;
                 }
                 long backoff = props.getRetryBackoffBase().toMillis() * (1L << (attempt - 1));

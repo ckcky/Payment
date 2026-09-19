@@ -1,6 +1,7 @@
 package com.payment.common.mq;
 
 import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,9 +33,10 @@ public class RedisMqAutoConfiguration {
     @ConditionalOnMissingBean
     public TransactionalProducer transactionalProducer(StringRedisTemplate redis, MqProperties props,
                                                        BusinessMetrics metrics,
+                                                       StructuredAuditLogger audit,
                                                        org.springframework.core.env.Environment env) {
         String producerName = env.getProperty("spring.application.name", "");
-        return new TransactionalProducer(redis, props, metrics, producerName);
+        return new TransactionalProducer(redis, props, metrics, producerName, audit);
     }
 
     @Bean

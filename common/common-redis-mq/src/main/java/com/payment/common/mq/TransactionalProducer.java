@@ -1,6 +1,7 @@
 package com.payment.common.mq;
 
 import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.core.trace.TraceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,13 +40,34 @@ public class TransactionalProducer {
     private final MqProperties props;
     private final BusinessMetrics metrics;
     private final String producerName;
+    /** FR-503 / T56：投递结果审计（可空）。 */
+    private final StructuredAuditLogger audit;
 
     public TransactionalProducer(StringRedisTemplate redis, MqProperties props,
                                  BusinessMetrics metrics, String producerName) {
+        this(redis, props, metrics, producerName, null);
+    }
+
+    public TransactionalProducer(StringRedisTemplate redis, MqProperties props,
+                                 BusinessMetrics metrics, String producerName,
+                                 StructuredAuditLogger audit) {
         this.redis = redis;
         this.props = props;
         this.metrics = metrics;
         this.producerName = producerName;
+        this.audit = audit;
+    }
+
+    /**
+     * FR-503：投递结果审计（action = mq.committed / mq.rolled_back）；
+     * traceId 由 {@link StructuredAuditLogger} 从上下文自动带上。
+     * 以 entityType=message、entityId=msgId 承载，amountMinor 传 null（非资金动作）。
+     */
+    private void audit(String action, EventEnvelope e, String toStatus) {
+        if (audit != null) {
+            audit.audit(action, e.bizNo(), null, null, e.topic(), toStatus,
+                    "message", e.msgId());
+        }
     }
 
     /**
@@ -104,6 +126,7 @@ public class TransactionalProducer {
             redis.opsForStream().add(MqKeys.stream(envelope.topic()), fv);
             cleanup(envelope);
             count("mq.committed", envelope.topic());
+            audit("mq.committed", envelope, "VISIBLE");
             log.info("MQ commit topic={} msgId={} bizNo={} traceId={}",
                     envelope.topic(), envelope.msgId(), envelope.bizNo(), envelope.traceId());
         } catch (RuntimeException e) {
@@ -118,6 +141,7 @@ public class TransactionalProducer {
         try {
             cleanup(envelope);
             count("mq.rolled_back", envelope.topic());
+            audit("mq.rolled_back", envelope, "DISCARDED");
             log.info("MQ rollback topic={} msgId={} bizNo={}（本地事务未提交，消息不投递）",
                     envelope.topic(), envelope.msgId(), envelope.bizNo());
         } catch (RuntimeException e) {

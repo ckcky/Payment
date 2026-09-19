@@ -65,6 +65,10 @@ public class HalfMessageScanner {
             log.warn("半消息扫描失败（下轮重试）", e);
             return;
         }
+        // FR-502 / T55：半消息积压观测（本轮到期条数，供告警阈值）
+        if (metrics != null && !due.isEmpty()) {
+            metrics.counter("mq.half_backlog", due.size(), "topic", "all");
+        }
         for (String member : due) {
             // member = topic:msgId
             int idx = member.indexOf(':');
