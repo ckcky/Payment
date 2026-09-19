@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.payment</groupId>
+        <artifactId>payment-arch</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+    <artifactId>common-redis-mq</artifactId>
+    <name>common-redis-mq</name>
+    <description>spec 029 / ADR-0074：Redis Streams 事务消息通道（半消息 + 回查 + 消费组）</description>
+
+    <dependencies>
+        <!-- TraceContext / BusinessMetrics / StructuredAuditLogger 复用基座 -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>common-core</artifactId>
+        </dependency>
+        <!-- FR-112：依赖仅 data-redis + StringRedisTemplate，禁止 Redisson（INV-7） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- 自动装配 @ConfigurationProperties / @Scheduled 扫描器 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- in-JVM 真实 Redis（无需 Docker），与 order/catalog 既有测试同口径 -->
+        <dependency>
+            <groupId>com.github.codemonstur</groupId>
+            <artifactId>embedded-redis</artifactId>
+            <version>1.4.3</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

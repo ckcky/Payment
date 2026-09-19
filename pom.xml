@@ -33,6 +33,8 @@
         <module>common/common-core</module>
         <module>common/common-dto</module>
         <module>common/common-mybatis</module>
+        <!-- spec 029 / ADR-0074：Redis 事务消息通道 starter（半消息 + 回查 + Stream 消费） -->
+        <module>common/common-redis-mq</module>
         <module>merchant-service</module>
         <module>catalog-service</module>
         <module>order-service</module>
