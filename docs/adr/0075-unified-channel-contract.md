@@ -2,7 +2,7 @@
 
 # ADR-0075: 聚合支付统一渠道契约——能同时容纳支付宝 / 微信 / 抖音 / Stripe
 
-- 状态：🟡 **Proposed**（2026-09-19 提出，2026-09-19 负责人拍板 D1~D11；**本轮只写文档，不改代码**）
+- 状态：🟢 **Accepted**（2026-09-19 提出并拍板 D1~D11；**2026-09-19 负责人确认：由 Proposed 升级为 Accepted**。实现由 [spec 030](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md) 承接——本 ADR 的契约条款**原样保留、未被修改**；原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 四件套已于 2026-09-19 **整目录删除**，其设计被该 spec 全量吸收）
 - 关联：
   - [ADR-0072](0072-two-layer-channel-architecture.md)（payment-service 两层结构——本 ADR **扩展渠道层的契约**，其结构条款（表归属、写入口、分层≠拆事务）**全部不变**）
   - [ADR-0073](0073-channel-routing.md)（渠道路由——`ChannelRouter` / `ChannelRegistry` 语义不变；本 ADR 的 `scene` / `channelExtra` **不参与选路**）
@@ -11,7 +11,7 @@
   - [ADR-0012](0012-payment-reliability-impl-decisions.md)（双响应码错误分类——`ChannelResult` 的 `status`/`errorType`/`retryable` 派生逻辑不变）
   - [ADR-0016](0016-refund-decisions.md)（部分退款 ❌ Rejected——本 ADR 的 `outRequestNo` 只是**为将来**保留渠道语义，**不改变「退款恒按全退处理」**）
   - [ADR-0063](0063-cross-service-reference-by-business-no.md)（跨系统一律业务单号——契约内标识沿用 `paymentNo` / `refundNo`）
-  - spec 015（多渠道支付）、spec 028（两层结构 + 路由）、spec 030
+  - spec 015（多渠道支付）、spec 028（两层结构 + 路由）、spec 030（本 ADR 的**实现轮**，落在 stage-05）
 - 需求源头：负责人 2026-09-19「**我们系统内部的接口需要重新设计下，之前是极简版本，很多字段都是没有的**。你主要看看支付宝、微信、抖音支付、stripe 的接口需要什么参数，都什么意思。然后我们聚合支付内部接口怎么设计才能兼容他们这些。**要通用要合理，还要结构清晰**」；同日追加「**ChannelResult 没有承载"渠道凭证"的地方，这个需要加**，基本上每个三方渠道下单之后肯定会返回一个 payUrl，这个要加到请求了」。
 
 ## 背景
@@ -177,6 +177,6 @@ MUST 用 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`，**禁止 `double
 
 ## 落地
 
-- 实现计划：`docs/specs/stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/plan.md` 批次 A（契约）与批次 B（凭证）；
+- 实现计划：[spec 030 的 plan.md](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/plan.md) **批次 3**（契约 + 类型化凭证）；
 - 字段级权威定义：`docs/architecture/systems/payment-service.md` §3.11；
 - 凭证的消费方（染色分流与沙箱适配器）：见 [ADR-0076](0076-traffic-dyeing-and-alipay-sandbox.md)。

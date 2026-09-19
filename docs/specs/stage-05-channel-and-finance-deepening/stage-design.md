@@ -12,7 +12,7 @@
 |---|---|
 | L0 当前系统事实 | [technical-solution.md](../../architecture/technical-solution.md)、[systems/*.md](../../architecture/systems/) |
 | L1 当前约束 | [Constitution](../../../.specify/memory/constitution.md)、[docs/guides/](../../guides/) 三规范 |
-| L2 进行中 | [spec 030（渠道契约 + 染色 + 支付宝沙箱）](../stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/spec.md)、[ADR-0075](../../adr/0075-unified-channel-contract.md)、[ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md) |
+| L2 进行中 | [spec 030（渠道契约 + 染色 + 支付宝沙箱）](030-channel-contract-sandbox-callback/spec.md)、[ADR-0075](../../adr/0075-unified-channel-contract.md)、[ADR-0076](../../adr/0076-traffic-dyeing-and-alipay-sandbox.md) |
 | 计划权威 | [roadmap.md](../../architecture/roadmap.md)、[docs/specs/README.md](../README.md) |
 | 欠账登记 | [code-debt-backlog.md](../../operations/code-debt-backlog.md) |
 
@@ -25,9 +25,9 @@
 ## 0. 本文件的定位
 
 项目当前**没有**进行中的 Feature：`027-user-payment-limit` / `028-channel-routing` /
-`029-redis-transactional-mq` 均已实现并合入 master；`030-channel-contract-dye-alipay-sandbox`
-四件套齐备但**只写文档不改代码**，其两份 ADR 仍为 🟡 Proposed，实现待裁决
-（[spec 030 §10 D10](../stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/spec.md)）。
+`029-redis-transactional-mq` 均已实现并合入 master；`030-channel-contract-sandbox-callback`
+四件套齐备（**Spec v1.1 + Plan**）但**只写文档不改代码**，其两份 ADR 已于 2026-09-19 转 🟢 Accepted，**待开工**
+（[spec 030](030-channel-contract-sandbox-callback/spec.md)）。
 
 因此本文件回答三个问题：
 
@@ -660,7 +660,7 @@ AlipayChannelAdapter.charge(req):
 | 序 | Feature（建议名） | 范围 | 依赖 | 类型 |
 |---|---|---|---|---|
 | 0 | **文档收口**（非 Feature，先做） | 修 §1.4 的 D-1~D-6 六项漂移；ADR-0075/0076 登记进 README 两张表 + traceability | — | docs-only，可直推 master |
-| 1 | `031-channel-contract-dye-sandbox` | **spec 030 的实现轮**：统一契约 + 类型化凭证 + 染色 + 模态落库 + 支付宝沙箱适配器 + notify 端点 + demo 开关 | ADR-0075/0076 **转 Accepted** | 代码 |
+| 1 | `030-channel-contract-sandbox-callback` | **渠道契约实现轮**：统一契约 + 类型化凭证 + 染色 + 模态落库 + 支付宝沙箱适配器 + notify 端点 + demo 开关 | ADR-0075/0076 ✅ **已转 Accepted** | 代码（**Spec + Plan 已就绪**） |
 | 2 | `032-ledger-account-view` | §4 G1（科目余额视图）+ G2（期间与试算平衡）+ G3（待记账清单） | 031 无强依赖，可并行 | 代码 + **Schema 变更** |
 | 3 | `033-reconciliation-real-statement` | §5 R1（真实账单来源）+ R2（**N1 商户维度**）+ R4（差异处置策略化） | 涉及 `common-dto` 变更 | 代码 + **跨服务 API 变更** |
 | 4 | `034-test-infrastructure` | §8 T1（Testcontainers 渐进）+ T2（迁移可重放门禁）+ T3（ArchUnit RPC 环） | 无 | 工程 |

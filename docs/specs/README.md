@@ -52,23 +52,28 @@
 
 ## stage-04-new-directions — 新能力方向
 
-> 用户支付限额 / 渠道路由 / Redis 事务消息 / 渠道契约染色与支付宝沙箱。
+> 用户支付限额 / 渠道路由 / Redis 事务消息。
 
 - [027-user-payment-limit](stage-04-new-directions/027-user-payment-limit/)
 - [028-channel-routing](stage-04-new-directions/028-channel-routing/)
 - [029-redis-transactional-mq](stage-04-new-directions/029-redis-transactional-mq/)
-- [030-channel-contract-dye-alipay-sandbox](stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/)
 
 ## stage-05-channel-and-finance-deepening — 渠道与资金纵深（🟡 提案中，待负责人确认）
 
 > 本阶段总目标设计书：**[stage-design.md](stage-05-channel-and-finance-deepening/stage-design.md)（Draft，2026-09-19）**——
 > 现状评估 + 总体架构 + 渠道接入 / 账务总账 / 对账结算 / 可靠性 / 可观测性 / 测试策略六面目标态 + Feature 拆分建议。
 >
-> 正式审查（以代码为事实来源）：**[design-review.md](stage-05-channel-and-finance-deepening/design-review.md)（2026-09-19）**——
+> 正式审查（以代码为事实来源）：**[design-review.md](stage-05-channel-and-finance-deepening/design-review.md)（v1.1，2026-09-19）**——
 > 14 节审查（领域模型 / 两个状态机 / 渠道架构 / 回调 / 账本 / 对账 / 结算 / 可靠性 11 类故障走查）+
-> **17 项设计冲突**（1 项 🔴 阻断、13 项 🟠）+ 必需变更分级 + **16 项人类决策** + 自 `030` 起的 Feature 实施矩阵。
-> 结论：**stage-design 方向通过，需修订后生效**；进入实现前须先完成「文档收口 + 030 前置一致性收口」两个门。
->
-> ⚠️ **状态说明**：该阶段为**提案**，尚未分配 Feature 编号、未同步 `roadmap.md`；阶段命名与 Feature 编号属
-> 宪法 §Governance 人类决策边界，须负责人确认后本索引与 roadmap 才视为生效。
-> 上述两份文件均为 **Draft / 提案**，**不是** L0 当前系统事实源，**不产生**任何已生效决策。
+> **24 项设计冲突**（1 项 🔴 阻断、16 项 🟠、4 项 🟡、10 项 ⚪）+ 必需变更分级 + **21 项人类决策** + 自 `030` 起的 Feature 实施矩阵。
+> **v1.1 修订**：**C-11 由 🟠 降级为 ⚪ 验证通过**——「重复支付自动退款」**不是缺失能力**，而是既有能力
+> （`TransactionApplicationService.surplusRefund`，见 §11 的 C-11 专项验证表 10 点）；**不新增「禁止多 Payment SUCCESS」、
+> 不要求「换渠道前关闭旧 Payment」**。验证过程中新发现 7 项真实缺陷（C-18~C-24），其中 4 项 🟠 集中在
+> **自动退款的恢复路径不可自愈**（C-18/C-19）与**对账/结算事实缺期间与商户维度**（C-20）。
+> 结论：**stage-design 方向通过，需修订后生效**；进入实现前须先完成「文档收口 + 前置一致性收口（B1~B7）」两个门。
+
+- [030-channel-contract-sandbox-callback](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/) —— 🟢 **Spec v1.1 + Plan 三件已就绪，待开工**；ADR-0075 / ADR-0076 已转 Accepted。⚠️ 本编号占用 `030`（原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 已于 2026-09-19 删除，设计被本 Feature 全量吸收，见 [spec §0.3](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)）。
+
+> ⚠️ **状态说明**：该阶段**其余 Feature 仍为提案**，尚未分配 Feature 编号、未同步 `roadmap.md`；阶段命名与
+> **后续 Feature 编号重排**（是否顺移一位）属宪法 §Governance 人类决策边界，须负责人确认后本索引与 roadmap 才视为生效。
+> `stage-design.md` / `design-review.md` 均为 **Draft / 提案**，**不是** L0 当前系统事实源，**不产生**任何已生效决策。

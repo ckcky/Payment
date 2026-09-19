@@ -9,6 +9,28 @@
 
 ---
 
+## 修订记录
+
+### v1.1（2026-09-19）——C-11 重新评估
+
+**修订原因**：v1.0 将「同一 Transaction 下两笔支付均成功」判为**系统缺失的业务能力**（C-11 🟠）。该判定**错误**：v1.0 只审查了 payment-service，**未读 order-service 的 Transaction 层**，因此没有发现 `TransactionApplicationService.surplusRefund(...)` 已经完整实现了「重复支付自动退款」。
+
+**修订动作**：
+
+| # | 动作 | 说明 |
+|---|---|---|
+| 1 | **C-11 由 🟠 降级为 ⚪ 验证项** | 标题改为「现有『重复支付自动退款』流程 —— **验证通过**」，不再是设计冲突 |
+| 2 | 新增 **§11 的 C-11 专项验证表** | 按 10 个指定问题逐条给出「代码证据 → 结论 → 缺口」 |
+| 3 | 原 C-11 的 **11-B（渠道切换双成功）** 判定**撤销** | 该场景**已被 `surplusRefund` 覆盖**；不新增「禁止多 Payment SUCCESS」、不要求「换渠道前关闭旧 Payment」 |
+| 4 | 原 C-11 的 **11-F11b（订单取消后迟到成功）** **保留但独立编号为 C-23** | 该场景与 surplus 流程**不同源**：`CLOSED` 支付吸收迟到成功 ⇒ **不发 `payment.succeeded`** ⇒ order 侧 surplus 机制**根本没有被触发**，钱确实收下且不退 |
+| 5 | 验证过程中发现 **7 项真实缺陷**，新增编号 **C-18 ~ C-24** | 见 §11；其中 🟠 4 项、🟡 2 项、⚪ 1 项 |
+| 6 | 修正 §11.1 汇总表的**两处计数错误** | v1.0 的 🟠 行标 12 实列 13 项、🟡 行标 3 实列 2 项 |
+| 7 | §13 的 **H8（换渠道前关闭旧 Payment）撤销** | 该决策项随 11-B 判定一并撤销 |
+
+**本轮新增读取的代码范围**（v1.0 未覆盖）：`order-service` 的 `Transaction` / `TransactionApplicationService` / `OrderApplicationService` / `RefundOrder` / `Order` / `OrderStatus` / `RefundOrderStatus` / `TransactionRefundRepository` / `OrderMqHandlers` 与 `TransactionRefundTest` / `TransactionCallbackConflictTest`；`payment-service` 的 `PaymentAutoRefundService` / `PaymentRefundService` / `RefundResultProcessor` / `RefundApplicationService` / `RefundPolicy` / `Refund` / `RefundStatus` / `MockRefundResultBridge` / `PaymentAttemptRepository`；`reconciliation-service` 的 `PaymentFactsClient` / `RefundFactsClient` 实现、`CsvChannelStatementLoader`、`PlatformFact`；`settlement-service` 的 `SettlementBatch` / `ConfirmedFactGate`；`deployment/schema` 的 `payment_attempts` / `transaction_refunds` / `refunds`。
+
+---
+
 ## 1. Review Summary
 
 ### 1.1 结论
@@ -16,6 +38,8 @@
 **`stage-design.md` 的方向判断成立，可以作为阶段输入；但其中 3 处「现状」描述需要修正，且其建议的 Feature 顺序需要插入一个前置收口轮。**
 
 一句话：**领域模型约束（`Transaction 1:N Payment`、`Payment 1:1 PaymentAttempt`）在当前代码中「事实上成立」，但既没有被数据库结构强制，也没有被文档统一表述；同时发现 1 处与已修复缺陷同源的遗留缺陷（账本幂等键双重前缀），必须在任何新能力之前收口。**
+
+**v1.1 补充结论（一句话）**：**「重复支付自动退款」不是缺失能力，而是既有的、实现完整的能力（`TransactionApplicationService.surplusRefund`）**——**该能力无需新增、无需改模型**；但它的**恢复路径不可自愈**（C-18 / C-19）与**事实维度不足**（C-20）会静默吃掉资金，须在接真实渠道前收口。
 
 ### 1.2 审查判定
 
@@ -27,9 +51,10 @@
 | 渠道架构（Router/Registry） | ✅ 通过 | 确定性、前后向分离、fail-fast 均落实；1 处防御性死代码 |
 | 回调 | ❌ **不通过（接真实渠道前）** | 验签恒放行、金额不校验、渠道流水号不校验归属（C-04/C-05） |
 | 账务总账 | ❌ **不通过** | 账本幂等键双口径且其中一条是**已修复缺陷的遗留**（C-01，最高优先级） |
-| 对账 | ⚠️ **有条件通过** | 四核对完整；结算事实仅取「已匹配项」是隐含耦合（C-13），SETTLEMENT sourceId 用数值 id（C-08） |
-| 结算 | ⚠️ **有条件通过** | 门禁 fail-closed 正确；**负净额的会计处理未定义**（C-07） |
-| 可靠性 | ✅ 通过（含 2 项已识别缺口） | 11 类故障走查结果全部自洽，无「猜成败」路径 |
+| 对账 | ⚠️ **有条件通过** | 四核对完整；结算事实仅取「已匹配项」是隐含耦合（C-13），SETTLEMENT sourceId 用数值 id（C-08）；**事实链缺期间与商户维度**（C-20），退款渠道引用取首无排序（C-22） |
+| 结算 | ⚠️ **有条件通过** | 门禁 fail-closed 正确；**负净额的会计处理未定义**（C-07）；**事实无商户维度 ⇒ 跨商户串账**（C-20） |
+| 可靠性 | ⚠️ **有条件通过** | 11 类故障走查结果自洽，无「猜成败」路径；但**自动退款链路存在两处不可自愈缺口**（C-18 / C-19） |
+| **重复支付自动退款（C-11 专项）** | ✅ **通过（v1.1 新增）** | **流程已存在且实现完整**：`surplusRefund` 正确判定并驱动 TXRF → PMRF 两层退款；幂等由「在途守卫 + TXRF 幂等键 + `RefundPolicy` 累计上限」三层保障；surplus 退单不污染 `paidMinor`/`refundedMinor`。**10 点验证见 §11 的 C-11 专项验证表**；发现的缺陷集中在**恢复路径与事实维度**，不在判定逻辑本身（C-18~C-24） |
 | 可观测 / 测试 | ✅ 通过（stage-design 描述准确） | 7 条告警规则、五层测试、ArchUnit 8/8 核实无误 |
 
 ### 1.3 `stage-design.md` 现状描述的修正（3 处）
@@ -128,12 +153,16 @@
 
 **结论**：✅ 与「`Transaction 1:N Payment`」一致。**首笔支付单不被改写、不被复用**，符合「事实不回滚」。
 
-**但存在一个语义缺口**：**首笔 Payment 若停留在 `UNKNOWN`（例如首渠道超时），切换渠道后两笔 Payment 同时「活着」**——首笔仍会被 `ChannelQueryService` 继续查询收敛。若首笔最终收敛为 `SUCCEEDED`，则**同一 Transaction 下有 2 笔成功的 Payment**。当前系统：
-- 记账：两笔各自记账（幂等键不同）⇒ **CUSTOMER_CASH 双倍借记**；
-- 结算：对账事实按 `reference` 匹配 ⇒ 若渠道账单只有一笔，另一笔成 `PLATFORM_ONLY`；
-- 谁负责判定「这是重复支付、需要退一笔」？——**没有代码负责**（`closeByOrderCancelled` 只处理订单取消，不处理「换渠道后旧单成功」）。
+**首笔 Payment 停留 `UNKNOWN` 后收敛为 `SUCCEEDED` 的处理（v1.1 修正）**：若首笔 Payment 停留在 `UNKNOWN`（例如首渠道超时）时切换渠道新建第二笔，随后首笔收敛为 `SUCCEEDED`，则**同一 Transaction 下确有 2 笔成功的 Payment**。**这一场景当前系统已完整处理**：
 
-> **记为 C-11。** 严重度 🟠。这不是新阶段引入的，是**当前已存在的跨渠道切换语义空洞**，且 stage-design 未识别。
+| 环节 | 代码路径 | 结果 |
+|---|---|---|
+| 判定 | `TransactionApplicationService.onPaymentSucceeded`：`order.getStatus() == PAID` 且 `request.paymentNo() != order.getPaymentNo()` ⇒ `surplusRefund(order, request, "DUPLICATE_PAYMENT")` | 后成功的那笔被判定为 **surplus（多收的钱）** |
+| 发起退款 | `surplusRefund` → `doCreateRefund` → `paymentGateway.refund(RefundCommandRequest)` ⇒ payment 侧生成 **PMRF** | TXRF（order）→ PMRF（payment）两层退款单 |
+| 记账 | 两笔各自记 `PAYMENT:{paymentNo}`；surplus 退款成功记 `REFUND:{PMRF}` 冲正 | **净额 = 1 笔订单金额**（§11 的 C-11 专项验证表 第 7 点） |
+| 收口 | `onRefundResult`：`refundOrder.refundsEffectivePayment(order) == false` ⇒ 只关退款单，**不累加 `refundedMinor`、不动订单状态** | 生效支付单（首笔成功者）的账务口径不被污染 |
+
+> **v1.0 在此处误判为「无代码负责判定重复支付需退一笔」（记为 C-11 🟠）。该判定已撤销**：v1.0 只审查了 payment-service，未读 order-service 的 Transaction 层。正确判定见 **§11 的 C-11 专项验证表** 与 **C-11（已降级为 ⚪ 验证通过）**。
 
 #### 场景 C —— 同渠道超时
 
@@ -200,7 +229,7 @@ boolean changed = PaymentResultApplier.applyPayment(payment, result);  // 支付
 
 **这是 ADR-0007「终态吸收」的必然结果，不是 bug**。但**当前没有任何文档写明这个口径**，且**对账侧的匹配键是 `reference`（支付单号）而非「渠道流水号」**，因此这两行数据在报表里会呈现为「同一支付单渠道成功、平台失败」。
 
-> **记为 C-11 的一部分。** 处置建议：**不改行为**，在 L0 `systems/payment-service.md` 与 `business-standards.md` 显式写明「`payment_attempts` 记录渠道事实、`payments` 记录平台事实，两者可合法不一致，差异由对账处置」。
+> **记为 C-23 的同一根因。** 处置建议：**不改行为**，在 L0 `systems/payment-service.md` 与 `business-standards.md` 显式写明「`payment_attempts` 记录渠道事实、`payments` 记录平台事实，两者可合法不一致，差异由对账处置」；但对**第一行（渠道已扣款、平台不记账）**必须补一条主动追回路径，理由见 **C-23**。
 
 #### （2）`ChannelResult.accepted()` 的渠道受理流水号被丢弃
 
@@ -403,7 +432,7 @@ PENDING ──accept(ref)──► ACCEPTED ──succeed()──► SUCCEEDED
 
 ### Q5. 乱序回调是否安全？
 
-✅ 是（终态吸收）。但**「已 `CLOSED`（订单取消）后到 `SUCCESS`」是唯一会丢资金事实的场景**，见 §4.1 与 C-11。
+✅ 是（终态吸收）。但**「已 `CLOSED`（订单取消）后到 `SUCCESS`」是唯一会丢资金事实的场景**——此时支付侧终态吸收使其**不再发 `payment.succeeded`**，order 侧 surplus 机制因此**根本未被触发** ⇒ 见 **C-23**（不是 C-11：C-11 的渠道切换场景已被 `surplusRefund` 覆盖）。
 
 ### Q6. 回调金额是否校验？
 
@@ -730,7 +759,7 @@ case "SUCCEEDED" -> {
 | **F7** | 支付成功后**记账 RPC 失败** | `payment=SUCCEEDED`（事务已提交） | `payments=SUCCEEDED`；**ledger 无 posting** | `FeignLedgerPostingGateway` **吞异常** ⇒ 仅 `ledger.posting_failed` 指标 + ERROR 日志 | **无自动重试、无待记账载体**（C-09）；T+1 `CertificateAuditor` 产出 `MISSING_POSTING`（BLOCKER）⇒ 人工调账（`SUPPLEMENT`）补记 | 补记后账证相符；未补记则持续 BLOCKER 并**阻塞结算**（`settlementGate` BLOCK） |
 | **F8** | 支付成功后**履约通知失败**（MQ `commit` 失败） | `payment=SUCCEEDED` | `payments=SUCCEEDED`；**半消息留在 Redis**（`mq:half:{topic}:{msgId}` + `ZADD mq:half:idx`） | `HalfMessageScanner` 按 `prepare` 超时摘取 → **回查真相表**（`payments`）→ 判定 COMMIT ⇒ 补投 | 回查次数上限后 `toDlq`（`mq:dlq:{topic}` + `mq.dead_letter` 指标） | 订单侧收到 `payment.succeeded`；或进 DLQ 需人工重放。**支付事实不受影响（INV-1）** |
 | **F9** | **重复回调**（同一 SUCCESS 回调两次） | 第一次 ⇒ `SUCCEEDED`；第二次 ⇒ `PROCESSING`? 否 ⇒ 已 `SUCCEEDED` | `payments=SUCCEEDED`（第一次） | `applyAndNotify`：`applyPayment` 命中 `status == target` ⇒ `changed=false` | 不记账、不通知履约；计 `payment.duplicate_callback` | `SUCCEEDED`，**记账与履约恰好一次**（测试已钉死）。⚠️ attempt 仍被无条件 `save`（一次无意义 UPDATE） |
-| **F10** | **迟到冲突回调**（已 `FAILED` 后到 `SUCCESS`） | `payment=FAILED`（终态） | `payments=FAILED` | `transitionTo(SUCCEEDED)` ⇒ `isTerminal()` ⇒ 返回 `false` | 不记账、不通知履约 | `payments=FAILED` / **`payment_attempts=SUCCEEDED`**（渠道层被收敛）；**渠道实际已扣款** ⇒ 资金差异，仅能靠对账 `STATUS_MISMATCH`/`PLATFORM_ONLY` 发现（C-11） |
+| **F10** | **迟到冲突回调**（已 `FAILED` 后到 `SUCCESS`） | `payment=FAILED`（终态） | `payments=FAILED` | `transitionTo(SUCCEEDED)` ⇒ `isTerminal()` ⇒ 返回 `false` | 不记账、不通知履约；**因不发 `payment.succeeded`，order 侧 surplus 退款未被触发** | `payments=FAILED` / **`payment_attempts=SUCCEEDED`**（渠道层被收敛）；**渠道实际已扣款** ⇒ 资金差异，仅能靠对账 `STATUS_MISMATCH`/`PLATFORM_ONLY` 发现（**C-23**） |
 | **F11** | **订单取消 × 支付状态** | 见下 | 见下 | `Payment.closeByOrderCancelled()` | — | 见下 |
 
 **F11 细分**：
@@ -738,10 +767,12 @@ case "SUCCEEDED" -> {
 | 子场景 | 迁移 | 数据库状态 | 后续渠道回调 | 最终状态 |
 |---|---|---|---|---|
 | 11a 取消时 `SUCCEEDED` | **拒绝**（返回 `false`，状态不变） | `payments=SUCCEEDED` | 已被吸收 | `SUCCEEDED`；order 侧走 **surplus 原路退回** |
-| 11b 取消时 `PROCESSING` / `UNKNOWN` | ⇒ `CLOSED` | `payments=CLOSED`、`failure_reason="order cancelled"` | **`CLOSED` 吸收 SUCCESS** ⇒ 不记账 | ⚠️ **渠道扣款成功、平台 `CLOSED`、不记账** ⇒ 资金差异，仅能靠对账发现 |
+| 11b 取消时 `PROCESSING` / `UNKNOWN` | ⇒ `CLOSED` | `payments=CLOSED`、`failure_reason="order cancelled"` | **`CLOSED` 吸收 SUCCESS** ⇒ `changed=false` ⇒ **不发 `payment.succeeded`** | ⚠️ **渠道扣款成功、平台 `CLOSED`、不记账、且 order 侧 surplus 机制未被触发** ⇒ 钱不退，仅能靠对账发现（**C-23**） |
 | 11c 取消时 `PENDING` | ⇒ `CLOSED` | `payments=CLOSED` | 同上 | 同上 |
 
-**F11b 是本轮走查发现的最严重资金语义空洞**（记为 C-11）：`Payment.java:121-127` 的注释只覆盖了「已 `SUCCEEDED` 不关闭」，**未覆盖「关闭后渠道成功」**。`closeByOrderCancelled` 的语义是「拒收后续回调」，但渠道**已经扣款**这一事实无法被拒收。
+**F11b（记为 C-23）**：`Payment.java:121-127` 的注释只覆盖了「已 `SUCCEEDED` 不关闭」，**未覆盖「关闭后渠道成功」**。`closeByOrderCancelled` 的语义是「拒收后续回调」，但渠道**已经扣款**这一事实无法被拒收。
+
+> **v1.1 修正**：v1.0 把 F11b 与「渠道切换双成功」合并为 C-11，**这一合并是错的**。二者**不同源**：渠道切换双成功走的是「支付成功通知已发出 → order 判定 surplus」（**已被 `surplusRefund` 覆盖，C-11 验证通过**）；F11b 走的是「支付侧终态吸收 ⇒ **通知根本没发出**」（**无任何后续机制**）。因此 F11b 独立编号为 **C-23**，且**不能被 C-11 的验证结论豁免**。
 
 ### 10.2 补充：并发竞争（非 11 类之一，但必须走查）
 
@@ -752,13 +783,28 @@ case "SUCCEEDED" -> {
 | 两个并发 `createPaymentIntent`（无幂等键，同交易） | ⚠️ `countByTransactionId` **读后写**，两个并发请求会算出**同一个 `attemptSeq`** ⇒ 幂等键相同 ⇒ 第二条撞唯一键回查 ⇒ 返回**同一笔支付** | ⚠️ **行为安全但语义可疑**：「用户连点两次下单」被合并为一笔（可能符合预期，也可能不符）。**当前无测试覆盖**，且 H2 无法验证真实并发 ⇒ 属 T1（Testcontainers）的目标场景 |
 | 两个并发渠道调用（同 attempt） | 无保护（但 `PaymentPersistence` 保证一次请求内只调一次） | ⚪ 当前无路径 |
 
-### 10.3 可靠性结论
+### 10.3 补充：重复支付自动退款链路走查（v1.1 新增）
+
+> 沿用 §10.1 的「故障 → 当前状态 → 数据库状态 → 系统下一步 → 重试/补偿 → 最终状态」口径。
+> 链路：`payment.succeeded`(PM-2) → `TransactionApplicationService.onPaymentSucceeded` → `surplusRefund` → `doCreateRefund`（TXRF 落 `transaction_refunds`）→ `PaymentGateway.refund` → `PaymentAutoRefundService.refundByOrder` → `RefundApplicationService.createRefund`（PMRF 落 `refunds`）→ 渠道 → `RefundResultProcessor` → `refund.result` → order `onRefundResult`。
+
+| # | 故障 | 当前状态 | 数据库状态 | 系统下一步 | 重试/补偿 | 最终状态 |
+|---|---|---|---|---|---|---|
+| **R1** | 两笔支付**几乎同时**成功（并发 `payment.succeeded`） | 两条消息各自读到 `order=PENDING_PAYMENT` | 无 | 双方都调 `orderLayer.onPaymentSucceeded` → `markPaid` + `transaction.recordEffectivePayment`（**首张成功者写入**） | 乐观锁（`orders.version` / `payments.version`）使一方失败；失败方抛 `STATE_TRANSITION_VIOLATION` / `CONFLICT` / `INTERNAL_ERROR` | 失败方消息经 `StreamConsumer` **重试 1s/2s/4s**；重试时 `order=PAID` 且 `paymentNo` 不同 ⇒ 走 `surplusRefund` ⇒ **自愈**。⚠️ 三次重试耗尽 ⇒ DLQ + `XACK`，**无持久化待办**（C-18 同类） |
+| **R2** | **渠道退款调用失败**（RPC 抛异常 / 5xx / 网络不可达） | `surplusRefund` 已提交 TXRF | `transaction_refunds=REQUESTED`（**先落库再调渠道**，`TransactionApplicationService:212`） | `paymentGateway.refund` 抛异常上抛 → MQ 重试 | ⚠️ **重试被在途守卫短路**：`doCreateRefund:189-198` 命中「同 `paymentNo` + 同金额 + `REQUESTED`」⇒ **直接返回原 TXRF，不再调渠道** | 🔴 **TXRF 永久停在 `REQUESTED`**（非终态）；MQ 三次重试 + 任何人工重放都只回放不执行；`TransactionRefundRepository` **无按状态查询** ⇒ 无扫描器可写 ⇒ **重复支付的钱永久不退**（**C-18**） |
+| **R3** | **退款渠道判定 FAILED** | TXRF 已 `PROCESSING` | `refunds=FAILED`；`transaction_refunds` 待收口 | `RefundResultProcessor.apply` → `notifyOrder` → order `onRefundResult` | ❌ **无重试**：`onRefundResult:257-262` 仅 `log.warn` + `order.refund_failed` 指标后 `return` | `transaction_refunds=FAILED`（终态）；**无自动重试、无补偿入口、无告警规则**（**C-18**）。⚠️ 副作用：同一张 PM 的重复成功回调会新建 TXRF 再试一次（非确定性「意外重试」，不可依赖） |
+| **R4** | 退款**受理在途**（渠道返回「已受理未终局」） | `refunds=PROCESSING`（`RefundApplicationService:115-119`） | `refunds=PROCESSING`、`payment_attempts(REFUND)=UNKNOWN` | 等渠道回调 `MockRefundResultBridge` / `POST /internal/refunds/{refundNo}/channel-callback` | ⚠️ **无主动查询、无超时扫描**：`TimeoutScanner` 只扫 `PaymentStatus.PROCESSING`（`TimeoutScanner.java:54`），**refund 包无任何 `@Scheduled`** | 有回调 ⇒ 终态；**无回调 ⇒ 永久 `PROCESSING`/`UNKNOWN`**（**C-19**） |
+| **R5** | 退款成功后 **ledger 冲正失败** | `refunds=SUCCEEDED`（已提交） | `refunds=SUCCEEDED`；**ledger 无 `REFUND:{PMRF}` posting** | `RefundResultProcessor.postLedger` **吞异常** ⇒ `refund.ledger_posting_failed` + ERROR | ❌ 无重试、无待记账载体（同 C-09） | T+1 `CertificateAuditor` → `MISSING_POSTING`（BLOCKER）⇒ 人工 `SUPPLEMENT` 补记。**账面上 `CUSTOMER_CASH` 双倍借记真实存在**，直到补记才对冲（§11 的 C-11 专项验证表 第 7 点） |
+| **R6** | TXRF 已落终态后，order 侧**累加/审计失败**（DB 异常） | `transaction_refunds=SUCCEEDED`（已提交） | `transaction_refunds=SUCCEEDED`；`transactions.refunded_minor` / `orders.refunded_minor` **未累加** | 消息重投 → `onRefundResult` | 🔴 **重放被吸收**：`refundOrder.complete(...)` 返回 `false` ⇒ `onRefundResult:253-255` 直接 `return`，**永不补累加** | 🔴 **`refunded_minor` 永久少计**，且**无审计记录**（`auditLogger.audit("order.refund_result_applied")` 在 `:313`，位于两处提前 `return` 之后）。⚠️ 影响**生效支付单退款**；surplus 退单不累加故无金额影响，但仍丢审计（**C-19 / C-21**） |
+
+### 10.4 可靠性结论
 
 - ✅ **全链路无「猜成败」**：`deriveStatus` 只在 `transport==SUCCESS && business.isConclusive()` 时给 `FAILURE`，其余非成功一律 `UNKNOWN`。
 - ✅ **重试判定只看通信码**（`retryable()` = `transportCode.isRetryable()`），业务拒绝不重试。
 - ✅ **终态吸收**在 `Payment` / `PaymentAttempt` / `Refund` / `SettlementBatch` / `ReconciliationBatch` 五处一致实现。
 - ✅ **消息通道半消息协议**实现完整（prepare → 本地事务 → commit；`HalfMessageScanner` 回查真相表补投/丢弃；DLQ + 计数 TTL）。
-- ❌ **两处缺口**：`UNKNOWN` 无终态出口（C-06）；后置失败（记账 / 履约 / 退款通知）**均无持久化台账**（C-09，`stage-design B4` 已识别）。
+- ❌ **四处缺口**：① `UNKNOWN` 无终态出口（C-06，**payment**）；② 后置失败（记账 / 履约 / 退款通知）**均无持久化台账**（C-09，`stage-design B4` 已识别）；③ **自动退款不可自愈**——TXRF 停 `REQUESTED` 的重试被在途守卫短路且无扫描器（**C-18**，v1.1 新增）；④ **退款终态后置动作与 UNKNOWN 收敛缺失**——TXRF 终态先落库导致累加/审计丢失后重放被吸收，且 refund 无超时扫描（**C-19**，v1.1 新增）。
+- ⚠️ **`stage-design §6.1` 的「Redis 全丢只需人工重放」对自动退款链路不成立**：重放依赖「在途守卫未命中 + 消息可重投」，而 C-18 恰好使「TXRF 停在 `REQUESTED`」这一状态**既短路重放、又不可查询**。
 - ✅ `stage-design §6.1` 的现状表**逐条核实准确**，包括「Redis 全丢系统仍正确，只需人工重放」（因三条记账链路同步、`payment.mq.enabled=false` 可回落同步 Feign）。
 
 ---
@@ -858,16 +904,54 @@ case "SUCCEEDED" -> {
 - **推荐**：**A 立即**（成本极低）；**B / C 需先确认 `ACCEPTED` 是否在 spec 030 启用**（若启用则 B，若不启用则 C 并删除状态）。
 - **是否需要人工决策**：**是**（B/C 涉及状态机变更）。
 
-### C-11 🟠 渠道切换 / 订单取消造成的资金语义空洞
+### C-11 ⚪（v1.1 由 🟠 降级）现有「重复支付自动退款」流程 —— **验证通过**
 
-- **问题（两个子场景，同一根因：渠道已扣款但平台不记账）**：
-  - **11-B（渠道切换）**：首笔 Payment 停留 `UNKNOWN` 时切换渠道新建第二笔；若首笔随后收敛为 `SUCCEEDED`，则**同一 Transaction 下两笔成功支付** ⇒ 各自记账 ⇒ `CUSTOMER_CASH` 双倍借记；**无代码负责判定「重复支付需退一笔」**。
-  - **11-F11b（订单取消）**：支付 `PROCESSING/UNKNOWN` 时订单取消 ⇒ `CLOSED` ⇒ 迟到 `SUCCESS` 回调被吸收 ⇒ 渠道扣款成功、平台 `CLOSED`、不记账。
-- **证据**：`PaymentPersistence.java:73-74`（换渠道 ⇒ 新幂等键 ⇒ 新 Payment）；`Payment.java:128-139`（`closeByOrderCancelled` 语义为「拒收后续回调」）；`Payment.java:121-127` 注释**只覆盖**「已 `SUCCEEDED` 不关闭」；`PaymentResultApplier` 终态吸收。
-- **影响**：真实资金差异，只能靠对账 `PLATFORM_ONLY` / `STATUS_MISMATCH` 事后发现；当前**无文档写明**该口径。
-- **候选方案**：A **不改行为，改文档**（在 L0 + `business-standards.md` 显式写明「渠道事实与平台事实可合法不一致，差异由对账处置」，并把 11-B 登记为已知业务缺口）；B 新增「换渠道前先关闭旧 Payment」的编排规则（**行为变更**）；C 对账侧新增「同 Transaction 多笔成功」专项差异类型。
-- **推荐**：**A + C**（文档化 + 可检测）；**B 需人工决策**（涉及支付编排行为变更）。
-- **是否需要人工决策**：**是**（B 涉及行为变更；A/C 不需要）。
+> **v1.0 判定作废**。v1.0 记为「渠道切换 / 订单取消造成的资金语义空洞（🟠）」并给出候选方案 B「新增『换渠道前先关闭旧 Payment』的编排规则」。**该判定与方案 B 均已撤销。**
+
+- **问题**：无。**这是一项验证项**，不是设计冲突。用户给定的领域模型约束（`Transaction 1:N Payment` / `Payment 1:1 PaymentAttempt`）**保持不变**，**不禁止多个 Payment 成功**，**不要求渠道切换前关闭旧 Payment**。
+- **验证结论**：**流程已存在、实现完整、语义正确**。同一 Transaction 下允许多个 Payment；当第二笔 Payment 成功而订单已有生效支付时，**Transaction 层判定为重复支付（surplus）并自动发起原路退款**，把后成功的重复支付退掉。
+- **代码证据链**：
+
+| 环节 | 位置 | 行为 |
+|---|---|---|
+| 入口 | `TransactionApplicationService.onPaymentSucceeded:93-116` | 按 `order.getStatus()` 分派 |
+| 判定（已 PAID + 不同支付单） | 同文件 `:98-106` | `order.getStatus() == PAID` 且 `!request.paymentNo().equals(order.getPaymentNo())` ⇒ `surplusRefund(order, request, "DUPLICATE_PAYMENT")` |
+| 判定（非可支付态） | 同文件 `:107-112` | 已取消 / 超时 / 关闭仍收成功 ⇒ `surplusRefund(order, request, "ORDER_NOT_PAYABLE")` |
+| 判定（同支付单重复通知） | 同文件 `:99-102` | 幂等吸收，直接 `return` |
+| 生效支付单 | `Order.paymentNo`（`Order.markPaid` 写入）；`Transaction.recordEffectivePayment` 由 `OrderApplicationService.markPaidAndTransaction` 同事务写入 | **首张成功支付为准**（`recordEffectivePayment` 首值写入后不再覆盖：`if (this.paymentNo != null) return false;`） |
+| 发起退款 | `surplusRefund:162-174` → `doCreateRefund:181-231` | 生成 **TXRF**（`transaction_refunds`，幂等键 = TXRF）→ 调 `paymentGateway.refund(RefundCommandRequest(TXRF, transactionNo, paymentNo, ...))` |
+| 执行退款 | payment 侧 `PaymentAutoRefundService.refundByOrder:63-115` | 校验支付单 `SUCCEEDED` → `RefundApplicationService.createRefund`（**幂等键 = TXRF**）生成 **PMRF** → 调渠道三态收敛 |
+| 收口 | `TransactionApplicationService.onRefundResult:240-316` | `refundOrder.refundsEffectivePayment(order) == false` ⇒ **只关退款单**，不累加 `transactions.refunded_minor` / `orders.refunded_minor`、不动订单状态、不终止履约 |
+| 测试钉死 | `TransactionCallbackConflictTest`（`duplicateCallbackForSamePaymentIsAbsorbed` / `secondPaymentOnPaidOrderIsJudgedSurplusAndRefunded` / `successOnCancelledOrderIsRefundedWithoutNotPayableException`）；`TransactionRefundTest.surplusRefundClosesWithoutBooking` | surplus 判定、自动退款发起、不污染账务口径均有断言 |
+
+#### C-11 专项验证：10 点逐条结论
+
+| # | 问题 | 结论 | 关键证据 | 缺口 |
+|---|---|---|---|---|
+| **1** | 两个 Payment 几乎同时 SUCCESS 如何处理 | ✅ **正确** | 双方均调 `orderLayer.onPaymentSucceeded` → `markPaid` + `recordEffectivePayment`；乐观锁使一方失败并抛 `STATE_TRANSITION_VIOLATION` / `CONFLICT` / `INTERNAL_ERROR`；失败方消息经 `StreamConsumer` **重试 1s/2s/4s**，重试时 `order=PAID` ⇒ 走 `surplusRefund` **自愈** | ⚠️ 重试耗尽 ⇒ DLQ + `XACK`，**无持久化待办**（C-18 同类）；无并发专项测试（H2 无法验证真并发，属 033 T1） |
+| **2** | Transaction 层如何确定哪个 Payment 是有效支付 | ✅ **正确（权威源是 `Order.paymentNo`，非 `Transaction.paymentNo`）** | `surplusRefund` 与 `onRefundResult` 均读 `order.getPaymentNo()`（`RefundOrder.refundsEffectivePayment(order)` = `paymentNo.equals(order.getPaymentNo())`）；`Transaction.recordEffectivePayment` 采用**首值写入**语义（`if (this.paymentNo != null) return false;`） | ⚪ `Transaction.paymentNo` **无业务读取点**（仅 `MybatisTransactionRepository:70` 持久化映射）⇒ 影权威，见 **C-24** |
+| **3** | 自动 Refund 是否幂等 | ✅ **是（三层保障）** | ① **order 在途守卫** `doCreateRefund:189-198`（同 `orderNo` + `paymentNo` + 金额 + `REQUESTED`/`PROCESSING` ⇒ 回放原 TXRF，不重复调渠道）；② **payment TXRF 幂等键** `RefundApplicationService:62-64`（`transactionRefundNo` ⇒ 同一 TXRF 回放同一 PMRF）；③ **`RefundPolicy` 累计上限**（同支付单累计申请额 ≤ 已支付额 ⇒ 超退被 `reject`） | ⚠️ ③ 是**真正兜住重复退款**的一层：TXRF 已达终态后的重复成功回调会新建 TXRF，仅被 ③ 拦为 `REJECTED`（**C-21**）；⚠️ order 侧 `findByIdempotencyKey` 分支是**死代码**（幂等键 = `refundNo` = 新雪花，同 **C-15**） |
+| **4** | Refund 失败 / UNKNOWN 如何恢复 | ❌ **不完整** | `onRefundResult:257-262` 对非成功终态仅 `log.warn` + `order.refund_failed` 后 `return`；`TransactionRefundRepository` **无按状态查询**（仅 `findById`/`findByRefundNo`/`findByIdempotencyKey`/`findByTransactionNo`/`findByOrderNo`）；`TimeoutScanner:54` 只扫 `PaymentStatus.PROCESSING`；refund 包**无 `@Scheduled`** | 🔴 **TXRF 停 `REQUESTED` 的重试被在途守卫短路且不可查询（C-18）**；🔴 **退款 `FAILED`/`UNKNOWN`/`PROCESSING` 无重试、无扫描、无告警（C-18 / C-19）** |
+| **5** | 重复 Callback 如何处理 | ✅ **正确** | `payment.succeeded` 重复 ⇒ `applyPayment` 命中 `status == target` ⇒ `changed=false` ⇒ 不记账、不重通知；order 侧 `order=PAID` 且同 `paymentNo` ⇒ `return`；surplus 重复 ⇒ 在途守卫回放 / 已达终态则被 `RefundPolicy` 拦为 `REJECTED`；`refund.result` 重复 ⇒ `refundOrder.complete` 返回 `false` ⇒ 吸收 | ⚪ 重复回调会**新建一条 `REJECTED` TXRF** 并误报 `payment.auto_refund_succeeded`（**C-21**） |
+| **6** | Refund 与 Ledger 如何保持最终一致 | ⚠️ **仅靠对账发现，无自动收敛** | 退款成功 ⇒ `RefundResultProcessor.postLedger:128-138`，幂等键 `REFUND:{PMRF}`（前缀由 `RefundFeignLedgerPostingGateway` 统一加，**G5 已修**）；失败 ⇒ 吞异常 + `refund.ledger_posting_failed` + ERROR，**不回滚事实、不重试**；T+1 `CertificateAuditor` → `MISSING_POSTING`（BLOCKER）⇒ 人工 `SUPPLEMENT` | ⚠️ 同 **C-09**（无 `pending_postings` 载体）；⚠️ `RefundResultProcessor.apply` 在 `RefundApplicationService.createRefund` 的 `@Transactional` 内调用 ⇒ 退款事务回滚而 ledger 已 post 时会产生**孤儿 posting**（窗口极小，属观察） |
+| **7** | 重复支付是否会造成重复记账 | ✅ **不会（净额正确），但有前提** | 设计上每张成功支付单独立记 `PAYMENT:{paymentNo}`（Feature 015 / C2 修复），故 PM-1、PM-2 各记一笔借记；surplus 退款成功记 `REFUND:{PMRF}` 贷记冲正 ⇒ **净额 = 1 笔订单金额**。`surplusRefund` 的 TXRF **不进订单/交易账本**（`refundsEffectivePayment == false`），故不重复累加 `refundedMinor` | 🔴 **前提是退款记账成功**：若 R5 发生（`refund.ledger_posting_failed`），账面上 `CUSTOMER_CASH` **双倍借记真实存在**，无自动补偿（C-09 / §10.3 R5）；🔴 同支付单**双路径记账**风险仍由 **C-01** 承担（最高优先级） |
+| **8** | 自动 Refund 是否有完整审计记录 | ⚠️ **发起侧完整，失败侧有缺口** | 已有：`order.surplus_refund_initiated`（`FINANCIAL_AUDIT`，含 `transactionNo` + `paymentNo` + `orderNo`）、`order.refund_order_created`、`order.refund_result_applied`；payment 侧 `refund.attempted` / `refund.succeeded` / `refund.failed` / `refund.unknown` / `refund.rejected` / `refund.duplicate`；指标 `order.surplus_payment`（带 `cause` 标签） | 🔴 **退款失败终态在 order 侧无审计**：`onRefundResult:257-262` 的 `return` **早于** `:313` 的 `auditLogger.audit("order.refund_result_applied")`；🔴 **R6 场景下审计永久丢失**（重放被吸收）；⚠️ `payment.auto_refund_succeeded` 指标口径错误（`REJECTED`/`FAILED` 也计数，`PaymentAutoRefundService:84`）；⚠️ 无「surplus 自动退款未完成」告警规则（**C-21**） |
+| **9** | Reconciliation 如何处理「支付成功后自动退款」的渠道账单 | ✅ **匹配逻辑正确，但事实维度不足** | 平台事实 = **全部 `Payment.status==SUCCEEDED`** + **全部 `Refund.status==SUCCEEDED`**（`PaymentFactsService.confirmedFacts` / `RefundFactsService.confirmedFacts`）；匹配键 = **`channelReference`**（非平台单号，`FeignPaymentFactsClient:39` / `FeignRefundFactsClient:38` 均取 `d.channelReference()`）。surplus 支付单**保留 `SUCCEEDED` 不回滚**（ADR-0054）⇒ 渠道账单上「一笔入账 + 一笔出账」两侧都能匹配，**不产生虚假差异** | 🔴 **事实无期间维度**：`confirmedFacts()` 无 `period` 入参、`PaymentFactResponse` / `RefundFactResponse` **无时间字段** ⇒ 无法按期间过滤（**C-20**）；🟡 `RefundFactsService.resolveChannelReference:47-59` 用 `findByPaymentNo(...).filter(TYPE_REFUND).filter(ref != null).findFirst()`，**无排序、无状态过滤** ⇒ 同一支付单有多个退款尝试时可能取到**失败尝试**的渠道引用（**C-22**）；⚠️ `sample.csv` 仅表头（0 行），周期 fixture（`2026-08-31.csv` / `2026-09-30.csv`）为**合成引用**（`CH-AUD-*` / `CH-RF-*`），与真实 `channelReference`（`alipay-<uuid>` 等）**无自动对齐机制** ⇒ 真实数据下全部事实会成 `PLATFORM_ONLY` |
+| **10** | Settlement 是否只结算最终有效资金事实 | ⚠️ **净额口径正确，归属维度错误** | `settlementSummary(period)` 返回 `batch.getMatches()`（`ReconciliationApplicationService:186-189`）；`createBatch` 取 `income = Σ PAYMENT 事实`、`refund = Σ REFUND 事实`、`net = income − refund + adjustment`（`SettlementApplicationService:116-133`、`SettlementBatch.compute:57-69`）。surplus 场景：`income = PM-1 + PM-2`、`refund = 1 笔 surplus 退款` ⇒ **`net` = 1 笔订单金额，正确**；`ConfirmedFactGate` 逐条校验类型/金额非负/币种，fail-closed | 🔴 **事实无 `merchantId`**：`ReconciliationSettlementFact` 仅 `(reference, type, amountMinor, currencyCode)`，`PlatformFact` 亦无商户 ⇒ `createBatch(merchantId, period)` 的 `income` 实际汇总**全平台**支付事实 ⇒ **跨商户串账结算**（**C-20**）；🔴 **无期间维度 ⇒ 同一事实可在多个期间重复结算**（`SettlementBatch` 幂等仅按 `(merchant, period)` / `idempotencyKey`，**C-20**）；⚠️ 负净额会计处理未定义（C-07） |
+
+**C-11 最终判定**：
+
+| 维度 | 判定 |
+|---|---|
+| 流程是否存在 | ✅ **存在**（v1.0 误判为缺失） |
+| 判定逻辑是否正确 | ✅ 正确（`Order.paymentNo` 为权威生效支付；首张成功者为准） |
+| 是否幂等 | ✅ 是（三层保障，其中 `RefundPolicy` 累计上限是最后防线） |
+| 是否污染生效支付账务口径 | ✅ 不污染（surplus 退单不累加 `refundedMinor`、不改订单状态、不终止履约） |
+| 对账 / 结算净额是否正确 | ✅ 正确（收入 − 退款 = 最终有效金额） |
+| **恢复路径是否完整** | ❌ **不完整**（点 4 / 6 / 7 的失败分支）⇒ **C-18 / C-19** |
+| **事实维度是否充分** | ❌ **不充分**（点 9 / 10 的期间与商户维度）⇒ **C-20** |
+| **是否需要重新设计** | ❌ **不需要**。**不新增「禁止多 Payment SUCCESS」、不新增「换渠道前关闭旧 Payment」** |
+| **是否需要人工决策** | **否**（本项本身）；下游 C-18~C-22 中仅「退款失败补偿策略」需人工确认口径 |
 
 ### C-12 🟠 `QueryStatusRequest` 传平台 `transactionId` 而非渠道交易号
 
@@ -927,16 +1011,91 @@ case "SUCCEEDED" -> {
 | g | 选路决策可查「当前规则」，**历史规则快照不可回溯** | `ConfiguredChannelRouter.preview()` |
 | h | 文档漂移 D-1~D-6（`stage-design §1.4` 已列） | `payment-service.md:52`（悬空 `§3.11`）、`:281`/`:302`（两个 `### 3.10`）、`adr/README.md:38`/`:128`（ADR-0075/0076 未登记）等 |
 
+---
+
+> **以下 C-18 ~ C-24 为 v1.1 在 C-11 专项验证过程中发现的真实缺陷。**
+> 它们**不是**「重复支付自动退款流程设计缺失」，而是该流程在**恢复路径**与**事实维度**上的实现缺口。
+
+### C-18 🟠 自动退款不可自愈：TXRF 停在 `REQUESTED` 的重试被在途守卫短路，且无扫描器/补偿入口
+
+- **问题**：`doCreateRefund` **先落 TXRF（`REQUESTED`）再调渠道**（`TransactionApplicationService:212` → `:217`）。若渠道退款调用失败（RPC 抛异常 / 5xx / 网络不可达），异常上抛 → MQ 重试；但**重试时 `doCreateRefund:189-198` 的在途守卫命中「同 `orderNo` + 同 `paymentNo` + 同金额 + `REQUESTED`」⇒ 直接返回原 TXRF，不再调渠道**。同时 `TransactionRefundRepository` **无按状态查询**，order-service 除 `OrderTimeoutScheduler` 外**无任何退款扫描器** ⇒ 该 TXRF 永久停在非终态。
+- **证据**：`TransactionApplicationService.java:189-198`（在途守卫）、`:200-231`（先落库后调渠道）、`:257-262`（非成功终态仅日志+指标）；`TransactionRefundTest.inFlightRefundIsReplayedNotDuplicated:104-114`（断言 `paymentGateway.refundRequests).hasSize(1)` —— **该测试把「不重复调渠道」钉死为预期行为，恰好固化了这一缺陷**）；`TransactionRefundRepository.java`（仅 5 个查询方法，无状态维度）；`payment-service` refund 包**无 `@Scheduled`**。
+- **影响**：🔴 **重复支付的钱可能永久不退**（用户已实际被扣款两次，只退一次）。且这是**静默**的：若失败发生在 **order→payment 的网络 / RPC 边界**（payment 未收到请求），则 `payment.auto_refund_failed` 指标**不会递增**（该指标只在 `PaymentAutoRefundService` 内部重试耗尽时递增）；唯一痕迹是 MQ 重试日志与 DLQ。TXRF 亦**永久停在非终态**，无终态可查。
+- **候选方案**：A 在途守卫**区分「重放」与「重试」**——仅当 TXRF 已成功推进过（存在 `paymentRefundNo` 或 `PROCESSING`）才回放；`REQUESTED` 且无 `paymentRefundNo` 时**重放渠道调用**；B 新增 order 侧退款补偿扫描器（需补 `findByStatusIn(...)` 查询 + 超时阈值 + 指标告警）；C 把 TXRF 落库推迟到渠道受理之后（**破坏「先落库后调用」的幂等前提，不推荐**）。
+- **推荐**：**A 立即**（改动小、直接消除「重试被吞」）；**B 作为兜底**（覆盖 A 之外的场景，如进程崩溃、DLQ 无人工处置）。
+- **是否需要人工决策**：**A 否**（缺陷修复）；**B 涉及新增扫描任务与告警，需确认阈值口径**。
+
+### C-19 🟠 退款终态后置动作不可自愈 + refund 无 UNKNOWN 收敛出口
+
+- **问题（两处同源：终态先落库、后置动作无载体）**：
+  - **19-A**：`onRefundResult` 先 `refundOrder.complete(terminal)` + `save`（`:250-252`），**之后**才做 `transaction.accumulateRefund` + `order.applyRefund`（`:274-279`）。若后者失败，重投消息时 `complete` 返回 `false` ⇒ `:253-255` 直接 `return` ⇒ **`refunded_minor` 永久少计**。同一窗口也使 `:313` 的审计永久丢失。
+  - **19-B**：退款受理在途（`PROCESSING`）或 `UNKNOWN` **无任何自动收敛出口**——`TimeoutScanner` 只扫 `PaymentStatus.PROCESSING`（`TimeoutScanner.java:54`），refund 包无 `@Scheduled`、无主动查询服务。仅渠道回调或人工 `resolve` 可推进。
+- **证据**：`TransactionApplicationService.java:250-256`、`:257-262`、`:274-279`、`:313`；`RefundResultProcessor.java:87-125`（`changed=false` 即吸收，不重试后置）；`TimeoutScanner.java:54`；`RefundStatus`（`PROCESSING` / `UNKNOWN` 均为非终态，`UNKNOWN` javadoc 自称「待收敛状态」但无收敛驱动）。
+- **影响**：🔴 **生效支付单退款**场景下 `orders.refunded_minor` / `transactions.refunded_minor` 永久少计（**且因 `refundableMinor() = paidMinor − refundedMinor`，会导致后续可退款额度虚高 ⇒ 潜在超退**）；🔴 退款 `UNKNOWN` 永久滞留 ⇒ 渠道对账 `PLATFORM_ONLY` 长期存在、无法自动收口。⚠️ surplus 退单不累加，故金额无影响，但仍丢审计。
+- **候选方案**：A `onRefundResult` 加 `@Transactional` 使「终态 + 累加 + 审计」同事务（**注意**：MQ 消费与 Feign 通知不得置于事务内）；B 拆分幂等粒度——以「是否已累加」而非「TXRF 是否首次终态」作为守卫（需落一个 `applied` 标记或改用 `refunded_minor` 对账）；C 新增 refund 侧超时扫描/主动查询（对称 `TimeoutScanner` + `ChannelQueryScheduler`）。
+- **推荐**：**A + C**（A 消除窗口、C 补收敛出口）；**B 作为 A 的加固**。
+- **是否需要人工决策**：**A / C 否**（缺陷修复 + 对称补齐）；**B 若引入新列需裁决**。
+
+### C-20 🟠 对账 / 结算事实链缺「期间」与「商户」两个维度 ⇒ 跨期重复结算 + 跨商户串账
+
+- **问题（同一根因：事实 DTO 维度不足）**：
+  - **20-A（期间）**：`PaymentFactsService.confirmedFacts()` / `RefundFactsService.confirmedFacts()` **无 `period` 入参**，返回**全量** `SUCCEEDED` 事实；`PaymentFactResponse` / `RefundFactResponse` **无任何时间字段** ⇒ 平台侧**无法按期间过滤**。而 `runReconciliation(period)` 按周期建批、`SettlementBatch` 幂等仅按 `(merchant, period)` ⇒ **同一事实可在多个期间各结算一次**。
+  - **20-B（商户）**：`PlatformFact(reference, type, amountMinor, currencyCode, status)` 与 `ReconciliationSettlementFact(reference, type, amountMinor, currencyCode)` **均无 `merchantId`**；`ConfirmedFactGate` 也不校验归属。而 `createBatch(merchantId, period, ...)` 计算 `income` 时汇总的是**全平台** PAYMENT 事实 ⇒ **A 商户的结算批次会包含 B 商户的收入**。
+- **证据**：`PaymentFactsService.java:28-32`、`RefundFactsService.java:35-39`；`ReconciliationFactsController.java:21-24`（`GET /internal/payments/confirmed-facts` 无参数）；`PaymentFactResponse.java`、`RefundFactResponse.java`、`PlatformFact.java`、`ReconciliationSettlementFact.java`（四个 DTO 均无 `period`/`merchantId`）；`SettlementApplicationService.java:116-123`（`summary.facts()` 全量求和）、`:138-145`（`addItem` 与 `recordSource(summary.facts().size(), period)`）；`ConfirmedFactGate.java:32-51`。
+- **影响**：🔴 **跨商户串账**（资金归属错误，且 `factCount` 与明细同样错误，事后难核）；🔴 **跨期重复结算**（同一笔收入可能被打款多次）；⚠️ 当前被「对账 fixture 与真实渠道引用不同源 ⇒ 大量 `PLATFORM_ONLY` ⇒ `unresolvedDifferenceCount > 0` ⇒ `SettlementEligibility` 拒绝建批」**偶然掩盖**，一旦 R1（真实账单）+ R2（商户维度）落地就会暴露。
+- **候选方案**：A 事实 DTO 补 `merchantId` + `occurredAt`（或 `period`），`confirmed-facts` 端点加 `period` 入参并按期间过滤；`PlatformFact` / `ReconciliationSettlementFact` 同步补 `merchantId`，匹配键改 `(merchantId, reference)`，`ConfirmedFactGate` 增商户一致性校验；B 仅在 settlement 侧按 `orderNo` 回查商户（**引入跨服务回查与 N+1，不推荐**）。
+- **推荐**：**A**（即 `stage-design §5.2 R2` / 本审查原 M4 的完整化）。**必须与 032 的 R1/R2 同批实施**，且**先于 R4 差异处置策略化**（否则 R4 会静默漏结算，见 C-13）。
+- **是否需要人工决策**：**是**（跨服务 DTO 变更 = API Breaking，即 §13 的 H11）。
+
+### C-21 🟡 自动退款的可观测与审计缺口
+
+- **问题（三处）**：① `PaymentAutoRefundService:84` 在 `createRefund` 返回后**无条件**递增 `payment.auto_refund_succeeded`——即使退款单是 `REJECTED`（`RefundPolicy` 拦截）或 `FAILED`；② `onRefundResult:257-262` 的非成功终态**早退**，导致 `:313` 的 `order.refund_result_applied` 资金审计**不写**；③ 无「surplus 自动退款未完成 / 长期停留 `REQUESTED`」的告警规则（现仅 `order.refund_failed` 计数）。
+- **证据**：`PaymentAutoRefundService.java:77-94`（指标在 `createRefund` 之后、`responseStatus` 分支之前）、`RefundResultProcessor.java:117-123`（仅 `SUCCEEDED`/`FAILED` 才 `notifyOrder`，`REJECTED` 路径 `RefundApplicationService:78-101` 早退**不通知** order）；`TransactionApplicationService.java:257-262` vs `:313`。
+- **影响**：指标失真会掩盖真实失败率（`REJECTED`/`FAILED` 被计入「成功」）；退款失败终态**缺少 `FINANCIAL_AUDIT` 留痕**，与 Constitution Observability「资金动作 MUST 有审计」不符；C-18/C-19 的静默缺口**没有告警兜底**。
+- **候选方案**：A 指标按 `refund.getStatus()` 分标签（`payment.auto_refund_completed{status=...}`），成功/失败分开；B `onRefundResult` 在**所有**终态分支写审计（把 `auditLogger.audit` 提到早退之前）；C 补 2 条告警规则（`order.refund_failed` 增长、TXRF 停留 `REQUESTED` 超时）。
+- **推荐**：**A + B 立即**（成本极低）；**C 随 035 补齐**。
+- **是否需要人工决策**：否（观测与审计修正）。
+
+### C-22 🟡 `RefundFactsService` 渠道引用取首：无排序、无状态过滤
+
+- **问题**：`resolveChannelReference` 用 `attemptRepository.findByPaymentNo(refund.getPaymentNo())` → `.filter(TYPE_REFUND)` → `.filter(channelReference != null)` → `.findFirst()`。`MybatisPaymentAttemptRepository.findByPaymentNo` 的查询**无 `ORDER BY`**，且过滤条件**不排除失败尝试** ⇒ 同一支付单存在多个退款尝试（多 TXRF、或先失败后成功）时，可能取到**失败尝试**的渠道退款流水号。
+- **证据**：`RefundFactsService.java:47-59`；`MybatisPaymentAttemptRepository.java:34-41`（`lambdaQuery().eq(paymentNo)` 无排序）；`03-payment-schema.sql:55-57`（`KEY idx_attempts_payment_no` / `idx_attempts_payment_type`，非唯一）；`RefundApplicationService`（同一 `paymentNo` 可对应多个 TXRF/PMRF）。
+- **影响**：对账平台事实的 `reference` 指向错误渠道流水 ⇒ 产生**虚假 `PLATFORM_ONLY` + `CHANNEL_ONLY`**，或更糟——**与错误账单行匹配成功**（金额相同时静默掩盖真实差异）。
+- **候选方案**：A 查询加 `ORDER BY id DESC` 且优先取与 `refund` 对应的尝试（用 `refundNo` / `transactionRefundNo` 精确关联，而非仅靠 `paymentNo`）；B 在 `payment_attempts` 加 `refund_no` 关联列（**schema 变更**）。
+- **推荐**：**A**（若 `payment_attempts` 已能表达归属）；否则 **B 单独立项**。
+- **是否需要人工决策**：**A 否**；**B 是**（schema 变更）。
+
+### C-23 🟠 订单取消后迟到成功：渠道已扣款、平台不退款（surplus 机制覆盖不到）
+
+- **问题**：订单取消时 `PaymentMqHandlers.onOrderCancelled` → `Payment.closeByOrderCancelled()` 把非 `SUCCEEDED` 支付置 `CLOSED`。此后渠道迟到 `SUCCESS` 回调到达 ⇒ `PaymentResultApplier` 终态吸收 ⇒ `changed=false` ⇒ **不记账、且不发 `payment.succeeded`**。因通知未发出，order 侧 `TransactionApplicationService.onPaymentSucceeded` **从未被调用**，`surplusRefund` 因此**不可能触发** ⇒ **钱收下了、平台无任何追回动作**。
+- **证据**：`Payment.java`（`closeByOrderCancelled`，注释仅覆盖「已 `SUCCEEDED` 不关闭」，未覆盖「关闭后渠道成功」）；`PaymentResultProcessor.java:147`（`if (changed && result.status() == SUCCESS)` 才通知 ⇒ 被吸收时不通知）；`PaymentMqHandlers.onOrderCancelled`（`PaymentMqHandlersTest.onOrderCancelledClosesPending` / `...DoesNotCloseSucceeded` / `...IsIdempotent`）；`TransactionApplicationService.java:93-116`（surplus 判定以「收到 `payment.succeeded`」为前提）。
+- **影响**：🔴 真实资金差异（用户被扣款、平台不退款）。对账可发现（`payment_attempts.status=SUCCEEDED` vs `payments.status=CLOSED`，或渠道账单 `CHANNEL_ONLY`），但**无自动追回**。与 C-18 的差别：C-18 是「退款发起了但没执行」，C-23 是「退款根本没发起」。
+- **候选方案**：A 支付侧在「终态吸收但渠道结果为成功」时**仍发出一个显式信号**（新增 `payment.succeeded.after.closed` 主题，或复用 `payment.succeeded` 并允许 order 侧对 `CLOSED`/`FAILED` 订单走 `surplusRefund` 的 `ORDER_NOT_PAYABLE` 分支——**该分支已存在且正是为此设计**）；B `closeByOrderCancelled` 改为「不关闭、仅标记 `cancel_requested`」，保留回调驱动能力（**行为变更，影响面大**）；C 新增对账驱动的「渠道成功但平台非成功」专项差异 + 人工追回。
+- **推荐**：**A + C**。A 的落点很轻——`PaymentResultProcessor` 已构造 `PaymentSucceededRequest`，只需在 `changed=false && result==SUCCESS && payment 非 SUCCEEDED` 时补发一次；order 侧 `:107-112` 的 `ORDER_NOT_PAYABLE` 分支**无需改动**。
+- **是否需要人工决策**：**是**（新增/复用跨服务通知语义，属行为变更）。
+
+### C-24 ⚪ `Transaction.paymentNo` 是「写而不读」的影权威
+
+- **问题**：`Transaction.paymentNo` 由 `recordEffectivePayment`（首值写入）与 `succeed()` 一同维护，javadoc 自称「生效支付单」。但**全仓无任何业务读取点**——唯一引用是 `MybatisTransactionRepository.java:70` 的持久化映射。真正的权威是 `Order.paymentNo`（`RefundOrder.refundsEffectivePayment(order)` 与所有 surplus 判定都读它）。
+- **证据**：`Transaction.java`（`paymentNo` 字段 + `recordEffectivePayment` + `getPaymentNo()`）；`grep -rn "transaction.getPaymentNo()"` ⇒ 仅 `MybatisTransactionRepository.java:70`。
+- **影响**：同一事实存在两个字段，且**其中一个无人使用却带权威语义命名** ⇒ 后续维护者可能误以为改 `Transaction.paymentNo` 即可改变生效支付单判定（**静默失效**）。
+- **候选方案**：A 删除 `Transaction.paymentNo`（**需 schema 变更 + 迁移**）；B 保留但在 javadoc 显式标注「**仅供持久化留痕，业务判定一律读 `Order.paymentNo`**」，并在 L0 文档写明。
+- **推荐**：**B 立即**（零成本、消除误读）；**A 随 031 的账务 schema 变更一并评估**。
+- **是否需要人工决策**：**A 是**（schema 变更）；**B 否**。
+
 ### 11.1 冲突汇总
 
 | 严重度 | 数量 | 编号 |
 |---|---|---|
 | 🔴 阻断 | 1 | C-01 |
-| 🟠 高 | 12 | C-02, C-03, C-04, C-05, C-06, C-07, C-09, C-10, C-11, C-12, C-13, C-14, C-15 |
-| 🟡 中 | 3 | C-08, C-16 |
-| ⚪ 观察 | 8 | C-17 a~h |
+| 🟠 高 | 16 | C-02, C-03, C-04, C-05, C-06, C-07, C-09, C-10, C-12, C-13, C-14, C-15, **C-18, C-19, C-20, C-23** |
+| 🟡 中 | 4 | C-08, C-16, **C-21, C-22** |
+| ⚪ 观察 / 验证项 | 10 | **C-11**（v1.1 降级为验证通过）, **C-24**, C-17 a~h |
 
-**需人工决策的冲突（6 项）**：C-02(B)、C-04、C-07、C-08、C-10(B/C)、C-11(B)、C-14、C-15。
+> **计数修正（v1.1）**：v1.0 的 🟠 行标「12」但实列 13 项（漏计 C-15 或 C-02），🟡 行标「3」但实列 2 项（C-08、C-16）。本表已按实际条目重算。
+
+**需人工决策的冲突（13 项）**：C-02(B)、C-04、C-07、C-08、C-10(B/C)、C-14、C-15、**C-18(B)、C-19(B)、C-20、C-22(B)、C-23、C-24(A)**。
+**v1.1 撤销的人工决策项**：原 **C-11(B)**（「换渠道前先关闭旧 Payment」是否纳入编排）——随 C-11 降级一并撤销。
 
 ---
 
@@ -955,6 +1114,7 @@ case "SUCCEEDED" -> {
 | **B4** | `converge` 的 UNKNOWN 分支补 `backfillChannelReference` | C-10①，成本极低、影响渠道对账键 | 030 | ❌ |
 | **B5** | `QueryStatusRequest` / `RefundRequest` 补渠道交易号入参 | C-12，真实渠道查询契约不足 | 030（ADR-0075 契约改造） | ❌ |
 | **B6** | 文档收口：D-1~D-6 六项漂移 + ADR-0075/0076 登记进 `adr/README.md` 两张表 + traceability | 漂移会让后续 AI/人误读现状 | 第 0 步（docs-only，可直推 master） | ❌ |
+| **B7** | **`doCreateRefund` 在途守卫区分「重放」与「重试」**：`REQUESTED` 且无 `paymentRefundNo` 时重放渠道调用，而非直接返回（C-18 方案 A） | **C-18：静默资金损失**——重复支付的钱可能永久不退，且 `payment.auto_refund_failed` 指标不递增、无告警兜底 | 030-P（**涉及服务需由 payment-service 扩为 order-service + payment-service**） | ❌ |
 
 ### 12.2 High（本阶段内应完成）
 
@@ -965,10 +1125,14 @@ case "SUCCEEDED" -> {
 | **H3** | 负净额结算的会计处理（推荐反向分录） | C-07；否则 `MERCHANT_PAYABLE` 残留 + `CROSS_LEDGER_MISMATCH` 永不平 | 031 或 036 | ⚠️ 资金语义 |
 | **H4** | 结算事实口径改造（`matches` → 「全部已确认事实 − 已处置差异净影响」）**先于** R4 | C-13；否则 R4 会静默漏结算 | 032（前置） | ❌ |
 | **H5** | `UNKNOWN` 分级升级（`payment.unknown_age` 分桶 → 告警 → 人工队列），并**显式否决**自动终态化 | C-06 | 034 | ❌ |
-| **H6** | 渠道事实 / 平台事实不一致口径写入 L0 + `business-standards.md`；对账侧新增「同 Transaction 多笔成功」检测 | C-11（A+C） | 032 / 034 | ❌（B 方案才需要） |
+| **H6** | **C-11 验证结论落文档**：在 L0 `systems/order-service.md` + `business-standards.md` 写明「同一 Transaction 允许多个 Payment；第二笔成功由 Transaction 层判定 surplus 并自动原路退款；**禁止新增『禁止多 Payment SUCCESS』或『换渠道前关闭旧 Payment』**」；同步 C-24(B) `Transaction.paymentNo` 影权威 javadoc 标注；C-21(A+B) 指标分状态标签 + 退款失败终态补审计 | **C-11（v1.1 降级为验证项）+ C-24(B) + C-21(A/B)**；缺此文档会让后续 AI/人重复 v1.0 的误判，并可能擅自「修掉」正确行为 | 030-P（docs-only 部分可入第 0 步） | ❌ |
 | **H7** | 支付宝 notify 端点纳入「密钥 / 完整报文不入日志」的显式约束与测试 | `stage-design §7.2 O3`；Constitution §Security.4 | 035 | ❌ |
 | **H8** | Testcontainers-MySQL 渐进落地（先覆盖 ledger 幂等 / settlement 批次唯一 / payment 幂等键三类并发场景） | `stage-design §8.2 T1`；H2 覆盖不到真库并发 | 033 | ⚠️ 测试载体变更 |
 | **H9** | schema 迁移可重放（`01-order-schema.sql`、`016-refund-channel-attempt.sql` 两处方言问题） | `stage-design §8.2 T2`；阻塞 reset 与 CI | 033 | ❌ |
+| **H10** | **退款终态后置动作事务化**（`onRefundResult` 的「终态 + 累加 + 审计」同事务，MQ/Feign 移出事务）+ **refund 侧超时扫描 / 主动查询**（对称 `TimeoutScanner` + `ChannelQueryScheduler`） | **C-19**：`refunded_minor` 永久少计 ⇒ `refundableMinor()` 虚高 ⇒ 潜在超退；退款 `UNKNOWN` 无出口 | 034（可与 C-06 的 UNKNOWN 分级同批） | ⚠️ B 方案若引入新列需裁决 |
+| **H11** | **对账/结算事实链补 `merchantId` + 期间维度**：四个 DTO 补字段、`confirmed-facts` 加 `period` 入参并按期间过滤、匹配键改 `(merchantId, reference)`、`ConfirmedFactGate` 增商户校验 | **C-20**：跨商户串账 + 跨期重复结算（资金归属与重复打款） | 032（**必须与 R1/R2 同批，且先于 R4**） | ⚠️ 跨服务 DTO 变更（= §13 H11） |
+| **H12** | **订单取消后迟到成功的追回路径**：`PaymentResultProcessor` 在「终态吸收但渠道成功」时补发信号，驱动 order 侧既有 `ORDER_NOT_PAYABLE` surplus 分支 | **C-23**：钱收了不退（C-18 是「发起了没执行」，C-23 是「根本没发起」） | 034 | ⚠️ 跨服务通知语义变更 |
+| **H13** | **退款渠道引用精确关联**：`RefundFactsService` 按 `refundNo`/`transactionRefundNo` 关联尝试行，替代 `paymentNo + findFirst()` | **C-22**：对账 `reference` 可能指向失败尝试 ⇒ 虚假差异或静默错配 | 032 | ❌（若需加列则为 ⚠️） |
 
 ### 12.3 Medium（可排后）
 
@@ -977,7 +1141,7 @@ case "SUCCEEDED" -> {
 | **M1** | `SETTLEMENT` posting `sourceId` 改用 `batchNo`（含存量键兼容策略） | C-08 | 032 |
 | **M2** | 差异处置策略化（R4）+ 自动处置留 `audit_adjustments` 痕迹 | `stage-design §5.2 R4` | 032 |
 | **M3** | 真实账单来源接入 + fail fast（禁静默回退 `sample.csv`） | `stage-design §5.2 R1` | 032 |
-| **M4** | 对账事实补 `merchantId`（N1） | C-02 / `stage-design §5.2 R2` | 032 |
+| **M4** | ~~对账事实补 `merchantId`（N1）~~ **已升级为 H11**（原描述低估了严重度：不只是「补字段」，而是**跨商户串账结算 + 跨期重复结算**的资金正确性缺陷） | C-20 | ~~032~~ → **H11** |
 | **M5** | Resilience4j 去留裁决（推荐移除） | C-14 | 034 |
 | **M6** | 退款幂等键治理（B3） | C-15 | 034 |
 | **M7** | 后置 RPC 失败台账（复用 H2 模式） | `stage-design §6.2 B4` | 034 |
@@ -992,6 +1156,8 @@ case "SUCCEEDED" -> {
 ## 13. Human Decisions Required
 
 > 按 Constitution §Governance「人类决策边界」整理。**AI MUST NOT 自行执行**以下任一项。
+>
+> **编号说明**：本节的 `H1~H21` 与 §12 的 `H1~H13` / `B1~B7` / `M1~M12` 是**三个独立命名空间**（本节 = 人类决策项；§12.1 = Blocker 变更项；§12.2 = High 变更项；§12.3 = Medium 变更项）。跨节引用时一律带节号，例如「§13 H11」≠「§12 H11」。
 
 | # | 决策项 | 边界类型 | 出处 | 与本审查的关系 |
 |---|---|---|---|---|
@@ -1002,18 +1168,25 @@ case "SUCCEEDED" -> {
 | **H5** | **负净额结算的会计语义**（平台向商户追偿是否成立） | 资金语义 | **本轮新增（C-07）** | 决定 H3 的方案 |
 | **H6** | `SETTLEMENT` posting `sourceId` 改 `batchNo` 的**存量键兼容策略** | 数据/规范口径 | **本轮新增（C-08）** | 决定 M1 |
 | **H7** | `PaymentAttemptStatus.ACCEPTED` 去留（保留并在 spec 030 启用 / 删除） | 状态机变更 | **本轮新增（C-10②）** | 决定 C-10 的 B/C |
-| **H8** | 「换渠道前先关闭旧 Payment」是否纳入编排（**行为变更**） | 资金路径行为变更 | **本轮新增（C-11-B）** | C-11 的 B 方案 |
+| ~~**H8**~~ | ~~「换渠道前先关闭旧 Payment」是否纳入编排（行为变更）~~ | — | **v1.1 撤销**（C-11-B 判定作废） | 已撤销：surplus 自动退款已覆盖该场景，**不要求关闭旧 Payment** |
 | **H9** | `Payment : PaymentAttempt` 是否上 Schema 级唯一约束（可能需拆表） | 数据库结构变更 | **本轮新增（C-02-B / C-03-B）** | C-02 的 B 方案 |
 | **H10** | 退款幂等键口径变更（B3，行为变更） | 资金路径行为变更 | `stage-design §9.3 H4` | 决定 M6 |
-| **H11** | 对账事实补 `merchantId`（跨服务 DTO 变更） | API Breaking Change | `stage-design §9.3 H5` | 决定 M4 |
+| **H11** | **对账/结算事实补 `merchantId` + 期间维度**（跨服务 DTO 变更 + `confirmed-facts` 加 `period` 入参 + 匹配键改 `(merchantId, reference)`） | API Breaking Change | `stage-design §9.3 H5`；**v1.1 扩充（C-20）** | 决定 M4 / H11 |
 | **H12** | ledger 新增余额表 / `period` 列 | 新增关键资金表 | `stage-design §9.3 H6` | 决定 H2 / 031 |
 | **H13** | Resilience4j 去留 | 架构取舍 | backlog #5；`stage-design §9.3 H7` | 决定 M5 |
 | **H14** | SLO 目标值确认 | 非功能目标 | `stage-design §9.3 H8` | 决定 M8 |
 | **H15** | 阶段（stage-05）命名与 Feature 编号分配 | 计划权威 | `stage-design §9.3 H9` | 决定本文档 §14 的矩阵生效 |
 | **H16** | 是否放宽「不引入 Testcontainers」现状（Docker 与 CI 一致性） | 测试载体变更 | Constitution §Engineering.3；`stage-design §9.3 H10` | 决定 H8 |
+| **H17** | **「自动退款未完成」的补偿策略**：仅修 C-18 方案 A（守卫区分重放/重试）/ 追加 order 侧扫描器 / 仅告警+人工 | 资金路径行为口径 | **v1.1 新增（C-18）** | 决定 B7 与 C-18(B) |
+| **H18** | `onRefundResult` 的幂等粒度是否引入 `applied` 标记列（C-19 方案 B） | 数据库结构变更 | **v1.1 新增（C-19）** | 决定 H10 的加固方案 |
+| **H19** | `payment_attempts` 是否加 `refund_no` 关联列以精确关联退款尝试 | 数据库结构变更 | **v1.1 新增（C-22）** | 决定 H13 的方案选择 |
+| **H20** | **订单取消后迟到成功**：是否新增/复用跨服务通知语义以驱动追回（行为变更） | 跨服务通知语义 | **v1.1 新增（C-23）** | 决定 H12 |
+| **H21** | 是否删除 `Transaction.paymentNo`（影权威字段，需 schema 变更） | 数据库结构变更 | **v1.1 新增（C-24）** | 决定 C-24 的 A 方案 |
 
 **最小裁决集（进入实现前必须拿到结论的 6 项）**：**H1、H2、H3、H4、H15、H16**。
 其余可在对应 Feature 立项时再裁决。
+
+> **v1.1 补充建议**：**H17 应提级进最小裁决集**（成为 7 项）——C-18 是**静默资金损失**（重复支付的钱可能永久不退且无告警），其方案选择直接决定 B7 的实现形态，不宜推迟到 034 立项时再定。
 
 ---
 
@@ -1028,9 +1201,11 @@ case "SUCCEEDED" -> {
 | 方向（渠道纵深 / 账务可审计 / 工程欠账） | ✅ **正确**，与本轮代码走查结论一致 |
 | 现状评估（§1） | ✅ 基本准确，**3 处需修正**（§1.3 A-1/A-2/A-3） |
 | 目标态（§2~§8） | ✅ 方向正确，**2 处需补前置依赖**（R4 依赖结算口径改造 = C-13；B2 需显式否决自动终态化 = C-06） |
-| Feature 拆分（§9.2） | ⚠️ **顺序需调整**——须在 031 之前插入「030 前置收口」（本文 §12.1 的 B1~B6） |
-| 人类决策清单（§9.3） | ✅ 准确，**需补 5 项**（H4~H8） |
+| Feature 拆分（§9.2） | ⚠️ **顺序需调整**——须在 031 之前插入「030 前置收口」（本文 §12.1 的 B1~B7） |
+| 人类决策清单（§9.3） | ✅ 准确，**需补 5 项**（H4~H8）；**v1.1 再补 5 项**（H17~H21，其中 H17 建议提级进最小裁决集） |
 | 风险总表（§9.4） | ✅ 准确 |
+
+> **v1.1 新增结论**：`stage-design.md` **全文未提及「重复支付 / surplus / 渠道切换双成功」**（已 grep 核实，0 命中），既未列为待建能力、也未记为既有能力——**属遗漏**。本轮补记：**该能力已存在**（`TransactionApplicationService.surplusRefund`），故 `stage-design` **不需要**新增相关条目；若后续任何文档把「重复支付处理」列为待建 Feature，**须删除该条目**。本轮对 C-11 只做验证（H6）与恢复路径加固（B7 / H10 / H12）。
 
 ### 14.2 建议的执行顺序（4 个门）
 
@@ -1038,14 +1213,16 @@ case "SUCCEEDED" -> {
 门 0 ── 文档收口（B6）+ 最小裁决集（H1/H2/H3/H4/H15/H16）
           │  docs-only，可直推 master；不依赖任何裁决
           ▼
-门 1 ── 030 前置收口（B1~B5）
-          │  纯缺陷修复 + 契约补参；B1/B4 零 schema 变更，可立即做
-          │  ⚠️ B2/B3 依赖 H4 裁决
+门 1 ── 030 前置收口（B1~B7）
+          │  纯缺陷修复 + 契约补参；B1/B4/B7 零 schema 变更，可立即做
+          │  ⚠️ B2/B3 依赖 H4 裁决；B7 建议先取 H17 口径
           ▼
 门 2 ── Feature 030 实现（统一契约 + 类型化凭证 + 染色 + 模态落库 + 支付宝沙箱 + notify 端点）
           │  依赖门 1 完成 + ADR-0075/0076 转 Accepted
           ▼
 门 3 ── 031~035（账务纵深 / 对账纵深 / 测试基础设施 / 可靠性加固 / 可观测）
+          │  ⚠️ v1.1：032 的 H11（事实补 merchantId + period）必须与 R1/R2 同批且先于 R4；
+          │          034 增加 H10（退款后置事务化 + refund 超时收敛）与 H12（取消后迟到成功追回）
 ```
 
 **关键理由**：
@@ -1053,13 +1230,14 @@ case "SUCCEEDED" -> {
 2. **B4 成本极低但影响渠道对账键**——030 引入真实渠道后，异步受理的 `channel_reference` 是渠道对账的主键，不能等到 031 再补。
 3. **031（ledger 纵深）必须在 030 之后**——030 会新增 `channel_mode` 列与 notify 端点，账务侧需要先看到「真实的、有模态的渠道事实」，才知道余额/期间视图要承载什么维度。
 4. **033（测试基础设施）应与 031 并行**——031/032 会新增真库唯一约束与并发路径，H2 覆盖不到；先建 Testcontainers 基础设施能避免「写完再补测试」的返工。
+5. **B7 必须在 030 之前（v1.1 新增）**——C-18 是**静默资金损失**：重复支付的钱可能永久不退，且**不产生任何告警**。030 会改造渠道契约与退款执行链路，若先做 030，同一段 `doCreateRefund` / `RefundApplicationService` 会被改两次，且**存在把「重试被在途守卫吞掉」的语义带进新代码的风险**。
 
 ### 14.3 本阶段「不做」的明确清单（防止范围蔓延）
 
 - ❌ 真实出款 / 银行对接 / 多币种清分 / 税费分账（`stage-design §5.2 R3` 已明确）。
 - ❌ K8s / Service Mesh / API 网关 / 新中间件 / 分库分表 / CQRS / Event Sourcing（`stage-design §2.4`）。
 - ❌ 任何「超时即失败」的自动终态化（违反 Constitution §V.7）。
-- ❌ 为「渠道切换造成的双成功」新增自动退款编排（属行为变更，须先裁决 H8）。
+- ❌ **为「渠道切换造成的双成功」新增任何自动退款编排** —— **该能力已存在**（`TransactionApplicationService.surplusRefund`），v1.1 已判定 **C-11 验证通过**。**明确禁止**：新增「禁止多个 Payment SUCCESS」的约束、新增「换渠道前先关闭旧 Payment」的编排规则（**v1.0 的方案 B 已撤销**）。本轮对 C-11 只做**验证与文档化**（H6），不做行为变更。
 - ❌ 把 `stage-design` 的 `【目标】` 项写入 L0 文档（会造成虚假合规）。
 
 ---
@@ -1079,7 +1257,7 @@ case "SUCCEEDED" -> {
 
 | Feature | 前置依赖 | 核心目标 | 涉及服务 | 涉及数据库 | 风险 | 验证方式 |
 |---|---|---|---|---|---|---|
-| **030-P · 一致性收口** | 门 0 完成；H4 裁决（B2 语义） | B1 统一账本幂等键口径（两调用点 + 两条测试）；B2 回调金额与渠道流水号校验（两条路径同口径）；B4 `converge` UNKNOWN 分支回填 `channelReference`；C-17 a/b/d/e 异味清理 | payment-service | 无 schema 变更 | ① 改幂等键可能影响存量 posting 的查询口径；② 校验收紧可能拒绝掉当前被接受的合法回调（须先用 E2E 回归） | ① 单测断言同步路径与回调路径产生**同一** `PAYMENT:{paymentNo}` 键；② 伪造金额/串号回调被拒且原状态不变；③ 异步受理后 `channel_reference` 非空；④ 既有 `mvnw clean verify` 零回归 |
+| **030-P · 一致性收口** | 门 0 完成；H4 裁决（B2 语义）；**H17 口径（B7 方案，建议提级）** | B1 统一账本幂等键口径（两调用点 + 两条测试）；B2 回调金额与渠道流水号校验（两条路径同口径）；B4 `converge` UNKNOWN 分支回填 `channelReference`；**B7 `doCreateRefund` 在途守卫区分「重放 / 重试」**；**H6 C-11 验证结论落 L0 + `business-standards.md` + C-24(B) 影权威标注 + C-21(A/B) 指标与审计修正**；C-17 a/b/d/e 异味清理 | payment-service + **order-service**（v1.1 扩充） | 无 schema 变更 | ① 改幂等键可能影响存量 posting 的查询口径；② 校验收紧可能拒绝掉当前被接受的合法回调（须先用 E2E 回归）；③ **B7 改变 `doCreateRefund` 的短路语义，须确认不会引入重复退款**（`RefundPolicy` 累计上限是最后防线，须同时补「同 TXRF 重试只发一次渠道请求」的测试） | ① 单测断言同步路径与回调路径产生**同一** `PAYMENT:{paymentNo}` 键；② 伪造金额/串号回调被拒且原状态不变；③ 异步受理后 `channel_reference` 非空；④ **`doCreateRefund` 在 TXRF=`REQUESTED` 且渠道调用失败后重试，渠道请求次数 = 2（首次 + 重试），而非 1**；⑤ **退款失败终态在 order 侧有 `FINANCIAL_AUDIT` 记录**；⑥ `payment.auto_refund_*` 指标按 `status` 标签分离，`REJECTED` 不计入成功；⑦ 既有 `mvnw clean verify` 零回归 |
 
 ### 主 Feature 序列
 
@@ -1087,9 +1265,9 @@ case "SUCCEEDED" -> {
 |---|---|---|---|---|---|---|
 | **030 · channel-contract-dye-sandbox** | 门 0；**030-P**；ADR-0075/0076 → **Accepted**（H1）；H2 / H3 / H7 裁决 | 统一渠道契约（四组结构化字段 + `channelExtra`）；类型化 `PayCredential`；`X-Dye-Tag` 全链路染色（入站读与出站写**同一批**）；`payment_attempts.channel_mode` 落库 + 反向三路径按记录还原模态；单 Adapter 双模态（`AlipayChannelAdapter`，MOCK 分支 MUST `super`）；`AlipayGateway` 端口收口 SDK（`application/**` MUST NOT 依赖 `com.alipay.sdk`）；支付宝 RSA2 notify 端点（**必须返回纯文本 `success`**）；demo 沙箱开关 | payment-service（主）、`common-core`、`common-dto`、`mock-channel-web`（demo 页） | `payment_attempts` **加列** `channel_mode VARCHAR(16) NOT NULL DEFAULT 'MOCK'`（schema 三处齐备）；增量迁移 `030-...sql` | ① 染色只做一半 ⇒ 重演「全线 403」先例（ADR-0034 教训）；② 沙箱不可复现 ⇒ 真机验证被跳过、假绿；③ SDK 34.3 MB + ≥9 CVE 供应链风险；④ 沙箱超时 10s 与全局 1.5s 两档并存易误配 | ① 契约单测：四家参数映射表驱动 + 6 处测试桩 / 4 处构造点零改动编译；② 响应头回写 `X-Dye-Tag` + MDC `dyeMode` + 跨服务透传（单测 + E2E）；③ 沙箱单的退款/查询/超时扫描断言 `channel_mode=SANDBOX` 被正确还原；④ **固定签名向量**离线单测钉死签名/验签/参数排序；⑤ 手工 live（**未验证范围 MUST 显式记录，不得默认通过**）；⑥ ArchUnit：`application/**` 不依赖 `com.alipay.sdk` |
 | **031 · ledger-account-view** | 030 完成（账务需承载真实渠道事实）；H12 裁决 | 科目余额视图（G1）；期间与试算平衡 + 关账（G2）；`pending_postings` 待记账清单 + 补偿重试（G3，含 C-09 与 H3 负净额会计） | ledger-service、payment-service（写台账）、settlement-service（写台账） | 新增 `pending_postings` 表；`postings` **加列** `period`；余额表（若选方案②） | ① 余额表与分录漂移（须同事务更新 + 试算平衡校验）；② 负净额会计语义（H5）；③ 新增关键资金表 | ① 试算平衡表借贷恒等（各币种）；② 关账后 `POST /postings` 拒绝新分录；③ 待记账清单可查可补偿；④ 负净额批次产生反向分录且 `CROSS_LEDGER_MISMATCH` 可对平；⑤ `mvnw clean verify` 全绿 |
-| **032 · reconciliation-real-statement** | 031 完成（余额/期间视图是账表核对基础）；H11 裁决 | **先做 C-13 结算事实口径改造**；再 R1 真实账单来源（fail fast，禁静默回退）；R2 商户维度（N1，匹配键改 `(merchantId, reference)`）；R4 差异处置策略化（含 M1 `SETTLEMENT` sourceId 改 `batchNo`） | reconciliation-service、settlement-service、payment-service（`confirmed-facts` 出参）、`common-dto` | `reconciliation_batches` / `audit_*`（可能加列）；`SettlementApplicationService` 的 sourceId 口径 | ① **跨服务 DTO 变更（API Breaking）**；② 口径改造未先做 ⇒ R4 静默漏结算；③ 真实账单格式差异 ⇒ 解析失败须 fail fast | ① 结算事实 = 全部已确认事实 − 已处置差异净影响（构造「挂账后放行」用例断言不漏结算）；② 真实来源不可用时显式失败，**不**回退 `sample.csv`；③ 跨商户同号事实不串账；④ 差异可重复识别、可查询、可处置，原始事实不被改写 |
+| **032 · reconciliation-real-statement** | 031 完成（余额/期间视图是账表核对基础）；**H11 裁决** | **先做 C-13 结算事实口径改造 + H11 事实维度补齐（`merchantId` + 期间，含 `confirmed-facts` 加 `period` 入参）**；再 R1 真实账单来源（fail fast，禁静默回退）；R2 商户维度（N1，匹配键改 `(merchantId, reference)`）；**H13 退款渠道引用精确关联（C-22）**；R4 差异处置策略化（含 M1 `SETTLEMENT` sourceId 改 `batchNo`） | reconciliation-service、settlement-service、payment-service（`confirmed-facts` 出参）、`common-dto` | `reconciliation_batches` / `audit_*`（可能加列）；`SettlementApplicationService` 的 sourceId 口径；**`payment_attempts` 可能加 `refund_no`（H19）** | ① **跨服务 DTO 变更（API Breaking）**；② 口径改造未先做 ⇒ R4 静默漏结算；③ **事实无期间维度 ⇒ 跨期重复结算**（C-20-A）；④ 真实账单格式差异 ⇒ 解析失败须 fail fast | ① 结算事实 = 全部已确认事实 − 已处置差异净影响（构造「挂账后放行」用例断言不漏结算）；② 真实来源不可用时显式失败，**不**回退 `sample.csv`；③ **跨商户同号事实不串账**（构造两商户同期用例断言各自净额）；④ **同一事实不跨期重复结算**（构造连续两期用例断言第二期不重复计入）；⑤ **退款事实的 `reference` 指向其成功尝试的渠道流水号**（构造「先失败后成功」双退款尝试用例）；⑥ 差异可重复识别、可查询、可处置，原始事实不被改写 |
 | **033 · test-infrastructure** | 无强依赖（**建议与 031/032 并行**）；H16 裁决 | T1 Testcontainers-MySQL 渐进（先建基类 → 先切并发/唯一键三类 → 再逐模块）；T2 schema 迁移可重放 + CI 门禁；T3 ArchUnit 运行时 RPC 环规则（或立 ADR 明确接受）；M12 并发建单 `attemptSeq` 行为测试 | 全模块（构建层）、`deployment/architecture-tests`、`deployment/schema` | 无（测试载体与迁移脚本） | ① Docker 可用性与 CI 一致性是真实阻塞（Constitution 已标注）；② 方言差异（约束/时区/JSON）⇒ 假绿；③ 迁移改动可能破坏存量库 | ① ledger 幂等唯一键冲突、settlement 批次唯一约束、payment 幂等键三类并发场景在 MySQL 上通过；② 迁移在**空库**与**存量库**各重放一次结果一致；③ ArchUnit 新规则能拦住已知的 order ↔ payment 运行时环；④ `mvnw clean verify` 全绿 |
-| **034 · reliability-hardening** | 031 完成（复用台账模式）；H13 / H10 / H8 裁决 | C-14 熔断去留（推荐移除）；H5 `UNKNOWN` 分级升级（**显式否决自动终态化**）；M6 退款幂等键治理；M7 后置 RPC 失败台账（复用 031 的 `pending_postings` 模式）；H6 对账侧「同 Transaction 多笔成功」检测 | payment-service、order-service、reconciliation-service | 可能新增失败台账表（若与 `pending_postings` 不同源） | ① 熔断移除可能改变出站行为（须确认无实际依赖）；② 退款幂等键变更是**资金路径行为变更**；③ 换渠道编排变更（H8）影响下单流程 | ① `payment.unknown_age` 分桶指标 + 告警 + 人工队列可见；② 同参重放返回首次结果（**当前是死代码，改后必须由测试钉死**）；③ 后置失败可在台账查询并重试；④ 同 Transaction 双成功被对账识别为专项差异；⑤ 既有可靠性测试零回归 |
+| **034 · reliability-hardening** | 031 完成（复用台账模式）；H13 / H10 / **H17（已由 B7 部分前置）** / **H18 / H20** 裁决 | C-14 熔断去留（推荐移除）；H5 `UNKNOWN` 分级升级（**显式否决自动终态化**）；M6 退款幂等键治理；M7 后置 RPC 失败台账（复用 031 的 `pending_postings` 模式）；**H10 退款终态后置事务化 + refund 侧超时扫描/主动查询（C-19）**；**H12 订单取消后迟到成功的追回路径（C-23）**；C-21(C) 补 2 条告警（`order.refund_failed` 增长、TXRF 停留 `REQUESTED` 超时） | payment-service、order-service、reconciliation-service | 可能新增失败台账表（若与 `pending_postings` 不同源）；**H18 若引入 `applied` 标记列则改 `transaction_refunds`** | ① 熔断移除可能改变出站行为（须确认无实际依赖）；② 退款幂等键变更是**资金路径行为变更**；③ **H10 的事务边界改动必须把 MQ / Feign 移出事务**（否则重蹈「事务内发消息」）；④ **H12 改变跨服务通知语义**（`payment.succeeded` 的语义边界），须确认不会让 order 对已 CLOSED 订单误判 surplus | ① `payment.unknown_age` 分桶指标 + 告警 + 人工队列可见；② 同参重放返回首次结果（**当前是死代码，改后必须由测试钉死**）；③ 后置失败可在台账查询并重试；④ **`onRefundResult` 在「终态 + 累加 + 审计」任一环节失败后可自愈，`refunded_minor` 不再永久少计**；⑤ **退款 `UNKNOWN` 超阈值可被扫描收敛或进人工队列**；⑥ **订单取消后渠道迟到成功会驱动一次退款**（断言 `paymentGateway.refundRequests` 非空）；⑦ 既有可靠性测试零回归 |
 | **035 · observability-slo** | 031/032/034 产出新指标；H14 裁决 | M8 SLO 落地（Recording Rule + 看板 + 错误预算告警，4 项：同步查询 P99 ≤ 500ms / 同步命令 P99 ≤ 1s / 资金入口可用性 ≥ 99.9% / 对账达成率 ≥ 99%）；M9 补齐 5 类告警（结算 UNKNOWN 堆积 / `ledger.posting_failed` 堆积 / 限额在途泄漏 / DLQ 增长 / 染色非法值拒绝率）+ 每条的 runbook 处置动作；H7 密钥 / 完整报文不入日志的显式约束与测试 | 全服务（配置为主）、payment-service（密钥日志约束） | 无 | ① SLO 目标值是 `[目标]`，MUST 先确认（H14）；② 告警阈值过低会噪声、过高会漏报；③ 脱敏未重新引入时，「密钥不入日志」只能靠显式约束 + 测试而非通用脱敏 | ① 4 项 SLO 可在 Grafana 查询且与错误预算告警联动；② 12 条告警规则全部有 runbook；③ 沙箱适配器与 notify 端点的日志断言不含密钥/完整报文 |
 
 ### 附 A.1 依赖关系图
@@ -1117,13 +1295,20 @@ case "SUCCEEDED" -> {
 | C-08 | 032（M1） |
 | C-09 | 031（H2）+ 034（M7） |
 | C-10 | 030-P（B4，①）+ 030 / 待 H7（②） |
-| C-11 | 0（文档）+ 032/034（检测）+ 待 H8（编排） |
+| C-11 | **v1.1 降级为验证项（⚪ 通过）** → 030-P（H6 文档化）；**无 Feature 需实现**（明确禁止新增「禁止多 Payment SUCCESS」/「换渠道前关闭旧 Payment」） |
 | C-12 | 030（B5） |
 | C-13 | 032（**前置**） |
 | C-14 | 034（H13） |
 | C-15 | 034（H10） |
 | C-16 | 033（M12） |
 | C-17 a/b/d/e | 030-P |
+| **C-18** | **030-P（B7，方案 A）+ 待 H17（B 方案扫描器）** |
+| **C-19** | **034（H10）；加固方案待 H18** |
+| **C-20** | **032（H11，与 R1/R2 同批，先于 R4）；待 H11 裁决** |
+| **C-21** | **030-P（A+B）+ 035（C：告警规则）** |
+| **C-22** | **032（H13）；加列方案待 H19** |
+| **C-23** | **034（H12）；待 H20 裁决** |
+| **C-24** | **030-P（B：javadoc 标注）；A 方案（删列）待 H21** |
 | D-1~D-6 | 0（B6） |
 
 ---
@@ -1132,14 +1317,30 @@ case "SUCCEEDED" -> {
 
 **方法**：以代码为唯一事实来源，逐文件读核心聚合 / 应用服务 / 基础设施实现 / Schema / 测试，再与 `stage-design.md` 逐条对照；对每处结论给出 `文件:行号` 证据。
 
-**已读代码范围**（`payment-service`）：`Payment`、`PaymentAttempt`、`PaymentStatus`、`PaymentAttemptStatus`、`PaymentApplicationService`、`PaymentPersistence`、`PaymentResultProcessor`、`PaymentResultApplier`、`PaymentUnknownResolutionService`、`PaymentCallbackService`、`ChannelCallbackController`、`ChannelCallbackSignatureFilter`、`ChannelCallbackRequest`、`PaymentController`、`PaymentRetryService`、`TimeoutScanner`、`ChannelQueryScheduler`、`ChannelQueryService`、`ChannelAttemptRecorderImpl`、`ChannelResult`、`ChargeRequest`、`QueryStatusRequest`、`RefundRequest`、`PaymentChannel`、`ChannelRouter`、`ConfiguredChannelRouter`、`RouteContext`、`ChannelRegistry`、`SpringChannelRegistry`、`AlipayChannelAdapter`、`AbstractMockChannelAdapter`（引用）、`LedgerPostingGateway`、`FeignLedgerPostingGateway`、`RefundApplicationService`、`RefundResultProcessor`、`RefundFeignLedgerPostingGateway`、`PaymentCaptureLedgerPostingTest`；`ledger-service`：`Posting`、`LedgerEntry`、`LedgerSourceType`、`Account`、`LedgerPostingService`、`BalanceChecker`、`LedgerController`；`reconciliation-service`：`ReconciliationMatching`、`ReconciliationApplicationService`、`ReconciliationBatch`、`DifferenceType`、`AuditApplicationService`、`AuditDifferenceKind`、`CertificateAuditor`；`settlement-service`：`SettlementApplicationService`、`SettlementBatch`、`SettlementEligibility`、`ConfirmedFactGate`；`common-redis-mq`：`TransactionalProducer`；`order-service`：`RefundOrder`（幂等键）；`deployment/schema`：`03-payment-schema.sql`、`09-ledger-schema.sql`、`10-audit-schema.sql`。
+**已读代码范围（v1.0）**（`payment-service`）：`Payment`、`PaymentAttempt`、`PaymentStatus`、`PaymentAttemptStatus`、`PaymentApplicationService`、`PaymentPersistence`、`PaymentResultProcessor`、`PaymentResultApplier`、`PaymentUnknownResolutionService`、`PaymentCallbackService`、`ChannelCallbackController`、`ChannelCallbackSignatureFilter`、`ChannelCallbackRequest`、`PaymentController`、`PaymentRetryService`、`TimeoutScanner`、`ChannelQueryScheduler`、`ChannelQueryService`、`ChannelAttemptRecorderImpl`、`ChannelResult`、`ChargeRequest`、`QueryStatusRequest`、`RefundRequest`、`PaymentChannel`、`ChannelRouter`、`ConfiguredChannelRouter`、`RouteContext`、`ChannelRegistry`、`SpringChannelRegistry`、`AlipayChannelAdapter`、`AbstractMockChannelAdapter`（引用）、`LedgerPostingGateway`、`FeignLedgerPostingGateway`、`RefundApplicationService`、`RefundResultProcessor`、`RefundFeignLedgerPostingGateway`、`PaymentCaptureLedgerPostingTest`；`ledger-service`：`Posting`、`LedgerEntry`、`LedgerSourceType`、`Account`、`LedgerPostingService`、`BalanceChecker`、`LedgerController`；`reconciliation-service`：`ReconciliationMatching`、`ReconciliationApplicationService`、`ReconciliationBatch`、`DifferenceType`、`AuditApplicationService`、`AuditDifferenceKind`、`CertificateAuditor`；`settlement-service`：`SettlementApplicationService`、`SettlementBatch`、`SettlementEligibility`、`ConfirmedFactGate`；`common-redis-mq`：`TransactionalProducer`；`order-service`：`RefundOrder`（幂等键）；`deployment/schema`：`03-payment-schema.sql`、`09-ledger-schema.sql`、`10-audit-schema.sql`。
+
+**已读代码范围（v1.1 新增，C-11 专项验证）**：
+
+| 模块 | 文件 |
+|---|---|
+| `order-service`（**Transaction 层，v1.0 完全遗漏**） | `domain/Transaction`、`domain/RefundOrder`、`domain/RefundOrderStatus`、`domain/Order`、`domain/OrderStatus`、`domain/TransactionRefundRepository`；`application/TransactionApplicationService`（**核心**）、`application/OrderApplicationService`；`mq/OrderMqHandlers`、`mq/OrderMqConfig`；`api/OrderRefundRpcController`；`test/scenario/TransactionRefundTest`、`test/scenario/TransactionCallbackConflictTest`、`test/application/OrderApplicationServiceTest` |
+| `payment-service`（退款域 + 事实抽取） | `application/PaymentAutoRefundService`、`application/PaymentFactsService`、`api/ReconciliationFactsController`、`api/dto/PaymentFactResponse`；`refund/application/RefundApplicationService`、`refund/application/RefundResultProcessor`、`refund/application/RefundFactsService`、`refund/application/MockRefundResultBridge`、`refund/domain/Refund`、`refund/domain/RefundPolicy`、`refund/domain/RefundStatus`、`refund/api/dto/RefundFactResponse`、`refund/domain/RefundRepository`；`domain/PaymentAttemptRepository`、`infra/persistence/attempt/MybatisPaymentAttemptRepository`；`test/application/PaymentAutoRefundServiceTest`、`test/application/PaymentRefundServiceTest`、`test/refund/application/RefundFactsServiceTest` |
+| `reconciliation-service` | `infra/client/FeignPaymentFactsClient`、`infra/client/FeignRefundFactsClient`、`infra/client/PaymentFactDto`、`infra/client/RefundFactDto`、`infra/CsvChannelStatementLoader`、`domain/PlatformFact`、`domain/ChannelStatement`、`api/ReconciliationSettlementFact`、`application/PaymentFactsClient`、`application/RefundFactsClient` |
+| `settlement-service` | `application/SettlementApplicationService`（净额计算段）、`application/ConfirmedFactGate`、`domain/SettlementBatch`、`application/SettlementFact` |
+| `deployment` | `schema/01-order-schema.sql`（`transaction_refunds`）、`schema/019-order-driven-refund.sql`、`schema/03-payment-schema.sql`（`payment_attempts`）；`reconciliation-service/src/main/resources/fixtures/channel-statements/*.csv`（3 个 fixture 全文） |
+| `docs` | `adr/0064-multi-payment-per-transaction.md`、`specs/stage-03-evolution-consolidation/016-order-payment-orchestration/spec.md`（FR-002/004/005/007/010/017、SC-001/004/008、US2） |
 
 **局限（诚实标注）**：
 
 1. **未运行测试**：本审查未执行 `mvnw clean verify` / E2E，所有行为结论来自静态阅读。**未验证**：并发行为（H2 无法覆盖）、真实 MySQL 的唯一约束触发路径。
-2. **未读全量**：`LedgerAuditor` / `RealAuditor` / `ReportAuditor` 内部实现、`RefundAttemptSettlementService`、`LimitGate` / 限额域、`order-service` 支付编排、`fulfillment` / `entitlement` 未逐行审查；§8 Q6 的「四核对完整」结论基于 `AuditApplicationService` 的分派逻辑与 `AuditDifferenceKind` 的 11 类定义，**未验证每个审计器的判定正确性**。
+2. **未读全量**：`LedgerAuditor` / `RealAuditor` / `ReportAuditor` 内部实现、`LimitGate` / 限额域、`fulfillment` / `entitlement` 未逐行审查；§8 Q6 的「四核对完整」结论基于 `AuditApplicationService` 的分派逻辑与 `AuditDifferenceKind` 的 11 类定义，**未验证每个审计器的判定正确性**。
 3. **未读 spec 030 四件套全文**：§3.2 的目标态描述取自 `stage-design §3.2` 的转述；**spec 030 的 `tasks.md` / `plan.md` 未逐条核对**，因此 030-P 的落点（作为 030 的前置任务还是独立分支）需在 030 立项时确认。
 4. **`attemptSeq` 并发行为**（C-16）为**推理结论**，未经实测。
 5. **`stage-design.md` 的 §1.4 漂移清单**（D-1~D-6）**未逐条复核**（仅抽查 D-1/D-2/D-3 的路径存在性），其余条目沿用其结论。
+6. **v1.1：C-11 的 10 点验证均为静态阅读结论**。其中「两笔支付几乎同时成功」的自愈路径（§10.3 R1）**依赖 MQ 重试语义的推理**，未在真库 + 真实 Redis 下实测；建议 033（T1）补一条并发双成功用例。
+7. **v1.1：`RefundPolicy.decide` 的具体阈值与边界未逐行审查**。C-11 第 3 点把 `RefundPolicy` 累计上限列为「兜住重复退款的最后一层」，该结论**基于 `RefundApplicationService:87-101` 的调用形态与 `isCounted` 的状态集**，未验证 `RefundPolicy` 内部比较符（`>` / `>=`）的精确语义。
+8. **v1.1：`TransactionApplicationService` 无 `@Transactional`（grep 无匹配）**，故 §10.3 R6 / C-19 的「终态先落库、后置动作无事务保护」是**基于该事实的推理**；若 Spring 在别处（如 `OrderMqHandlers`）加了事务代理，结论需修正。
 
-**下一步建议**：本审查完成后，请先就 §13 的**最小裁决集（H1、H2、H3、H4、H15、H16）**给出结论；随后按 §14.2 的 4 个门推进。**在裁决落地前，不进入任何代码实现。**
+**下一步建议**：本审查完成后，请先就 §13 的**最小裁决集（H1、H2、H3、H4、H15、H16，v1.1 建议加入 H17）**给出结论；随后按 §14.2 的 4 个门推进。**在裁决落地前，不进入任何代码实现。**
+
+> **v1.1 特别提示**：**C-11 不需要任何实现工作**（验证通过 + 文档化）。请勿因 v1.0 的旧结论（或任何下游文档/讨论的转述）而启动「禁止多 Payment SUCCESS」或「换渠道前关闭旧 Payment」的改造——**那会破坏当前正确的行为**。
