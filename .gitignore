@@ -42,6 +42,8 @@ payment-platform-*.tar.gz.sha256
 #                    决策结论 → CHANGELOG.md / docs/adr/
 # ===========================================
 .workbuddy/
+# WorkBuddy AI 工作区数据（记忆 / 技能 / 会话状态）：磁盘保留，不跟踪
+.workbuddy-ai/
 
 # traffic-gen 运行时产物
 deployment/demo/traffic-gen.jsonl
