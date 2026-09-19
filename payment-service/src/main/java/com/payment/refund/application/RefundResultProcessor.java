@@ -5,11 +5,13 @@ import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.RefundResultNotification;
 import com.payment.payment.application.OrderGateway;
 import com.payment.payment.application.channel.ChannelResult;
+import com.payment.payment.mq.PaymentEventPublisher;
 import com.payment.refund.domain.Refund;
 import com.payment.refund.domain.RefundRepository;
 import com.payment.refund.domain.RefundStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -58,19 +60,23 @@ public class RefundResultProcessor {
     private final RefundAttemptSettlementGateway attemptSettlementGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
+    /** spec 029 / FR-203 / T30：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
+    private final PaymentEventPublisher mq;
 
     public RefundResultProcessor(RefundRepository refundRepository,
                                  OrderGateway orderGateway,
                                  LedgerPostingGateway ledgerGateway,
                                  RefundAttemptSettlementGateway attemptSettlementGateway,
                                  BusinessMetrics metrics,
-                                 StructuredAuditLogger auditLogger) {
+                                 StructuredAuditLogger auditLogger,
+                                 ObjectProvider<PaymentEventPublisher> mqProvider) {
         this.refundRepository = refundRepository;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
         this.attemptSettlementGateway = attemptSettlementGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
+        this.mq = mqProvider == null ? null : mqProvider.getIfAvailable();
     }
 
     /**
@@ -138,12 +144,20 @@ public class RefundResultProcessor {
             log.debug("refund has no transactionRefundNo, skip order notification refundNo={}", refund.getRefundNo());
             return;
         }
+        RefundResultNotification notification = new RefundResultNotification(
+                refund.getTransactionRefundNo(), refund.getRefundNo(),
+                refund.getTransactionNo(), refund.getOrderNo(), refund.getPaymentNo(),
+                refund.getAmountMinor(), refund.getCurrencyCode(),
+                refund.getStatus().name(), refund.getFailureReason());
+        // spec 029 / T30、FR-203：refund.result 改事务消息（点对点 → order），
+        // 替代同步 OrderGateway.notifyRefundResult。本地事务（refunds 落库）已在上方完成，
+        // prepare→commit 即可（INV-3）。SC-1：同步通知点清零。
         try {
-            orderGateway.notifyRefundResult(new RefundResultNotification(
-                    refund.getTransactionRefundNo(), refund.getRefundNo(),
-                    refund.getTransactionNo(), refund.getOrderNo(), refund.getPaymentNo(),
-                    refund.getAmountMinor(), refund.getCurrencyCode(),
-                    refund.getStatus().name(), refund.getFailureReason()));
+            if (mq != null) {
+                mq.publishRefundResult(notification);
+            } else {
+                orderGateway.notifyRefundResult(notification);
+            }
         } catch (RuntimeException ex) {
             metrics.counter("refund.order_notify_failed", 1.0, "module", MODULE);
             log.warn("退款结果通知 order 失败（事实不回滚，重试/对账兜底）refundNo={} txrf={} reason={}",

@@ -32,7 +32,7 @@ class RefundMetricsTest {
 
     private RefundApplicationService appService() {
         RefundResultProcessor processor = new RefundResultProcessor(refunds, order, ledger,
-                (p, r, o) -> { }, metrics, audit);
+                (p, r, o) -> { }, metrics, audit, com.payment.payment.mq.MqTestSupport.off());
         return new RefundApplicationService(refunds, payment, processor, metrics, audit);
     }
 

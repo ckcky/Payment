@@ -14,8 +14,10 @@ import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
+import com.payment.payment.mq.PaymentEventPublisher;
 import java.util.Set;
 import java.util.TreeSet;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -43,6 +45,8 @@ public class PaymentApplicationService {
     private final StructuredAuditLogger auditLogger;
     private final ChannelRouter channelRouter;
     private final ChannelRegistry channelRegistry;
+    /** spec 029 / FR-201 / T28：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
+    private final PaymentEventPublisher mq;
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
@@ -54,7 +58,8 @@ public class PaymentApplicationService {
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger,
                                      ChannelRouter channelRouter,
-                                     ChannelRegistry channelRegistry) {
+                                     ChannelRegistry channelRegistry,
+                                     ObjectProvider<PaymentEventPublisher> mqProvider) {
         this.paymentRepository = paymentRepository;
         this.paymentPersistence = paymentPersistence;
         this.retryService = retryService;
@@ -64,6 +69,7 @@ public class PaymentApplicationService {
         this.auditLogger = auditLogger;
         this.channelRouter = channelRouter;
         this.channelRegistry = channelRegistry;
+        this.mq = mqProvider == null ? null : mqProvider.getIfAvailable();
     }
 
     /** 兼容构造（不接账本）：空记账网关（测试/账本未接入场景）；选路用恒等路由。 */
@@ -75,7 +81,7 @@ public class PaymentApplicationService {
                                      StructuredAuditLogger auditLogger) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway,
                 (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
-                }, metrics, auditLogger, null, null);
+                }, metrics, auditLogger, null, null, null);
     }
 
     /**
@@ -92,7 +98,7 @@ public class PaymentApplicationService {
                                      StructuredAuditLogger auditLogger,
                                      PaymentChannel singleChannel) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway, ledgerGateway,
-                metrics, auditLogger, identityRouter(singleChannel), singleChannelRegistry(singleChannel));
+                metrics, auditLogger, identityRouter(singleChannel), singleChannelRegistry(singleChannel), null);
     }
 
     /** 恒等路由：不管上下文如何，恒返回该通道 code（FR-036 兼容垫片）。 */
@@ -193,11 +199,23 @@ public class PaymentApplicationService {
         // Feature 016（ADR-0054）：同步 charge 路径不再直调履约——支付成功通知统一由
         // orderGateway 异步于本请求之外完成（见 PaymentResultProcessor）；此处仅编排自身支付指令。
         if (applied.changed() && result.status() == ChannelResult.Status.SUCCESS) {
-            try {
-                orderGateway.notifyPaymentSucceeded(
-                        PaymentResultApplier.toSucceededRequest(applied.payment()));
-            } catch (RuntimeException ignored) {
-                // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）。
+            // spec 029 / T28、FR-201：payment.succeeded 改事务消息（点对点 → order），
+            // 替代同步 OrderGateway.notifyPaymentSucceeded。SC-1：同步通知点清零。
+            if (mq != null) {
+                try {
+                    mq.publishPaymentSucceeded(
+                            PaymentResultApplier.toSucceededRequest(applied.payment()));
+                } catch (RuntimeException ex) {
+                    // commit 失败不回滚支付成功事实（INV-1）；半消息由回查按 payments 表补投
+                    metrics.counter("payment.order_notify_failed", 1.0, "module", MODULE);
+                }
+            } else {
+                try {
+                    orderGateway.notifyPaymentSucceeded(
+                            PaymentResultApplier.toSucceededRequest(applied.payment()));
+                } catch (RuntimeException ignored) {
+                    // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）。
+                }
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009，手续费 MVP 计 0）。

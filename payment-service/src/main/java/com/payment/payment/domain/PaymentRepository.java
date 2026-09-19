@@ -14,6 +14,12 @@ public interface PaymentRepository {
 
     Optional<Payment> findByTransactionId(String transactionId);
 
+    /**
+     * 按订单号查询本订单下的支付单（spec 029 / FR-301 / T49：消费 order.cancelled 时关闭）。
+     * 一订单可能有多张支付单（Feature 015 一交易多支付单），故返回列表。
+     */
+    List<Payment> findByOrderNo(String orderNo);
+
     /** 按幂等键查询已受理支付（幂等回放，Constitution §4.1 数据库唯一约束兜底）。 */
     Optional<Payment> findByIdempotencyKey(String idempotencyKey);
 
