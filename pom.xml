@@ -77,6 +77,16 @@
         <!-- springdoc-openapi（Swagger UI）：2.8.x 兼容 Spring Boot 3.5，用于本地 API 可视化 -->
         <springdoc.version>2.8.14</springdoc.version>
 
+        <!--
+            支付宝官方 SDK（spec 030 / FR-135，H3 已裁决引入）。
+            风险显式接受并记入 ADR-0076：体积大（约 34 MB）+ 传递依赖
+            （fastjson / okhttp / bcprov / dom4j）+ 已知 CVE。
+            缓解手段 = **端口收口**（INV-7）：SDK 只能出现在 AlipaySdkGateway 一个类里，
+            领域/应用层只见 AlipayGateway 端口，将来换纯 JDK 实现（HttpClient + SHA256withRSA）
+            零扩散。选 .ALL 分类器（含全部传递依赖，避免手工补依赖漏项）。
+        -->
+        <alipay-sdk.version>4.40.996.ALL</alipay-sdk.version>
+
         <!-- Micrometer / JUnit 5 / Mockito / AssertJ 版本由 spring-boot-starter-parent 的 BOM 统一管理 -->
     </properties>
 
@@ -136,6 +146,16 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+
+            <!--
+                支付宝官方 SDK（spec 030 / FR-135）：版本在此**唯一**锁定，
+                子模块声明时**不写版本**（plan §1 纪律 / T70）。
+            -->
+            <dependency>
+                <groupId>com.alipay.sdk</groupId>
+                <artifactId>alipay-sdk-java</artifactId>
+                <version>${alipay-sdk.version}</version>
             </dependency>
 
             <!-- 本工程内部共享模块（版本随父 POM 0.1.0-SNAPSHOT） -->
