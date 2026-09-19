@@ -66,7 +66,10 @@
         </dependency>
         <!-- spec 027 / ADR-0071 D13：在途占用过期索引（**仅**作 Redis TTL 标记，绝不参与额度计数）。
              这是对 ADR-0044「payment 不使用 Redis」的显式、限用途反转；Redis 不可用时降级
-             NoopLimitExpiryIndex（保守占用、不拦截），故本依赖不构成硬依赖。 -->
+             NoopLimitExpiryIndex（保守占用、不拦截），故本依赖不构成硬依赖。
+             spec 029 / FR-301 / ADR-0074 D11：同一例外再扩用途——生产 payment.succeeded /
+             refund.result、消费 order.cancelled 的事务消息通道。扩展依据：通道仅承载
+             **通知**（不得承载资金事实真相，INV-1/ADR-0074 D2），且 mq.enabled=false 时回落同步 Feign。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>

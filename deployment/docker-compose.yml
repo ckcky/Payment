@@ -53,8 +53,16 @@ services:
   redis:
     image: redis:7
     container_name: payment-redis
+    # spec 029 / FR-501：Redis 由「纯缓存」升级为事务消息通道载体后，必须持久化与防驱逐——
+    #   --appendonly yes：AOF 落盘，进程/容器重启后消息与消费位点不丢（L2 已诚实标注落盘窗口）
+    #   --maxmemory 512mb + noeviction：容量触顶时**拒绝写入而非驱逐**，避免半消息/位点被
+    #     无声淘汰导致消息凭空消失（INV-5：Redis 全丢时系统仍正确，但绝不能主动丢）
+    #   数据卷 redis-data：容器重建后 AOF 与数据保留
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -551,4 +559,5 @@ networks:
 
 volumes:
   mysql-data:
+  redis-data:
   loki-data:
