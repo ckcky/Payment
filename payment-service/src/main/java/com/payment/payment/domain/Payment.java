@@ -118,6 +118,26 @@ public class Payment {
                 "illegal close from " + this.status);
     }
 
+    /**
+     * 订单已取消 → 关闭支付（spec 029 / FR-301 / T49）：PENDING / PROCESSING / UNKNOWN → CLOSED，
+     * 拒收后续渠道回调（CLOSED 为终态，{@code transitionTo} 吸收迟到结果）。
+     *
+     * <p>已 SUCCEEDED 的支付单不关闭（钱已收：事实不回滚，由 order 侧走 surplus 原路退回）；
+     * 已 CLOSED 幂等吸收。返回是否发生迁移。</p>
+     */
+    public boolean closeByOrderCancelled() {
+        if (status == PaymentStatus.CLOSED) {
+            return false; // 幂等重复
+        }
+        if (status == PaymentStatus.SUCCEEDED) {
+            // 钱已收，不可关闭；多收由 order 侧 surplus 退款处置（INV-1 事实不回滚）
+            return false;
+        }
+        this.status = PaymentStatus.CLOSED;
+        this.failureReason = "order cancelled";
+        return true;
+    }
+
     private boolean transitionTo(PaymentStatus target, String op, PaymentStatus... from) {
         if (status == target) {
             return false; // 幂等重复

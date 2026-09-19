@@ -6,10 +6,41 @@
 
 ---
 
+## [2026-09-20] feat：spec 029 Redis 事务消息通道落地（ADR-0074）
+
+**范围**：新增 `common/common-redis-mq` starter + 五服务（order / payment / catalog / fulfillment / entitlement）
+生产消费侧改造 + order 侧只读轨迹投影 + 可观测与演示件。ADR-0074 状态 🟡 Proposed → 🟢 **Accepted**；
+**Supersedes ADR-0031**（不使用 MQ 中间件——Redis Streams 复用既有 Redis，未新增运维实体，禁令清单不变）。
+
+- **通道语义（INV-3）**：`prepare`（写半消息 + `ZADD` 回查索引）→ 本地事务提交 → `commit`（`XADD` 可见队列 + 清半消息）。
+  半消息超 `prepare-timeout-ms` 未决即进回查：`HalfMessageScanner` 每 5s 扫到期项，分派 `TransactionChecker`
+  （COMMIT / ROLLBACK / UNKNOWN），UNKNOWN 超 `maxCheckTimes` → DLQ（FR-105/106）。
+- **消费语义（FR-107~109）**：`XGROUP MKSTREAM` 建组（忽略 `BUSYGROUP`）→ `XREADGROUP`（blockMs 2000）→ 成功 `XACK`；
+  失败按 1s / 2s / 4s 退避重试，超 `maxRetry` 进 DLQ 并 `XACK`；`XAUTOCLAIM`（`minIdleMs=60s`）接管同组超时 PEL。
+- **替代的 8 条同步通知链路**：`payment.succeeded` / `refund.result`（payment → order，点对点）；
+  `order.paid` / `refund.succeeded` / `order.cancelled`（order → 广播）；`fulfillment.completed` /
+  `fulfillment.revoked`（fulfillment → entitlement，点对点）。**记账三条链路维持同步**（ADR-0074 D2）。
+- **回落开关（FR-306）**：`payment.mq.enabled=false` 时全部 MQ 装配不生效，生产方回落既有同步 Feign 语义
+  （秒杀回补、履约驱动、库存确认等原调用点保留在 `else` 分支）；两种模式既有集成测试均通过。
+- **订单轨迹（FR-401~404）**：新增 `order_event_log` 表（`msg_id` 唯一键幂等吸收）+ `trace` 消费组独立订阅全部
+  7 个 topic + `GET /api/orders/{orderNo}/timeline`；轨迹为**只读投影**（INV-5），删表不影响业务链路。
+- **traceId 连续性（FR-601~604）**：信封携带 traceId；消费端 `MDC.put("traceId", …)` 恢复、`finally` 清理；
+  半消息回查补投**沿用信封原始 traceId**（不新建）；fulfillment → entitlement 链路继承上游 traceId。
+- **可观测（FR-502~504）**：8 项 `mq.*` 指标（`prepared` / `committed` / `rolled_back` / `checked` / `consumed` /
+  `retried` / `dead_letter` / `half_backlog`）；`StructuredAuditLogger` 记录 `mq.committed` / `mq.rolled_back` /
+  `mq.consumed` / `mq.dead_letter`（含 msgId + bizNo）；Grafana 新增「⑥ 消息通道」行（11 图：半消息积压 / DLQ /
+  投递回滚速率 / 各组消费与重试 / PEL 积压 / 各组位点 / 回查分派 / 审计速率），`redis-exporter` 提供 stream 服务端指标。
+- **容灾（FR-501）**：Redis 补 `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction` + 数据卷
+  —— 容量触顶**拒绝写入而非驱逐**，避免半消息 / 位点被无声淘汰。
+- **架构门禁**：`ServiceBoundaryTest` 的分布式基础设施禁用清单**保持不变**（Kafka / RabbitMQ / RocketMQ / JMS / JTA-XA
+  仍禁），测试注释补充「Redis 通道不在清单内」的定位与豁免依据。
+
+---
+
 ## [2026-09-19] spec 029 立项：Redis 事务消息通道（仅文档）
 
 **范围**：跨服务异步解耦方案定稿（**ADR-0074**，Supersedes ADR-0031「不使用 MQ」）+ spec 029 四件套。
-本轮**只写文档，不改代码**；实现期另开 `feature/029-redis-transactional-mq`。
+本轮**只写文档，不改代码**；实现期另开 `feature/029-redis-transactional-mq`（已于 2026-09-20 落地，见上条）。
 
 - **通道形态**：用现有 `redis:7` 的 Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 5s 回查真相表），
   **不引入 RocketMQ / Kafka 等任何消息中间件**（个人项目不增组件）。

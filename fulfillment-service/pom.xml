@@ -20,6 +20,10 @@
         </dependency>
         <dependency>
             <groupId>com.payment</groupId>
+            <artifactId>common-redis-mq</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.payment</groupId>
             <artifactId>common-dto</artifactId>
         </dependency>
         <dependency>
@@ -59,6 +63,18 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- spec 029 / FR-304：接入 Redis 事务消息通道——消费 order.paid / refund.succeeded /
+             order.cancelled，生产 fulfillment.completed / fulfillment.revoked。
+             Redis 仅承载通知消息（非数据源，INV-5）；通道不可用时回落同步 Feign（mq.enabled=false）。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce 连接池前提（ADR-0060）：消费端 XREADGROUP 短阻塞读与生产者写入并发，需池化 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

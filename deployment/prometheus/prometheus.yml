@@ -65,3 +65,9 @@ scrape_configs:
     metrics_path: "/actuator/prometheus"
     static_configs:
       - targets: ["host.docker.internal:8091"]
+
+  # Redis 服务端指标（spec 029 / FR-504）：「消息通道」面板的 PEL 积压与消费组位点
+  # 只能从服务端取（客户端不知 PEL）；同 compose 网络内直连 redis-exporter 容器。
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]

@@ -2,7 +2,7 @@
 
 # ADR-0074: Redis 事务消息通道——用 Streams 承载跨服务异步解耦（spec 029 立项）
 
-- 状态：🟡 **Proposed**（2026-09-19 提出，2026-09-19 负责人拍板；**本轮只写文档，不改代码**）
+- 状态：🟢 **Accepted → Implemented**（2026-09-19 提出并拍板；2026-09-20 随 spec 029 批次 A~G 落地，`--no-ff` 合入 master `5e2c00d`）
 - 关联：
   - **Supersedes [ADR-0031](0010-distributed-evolution-decisions.md)**（⛔ Not Implemented「不使用 MQ」——本 ADR 以「Redis 不是 MQ 组件」的方式满足其解耦证据要求，并把其三条约束原样继承）
   - [ADR-0043](0014-next-stage-decisions.md)（订单超时用 **Redis ZSet 时间轮**顶替 MQ 延迟消息——本 ADR 的先例与可复用骨架）

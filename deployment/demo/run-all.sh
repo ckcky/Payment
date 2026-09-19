@@ -37,6 +37,8 @@ bash "$HERE/restart-payment.sh" SUCCESS
 bash "$HERE/scenario-reconciliation.sh"
 # spec 017：审计四核对 + 挂账调账闭环（故障注入幂等，依赖 3306 本地演示库）
 bash "$HERE/scenario-audit.sh"
+# spec 029：Redis 事务消息通道（D1~D6；需 payment-redis 容器可访问）
+bash "$HERE/scenario-mq.sh"
 
 echo ""
-info "✅ 全部演示场景通过（主链 / 渠道路由 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环）"
+info "✅ 全部演示场景通过（主链 / 渠道路由 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环 / 消息通道）"

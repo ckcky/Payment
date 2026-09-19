@@ -190,6 +190,34 @@ PENDING --cancel--> CANCELLED
 
 ---
 
+### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
+
+| 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
+|---|---|---|---|---|
+| 生产 | `order.paid` | catalog、fulfillment、trace | 广播 | `onPaymentSucceeded` 中串行调 confirmStock / 驱动履约 |
+| 生产 | `refund.succeeded` | catalog、fulfillment、trace | 广播 | `onRefundResult` 中串行调秒杀回补 / 终止履约 |
+| 生产 | `order.cancelled` | catalog、payment、fulfillment、trace | 广播 | 关单后**当前无任何外部通知**（新增能力） |
+| 消费 | `payment.succeeded` | ← payment | 点对点 | 支付成功回调（含 surplus 判定在 transaction 层） |
+| 消费 | `refund.result` | ← payment | 点对点 | 退款结果回调 |
+
+**广播点画在 `order.paid` 的理由**（ADR-0066）：`order_items` 是明细单一事实源，「绝不信任上游快照」；且「正常到账 vs surplus」判定在本服务 transaction 层。两项只能在 order 完成，故由 order 以订单域名义发布事实。
+
+**回查依据**（半消息超时后判定本地事务是否成功）：`order.paid` → `orders` 是否 PAID；`refund.succeeded` → `transaction_refunds` 是否 SUCCEEDED；`order.cancelled` → `orders` 是否 CANCELLED / CLOSED。
+
+**本服务不生产记账事件**：payment/refund → ledger 的记账链路维持同步（ADR-0074 D2）。
+
+**实现实况**（spec 029 批次 C/E，`com.payment.order.mq`）：
+
+| 项 | 值 |
+|---|---|
+| 配置类 | `OrderMqConfig`（`payment.mq.enabled=false` 时整体不生效，回落同步 Feign，FR-306） |
+| 生产 | `OrderEventPublisher`（事务提交后 prepare + commit；`order.paid` 负载由本库 `order_items` 富化，INV-4） |
+| 业务消费组 | `order`（消费名 `order-ps` / `order-rr`） |
+| 轨迹消费组 | `trace`（消费名 `trace-{topic}`，订阅全部 7 个 topic，落 `order_event_log`，INV-5 只读投影） |
+| 回查 checker | `order.paid` → `orders` 是否 PAID；`refund.succeeded` → `transaction_refunds` 是否 SUCCEEDED；`order.cancelled` → `orders` 是否 CANCELLED / CLOSED |
+| 轨迹只读接口 | `GET /api/orders/{orderNo}/timeline`（`OrderTimelineController`，FR-403） |
+
+**轨迹表**：`order_event_log`（`msg_id` 唯一键做幂等吸收，`(order_no, occurred_at)` 索引）；删表不影响业务链路（INV-5 / FR-404）。
 ## 4. 关键流程链路剖析
 
 ### 4.1 创建订单（两步式：建单与建支付单分离，spec 015 / 016）

@@ -2,9 +2,9 @@
 
 **版本**：1.0
 **日期**：2026-09-19
-**状态**：Draft（**本轮只写文档，不改代码**；实现待负责人核准 [ADR-0074](../../adr/0074-redis-transactional-message.md) 后另开 `feature/029-redis-transactional-mq`）
-**分支**：`docs/spec-029-redis-transactional-mq`（纯文档）
-**决策**：[ADR-0074](../../adr/0074-redis-transactional-message.md)（🟡 Proposed）—— Redis 事务消息通道，Supersedes ADR-0031
+**状态**：Implemented（批次 A~G 于 2026-09-20 落地，`--no-ff` 合入 master `5e2c00d`）
+**分支**：`feature/029-redis-transactional-mq`（已合并并清理）
+**决策**：[ADR-0074](../../adr/0074-redis-transactional-message.md)（🟢 Accepted → Implemented）—— Redis 事务消息通道，Supersedes ADR-0031
 
 > 一句话：**把 12 个「吞异常 + 靠对账兜底」的同步通知，改成 Redis Streams 上的事务消息**；事实类事件由订单域广播，动作类事件点对点；顺带用审计消费组落订单轨迹，实现「按订单号还原全链路」。
 

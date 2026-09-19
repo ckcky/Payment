@@ -11,8 +11,10 @@ import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentRepository;
+import com.payment.payment.mq.PaymentEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +40,8 @@ public class PaymentResultProcessor {
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
     private final LimitSettlementHook limitSettlement;
+    /** spec 029 / FR-201 / T29：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
+    private final PaymentEventPublisher mq;
 
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
@@ -46,9 +50,11 @@ public class PaymentResultProcessor {
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
-                                  LimitSettlementHook limitSettlement) {
+                                  LimitSettlementHook limitSettlement,
+                                  ObjectProvider<PaymentEventPublisher> mqProvider) {
         this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics,
-                new StructuredAuditLogger(), limitSettlement);
+                new StructuredAuditLogger(), limitSettlement,
+                mqProvider == null ? null : mqProvider.getIfAvailable());
     }
 
     /** 显式指定审计器（测试场景可捕获 FINANCIAL_AUDIT；生产走默认构造）。 */
@@ -59,7 +65,7 @@ public class PaymentResultProcessor {
                                   BusinessMetrics metrics,
                                   StructuredAuditLogger auditLogger) {
         this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics, auditLogger,
-                LimitSettlementHook.noop());
+                LimitSettlementHook.noop(), null);
     }
 
     /** 全参构造：显式给出额度结算钩子（spec 027）。 */
@@ -70,6 +76,19 @@ public class PaymentResultProcessor {
                                   BusinessMetrics metrics,
                                   StructuredAuditLogger auditLogger,
                                   LimitSettlementHook limitSettlement) {
+        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics, auditLogger,
+                limitSettlement, null);
+    }
+
+    /** 全参构造（含 MQ 发布器，spec 029）。 */
+    public PaymentResultProcessor(PaymentRepository paymentRepository,
+                                  ChannelAttemptRecorder attemptRecorder,
+                                  OrderGateway orderGateway,
+                                  LedgerPostingGateway ledgerGateway,
+                                  BusinessMetrics metrics,
+                                  StructuredAuditLogger auditLogger,
+                                  LimitSettlementHook limitSettlement,
+                                  PaymentEventPublisher mq) {
         this.paymentRepository = paymentRepository;
         this.attemptRecorder = attemptRecorder;
         this.orderGateway = orderGateway;
@@ -77,6 +96,7 @@ public class PaymentResultProcessor {
         this.metrics = metrics;
         this.auditLogger = auditLogger;
         this.limitSettlement = limitSettlement;
+        this.mq = mq;
     }
 
     /**
@@ -126,25 +146,39 @@ public class PaymentResultProcessor {
         attemptRecorder.save(attempt);
         if (changed && result.status() == ChannelResult.Status.SUCCESS) {
             PaymentSucceededRequest request = PaymentResultApplier.toSucceededRequest(payment);
-            try {
-                orderGateway.notifyPaymentSucceeded(request);
-            } catch (RuntimeException ex) {
-                // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）；
-                // Feature 016：order 不再抛 409——surplus 判定与自动退款发起归 order transaction 层。
-                // T109：不再静默吞异常——WARN + 指标留痕，供监控告警与对账兜底。
-                log.warn("支付成功通知 order 失败（事实不回滚，对账兜底）paymentNo={} orderNo={} reason={}",
-                        payment.getPaymentNo(), payment.getOrderNo(), ex.getMessage());
-                metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
-                // spec 002 / T024：「订单非法前态拒绝」是资金风险信号——钱已收、订单侧不认，
-                // 仅靠通用指标会被淹没在 RPC 抖动里，故单独审计留痕 + 专用指标，供人工介入与对账兜底。
-                if (isIllegalOrderState(ex)) {
-                    auditLogger.audit("payment.order_illegal_state_rejected", payment.getPaymentNo(),
-                            payment.getAmountMinor(), payment.getCurrencyCode(),
-                            payment.getStatus().name(), "ORDER_REJECTED",
-                            "payment", payment.getPaymentNo());
-                    metrics.counter("payment.order_illegal_state_rejected", 1.0, "module", "payment");
-                    log.warn("订单非法前态拒绝：支付已成功但订单侧拒绝接收 paymentNo={} orderNo={} code={}",
-                            payment.getPaymentNo(), payment.getOrderNo(), ((BizException) ex).getCode());
+            // spec 029 / T28-T30、FR-201：payment.succeeded 改事务消息（点对点 → order），
+            // 替代同步 OrderGateway.notifyPaymentSucceeded。SC-1：同步通知点清零。
+            // 本地事务已在上方 save 完成，此处 prepare→commit 即可（INV-3「先事务后可见」）。
+            if (mq != null) {
+                try {
+                    mq.publishPaymentSucceeded(request);
+                } catch (RuntimeException ex) {
+                    // commit 失败不回滚支付成功事实（INV-1）；半消息由回查按 payments 表补投
+                    log.warn("MQ 发布 payment.succeeded 失败（事实不回滚，回查补投）paymentNo={} reason={}",
+                            payment.getPaymentNo(), ex.getMessage());
+                    metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
+                }
+            } else {
+                try {
+                    orderGateway.notifyPaymentSucceeded(request);
+                } catch (RuntimeException ex) {
+                    // 订单回写失败不得回滚支付成功事实（订单侧幂等 + 后续对账收敛）；
+                    // Feature 016：order 不再抛 409——surplus 判定与自动退款发起归 order transaction 层。
+                    // T109：不再静默吞异常——WARN + 指标留痕，供监控告警与对账兜底。
+                    log.warn("支付成功通知 order 失败（事实不回滚，对账兜底）paymentNo={} orderNo={} reason={}",
+                            payment.getPaymentNo(), payment.getOrderNo(), ex.getMessage());
+                    metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
+                    // spec 002 / T024：「订单非法前态拒绝」是资金风险信号——钱已收、订单侧不认，
+                    // 仅靠通用指标会被淹没在 RPC 抖动里，故单独审计留痕 + 专用指标，供人工介入与对账兜底。
+                    if (isIllegalOrderState(ex)) {
+                        auditLogger.audit("payment.order_illegal_state_rejected", payment.getPaymentNo(),
+                                payment.getAmountMinor(), payment.getCurrencyCode(),
+                                payment.getStatus().name(), "ORDER_REJECTED",
+                                "payment", payment.getPaymentNo());
+                        metrics.counter("payment.order_illegal_state_rejected", 1.0, "module", "payment");
+                        log.warn("订单非法前态拒绝：支付已成功但订单侧拒绝接收 paymentNo={} orderNo={} code={}",
+                                payment.getPaymentNo(), payment.getOrderNo(), ((BizException) ex).getCode());
+                    }
                 }
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；记账属 payment 层支付指令编排，

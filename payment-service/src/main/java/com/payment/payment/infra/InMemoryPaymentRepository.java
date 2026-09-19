@@ -37,6 +37,13 @@ public class InMemoryPaymentRepository implements PaymentRepository {
     }
 
     @Override
+    public List<Payment> findByOrderNo(String orderNo) {
+        return byId.values().stream()
+                .filter(p -> orderNo.equals(p.getOrderNo()))
+                .toList();
+    }
+
+    @Override
     public long countByTransactionId(String transactionId) {
         return byId.values().stream()
                 .filter(p -> transactionId.equals(p.getTransactionId()))

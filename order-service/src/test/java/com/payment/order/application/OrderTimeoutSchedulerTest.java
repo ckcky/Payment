@@ -52,7 +52,8 @@ class OrderTimeoutSchedulerTest {
         props.setEnabled(true);
         props.setTtlSeconds(900);
         props.setZsetKey("order:timeouts");
-        scheduler = new OrderTimeoutScheduler(redis, orderRepository, catalogClient, props, metrics);
+        scheduler = new OrderTimeoutScheduler(redis, orderRepository, catalogClient, props, metrics,
+                MqTestSupport.off());
     }
 
     @Test
@@ -70,7 +71,8 @@ class OrderTimeoutSchedulerTest {
     void scheduleSkippedWhenDisabled() {
         OrderTimeoutProperties props = new OrderTimeoutProperties();
         props.setEnabled(false);
-        OrderTimeoutScheduler disabled = new OrderTimeoutScheduler(redis, orderRepository, catalogClient, props, metrics);
+        OrderTimeoutScheduler disabled = new OrderTimeoutScheduler(redis, orderRepository, catalogClient, props, metrics,
+                MqTestSupport.off());
         disabled.schedule(1L);
         verify(zSet, times(0)).add(anyString(), anyString(), anyDouble());
     }

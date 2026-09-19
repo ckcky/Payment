@@ -59,4 +59,33 @@ public final class TraceContext {
             }
         }
     }
+
+    /** MDC 中的业务单号键（spec 029 / FR-605）：orderNo / paymentNo / refundNo。 */
+    public static final String BIZ_NO_KEY = "bizNo";
+
+    /**
+     * 在指定 bizNo 下执行一段逻辑并确保清理（spec 029 / FR-605、FR-606）。
+     *
+     * <p><b>为什么需要单独的 bizNo 维度</b>：traceId 能串起一条链路，但排障时要回答的往往是
+     * 「这**一笔订单/支付单**发生了什么」——traceId 会随每次入口请求而变（同一订单被查询三次
+     * 就是三个 traceId），只有 bizNo 是跨请求稳定的。两者互补，缺一不可。</p>
+     *
+     * <p>消费侧由 {@code StreamConsumer} 从信封恢复；生产侧（HTTP 入口）用本方法显式标注，
+     * 使 logback pattern 的 {@code %X{bizNo}} 输出可被 {@code trace-grep.sh --bizno} 检索。</p>
+     */
+    public static void runWithBizNo(String bizNo, Runnable action) {
+        String previous = MDC.get(BIZ_NO_KEY);
+        if (bizNo != null && !bizNo.isBlank()) {
+            MDC.put(BIZ_NO_KEY, bizNo);
+        }
+        try {
+            action.run();
+        } finally {
+            if (previous != null) {
+                MDC.put(BIZ_NO_KEY, previous);
+            } else {
+                MDC.remove(BIZ_NO_KEY);
+            }
+        }
+    }
 }

@@ -195,6 +195,29 @@ catalog-service **不主动调用** order-service。反向依赖由 order-servic
 
 ---
 
+### 3.9 事件通道（消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
+
+| 方向 | 事件 | 对端 | 模式 | 处理 |
+|---|---|---|---|---|
+| 消费 | `order.paid` | ← order | 广播组之一 | 确认扣减库存（reserve → sold），幂等键 `order:{orderNo}:sku:{skuId}` |
+| 消费 | `refund.succeeded` | ← order | 广播组之一 | 秒杀配额回补，幂等键 `refund:{TXRF}:sku:{skuId}` |
+| 消费 | `order.cancelled` | ← order | 广播组之一 | 释放预占 + 回补秒杀（当前由 order 在关单流程内串行调用） |
+
+**本服务不生产事件**：库存侧的事实最终以本库为准，无需对外广播。
+
+**语义保持**：三段式（reserve → confirm → release）与「release 仅 PENDING 放行 → 不超回」的守卫**不变**；变化的只是触发方式由同步 RPC 改为订阅事件。
+
+**已知限制（沿用现状）**：退款**不回补普通库存**（仅回补秒杀配额），源码注释「已确认的预占不回滚」。
+
+**实现实况**（spec 029 批次 D，`com.payment.catalog.mq`）：
+
+| 项 | 值 |
+|---|---|
+| 配置类 | `CatalogMqConfig`（`payment.mq.enabled=false` 回落同步 Feign） |
+| 业务消费组 | `catalog`（消费名 `catalog-op` / `catalog-rs` / `catalog-oc`） |
+| 幂等键 | `order.paid` → `"order:" + orderNo + ":sku:" + skuId`（确认预占）；`refund.succeeded` → `"refund:" + TXRF + ":sku:" + skuId`（秒杀回补） |
+| 处理动作 | `CatalogMqHandlers`：`onOrderPaid` → `stockService.confirm(..., "PAY:" + paymentNo)`；`onRefundSucceeded` → `seckillService.rollback`；`onOrderCancelled` → `stockService.release` + `seckillService.rollback` |
+| 无 checker | 本服务只消费、不生产事件，故无需回查 checker |
 ## 4. 关键流程链路剖析
 
 ### 4.1 创建商品 / SKU 与上架（含状态机）

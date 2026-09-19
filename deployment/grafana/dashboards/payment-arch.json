@@ -1239,6 +1239,439 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 110,
+      "type": "row",
+      "title": "⑥ 消息通道（Redis Streams 事务消息，ADR-0074）",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 80
+      },
+      "panels": []
+    },
+    {
+      "id": 111,
+      "type": "timeseries",
+      "title": "半消息积压 · 到期待回查 (mq.half_backlog)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 81
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(mq_half_backlog_total[5m]))",
+          "refId": "A",
+          "legendFormat": "到期半消息"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "扫描器每 5s 扫一次 ZSet，把到期未决半消息数量打点（FR-502/FR-504）。持续>0 说明有本地事务未决或回查滞后。"
+    },
+    {
+      "id": 112,
+      "type": "timeseries",
+      "title": "DLQ 堆积 · 死信速率 (mq.dead_letter)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 81
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic) (increase(mq_dead_letter_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{topic}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "消费失败超 maxRetry 或回查 UNKNOWN 超 maxCheckTimes 后转死信（FR-108）。持续增长需人工介入。"
+    },
+    {
+      "id": 113,
+      "type": "timeseries",
+      "title": "投递速率 · 事务提交 (mq.committed)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 81
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic) (increase(mq_committed_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{topic}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "本地事务提交后真正可见的消息速率（FR-502），反映各 topic 生产强度。"
+    },
+    {
+      "id": 114,
+      "type": "timeseries",
+      "title": "回滚速率 · 事务未提交即丢弃 (mq.rolled_back)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 81
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic) (increase(mq_rolled_back_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{topic}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "本地事务回滚 → 半消息丢弃、不投递（INV-3、FR-104）。对照 committed 可看事务失败率。"
+    },
+    {
+      "id": 115,
+      "type": "timeseries",
+      "title": "消费速率 · 按组 (mq.consumed)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 89
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic, group) (increase(mq_consumed_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{topic}} / {{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "各消费组成功消费（XACK）速率（FR-502），用于判断下游是否跟得上生产。"
+    },
+    {
+      "id": 116,
+      "type": "timeseries",
+      "title": "重试速率 · 消费失败退避重投 (mq.retried)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 89
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic, group) (increase(mq_retried_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{topic}} / {{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "消费抛异常按 1s/2s/4s 退避重试的速率（FR-108）。与 consumed 同量级说明有抖动；与 dead_letter 同升说明代码/数据问题。"
+    },
+    {
+      "id": 117,
+      "type": "timeseries",
+      "title": "消费延迟 · 组内 PEL 待处理积压 (XPENDING)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 89
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic, group) (redis_streams_pending_messages)",
+          "refId": "A",
+          "legendFormat": "{{topic}} / {{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "各组 XAUTOCLAIM 前的 PEL 待确认消息数（FR-109）。持续上升表示消费慢于生产；超过 minIdleMs(60s) 会被同组实例认领。"
+    },
+    {
+      "id": 118,
+      "type": "timeseries",
+      "title": "各组位点 · 已投递 vs 已确认 (XINFO GROUPS)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 97
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic, group) (redis_streams_entries_processed_total)",
+          "refId": "A",
+          "legendFormat": "{{topic}} / {{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "消费组已投递条数（entries-read / last-delivered），用于估算与最新消息的差距（FR-504）。"
+    },
+    {
+      "id": 119,
+      "type": "timeseries",
+      "title": "回查分派结果 (mq.checked)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 97
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic, state) (increase(mq_checked_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{topic}} / {{state}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "半消息回查判定结果分布：COMMIT / ROLLBACK / UNKNOWN（FR-105/FR-106）。UNKNOWN 占比高说明本地事务状态不可判定。"
+    },
+    {
+      "id": 120,
+      "type": "timeseries",
+      "title": "消息通道投递/消费审计 (Loki) — 按 action",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 97
+      },
+      "targets": [
+        {
+          "expr": "sum by (action) (count_over_time({job=~\"payment.*\"} |= \"mq.\" | json | __error__=\"\" [5m]))",
+          "refId": "A",
+          "legendFormat": "{{action}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "StructuredAuditLogger 落地的 mq.committed / mq.rolled_back / mq.consumed / mq.dead_letter 审计速率（FR-503）。业务日志字段对齐后由图替换。"
     }
   ],
   "templating": {

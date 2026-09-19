@@ -149,9 +149,19 @@ PENDING --cancel--> CANCELLED
 
 ---
 
-### 3.5 当前调用边界
+### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
 支付成功后的当前调用方是 order-service；order 使用自身 `order_items` 事实源补齐明细后，通过 `PaymentSucceededRequest.items` 调用本服务。履约完成后仍由 fulfillment-service 调用 entitlement-service，order 不直接修改权益。
+
+**实现实况**（spec 029 批次 D，`com.payment.fulfillment.mq`）：
+
+| 项 | 值 |
+|---|---|
+| 配置类 | `FulfillmentMqConfig`（`payment.mq.enabled=false` 回落同步 Feign） |
+| 生产 | `FulfillmentEventPublisher`（`fulfillment.completed` / `fulfillment.revoked`，点对点 → entitlement） |
+| 业务消费组 | `fulfillment`（消费名 `ff-op` / `ff-rs` / `ff-oc`） |
+| 回查 checker | `fulfillment.completed` → 履约单是否 DELIVERED；`fulfillment.revoked` → 履约单是否 CANCELLED 或不存在 |
+| 注入说明 | `FulfillmentApplicationService` 主构造器 `@Autowired` 收 `ObjectProvider<FulfillmentEventPublisher>`；另留 3 参 / 4 参构造器给测试 |
 
 ## 4. 关键流程链路剖析
 

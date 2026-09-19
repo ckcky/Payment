@@ -1,10 +1,10 @@
 # Plan: 029 Redis 事务消息通道 + 跨服务异步解耦
 
-对应 [spec.md](spec.md)。**本 Plan 描述实现期（`feature/029-redis-transactional-mq`）的落地方案**；本轮只产出文档，不落代码。
+对应 [spec.md](spec.md)。**本 Plan 描述实现期（`feature/029-redis-transactional-mq`）的落地方案**；已于 2026-09-20 按批次 A~G 完成落地并合入 master `5e2c00d`。
 
 ## 0. 范围与执行顺序
 
-六个批次，**A → B → C → D → E → F 严格顺序**（后批次依赖前批次的类型与配置）：
+七个批次，**A → B → C → D → E → F → G 不可乱序**（后批次依赖前批次的类型与配置）：
 
 | 批次 | 内容 | 对应 FR | 可独立编译？ |
 |---|---|---|---|
