@@ -86,6 +86,33 @@ class StreamConsumerTest {
     }
 
     @Test
+    @DisplayName("SC-11 消费端恢复 traceId + bizNo 进 MDC，用后清理不串号")
+    void consumeRestoresTraceIdAndBizNoThenCleansUp() {
+        EventEnvelope e = producer.envelope(TOPIC, "ORD-BIZ-1", Map.of("orderNo", "ORD-BIZ-1"));
+        producer.prepare(e);
+        producer.commit(e);
+
+        AtomicReference<String> seenTrace = new AtomicReference<>();
+        AtomicReference<String> seenBiz = new AtomicReference<>();
+        StreamConsumer consumer = new StreamConsumer(redis, props, new NoOpMetrics(), TOPIC, "gbiz", "cbiz",
+                env -> {
+                    seenTrace.set(MDC.get(TraceIdFilter.MDC_KEY));
+                    seenBiz.set(MDC.get("bizNo"));
+                }, producer);
+        consumer.ensureGroup();
+        consumer.pollOnce();
+
+        // traceId 跨异步边界连续（FR-601/602）：消费端 MDC 等于信封里的原始 traceId
+        assertThat(seenTrace.get()).as("SC-11：消费端 traceId 与生产端一致（跨 MQ 边界连续）")
+                .isEqualTo(e.traceId());
+        // bizNo 维度（FR-605）：使日志可按业务单号检索
+        assertThat(seenBiz.get()).as("SC-11：消费端 MDC 带 bizNo").isEqualTo("ORD-BIZ-1");
+        // 用后清理：MDC 不残留，避免线程复用（mq-consumer 单线程循环）把单号带到下一条消息
+        assertThat(MDC.get(TraceIdFilter.MDC_KEY)).as("消费后 traceId 已清理").isNull();
+        assertThat(MDC.get("bizNo")).as("消费后 bizNo 已清理").isNull();
+    }
+
+    @Test
     @DisplayName("T27-2 消费抛异常 → 重试 3 次 → 进 DLQ")
     void consumeFailureGoesToDlq() {
         props.setMaxRetry(3);

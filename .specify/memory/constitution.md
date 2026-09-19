@@ -144,6 +144,7 @@ Sync Impact Report:
 - ❌ 引入 2PC/XA 分布式事务（用 Saga + RPC + 幂等替代）。
 - ❌ 为体现复杂度引入中间件（Kafka/Redis/MQ/ES 等，除非对应阶段有真实需要且经 ADR 论证）。
   - **已按本条款引入的例外（v2.3.0 澄清）**：Redis 7 已由 ADR-0044 / ADR-0045 论证引入（Feature 014），**不属于违规**。其定位是**非数据源的旁路设施**——仅用于入口幂等、SKU 读缓存、秒杀原子预扣、订单超时时间轮，一律 **fail-open**（唯独秒杀预扣 **fail-closed**）；任何状态的所有权仍在各服务的数据库。**MUST NOT** 把 Redis 当作数据源或跨服务共享存储。
+  - **例外二（v2.4.0 增补，2026-09-20 / ADR-0074 落地）**：Redis 另承载 **事务消息通道**（spec 029）——半消息 / 回查索引 / 消费位点 / DLQ。这**仍属同一 Redis 实例**，未新增运维实体。由此产生两条硬要求：① Redis MUST 开 `appendonly yes` 且 `maxmemory-policy noeviction`（**拒绝写入而非驱逐**，防止半消息/位点被无声淘汰）；② 通道故障时业务链路 MUST 可降级——`payment.mq.enabled=false` 回落同步 RPC（FR-306），且 Redis 全丢时系统**仍正确**（INV-5，仅需人工重放通知）。
 
 **引入基础设施的决策门槛**：不为了分布式而分布式。引入任何基础设施/中间件前 MUST 回答：①解决什么问题？②为什么当前方案解决不了？③引入后有什么收益？④引入后有什么成本？⑤是否值得长期维护？答不出或答不全，视为「为了炫技」，禁止引入。
 
@@ -154,7 +155,7 @@ Sync Impact Report:
 1. **Idempotency（幂等）**：支付、退款、结算等资金入口 MUST 有幂等键；相同幂等键的重复请求 MUST NOT 产生重复资金动作。幂等键由调用方提供，服务端持久化并唯一约束。
 2. **State Machine（状态机）**：Order / Payment / Refund / Fulfillment / Entitlement / Settlement 都 MUST 有**显式、单向**的状态机。禁止非法状态跳转；状态流转 MUST 通过集中状态转换函数，禁止散落直接 set 状态。
 3. **Eventual Consistency（最终一致）**：与外部系统（渠道、网关）的交互采用最终一致；单服务内部状态变更用本地事务保证原子；跨服务通过同步 RPC 编排和幂等重试实现最终一致。三者分层，不可混淆。
-   > **异步通知通道（2026-09-19 增补，[ADR-0074](../docs/adr/0074-redis-transactional-message.md#adr-0074)）**：不引入 MQ 中间件，改用已存在的 Redis（`redis:7`）Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 回查真相表）做跨服务**通知与解耦**。硬约束：① 仅用于通知，**不得承载资金事实的唯一真相**；② 消费端 MUST 幂等（at-least-once）；③ 记账链路（→ledger）维持同步；④ Redis 非数据源（全丢时系统仍正确，只是需人工重放）；⑤ **traceId MUST 跨异步边界连续**（写入信封 + 消费端恢复进 MDC）。
+   > **异步通知通道（2026-09-19 增补 → 2026-09-20 落地，[ADR-0074](../docs/adr/0074-redis-transactional-message.md#adr-0074)）**：不引入 MQ 中间件，改用已存在的 Redis（`redis:7`）Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 回查真相表）做跨服务**通知与解耦**。硬约束：① 仅用于通知，**不得承载资金事实的唯一真相**（消息丢了不影响正确性，只影响时效）；② 消费端 MUST 幂等（at-least-once，重复投递由下游幂等键吸收，INV-2）；③ 记账链路（→ledger）维持同步；④ Redis 非数据源（全丢时系统仍正确，只需人工重放）；⑤ **traceId MUST 跨异步边界连续**（写入信封 + 消费端恢复进 MDC；回查补投沿用原始 traceId，禁止新建）；⑥ MDC MUST 同时携带 **bizNo**（orderNo/paymentNo/refundNo），使「一笔业务事实的全历史」可按单号检索（FR-605~607）；⑦ 半消息回查 MUST 以**业务库真相表**为唯一判据（不得以 Redis 内状态自证）。
 4. **Retry（重试）**：对幂等的外部调用才允许自动重试，重试 MUST 有退避与上限；非幂等调用禁止盲目重试。
 5. **Duplicate Message / Callback（重复消息/回调）**：消费/处理侧 MUST 假设消息与回调会重复到达，靠幂等键 + 状态机幂等吸收，不重复入账。
 6. **Timeout（超时）**：所有外部调用 MUST 有超时；超时**不等于失败或成功**，需进入「未知状态」处理（见下条）。

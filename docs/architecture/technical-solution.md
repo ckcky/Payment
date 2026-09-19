@@ -31,7 +31,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
 - 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**均已落地**，Ledger 复式记账已接入，形成完整业务闭环（roadmap 主链走至 `014-seckill-and-cache`）。
 - **尚未引入**：真实支付渠道（当前 Mock Channel）、独立 MQ 中间件、API 网关、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现；熔断组件 Resilience4j 已在 payment-service 引入并保留）。
-- **已立项待实现**：跨服务异步事件——以 **Redis 事务消息通道**实现（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074) / spec 029，🟡 Proposed，2026-09-19 拍板），不引入 MQ 中间件。
+- **已实现**：跨服务异步事件——以 **Redis 事务消息通道**实现（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074) / spec 029，🟢 Accepted，2026-09-20 落地），不引入 MQ 中间件。
 
 ---
 
@@ -51,7 +51,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 - 不接真实支付机构、不做真实出款/入账（当前仅 Mock Channel + 模拟业务事实）。
 - （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
-- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外一：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；**例外二：Redis 事务消息通道（ADR-0074 / spec 029，🟡 Proposed 待实现）——复用同一 Redis 实例的 Streams 承载跨服务通知，不引入任何 MQ 中间件，仍遵守「非数据源」定位**；熔断组件（Resilience4j）在 payment-service 已引入并保留（2026-09-04 裁决），缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
+- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外一：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；**例外二：Redis 事务消息通道（ADR-0074 / spec 029，🟢 Accepted 已实现）——复用同一 Redis 实例的 Streams 承载跨服务通知，不引入任何 MQ 中间件，仍遵守「非数据源」定位；通道承载半消息/位点/DLQ，须开 AOF 且 `noeviction`（FR-501）**；熔断组件（Resilience4j）在 payment-service 已引入并保留（2026-09-04 裁决），缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
 
 **本阶段范围裁剪（2026-08-30 负责人裁决）**：以下能力**明确不做**，只保留预留挂点，落地形态与启用条件见 §2.4：
@@ -190,7 +190,7 @@ graph LR
 
 - **服务内**：本地事务保证原子。
 - **跨服务（同步）**：统一走**公开的同步 HTTP/RPC 用例**（Spring Cloud OpenFeign + LoadBalancer），契约 DTO 集中在 `common-dto`。适用于**必须取返回值**的查询与命令（查 SKU 价、建支付单取 paymentNo、发起退款取 refundNo）。
-- **跨服务（异步）**：**Redis 事务消息通道**（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)，spec 029，🟡 Proposed）。用 `redis:7` 的 Streams 承载，实现半消息（prepare → 本地事务 → commit/rollback → 5s 回查真相表）语义；消费语义 at-least-once，重复由下游幂等吸收。
+- **跨服务（异步）**：**Redis 事务消息通道**（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)，spec 029，🟢 Accepted 已实现）。用 `redis:7` 的 Streams 承载，实现半消息（prepare → 本地事务 → commit/rollback → 5s 回查真相表）语义；消费语义 at-least-once，重复由下游幂等吸收。落点：`common/common-redis-mq` starter + 五服务 `{service}/mq` 包；键名契约见 `MqKeys`（`mq:stream:{topic}` / `mq:half:*` / `mq:dlq:{topic}`）。`payment.mq.enabled=false` 回落同步 Feign（FR-306）。
   - **适用**：事实已发生、下游可幂等的**通知/扇出**（支付成功 → 库存确认 / 履约；退款成功 → 回补 / 终止履约；订单取消 → 释放库存 / 拒收支付）。
   - **不适用**：必须取返回值的命令，以及**记账链路**（payment→ledger、refund→ledger、settlement→ledger 维持同步——借贷平衡审计对顺序敏感，且有 T+1 账证核对兜底）。
   - **拓扑**：混合。`payment.succeeded` 点对点（order 做事实判定与明细富化，ADR-0066）；`order.paid` / `refund.succeeded` / `order.cancelled` **广播**（多个消费者组各自独立位点）；`fulfillment.completed` / `fulfillment.revoked` 点对点。
@@ -331,7 +331,7 @@ Order (1) ───── (1) Transaction (1) ───── (N) Payment ──
 
 ### 4.3 核心业务流程
 
-> **异步化改造预告（spec 029 / [ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）**
+> **异步化改造（spec 029 / [ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)，🟢 Accepted 已实现）**
 > 本节时序中「订单/支付**同步 RPC 通知**下游」的步骤，将改为「**本地事务提交后发布事件，下游各自订阅消费**」。改造只影响**通知通道**，不改变任何状态机语义、幂等口径与事实不回滚原则。
 >
 > | 原同步通知 | 改为事件 | 生产方 | 订阅方 |
@@ -346,7 +346,10 @@ Order (1) ───── (1) Transaction (1) ───── (N) Payment ──
 > | fulfillment → entitlement 授予·回收 | `fulfillment.completed` / `fulfillment.revoked` | fulfillment | entitlement（点对点） |
 >
 > **记账三条（payment/refund/settlement → ledger）维持同步**，理由见 §3.4。
-> 实现落地后本节时序图将按真实代码同步更新（spec 029 tasks T69）。
+> **已落地（2026-09-20）**：本节时序图按真实代码同步如下——「同步 RPC 通知」的箭头一律替换为
+> 「本地事务提交 → 发布事件 → 订阅方各自消费」；生产/消费代码位于各服务 `{service}/mq` 包，
+> 通道实现于 `common/common-redis-mq`。状态机语义、幂等口径与「事实不回滚（INV-1）」均未变。
+> 回查真相表判据见 [order-service §3.5](systems/order-service.md) 与 [payment-service §3.10](systems/payment-service.md)。
 
 #### 4.3.1 购买主链路
 
