@@ -19,21 +19,21 @@
 
 ## Phase 1 —— B1 账本幂等键口径统一（**payment-service，🔴**）
 
-- [ ] **T7** 改 `payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java:222`：由传 `payment.getIdempotencyKey()` 改为只传 **`paymentNo`** [FR-220]
-- [ ] **T8** 改 `payment-service/src/main/java/com/payment/payment/application/PaymentResultProcessor.java:188`：由传 `"PAYMENT:" + paymentNo` 改为只传 **`paymentNo`**（去掉手工前缀）[FR-220]
-- [ ] **T9** 确认 `payment-service/src/main/java/com/payment/payment/infra/client/FeignLedgerPostingGateway.java:42` **独占**前缀拼接且**未被修改**——**前缀只留一处** [FR-220][FR-222]
-- [ ] **T10** 加强 `payment-service/src/test/java/com/payment/payment/application/PaymentCaptureLedgerPostingTest.java` 与 `PaymentApplicationServiceTest.java`：断言两条路径产生**同一**键 `PAYMENT:{paymentNo}` [FR-221][SC-B1-01][SC-B1-02]
+- [x] **T7** 改 `payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java:222`：由传 `payment.getIdempotencyKey()` 改为只传 **`paymentNo`** [FR-220]
+- [x] **T8** 改 `payment-service/src/main/java/com/payment/payment/application/PaymentResultProcessor.java:188`：由传 `"PAYMENT:" + paymentNo` 改为只传 **`paymentNo`**（去掉手工前缀）[FR-220]
+- [x] **T9** 确认 `payment-service/src/main/java/com/payment/payment/infra/client/FeignLedgerPostingGateway.java:42` **独占**前缀拼接且**未被修改**——**前缀只留一处** [FR-220][FR-222]
+- [x] **T10** 加强 `payment-service/src/test/java/com/payment/payment/application/PaymentCaptureLedgerPostingTest.java` 与 `PaymentApplicationServiceTest.java`：断言两条路径产生**同一**键 `PAYMENT:{paymentNo}` [FR-221][SC-B1-01][SC-B1-02]
 - [ ] **T11** 补测试：同一支付单**先同步成功再收到回调** ⇒ 账本分录数 **= 1**（不是 2）；并发两条路径（**需真库**，见 T114 载体要求）⇒ 唯一约束吸收，分录数 **= 1** [FR-223][SC-B1-03][SC-B1-04]
 
 ## Phase 2 —— B7 在途守卫区分「重放 / 重试」（**order-service，🟠**）
 
-- [ ] **T12** 改 `order-service/src/main/java/com/payment/order/application/TransactionApplicationService.java:189-198`：在途守卫判据改为「**是否已成功推进过**」——`paymentRefundNo != null` 或状态 `PROCESSING` ⇒ **回放**（不调渠道）；状态 `REQUESTED` **且** `paymentRefundNo == null` ⇒ **重放渠道调用** [FR-230]
-- [ ] **T13** 确认改动 **未破坏**「先落库后调用」的幂等前提（**MUST NOT** 改为「先调渠道后落库」）[FR-231]
-- [ ] **T14** ⚠️ **修正固化缺陷的断言**：`order-service/src/test/java/com/payment/order/scenario/TransactionRefundTest.java:104-114` 的 `hasSize(1)` ⇒ **修正为 2**（渠道失败后重试 ⇒ 请求次数 = 2）；PR 描述 **MUST** 给出缺陷证据链（`design-review §11 C-18`），证明是**修正错误预期**而非迎合实现 [FR-235][SC-B7-01]
-- [ ] **T15** 补测试：TXRF 已 `PROCESSING`（渠道已受理）⇒ 重试时渠道请求次数 **= 1**（正确回放，不重复调）[FR-232][SC-B7-02]
-- [ ] **T16** 补测试：并发两次同参 surplus 退款 ⇒ 最终**只产生一个** TXRF + 一个 PMRF（三层防线）[SC-B7-03]
-- [ ] **T17** 补 `RefundPolicy` 边界单测（**`>` vs `>=`** 比较符；spec §15.3 标注该结论此前**未验证**）[FR-233]
-- [ ] **T18** 补可观测：TXRF 停留 `REQUESTED` 超阈值 ⇒ **指标**可发现（**告警规则属后续 Feature**，本 Feature 至少补指标）[FR-234][SC-B7-05]
+- [x] **T12** 改 `order-service/src/main/java/com/payment/order/application/TransactionApplicationService.java:189-198`：在途守卫判据改为「**是否已成功推进过**」——`paymentRefundNo != null` 或状态 `PROCESSING` ⇒ **回放**（不调渠道）；状态 `REQUESTED` **且** `paymentRefundNo == null` ⇒ **重放渠道调用** [FR-230]
+- [x] **T13** 确认改动 **未破坏**「先落库后调用」的幂等前提（**MUST NOT** 改为「先调渠道后落库」）[FR-231]
+- [x] **T14** ⚠️ **修正固化缺陷的断言**：`order-service/src/test/java/com/payment/order/scenario/TransactionRefundTest.java:104-114` 的 `hasSize(1)` ⇒ **修正为 2**（渠道失败后重试 ⇒ 请求次数 = 2）；PR 描述 **MUST** 给出缺陷证据链（`design-review §11 C-18`），证明是**修正错误预期**而非迎合实现 [FR-235][SC-B7-01]
+- [x] **T15** 补测试：TXRF 已 `PROCESSING`（渠道已受理）⇒ 重试时渠道请求次数 **= 1**（正确回放，不重复调）[FR-232][SC-B7-02]
+- [x] **T16** 补测试：并发两次同参 surplus 退款 ⇒ 最终**只产生一个** TXRF + 一个 PMRF（三层防线）[SC-B7-03]
+- [x] **T17** 补 `RefundPolicy` 边界单测（**`>` vs `>=`** 比较符；spec §15.3 标注该结论此前**未验证**）[FR-233]
+- [x] **T18** 补可观测：TXRF 停留 `REQUESTED` 超阈值 ⇒ **指标**可发现（**告警规则属后续 Feature**，本 Feature 至少补指标）[FR-234][SC-B7-05]
 
 ## Phase 3 —— A 统一渠道契约 + 凭证透传（**payment-service，零破坏**）
 
