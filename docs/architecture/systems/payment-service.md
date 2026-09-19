@@ -509,7 +509,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 ## 8. 退款域设计（原 refund-service，Feature 015 并入）
 
-> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0024-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/refund/`，原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/005-refund/` 与 git 历史。
+> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0024-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/refund/`，原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/stage-01-core-mvp/005-refund/` 与 git 历史。
 
 ### 8.1 职责边界
 

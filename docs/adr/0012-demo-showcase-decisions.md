@@ -3,7 +3,7 @@
 **Feature**：`011-demo-showcase`
 **日期**：2026-08-31
 **状态**：✅ **Accepted**（2026-08-31 负责人裁决；**ADR-0048 已按裁决修订**——推翻本文原「不做收银台」结论，改为新增 `mock-channel-web` 组件）
-**关联**：`docs/specs/011-demo-showcase/spec.md`、`docs/architecture/next-stage-design.md` §4、`0009-risk-security-decisions.md`（ADR-0025）、`0013-channel-callback-signature-decisions.md`（ADR-0052）
+**关联**：`docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/spec.md`、`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §4、`0009-risk-security-decisions.md`（ADR-0025）、`0013-channel-callback-signature-decisions.md`（ADR-0052）
 
 > **编号说明**：ADR-0038~0046 是 `next-stage-design.md` §9 的**预留号段**，ADR-0047 已用于退款金额校验口径。
 > 本集合从 **ADR-0048** 起编号，与 `docs/adr/README.md` 的「下一可用编号」一致。
@@ -214,4 +214,4 @@
 
 - `mvn -o clean verify -fae` 全量 BUILD SUCCESS（含 `architecture-tests` 边界门禁）。
 - `bash demo/reset.sh && bash demo/run-all.sh`：4 个场景断言全通过，退出码 0。
-- 实测记录见 `docs/specs/011-demo-showcase/acceptance.md`。
+- 实测记录见 `docs/specs/stage-02-demo-idempotency-seckill/011-demo-showcase/acceptance.md`。

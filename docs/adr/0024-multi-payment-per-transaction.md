@@ -52,7 +52,7 @@
 
 ## 验收
 
-见 `docs/specs/015-multi-channel-payment/acceptance.md`（SC-001~007 逐条对照 + 全量
+见 `docs/specs/stage-03-evolution-consolidation/015-multi-channel-payment/acceptance.md`（SC-001~007 逐条对照 + 全量
 `mvn -o clean verify -fae` 门禁）。
 
 ## 后续演进

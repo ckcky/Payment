@@ -39,7 +39,8 @@
 ## 5. 文档与 ADR
 
 - 重要/不可逆决策 MUST 立 ADR（`docs/adr/NNNN-*.md`），否则视为未决策。
-- 每个特性有 Spec（`docs/specs/<feature>/spec.md`）；代码与 Spec 不一致时，先判断是需求变更还是实现缺陷，再同步修订。
+- 每个特性有 Spec（`docs/specs/<stage>/<feature>/spec.md`，按阶段归组，索引见 `docs/specs/README.md`）；代码与 Spec 不一致时，先判断是需求变更还是实现缺陷，再同步修订。
+- **阶段（Stage）分层**：特性按目标归入 `docs/specs/<stage>/`；阶段总目标书（可选）写 `docs/specs/<stage>/stage-design.md`，阶段内全部 Feature 交付并合入 master 后归档到 `docs/archive/design/<YYYY-MM-DD>-<stage-slug>/`，并在 `docs/specs/README.md` 索引与 `roadmap.md` 同步。
 - 关键业务逻辑（状态机、幂等、账本）在代码内写清「为什么」的注释。
 
 ## 6. CI / CD 与 Git

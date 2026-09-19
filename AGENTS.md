@@ -46,9 +46,8 @@
 
 ### L2 — Active Feature Work
 
-- `docs/specs/<feature>/spec.md`
-- `docs/specs/<feature>/plan.md`
-- `docs/specs/<feature>/tasks.md`
+- Stage 分组：`docs/specs/<stage>/`，索引见 `docs/specs/README.md`
+- Feature：`docs/specs/<stage>/<feature>/spec.md` / `plan.md` / `tasks.md`
 
 仅当任务明确属于该 Active Feature 时读取对应 Feature 文档。代码或架构文档中的 Feature 编号不会自动触发整套 Spec 读取。
 
@@ -56,6 +55,7 @@
 
 - `docs/adr/*.md`
 - `docs/archive/audits/*.md`
+- `docs/archive/design/*`（已完成阶段的 stage-design 归档）
 - 已完成且已被当前架构吸收的 Feature Spec
 
 这些文档默认不是普通代码任务的上下文，只在历史调查、架构迁移、Knowledge Promotion、当前实现与历史决策冲突或用户明确要求时按需读取。

@@ -646,4 +646,4 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 
 **数据模型 delta**：reconciliation 库 `audit_batches` / `audit_differences`（11 类差异 × 三级 severity × 5 态状态机）/ `audit_adjustments`（处置台账）；ledger `accounts` 新增 id=5 SUSPENSE seed；业务单号新增 AB（审计批）/ AD（调账）前缀（ADR-0062 扩展）。
 
-**关联文档**：spec/plan/tasks → `docs/specs/017-accounting-audit/`；服务视角 → `docs/architecture/systems/reconciliation-service.md` §7。
+**关联文档**：spec/plan/tasks → `docs/specs/stage-03-evolution-consolidation/017-accounting-audit/`；服务视角 → `docs/architecture/systems/reconciliation-service.md` §7。

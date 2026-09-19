@@ -26,7 +26,8 @@ import org.springframework.stereotype.Service;
  * </ol>
  *
  * <p>放弃策略：{@code IN_PROGRESS} 带 30s TTL，业务失败未调用 {@code complete} 时自动过期，
- * 允许客户端在 TTL 后重试（崩溃窗口内的极小重复作为可接受代价，见 next-stage-design §5.1）。</p>
+ * 允许客户端在 TTL 后重试（崩溃窗口内的极小重复作为可接受代价，见已归档的 next-stage-design §5.1，
+ * 文档位置 docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md）。</p>
  */
 @Service
 public class OrderEntryIdempotencyService {

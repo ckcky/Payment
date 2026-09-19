@@ -12,7 +12,7 @@ Sync Impact Report:
 Sync Impact Report:
 - Version: 2.0.0 → 2.1.0（MINOR：解决 D1 自相矛盾，将 Ledger 从前置依赖「延后 Phase 8」改为「当前 Feature 004 实现」，并补充 MVP 过渡条款）
 - 修订：§II.3 增加过渡说明（MVP 阶段在 ledger-service 落地前以状态机事实模拟资金；Ledger 已前置到 Feature 004，落地后所有真实资金变动改走 ledger-service）
-- 关联：docs/adr/0004-ledger-design-decisions.md（ADR-0008~0011）；docs/specs/004-ledger/
+- 关联：docs/adr/0004-ledger-design-decisions.md（ADR-0008~0011）；docs/specs/stage-01-core-mvp/004-ledger/
 - 决策来源：2026-08-28 负责人确认（审计 D1：§II.3 与 Roadmap 延后 Ledger 的矛盾）
 - TODO: 无
 -->
@@ -79,7 +79,7 @@ Sync Impact Report:
    - **`Money` 值对象不启用**（ADR-0010，2026-08-29 负责人裁决；v2.3.0 追认）。理由：引入 `Money` VO 需改动全量跨服务 DTO 与持久化映射，收益（编译期防错）低于成本与扩散风险；「金额 + 币种成对传递」由**代码评审 + 测试**保障，不由类型系统强制。
    - 若将来跨币种计算成为常态（如多币种结算、汇率换算），MUST 重新评估并**另立 ADR**，不得直接引入。
 3. 任何资金变动 **MUST** 经 `ledger-service` 复式记账，借贷必须平衡；**MUST NOT** 直接改余额字段。
-   - **过渡条款（v2.1.0）**：`ledger-service` 已前置到 Feature 004 实现（原 Roadmap 延后至 Phase 8，D1 矛盾已消解）。在 `ledger-service` 落地前的 MVP 阶段，允许以 Payment/Refund/Settlement 状态机事实**临时**模拟资金（不视为最终账务事实）；`ledger-service` 落地后，所有已确认资金变动 **MUST** 改走 `ledger-service`（见 ADR-0004 / `docs/specs/004-ledger/`）。
+   - **过渡条款（v2.1.0）**：`ledger-service` 已前置到 Feature 004 实现（原 Roadmap 延后至 Phase 8，D1 矛盾已消解）。在 `ledger-service` 落地前的 MVP 阶段，允许以 Payment/Refund/Settlement 状态机事实**临时**模拟资金（不视为最终账务事实）；`ledger-service` 落地后，所有已确认资金变动 **MUST** 改走 `ledger-service`（见 ADR-0004 / `docs/specs/stage-01-core-mvp/004-ledger/`）。
 4. 资金路径（支付、退款、结算）**MUST** 具备幂等性（见 Core Principle V）。
 
 ### III. 领域边界（Domain Boundaries）

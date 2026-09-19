@@ -177,6 +177,6 @@ MUST 用 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`，**禁止 `double
 
 ## 落地
 
-- 实现计划：`docs/specs/030-channel-contract-dye-alipay-sandbox/plan.md` 批次 A（契约）与批次 B（凭证）；
+- 实现计划：`docs/specs/stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/plan.md` 批次 A（契约）与批次 B（凭证）；
 - 字段级权威定义：`docs/architecture/systems/payment-service.md` §3.11；
 - 凭证的消费方（染色分流与沙箱适配器）：见 [ADR-0076](0076-traffic-dyeing-and-alipay-sandbox.md)。

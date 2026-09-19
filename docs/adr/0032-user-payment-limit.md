@@ -13,7 +13,7 @@
 | # | 事实 | 证据 |
 |---|---|---|
 | G1 | `payments` 表已含 `user_id` / `amount_minor` / `currency_code`，是**唯一的资金入口事实源** | `deployment/schema/03-payment-schema.sql`；`payment-service.md` §2.3 |
-| G2 | **没有任何限额/额度概念**：全仓无 limit / quota 表或类型；`RiskCheckService` 与 `payment.risk.*` 已于 2026-08-31 删除 | ADR-0028 ⛔ Not Implemented；`docs/specs/009-risk-security/spec.md` §2 |
+| G2 | **没有任何限额/额度概念**：全仓无 limit / quota 表或类型；`RiskCheckService` 与 `payment.risk.*` 已于 2026-08-31 删除 | ADR-0028 ⛔ Not Implemented；`docs/specs/stage-01-core-mvp/009-risk-security/spec.md` §2 |
 | G3 | **ADR-0028 否决的是「评分式风控」**：原设计是「可配两条阈值规则；命中**只记录指标与审计，不阻断**」 | spec 009 §3 US4、§4 FR-006 |
 | G4 | 支付成功的副作用（通知 order、记账）**运行在事务之外**：`createPaymentIntent` 无 `@Transactional`，`PaymentResultProcessor.applyAndNotify` 亦无；只有 `PaymentPersistence.insertPending` / `applyAndPersist` 是独立短事务 | `PaymentApplicationService.java`、`PaymentPersistence.java`、`PaymentResultProcessor.java` |
 | G5 | 渠道回调会**重复且乱序**，当前靠状态机终态吸收（`changed=false` 不触发副作用） | `PaymentResultApplier.apply`；`payment-service.md` §5.2 |

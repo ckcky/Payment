@@ -68,7 +68,7 @@ bash deployment/demo/run-all.sh
 - Roadmap：[docs/architecture/roadmap.md](docs/architecture/roadmap.md)
 - 架构决策：[docs/adr/](docs/adr/)
 - 特性设计：`docs/specs/<feature>/`
-- 本特性快速验证：[docs/specs/001-core-business-model/quickstart.md](docs/specs/001-core-business-model/quickstart.md)
+- 本特性快速验证：[docs/specs/stage-01-core-mvp/001-core-business-model/quickstart.md](docs/specs/stage-01-core-mvp/001-core-business-model/quickstart.md)
 
 ## 当前边界（重要）
 

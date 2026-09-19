@@ -8,7 +8,7 @@ description: >
   零装饰性渐变、卡片不投影、display 用 600 字重、tnum 表格数字、全幅 tile 靠表面色切换分隔。
   任何 AI 编码代理在新建/修改 mock-channel-web 演示页面前 MUST 先读本文件；
   样式唯一真相源是 deployment/mock-channel-web/src/main/resources/static/design.css。
-  本版本取代 v1.0（Stripe 靛紫基底），依据 docs/specs/024-demo-ui-apple-redesign/spec.md。
+  本版本取代 v1.0（Stripe 靛紫基底），依据 docs/specs/stage-03-evolution-consolidation/024-demo-ui-apple-redesign/spec.md。
 
 colors:
   # 行动色（唯一强调色；HIG Accessible Blue）
@@ -236,6 +236,6 @@ Apple DESIGN.md 要求「单一强调色，无第二个品牌色」，而支付/
 ## 关联
 
 - 灵感来源：[VoltAgent/awesome-design-md](https://github.com/VoltAgent/awesome-design-md)（MIT）· `design-md/apple/DESIGN.md`
-- 规范出处：`docs/specs/024-demo-ui-apple-redesign/spec.md`（FR-001~015、NFR-001~006、D1~D6）
-- 历史版本：v1.0 Stripe 靛紫基底，见 `docs/specs/020-demo-ui-design-system/spec.md`（其 D1 / FR-002 / FR-006 / FR-008 已被 024 取代）
+- 规范出处：`docs/specs/stage-03-evolution-consolidation/024-demo-ui-apple-redesign/spec.md`（FR-001~015、NFR-001~006、D1~D6）
+- 历史版本：v1.0 Stripe 靛紫基底，见 `docs/specs/stage-03-evolution-consolidation/020-demo-ui-design-system/spec.md`（其 D1 / FR-002 / FR-006 / FR-008 已被 024 取代）
 - 外部参考：Apple HIG System Colors（v2024 无障碍变体）· Apple HIG Apple Pay 按钮规范

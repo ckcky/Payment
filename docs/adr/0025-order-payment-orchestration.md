@@ -67,8 +67,8 @@ ADR-0064 解决了「一订单多支付单」的建模问题，但其第 4 条�
 - **业务权威回归 order**：surplus 判定不再靠跨服务 409 异常，由 order transaction 层基于自身状态直接决定，链路更短、语义更直白。
 - **payment-service 瘦身**：移除 `FulfillmentGateway` / `AutoRefundGateway` 两个出站依赖与包耦合（其接口 / 实现可降级或删除）。
 - **测试视角迁移**：既有 `PaymentCallbackConflictScenarioTest`（payment catch 409→autoRefund）需迁到 order 视角（`TransactionCallbackConflictTest`：第二笔支付到账 → order 判定 surplus → 调 refund → 退款 SUCCEEDED）。
-- **文档漂移需同步收口**：`docs/specs/001-core-business-model/data-model.md` 仍写「Transaction 1:1 Payment」，须更新为 1:N（对齐 ADR-0064 现实）；本 ADR **Supersedes ADR-0064 §决策#4**（自动退款归属），ADR-0064 其余条款（一交易多支付单、退款域并入、三渠道 mock）保持不变。
+- **文档漂移需同步收口**：`docs/specs/stage-01-core-mvp/001-core-business-model/data-model.md` 仍写「Transaction 1:1 Payment」，须更新为 1:N（对齐 ADR-0064 现实）；本 ADR **Supersedes ADR-0064 §决策#4**（自动退款归属），ADR-0064 其余条款（一交易多支付单、退款域并入、三渠道 mock）保持不变。
 
 ## 验收（与 spec 016 对齐）
 
-见 `docs/specs/016-order-payment-orchestration/spec.md`、`plan.md`（SC-001~006 逐条对照 + `mvn -o clean verify -fae` 门禁 + 端到端「重复支付 → order 判定 surplus → 自动退款 SUCCEEDED」演示）。
+见 `docs/specs/stage-03-evolution-consolidation/016-order-payment-orchestration/spec.md`、`plan.md`（SC-001~006 逐条对照 + `mvn -o clean verify -fae` 门禁 + 端到端「重复支付 → order 判定 surplus → 自动退款 SUCCEEDED」演示）。

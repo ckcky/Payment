@@ -1,6 +1,6 @@
 # 下一阶段决策集合（ADR-0038~0046）
 
-> 本文件收录 Roadmap `next-stage-design.md` §9 预留号段 **ADR-0038~0046** 的九项正式决策，覆盖三个 Feature：
+> 本文件收录 Roadmap 已归档的 `next-stage-design.md`（`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md`）§9 预留号段 **ADR-0038~0046** 的九项正式决策，覆盖三个 Feature：
 >
 > | Feature | 编号 |
 > | --- | --- |

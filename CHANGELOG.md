@@ -203,7 +203,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 **范围**：纯文档 + 仓库清理，无代码改动（028 的 ADR 为 Proposed，未开工）。
 
-- `docs/specs/026-containerized-local-stack/spec.md`：状态由 `Draft` 改为
+- `docs/specs/stage-03-evolution-consolidation/026-containerized-local-stack/spec.md`：状态由 `Draft` 改为
   `✅ Implemented`，补齐三条收口合并点（`61e9e3d`/`6a07a3d`、`08f3bb1`、`01193ff`）与实测口径。
   原 `Draft` 系文件未刷新的滞后标记，非任务未完成（tasks.md 早为 68/68）。
 - `docs/architecture/roadmap.md`：Current Status 补齐 `018`~`026` 九个 spec 的落地汇总表
@@ -211,7 +211,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
   为「已立项待实现」（ADR-0072/0073 🟡 Proposed，待核准）；订正「当前能力」行的模块清单
   （10 服务 → **9 服务**，反映 spec 019 退款域并入 payment；补 `e2e-tests` 模块）；
   登记 `003`/`006`/`007` 的非阻塞遗留测试项。
-- **新增 spec 027（用户支付限额，纯文档）**：`docs/specs/027-user-payment-limit/`
+- **新增 spec 027（用户支付限额，纯文档）**：`docs/specs/stage-04-new-directions/027-user-payment-limit/`
   （`spec.md` / `plan.md` / `tasks.md` / `acceptance.md`）+
   `docs/adr/0032-user-payment-limit.md`（ADR-0071，🟡 Proposed，D1~D13 已确认）。
   三表模型（`user_payment_limits` / `user_limit_usage` / `limit_operations`）+ 两阶段预占
@@ -253,7 +253,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 ## [2026-09-15] spec 026：本地全栈容器化（双模式 · Compose 而非 K8s）
 
 **范围**：spec 026 立项 + P1~P7 全部落地并实测通过（P4 可观测适配、P5 演示脚本模式分支、P7 双模验证矩阵）。
-详见 [docs/specs/026-containerized-local-stack/](docs/specs/026-containerized-local-stack/)，决策见 **ADR-0070**
+详见 [docs/specs/stage-03-evolution-consolidation/026-containerized-local-stack/](docs/specs/stage-03-evolution-consolidation/026-containerized-local-stack/)，决策见 **ADR-0070**
 
 - **Supersedes ADR-0057「服务未容器化」**：原决策理由「学习项目，容器化非当前目标」被推翻——
   宿主 JDK 版本绑架启动（`RunMojo` 需 Java 17+，本机默认 java 11 → `UnsupportedClassVersionError`）
@@ -302,7 +302,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 022：全链路自动化测试体系（代码落地，ADR-0069）
 
-**范围**：新建黑盒 `deployment/e2e-tests` Maven 模块（不依赖业务模块），承载「退款正常 / 超退拦截 / 对账准确 / 单号记对」四类全链路验证；决策与验收见 [spec 022](docs/specs/022-full-chain-automated-testing/spec.md)。**live 实跑验证待办**（T433/T434，`bash deployment/e2e-tests/run.sh`）。
+**范围**：新建黑盒 `deployment/e2e-tests` Maven 模块（不依赖业务模块），承载「退款正常 / 超退拦截 / 对账准确 / 单号记对」四类全链路验证；决策与验收见 [spec 022](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/spec.md)。**live 实跑验证待办**（T433/T434，`bash deployment/e2e-tests/run.sh`）。
 
 - **支撑层**：Env（local/ci 双环境）/ Api（JDK HttpClient 黑盒，4xx 原样返回）/ Db（9 schema JDBC 探针）/ Await（Awaitility 统一轮询，禁 Thread.sleep）/ Trace / Dump（失败自动落盘）/ Invariants（9 条断言原语：超退守卫、单号链、记账平衡、权益撤销、履约终止、库存守恒、幂等重放、无孤儿）/ E2eBase（用例级数据隔离 + 造单助手）。
 - **P0/P1 用例**：退款主链（部分/全额，六库一致 + 权益撤销 + 履约终止）、超退守卫（单次/累计/并发 4×2000 不超付）、对账四核对（LIVE CLEAN + 8 类 FAULT 注入矩阵，DB 直改备份→注入→检出→还原）、CSV 渠道账实差异注入（长/短/金额不符/重复，经 `statement-dir-override` 运行时落盘）、结算门禁、单号链、幂等与回调异常路径（重复 3 次 / 丢失→resolve→后处理不丢 / 乱序不回退）、API schema 快照（L3，`-De2e.update-snapshots=true` 重录基线）。
@@ -314,7 +314,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 023：审计中性项收尾——可观测与一致性加固
 
-**范围**：2026-09-07 审计报告中性工程遗留项（安全类按负责人裁决保持桩实现不在范围，Testcontainers/E2E 归 spec 022）。决策与验收见 [spec 023](docs/specs/023-audit-ops-remediation/spec.md)。
+**范围**：2026-09-07 审计报告中性工程遗留项（安全类按负责人裁决保持桩实现不在范围，Testcontainers/E2E 归 spec 022）。决策与验收见 [spec 023](docs/specs/stage-03-evolution-consolidation/023-audit-ops-remediation/spec.md)。
 
 - **可观测**：删除 Prometheus 死目标 `refund`（:8085 已随 ADR-0064 退役，REFUND 指标由 payment-service 同进程暴露）。
 - **优雅停机**：9 领域服务统一 `server.shutdown=graceful` + 30s drain（审计 M5），SIGTERM 不再掐断在途回调。
@@ -325,7 +325,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 022（立项·待实施）：全链路自动化测试体系
 
-**状态**：仅落地文档（spec 四件套 + [ADR-0069](docs/adr/0030-end-to-end-automated-testing.md)），**代码未开发**；决策 D1~D8 见 [spec 022](docs/specs/022-full-chain-automated-testing/spec.md)，任务清单见 [tasks.md](docs/specs/022-full-chain-automated-testing/tasks.md)（批次 A 已完成，B~G 待实施）。
+**状态**：仅落地文档（spec 四件套 + [ADR-0069](docs/adr/0030-end-to-end-automated-testing.md)），**代码未开发**；决策 D1~D8 见 [spec 022](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/spec.md)，任务清单见 [tasks.md](docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/tasks.md)（批次 A 已完成，B~G 待实施）。
 
 **范围**：把「在 demo 控制台发起支付/退款 → 观察各系统状态与 DB 数据」变成可重复、可报告、可进 CI 的自动化测试，覆盖**退款功能正常 / 超退能拦截 / 对账准确 / 单号记对**四件事。
 
@@ -339,7 +339,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 020：演示界面设计系统统一——DESIGN.md 单一真相源 + 共享 Token 层
 
-**范围**：mock-channel-web 4 个演示页（portal / demo / cashier / audit）视觉层统一。决策见 [spec 020](docs/specs/020-demo-ui-design-system/spec.md)（D1–D5 采纳建议项），设计规范见 [docs/design/DESIGN.md](docs/design/DESIGN.md)。
+**范围**：mock-channel-web 4 个演示页（portal / demo / cashier / audit）视觉层统一。决策见 [spec 020](docs/specs/stage-03-evolution-consolidation/020-demo-ui-design-system/spec.md)（D1–D5 采纳建议项），设计规范见 [docs/design/DESIGN.md](docs/design/DESIGN.md)。
 
 ### 变更
 - **设计真相源**：新增 `docs/design/DESIGN.md`（Stripe 风格基底裁剪：靛紫 `#533afd` 主色、weight-300 展示字、tnum 表格数字、pill 按钮）+ `static/design.css` 共享 token 层（157 行，CSS variables + 语义类）；灵感来源 VoltAgent/awesome-design-md（MIT）。
@@ -351,7 +351,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 021：统一访问日志——结束时单条 ACCESS + 固定格式含服务名 + 异步 MDC 修复
 
-**范围**：全服务可观测性基建。决策见 [ADR-0068](docs/adr/0029-unified-access-logging.md)，实施见 [spec 021](docs/specs/021-unified-access-logging/tasks.md)。
+**范围**：全服务可观测性基建。决策见 [ADR-0068](docs/adr/0029-unified-access-logging.md)，实施见 [spec 021](docs/specs/stage-03-evolution-consolidation/021-unified-access-logging/tasks.md)。
 
 ### 核心变更
 - **AccessLogFilter**（common-core `accesslog` 包）：`OncePerRequestFilter` + ContentCaching 包装，每请求结束落一条 `ACCESS_LOG` INFO——`method/uri/status/costMs/req/resp` 全字段单行（D2）；异常路径 try/finally 必打；`copyBodyToResponse()` 保证响应完整（NFR-002）。
@@ -368,7 +368,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 019：order 驱动的两层退款单（TXRF/PMRF）+ 渠道退款异步回调闭环
 
-**范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0028-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/019-order-driven-refund/tasks.md)。
+**范围**：退款链路重设计。决策见 [ADR-0067](docs/adr/0028-order-driven-refund-two-layer-refund-order.md)，实施见 [spec 019](docs/specs/stage-03-evolution-consolidation/019-order-driven-refund/tasks.md)。
 
 ### 核心变更
 - **两层退款单**：order 库新增 `transaction_refunds`（TXRF+雪花，幂等键=TXRF 可重入）；payment 库 `refunds.refund_no` 改自生成 PMRF+雪花（存量 RF 保留），加 `transaction_refund_no` 双向互记。
@@ -388,7 +388,7 @@ S5 两渠道独立落库 / S6 退款回原渠道 INV-6），`payment_routing_tot
 
 ## [2026-09-07] spec 018：表结构列序规范化 + payment_attempts 金额留痕 + 按 order_item 粒度履约
 
-**范围**：全项目 22 张表列序规范化 + 履约粒度升级 + 演示可观测性。决策见 [ADR-0066](docs/adr/0027-schema-normalization-and-item-granular-fulfillment.md)，实施记录见 [spec 018](docs/specs/018-schema-normalization-item-fulfillment/spec.md)。
+**范围**：全项目 22 张表列序规范化 + 履约粒度升级 + 演示可观测性。决策见 [ADR-0066](docs/adr/0027-schema-normalization-and-item-granular-fulfillment.md)，实施记录见 [spec 018](docs/specs/stage-03-evolution-consolidation/018-schema-normalization-item-fulfillment/spec.md)。
 
 ### 变更
 - **列序规范化（FR-001）**：统一为「自增 id → 业务主键 → 唯一索引列 → 业务列 → 审计列」；违规 5 张表（payment_attempts / payments / refunds / fulfillments / entitlements 等）经幂等迁移脚本 `deployment/schema/018-schema-normalization.sql`（information_schema 守卫 + PREPARE 动态 SQL，存量库重放两次验证幂等）归位，基线 CREATE TABLE 与 H2 测试 schema 同步。

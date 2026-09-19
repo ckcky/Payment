@@ -12,7 +12,8 @@
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
 | [operations/](operations/) | 运维手册（[runbook.md](operations/runbook.md)：启停/巡检/故障处理） | How-to |
 | [archive/audits/](archive/audits/) | 历史审计报告（已归档，标注 Status，不再作为权威事实源） | 历史留档 |
-| [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录） | Feature 生命周期产物 |
+| [archive/design/](archive/design/) | 已完成阶段的「阶段总目标设计书」（stage-design）归档 | 历史留档 |
+| [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录）：**按阶段（Stage）分组**，顶层 `README.md` 为「阶段→spec」索引 | Feature 生命周期产物（阶段层） |
 
 ## 文档清单与职责
 
@@ -28,7 +29,9 @@
 | **技术流程规范** | `docs/guides/engineering-standards.md` | 编码 / 测试 / CI / 可观测 / 安全 / 依赖管理 | 规范调整时 |
 | **业务流程规范** | `docs/guides/business-standards.md` | 领域边界 / 资金正确性 / 状态机 / 一致性 | 业务规则调整时 |
 | **部署说明** | `deployment/README.md` | 本地/Compose 启动最小 how-to | 运行方式变化时 |
-| **Feature Spec** | `docs/specs/<feature>/spec.md` | 特性的需求、边界与验收（单一事实源） | 特性新增或变更时 |
+| **Feature Spec** | `docs/specs/<stage>/<feature>/spec.md` | 特性的需求、边界与验收（单一事实源） | 特性新增或变更时 |
+| **Specs 索引** | `docs/specs/README.md` | 「阶段→spec」索引与阶段分层约定；新阶段/切换时更新 | 阶段或里程碑变化时 |
+| **stage-design（阶段总目标书）** | `docs/specs/<stage>/stage-design.md`（可选）；阶段完成归档到 `docs/archive/design/<date>-<stage-slug>/` | 阶段的总体目标（Feature 分组的来源） | 新阶段启动或阶段完成归档时 |
 | **README** | 根目录 | 项目目标、架构总览、快速开始 | 保持最新 |
 
 ## 层级与优先级
@@ -41,13 +44,14 @@ Constitution（.specify/memory/constitution.md，最高约束）
    ├── L1 Current Constraints & Engineering Rules
    │     └── docs/guides/*.md（按任务读取相关规范）
    ├── L2 Active Feature Work
-   │     └── Feature（docs/specs/<feature>/，仅当前 Feature 默认读取）
-   │           ├── spec.md（要什么）
-   │           ├── plan.md（怎么设计）
-   │           ├── tasks.md（怎么执行）
-   │           └── 代码 / 测试（实现结果）
+   │     └── Stage（docs/specs/<stage>/，按阶段分组，索引见 docs/specs/README.md）
+   │           └── Feature（docs/specs/<stage>/<feature>/，仅当前 Feature 默认读取）
+   │                 ├── spec.md（要什么）
+   │                 ├── plan.md（怎么设计）
+   │                 ├── tasks.md（怎么执行）
+   │                 └── 代码 / 测试（实现结果）
    └── L3 Historical / On-Demand
-         └── ADR（docs/adr/）与 archive（按需读取）
+         └── ADR（docs/adr/）与 archive（按需读取；含已完成阶段的 stage-design 归档 docs/archive/design/）
 ```
 
 普通代码任务默认从 L0 和相关代码 / 测试开始，按任务补充 L1；L2 仅用于明确的 Active Feature，L3 仅按需读取。文档引用是导航，不自动形成读取依赖。冲突时按 Constitution 的约束处理；若代码、当前架构和 Feature / ADR 之间存在事实冲突，必须报告 `DOCUMENTATION_DRIFT`，不得静默改写架构文档。

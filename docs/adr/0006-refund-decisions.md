@@ -2,7 +2,7 @@
 
 > 本文件合并 Feature `005-refund` 的架构决策为单一决策记录，便于集中审阅（同 `0003` / `0004` 的合并风格）。
 > 编号为内部决策标签（**ADR-0016 ~ ADR-0018、ADR-0047**），状态独立标注。
-> **ADR-0047 的编号说明**：它产生于 ADR-0016 回退后的文档同步阶段（2026-08-31），主题仍属退款领域，故并入本文件而非新开文档。之所以跳到 0047，是因为 `docs/architecture/next-stage-design.md` §9 已把 **ADR-0038~0046 整段预留**给下一阶段提案清单（Mock 收银台 / 幂等键 / 库存域 / Redis 等）；为避免编号冲突，新提案自 **ADR-0047** 起。
+> **ADR-0047 的编号说明**：它产生于 ADR-0016 回退后的文档同步阶段（2026-08-31），主题仍属退款领域，故并入本文件而非新开文档。之所以跳到 0047，是因为 `docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §9 已把 **ADR-0038~0046 整段预留**给下一阶段提案清单（Mock 收银台 / 幂等键 / 库存域 / Redis 等）；为避免编号冲突，新提案自 **ADR-0047** 起。
 > 涉及 Constitution §8「人类决策边界」的决策，均**待负责人确认**（2026-08-29）。
 
 > ✅ **编号冲突已解决（2026-08-29）**：本文件最初位于 `docs/adr/0005-refund-decisions.md` 并使用 ADR-0012~0014，与既有的 `docs/adr/0005-payment-reliability-impl-decisions.md`（Feature 003 实现期决策，占用 **ADR-0012~0015**）**冲突**。
@@ -112,7 +112,7 @@
 
 `technical-solution.md §4.3.3` 的退款链路标注 `C --> D["履约/权益处理 (refund→fulfillment/entitlement RPC)"]`，§4.3.6 亦列出 `refund-service → fulfillment/entitlement 退款后处理`，Roadmap Phase 5「包含：退款后的 Fulfillment/Entitlement RPC」。
 
-但**实测代码中该 RPC 完全不存在**：refund-service 仅有 `EntitlementGateway` / `EntitlementFeignClient`（`application/EntitlementGateway.java`、`infra/client/EntitlementFeignClient.java`），没有任何 fulfillment 网关；fulfillment-service 也只有 `GET /{id}` 与 `POST /internal/fulfillments/on-payment-succeeded`，**无退款端点**。文档与代码矛盾（已记录于 `docs/specs/005-refund/` 与 git 历史；原 `systems/refund-service.md` 已并入 `systems/payment-service.md` §8）。
+但**实测代码中该 RPC 完全不存在**：refund-service 仅有 `EntitlementGateway` / `EntitlementFeignClient`（`application/EntitlementGateway.java`、`infra/client/EntitlementFeignClient.java`），没有任何 fulfillment 网关；fulfillment-service 也只有 `GET /{id}` 与 `POST /internal/fulfillments/on-payment-succeeded`，**无退款端点**。文档与代码矛盾（已记录于 `docs/specs/stage-01-core-mvp/005-refund/` 与 git 历史；原 `systems/refund-service.md` 已并入 `systems/payment-service.md` §8）。
 
 另一重问题是语义边界：`Fulfillment` 的状态机为 `PENDING → PROCESSING → DELIVERED / PARTIALLY_DELIVERED / FAILED`，且 `cancel()` **仅允许 `PENDING → CANCELLED`**（`Fulfillment.java:68`）。即「已交付的履约」在当前领域模型下**不可逆**。
 
@@ -153,7 +153,7 @@
 - Constitution §III 边界 #5/#6、§IV、§V.7、§8.3、§8.4
 - `005-refund` spec：US2、FR-004~FR-007；data-model.md §4；contracts/refund-orchestration.md §2
 - `docs/architecture/technical-solution.md` §4.3.3（矛盾源）、§4.3.6
-- `docs/specs/005-refund/`（refund → fulfillment 缺口 G2；原 refund-service 文档已并入 `systems/payment-service.md` §8）
+- `docs/specs/stage-01-core-mvp/005-refund/`（refund → fulfillment 缺口 G2；原 refund-service 文档已并入 `systems/payment-service.md` §8）
 - `refund-service/.../application/RefundApplicationService.java:108-116`、`fulfillment-service/.../domain/Fulfillment.java:68`
 
 ---
@@ -215,7 +215,7 @@
 ### 关联
 
 - Constitution §II.3、§IV、§V.7、§8.4
-- `docs/specs/004-ledger/`（US2 / FR-006 / T013~T014 / `contracts/post-refund.md`）
+- `docs/specs/stage-01-core-mvp/004-ledger/`（US2 / FR-006 / T013~T014 / `contracts/post-refund.md`）
 - `docs/adr/0004-ledger-design-decisions.md`（ADR-0008~0011，其中 ADR-0009 记账触发与一致性、ADR-0011 MVP 记账范围）
 - `005-refund` spec：US4、FR-009~FR-010；contracts/refund-orchestration.md §4
 - `ledger-service/.../api/LedgerController.java`、`payment-service/.../infra/client/FeignLedgerPostingGateway.java`、`common/common-dto/.../rpc/PostingRequest.java`
@@ -299,7 +299,7 @@ ADR-0016 裁决「部分退款不做」后，同一个「不做」有两种截�
 ### 关联
 
 - ADR-0016（部分退款 Rejected，本 ADR 为其回退后的口径收口）
-- `docs/specs/001-core-business-model/spec.md`（第 66–67、289 行：部分/多次退款基线）
-- `docs/specs/005-refund/spec.md` FR-003、`data-model.md` §3（累计口径）
+- `docs/specs/stage-01-core-mvp/001-core-business-model/spec.md`（第 66–67、289 行：部分/多次退款基线）
+- `docs/specs/stage-01-core-mvp/005-refund/spec.md` FR-003、`data-model.md` §3（累计口径）
 - `docs/architecture/technical-solution.md` §2.4 #6、§8.3、§10
 - `refund-service/.../domain/RefundPolicy.java`、`RefundApplicationServiceTest#cumulativeCountsRequestedAmountForBothTerminalAndInTransit`

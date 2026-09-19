@@ -4,7 +4,7 @@
 - **状态**：Accepted（2026-08-31，提交负责人复盘；若否决则回退 013/014 代码）
   → **🟡 收口：主决策已执行，1 条待办未闭环**（2026-09-03 复核）
 - **日期**：2026-08-31（提出）｜2026-09-03（待办复核）
-- **关联**：`docs/architecture/next-stage-design.md` §1-7（011~014 规划）；ADR-0041~0046（**已写入**，见 `0005`…`0014`）；ADR-0025（验签空实现）；ADR-0031（不使用 MQ）；roadmap「Next Feature」
+- **关联**：`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §1-7（011~014 规划）；ADR-0041~0046（**已写入**，见 `0005`…`0014`）；ADR-0025（验签空实现）；ADR-0031（不使用 MQ）；roadmap「Next Feature」
 
 ## 背景（Context）
 
@@ -17,7 +17,7 @@
 该代码与 roadmap / Spec Kit SOP 存在三处偏离：
 
 1. **顺序超前**：roadmap 规划顺序为 011 → 012 → 013 → 014，013/014 出现在 011 验收之前。
-2. **缺 spec 驱动产物**：无 `docs/specs/013-*` / `014-*`，无 plan/tasks/acceptance，ADR-0041~0046（库存域归属 / 扣减时机 / 超时释放机制 / Redis 引入论证 / Redis 用途边界 / 秒杀限流）**从未写入**。
+2. **缺 spec 驱动产物**：无 `docs/specs/stage-02-demo-idempotency-seckill/013-*` / `014-*`，无 plan/tasks/acceptance，ADR-0041~0046（库存域归属 / 扣减时机 / 超时释放机制 / Redis 引入论证 / Redis 用途边界 / 秒杀限流）**从未写入**。
 3. **Redis 引入越过闸门**：014 直接引入 `StringRedisTemplate` + Lua 脚本，但 roadmap §7 明确要求「压测基线 → 论证引入」的论证闸门（ADR 待写）；宪章禁 MQ（ADR-0031）背景下 Redis 作为新基础设施更应先论证。
 
 ## 决策（Decision）
@@ -45,7 +45,7 @@
 | # | 原待办 | 状态 | 证据 |
 |---|---|---|---|
 | 1 | 负责人复盘本 ADR，确认「保留并补 spec」或「回退 013/014」 | ✅ 已闭环 | 后续开发按「保留并补 spec」推进，013/014 至今在 master 且全量构建绿 |
-| 2 | 补 `docs/specs/013-*` / `014-*`（spec→plan→tasks→acceptance），落 ADR-0041~0046 | ✅ 已闭环 | `docs/specs/013-inventory-reservation/`、`docs/specs/014-seckill-and-cache/` 均含 spec / plan / tasks / acceptance 四件；ADR-0041~0046 已写入 `docs/adr/0014-next-stage-decisions.md` |
+| 2 | 补 `docs/specs/stage-02-demo-idempotency-seckill/013-*` / `014-*`（spec→plan→tasks→acceptance），落 ADR-0041~0046 | ✅ 已闭环 | `docs/specs/stage-02-demo-idempotency-seckill/013-inventory-reservation/`、`docs/specs/stage-02-demo-idempotency-seckill/014-seckill-and-cache/` 均含 spec / plan / tasks / acceptance 四件；ADR-0041~0046 已写入 `docs/adr/0014-next-stage-decisions.md` |
 | 3 | 为 014 的 Redis 引入补「压测基线 → 论证」证据（roadmap §7 闸门） | ✅ 已闭环 | 2026-09-02 实跑压测，证据已归档至 ADR-0044「压测基线证据」节；产物 `deployment/performance/results/2026-09-02-catalog-*`。注意：**k6 未能使用**（二进制下载被代理拦截），实际以 Node 标准库负载生成器等价复刻 |
 | 4 | 补 013/014 的端到端 / 压测自动化断言（不超卖、不漏卖、无重复单、限流生效） | 🟡 **部分闭环** | 见下 |
 
@@ -64,7 +64,7 @@
      `013/acceptance.md` SC-008 标注「并发防覆盖 ⚠️ 未直接验证」现仅指 DB 层：MyBatis-Plus 乐观锁依赖仍**未经本项目测试证明**。
   3. **端到端未验证** —— 013/014 的 acceptance 均注明「端到端运行时未验证（环境受限）」。
 
-> 📌 **由本条派生的文档待办**：`docs/specs/014-seckill-and-cache/acceptance.md` §1 仍写
+> 📌 **由本条派生的文档待办**：`docs/specs/stage-02-demo-idempotency-seckill/014-seckill-and-cache/acceptance.md` §1 仍写
 > 「k6 压测 —— 本机不可用」，§3 仍列压测为未验证项；现已存在实测数据，需按新证据更新
 > 该文件的验收方式与未验证项清单。已登记为 `docs/operations/code-debt-backlog.md` #12，
 > 在 Phase 5 阶段 ⑤ 一并处理（避免在 ADR 收口这一 commit 里跨太多文件）。

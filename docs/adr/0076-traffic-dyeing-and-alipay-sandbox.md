@@ -222,7 +222,7 @@ AlipayChannelAdapter.charge(req):
 
 ## 落地
 
-- 实现计划：`docs/specs/030-channel-contract-dye-alipay-sandbox/plan.md` 批次 C（染色）/ D（落库）/ E（反向还原）/
+- 实现计划：`docs/specs/stage-04-new-directions/030-channel-contract-dye-alipay-sandbox/plan.md` 批次 C（染色）/ D（落库）/ E（反向还原）/
   F（沙箱适配器）/ G（notify 端点）/ H（demo 开关）；
 - 接口与配置落点：`docs/architecture/systems/payment-service.md` §3.11 / §3.12 / §7；
 - 运维落点：`docs/operations/runbook.md`（沙箱密钥、染色开关、`notify_url` 公网可达与内网穿透）。

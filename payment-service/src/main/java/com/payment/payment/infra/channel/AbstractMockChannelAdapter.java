@@ -168,7 +168,7 @@ public abstract class AbstractMockChannelAdapter implements PaymentChannel {
         String ref = channelPrefix() + "-ref-" + runId + "-" + refGen.incrementAndGet();
 
         // spec 022 / T429：请求级确定性故障注入（金额尾数触发），优先于基线场景。
-        // 触发约定见 docs/specs/022 plan §5：禁止 sleep / 概率，保证 E2E 确定性可复现。
+        // 触发约定见 docs/specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/plan.md §5：禁止 sleep / 概率，保证 E2E 确定性可复现。
         ChannelResult injected = requestLevelInjection(request, ref);
         if (injected != null) {
             return injected;
