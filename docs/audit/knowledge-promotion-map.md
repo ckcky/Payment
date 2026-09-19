@@ -485,3 +485,11 @@ Not performed:
 - no modification to ADRs or Specs;
 - no code, schema, API, lifecycle status, archive, or runtime changes;
 - no Phase 3B execution.
+
+## 12. Phase 3B Execution Status
+
+Phase 3B execution is recorded in [knowledge-promotion-execution.md](knowledge-promotion-execution.md).
+
+The verified current facts were promoted into the approved L0 documents, including Payment Limit, TXRF/PMRF refund ownership, item-level fulfillment, Audit/SUSPENSE/Settlement Gate, unified access logging, Compose dual mode, E2E validation, and persisted-channel reverse routing.
+
+ADR-0074 / Spec 029 remain explicitly active proposals and were removed from current service contracts; their historical documents were not modified. Remaining lifecycle-status drift and `next-stage-design.md` cleanup are outside the executed promotion scope and remain human-review items.

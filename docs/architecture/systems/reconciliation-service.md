@@ -16,13 +16,13 @@
 
 | 维度 | 说明 |
 |---|---|
-| **负责** | 拉取 Payment/Refund 已确认事实（只读 RPC）、加载渠道账单、逐笔匹配产出 `Match`/`Difference`、批次状态机、按周期幂等执行、差异处理标记（resolve）、结算事实汇总（settlement-summary） |
+| **负责** | 拉取 Payment/Refund/Ledger/Settlement 已确认事实（只读 RPC）、基础渠道对账、会计四核对、审计批次状态机、差异挂账/调账/recheck/close、SUSPENSE 对账与结算门禁；同时提供基础结算事实汇总（settlement-summary） |
 | **不负责** | 修改/回写原始 Payment/Refund 事实（Constitution 硬规则）；资金划转（归属 settlement-service）；真实渠道账单接入与自动调账；会计记账与真实资金修正 |
 
 ### 1.2 硬约束（Constitution / ADR）
 
 - **Reconciliation ≠ Settlement**：对账只「比对→找差异→标记」，结算才做资金划转，二者解耦（technical-solution §4.3.5）。`settlementSummary` 仅输出匹配事实，不触发任何资金动作。
-- **绝不修改原始事实**：出站 RPC 只调用 `confirmed-facts`（只读），落地为 `PlatformFact` 快照副本；领域层 `ReconciliationBatch` 只写自有 `reconciliation_batches` 表（technical-solution §4.3.5、§4.5 明确禁止跨服务直改他服务数据）。
+- **绝不修改原始事实**：出站 RPC 只调用 confirmed-facts / postings / audit-facts（只读），落地为本服务快照与审计表；挂账/调账只经 ledger 标准记账通道写入平衡、append-only 分录，不 UPDATE/DELETE Payment、Refund、Settlement 原始事实。
 - **金额铁律**：金额一律 `long` 最小货币单位（`amountMinor`），禁止浮点；`PlatformFact`/`ChannelStatement`/`Match` 均用 `long`（ReconciliationMatching.java:34 以 `==` 比较）。
 - **显式状态机**：批次状态迁移集中在 `ReconciliationBatch`（`start`/`finish`/`beginProcessing`/`close`），禁止散落 `setStatus`（ReconciliationBatch.java:47）。
 - **幂等**：按对账周期（`period`）幂等，数据库唯一约束兜底（见 §5.2）。
@@ -134,7 +134,7 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 
 **响应** `DifferenceResponse`（标记后 `resolutionStatus=RESOLVED`）。
 
-**规则**：仅标记差异为已处理（`Difference.resolve`，Difference.java:56），**不修改任何原始 Payment/Refund 事实**，也**不推进批次状态机**（见 §4.2）。
+**规则**：基础 reconciliation 批次的 `resolve` 仅标记渠道对账差异；会计差异必须走 `audit` 包的挂账、调账、recheck 和 close 流程，不以普通备注替代资金处置。
 
 **错误**：`NOT_FOUND`（批次或差异不存在）。
 
@@ -206,8 +206,8 @@ sequenceDiagram
 
 1. 加载批次（`NOT_FOUND`）。
 2. 按 `reference` 定位 `Difference`（不存在 `NOT_FOUND`）。
-3. `difference.resolve(note)` 标记 `RESOLVED`（Difference.java:56），`repository.save(batch)` 持久化。
-4. **写入 `differences_json` 的 `resolutionStatus` 后调用 `beginProcessing()`（→`PROCESSING`），全部差异处理完毕调用 `close(operator, at)`（→`CLOSED`）**；`unresolvedDifferenceCount>0` 时 `close()` 抛 `UNRESOLVED_DIFFERENCES`，强制先清空差异再关闭（ADR-0019）。
+3. `difference.resolve(note)` 标记基础渠道对账差异已处理，`repository.save(batch)` 持久化；该路径不产生资金分录。
+4. 会计审计差异由 `AuditApplicationService` 负责状态推进和资金处置，状态为 `PENDING → SUSPENDED → ADJUSTED → VERIFIED → RESOLVED`；存在未收口差异时审计批次不能关闭。
 
 ### 4.3 渠道账单加载（当前 Mock）
 

@@ -2,7 +2,7 @@
 
 **版本**：0.1
 **日期**：2026-09-16
-**状态**：Draft（D1~D8 已由负责人确认；**§9 的 D9~D10 待确认**，确认后方可进入 `/speckit-plan`）
+**状态**：Implemented（D1~D13 已确认并已由 payment-service 实现；当前事实见 `payment-service.md` §9）
 **分支**：`docs/spec-027-user-payment-limit`（纯文档，经 `./spec-worktree.sh`）→ 实现期另开 `feature/027-user-payment-limit`
 **决策**：ADR-0071（[0032-user-payment-limit.md](../../adr/0032-user-payment-limit.md)，🟡 Proposed）
 

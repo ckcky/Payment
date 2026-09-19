@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-26
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: 建立 Commerce & Payment Platform 的核心业务模型，明确领域职责、实体、状态、关系、同步/异步边界、数据所有权、一致性、幂等和异常场景；当前只讨论业务和领域模型，不讨论具体技术实现。
 

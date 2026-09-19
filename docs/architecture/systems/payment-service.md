@@ -299,20 +299,6 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ---
 
-### 3.10 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）
-
-| 方向 | 事件 | 对端 | 模式 | 替代的原同步调用 |
-|---|---|---|---|---|
-| 生产 | `payment.succeeded` | order | 点对点 | `PaymentApplicationService` / `PaymentResultProcessor` 通知订单 |
-| 生产 | `refund.result` | order | 点对点 | `RefundResultProcessor` 通知订单 |
-| 消费 | `order.cancelled` | ← order | 广播组之一 | 关单后标记订单不可受理，拒收后续迟到回调（当前靠 surplus 兜底） |
-
-**回查依据**：`payment.succeeded` → `payments` 该 paymentNo 是否 `SUCCEEDED`；`refund.result` → `refunds` 该 PMRF 是否终态。
-
-**记账链路维持同步**：payment → ledger 的记账**不改异步**（ADR-0074 D2）——已有 T+1 账证核对兜底，且借贷平衡审计对顺序敏感。
-
-**Redis 依赖**：本服务原**刻意不使用 Redis**（ADR-0044/G7）。引入消息通道构成该约束的**显式例外**（ADR-0074 D11，写法参照 ADR-0071 D13）：仅作消息通道，不做缓存 / 计数。
-
 ## 4. 关键流程链路剖析
 
 ### 4.1 创建支付意图（含渠道调用）
@@ -367,7 +353,7 @@ sequenceDiagram
 3. **不迁移支付领域状态**（支付单保留 SUCCEEDED 事实不回滚，ADR-0054）；退款权威结果经渠道回调（进程内推送桥或 `POST /internal/refunds/{refundNo}/channel-callback`）→ `RefundResultProcessor` 统一收敛：退款状态机终态 + REFUND 尝试行收敛到 SUCCEEDED/FAILED + 成功记账冲正（`REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。
 4. 退款整体决策（发起/收口/秒杀回补/履约终止/权益撤销）归 order，payment 只提供渠道事实（ADR-0054/0067）。
 
-> **REFUND 尝试的渠道归属（spec 028 / ADR-0072）**：该行 `channel_code` MUST 取自被退支付单的**生效支付渠道**（该 `payment_no` 下 `attempt_type='PAYMENT'` 且状态 `SUCCEEDED` 那一行），**禁止硬编码、禁止重新路由**——退款换渠道＝钱退错地方。当前实现把渠道硬编码为 `"mock"`（`PaymentRefundService.java:89`），属 spec 028 待修的**潜伏缺陷**：单一 Mock 渠道下不触发任何失败，一旦拆出三渠道即刻暴露并污染退款对账事实。
+> **REFUND 尝试的渠道归属（ADR-0072/0073）**：该行 `channel_code` 取自被退支付单的**生效 PAYMENT 尝试**（同一 `payment_no` 下 `attempt_type='PAYMENT'` 且状态 `SUCCEEDED` 的记录）。`PaymentRefundService` 据此经 `ChannelRegistry` 解析渠道实现，退款、重试和主动查询均不重新走正常支付路由，也不静默回落默认渠道；缺少有效渠道记录直接报数据错误。
 
 ---
 
@@ -377,7 +363,7 @@ sequenceDiagram
 
 - **写路径**：`MybatisPaymentRepository` / `MybatisPaymentAttemptRepository` 在 `@Transactional` 应用服务内写 `payments` / `payment_attempts`；状态机逻辑在领域层，持久层只存枚举名。
 - **读路径**：`findById` / `findByIdempotencyKey` / `findByStatus`（对账事实抽取按 `SUCCEEDED` 查询）。
-- **缓存**：`[已评估·本期不引入]` 当前**无 Redis/本地缓存**，全部直连 MySQL；支付事实需强一致，不引入 Cache-Aside（避免读到过期状态）。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
+- **缓存**：支付事实与额度计数全部以 MySQL 为权威，不使用 Cache-Aside。Payment Limit 仅使用 Redis 作为在途预占的 TTL 索引；Redis 不承载 `used_minor` / `pending_minor` 计数，Redis 不可用时保守保留占用并不阻断建单。
 
 ### 5.2 幂等性方案
 

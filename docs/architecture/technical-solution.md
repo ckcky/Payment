@@ -31,7 +31,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
 - 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**均已落地**，Ledger 复式记账已接入，形成完整业务闭环（roadmap 主链走至 `014-seckill-and-cache`）。
 - **尚未引入**：真实支付渠道（当前 Mock Channel）、独立 MQ 中间件、API 网关、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现；熔断组件 Resilience4j 已在 payment-service 引入并保留）。
-- **已立项待实现**：跨服务异步事件——以 **Redis 事务消息通道**实现（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074) / spec 029，🟡 Proposed，2026-09-19 拍板），不引入 MQ 中间件。
+- **当前跨服务通信**：以公开同步 HTTP/RPC 用例为主；ADR-0074 / spec 029 的 Redis Streams 事务消息仍是 Active Proposal，不属于当前运行架构。
 
 ---
 
@@ -51,7 +51,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 - 不接真实支付机构、不做真实出款/入账（当前仅 Mock Channel + 模拟业务事实）。
 - （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
-- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外一：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；**例外二：Redis 事务消息通道（ADR-0074 / spec 029，🟡 Proposed 待实现）——复用同一 Redis 实例的 Streams 承载跨服务通知，不引入任何 MQ 中间件，仍遵守「非数据源」定位**；熔断组件（Resilience4j）在 payment-service 已引入并保留（2026-09-04 裁决），缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
+- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。Redis 当前只用于入口幂等、SKU 缓存、秒杀预扣、订单超时和 payment limit 在途预占 TTL 索引，非数据源；ADR-0074 / spec 029 的 Redis Streams 消息通道仍未实现。熔断组件（Resilience4j）在 payment-service 已引入并保留，对账侧不引入。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
 
 **本阶段范围裁剪（2026-08-30 负责人裁决）**：以下能力**明确不做**，只保留预留挂点，落地形态与启用条件见 §2.4：
@@ -136,7 +136,7 @@ graph LR
 | Payment Attempt（**channelAttempt 渠道层**） | PaymentAttempt、Channel Reference、Error Type | payment-service |
 | Payment Channel（**channelAttempt 渠道层**） | Channel / Adapter 实现族（接口 + 模块，不单独部署） | payment-service |
 | Refund | Refund、Refund Item、Refund Decision | payment-service（退款域，见 [§8](systems/payment-service.md)） |
-| Fulfillment | Fulfillment（Item / Delivery `[待定]`，尚未建模） | fulfillment-service |
+| Fulfillment | Fulfillment（按 `order_item_no` 明细粒度） | fulfillment-service |
 | Entitlement | Entitlement、Grant、Consumption | entitlement-service |
 | Ledger | Posting、Entry（复式，借贷平衡 `A = N + F`） | ledger-service |
 | Reconciliation | Batch、Match、Difference | reconciliation-service |
@@ -190,14 +190,9 @@ graph LR
 
 - **服务内**：本地事务保证原子。
 - **跨服务（同步）**：统一走**公开的同步 HTTP/RPC 用例**（Spring Cloud OpenFeign + LoadBalancer），契约 DTO 集中在 `common-dto`。适用于**必须取返回值**的查询与命令（查 SKU 价、建支付单取 paymentNo、发起退款取 refundNo）。
-- **跨服务（异步）**：**Redis 事务消息通道**（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)，spec 029，🟡 Proposed）。用 `redis:7` 的 Streams 承载，实现半消息（prepare → 本地事务 → commit/rollback → 5s 回查真相表）语义；消费语义 at-least-once，重复由下游幂等吸收。
-  - **适用**：事实已发生、下游可幂等的**通知/扇出**（支付成功 → 库存确认 / 履约；退款成功 → 回补 / 终止履约；订单取消 → 释放库存 / 拒收支付）。
-  - **不适用**：必须取返回值的命令，以及**记账链路**（payment→ledger、refund→ledger、settlement→ledger 维持同步——借贷平衡审计对顺序敏感，且有 T+1 账证核对兜底）。
-  - **拓扑**：混合。`payment.succeeded` 点对点（order 做事实判定与明细富化，ADR-0066）；`order.paid` / `refund.succeeded` / `order.cancelled` **广播**（多个消费者组各自独立位点）；`fulfillment.completed` / `fulfillment.revoked` 点对点。
-  - **定位**：仅作通知与解耦，**不承载资金事实真相**（ADR-0031 约束继承）；Redis 非数据源（ADR-0045），全丢时系统仍正确，只是需人工重放。
-  - **链路追踪**：traceId 写入事件信封并在消费端恢复进 MDC，保证跨异步边界连续（ADR-0074 D14）。
+- **跨服务（异步）**：当前系统不依赖跨服务异步事件；已实现链路使用公开同步 HTTP/RPC、幂等重试与对账收敛。Redis Streams 事务消息属于 ADR-0074 / spec 029 的 Active Proposal，未写入当前服务契约。
 - **对外渠道**：通过 Channel Adapter 抽象与第三方交互（当前 Mock Channel）。
-- **后置流程**：原「负责方同步 RPC 调用下游」改为**发布事实事件、各方订阅**；仍保留 `mq.enabled=false` 回落同步调用的开关。任何同步边界不得要求一次调用完成跨领域全链路。
+- **后置流程**：当前由负责方通过公开同步 RPC 调用下游，失败不回滚前序事实，依靠幂等重试、查询/对账和人工收敛完成最终一致。跨领域调用不要求一次请求完成全链路。
 
 ### 3.5 技术栈
 
@@ -331,23 +326,6 @@ Order (1) ───── (1) Transaction (1) ───── (N) Payment ──
 
 ### 4.3 核心业务流程
 
-> **异步化改造预告（spec 029 / [ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)，🟡 Proposed 待实现）**
-> 本节时序中「订单/支付**同步 RPC 通知**下游」的步骤，将改为「**本地事务提交后发布事件，下游各自订阅消费**」。改造只影响**通知通道**，不改变任何状态机语义、幂等口径与事实不回滚原则。
->
-> | 原同步通知 | 改为事件 | 生产方 | 订阅方 |
-> |---|---|---|---|
-> | payment → order 支付成功 | `payment.succeeded` | payment | order（点对点） |
-> | order → catalog 确认库存 | `order.paid` | order | catalog（广播） |
-> | order → fulfillment 驱动履约 | `order.paid` | order | fulfillment（广播） |
-> | payment → order 退款结果 | `refund.result` | payment | order（点对点） |
-> | order → catalog 秒杀回补 | `refund.succeeded` | order | catalog（广播） |
-> | order → fulfillment 终止履约 | `refund.succeeded` | order | fulfillment（广播） |
-> | 关单后（当前无任何通知） | `order.cancelled` | order | catalog / payment / fulfillment（广播） |
-> | fulfillment → entitlement 授予·回收 | `fulfillment.completed` / `fulfillment.revoked` | fulfillment | entitlement（点对点） |
->
-> **记账三条（payment/refund/settlement → ledger）维持同步**，理由见 §3.4。
-> 实现落地后本节时序图将按真实代码同步更新（spec 029 tasks T69）。
-
 #### 4.3.1 购买主链路
 
 ```mermaid
@@ -382,11 +360,11 @@ sequenceDiagram
     end
 ```
 
-> **现状 vs 目标（ADR-0054 / spec 016，Proposed 未实施）**：当前代码仍是 payment 直调履约（`PaymentResultProcessor:73`）并自行 catch 409 发起自动退款（`:82`）；目标链路为上图——payment 业务侧仅通知 order，order transaction 层判定正常/surplus（surplus 时以 `transactionNo + paymentNo` 发起自动退款），order 层执行 confirmStock + 驱动履约，记账保留在 payment。实施按 `docs/specs/016-order-payment-orchestration/` T1~T5 推进，完成后本图即为现状。
+> 当前实现：payment 仅通知 order；order 的 transaction 层判定正常到账或 surplus，order 层推进订单/交易并确认库存、请求 fulfillment；payment 保留支付/退款记账和渠道事实处理。
 
 #### 4.3.2 支付回调与 UNKNOWN 收敛
 
-渠道通知**可能重复、乱序、延迟**到达。payment-service 依据「渠道交易引用 + 支付尝试」幂等吸收重复通知，不回退已确认的合法状态；终态成功不被后到的失败回调覆盖。回调只更新 Payment/PaymentAttempt；payment 完成自身支付指令编排（含记账，保留在 payment 内）后，**业务侧仅通过同步 RPC 通知 order-service**，由 order 编排下游（回写订单/交易状态、履约触发），不直接改写其他领域内部数据（ADR-0054，现状 payment 直调履约待迁移，见 §4.3.1 注）。
+渠道通知**可能重复、乱序、延迟**到达。payment-service 依据「渠道交易引用 + 支付尝试」幂等吸收重复通知，不回退已确认的合法状态；终态成功不被后到的失败回调覆盖。回调只更新 Payment/PaymentAttempt；payment 完成自身支付指令编排（含记账，保留在 payment 内）后，**业务侧仅通过同步 RPC 通知 order-service**，由 order 编排下游（回写订单/交易状态、履约触发），不直接改写其他领域内部数据。
 
 渠道超时/断连/响应不完整时，Payment/Refund **进入 UNKNOWN**（不是失败别名）。收敛路径：主动查询接口、后续回调、对账、人工处理；在未收敛前**不得重复执行不可确认的资金动作**。
 
@@ -412,8 +390,7 @@ sequenceDiagram
     RF->>RF: 成功 → 后处理编排 (履约撤销→权益吊销→记账冲正)
 ```
 
-- 常规退款入口与 surplus 自动退款共用此链（发起方不同：用户申请 vs order transaction 层）。
-- 退款渠道流水号 MUST 落库（修复缺口：现状 `PaymentRefundService` 调渠道后 `channelReference` 仅回传不落库，对账退款事实用 `"refund-{id}"` 合成引用，见 spec 016 N4）。
+- 常规退款入口与 surplus 自动退款共用此链（发起方不同：用户申请 vs order transaction 层）。order/transaction 生成 `TXRF`，payment 生成 `PMRF` 执行单并互记；payment 持有渠道退款尝试和真实 `channel_reference`，退款终态经统一后处理通知 order 收口。
 
 ```mermaid
 flowchart LR
@@ -453,7 +430,8 @@ flowchart LR
 | 结算批次（净额 S） | `MERCHANT_PAYABLE` S | `SETTLEMENT_PAYABLE` S | 借贷相等 |
 
 - **记账**：仅对**已确认**的支付/退款/结算事实记账，`UNKNOWN` / 处理中 / 失败 / 拒绝**一律不记账**（Constitution §V.7）。幂等键 `PAYMENT:<key>` / `REFUND:<key>` / `SETTLEMENT:<batchId>` 保证重复请求只产生一份分录；借贷不平衡由 Posting 聚合根强校验拒绝，不落任何分录。记账 RPC 失败**不回滚**业务事实，记 `ledger.posting_failed` 并进入「待记账」清单由对账补齐。
-- **对账**：reconciliation-service 读取已确认的 Payment/Refund 事实，与 Mock/预置渠道账单比对，产出一致/金额差异/状态差异/平台独有/渠道独有。**对账只产生匹配/差异事实，永不修改原始 Payment/Refund 事实。**
+- **对账与审计**：reconciliation-service 读取已确认的 Payment/Refund/Ledger/Settlement 事实，基础对账之外执行账证、账账、账实、账表四类 Audit，产生差异并通过挂账/调账/recheck/close 收口。挂账使用 `SUSPENSE` 过渡科目，调整通过 ledger 平衡、append-only 分录完成，绝不修改原始 Payment/Refund/Settlement 事实。
+- **结算门禁**：settlement-service 建批前调用 reconciliation 的 `settlement-gate`；阻塞差异拒绝建批，已确认且可解释或已隔离的事实才进入 `ConfirmedFactGate` 和结算计算。
 - **结算**：settlement-service 只消费「已确认且差异可解释」的财务事实（校验商户结算资格 → 净额计算 → 生成结算批次）。同一商户周期不重复生成批次；未知执行结果不等于成功。
 - **分录不可变**：已提交分录禁止 UPDATE/DELETE，更正只能新增反向分录（冲正）。
 
@@ -475,7 +453,7 @@ reconciliation-service → payment-service      读已确认支付/退款事实
 settlement-service → merchant/reconciliation  校验结算资格 + 生成结算批次
 ```
 
-> **现状标注**：上述 order→fulfillment 履约触发与 order→payment 退款命令为 ADR-0054 目标链路（spec 016 未实施）；当前代码仍是 payment→fulfillment 直调 + payment catch 409 自发起退款。
+> 当前链路：order→fulfillment 由 order 层请求，order/transaction→payment 发起退款命令；payment→order 通过退款结果通知完成收口。
 
 ### 4.4 一致性模型（幂等 / 状态机 / 重试 / UNKNOWN）
 
@@ -484,11 +462,19 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 | **幂等** | 支付、退款、结算等资金入口 MUST 有幂等键；幂等键由调用方提供、服务端持久化并唯一约束；同键重复请求返回同一业务结果，不产生重复资金动作 |
 | **状态机** | Order/Payment/Refund/Fulfillment/Entitlement/Settlement 均显式、单向；状态流转集中在状态转换函数，禁止散落 set |
 | **本地事务** | 单服务内部状态变更用本地事务保证原子 |
-| **最终一致** | 跨服务通过同步 RPC 编排 + 幂等重试实现最终一致；对外部系统（渠道）采用最终一致。**通知类链路正改造为 Redis 事务消息通道（ADR-0074 / spec 029）**：本地事务提交后投递，at-least-once + 下游幂等，失败自动重投（把收敛时间从 ≥24h 人工压缩到秒级）；**记账链路维持同步**，资金事实仍以 ledger DB 为准，差异由 T+1 对账兜底 |
+| **最终一致** | 跨服务通过同步 RPC 编排 + 幂等重试实现最终一致；对外部系统（渠道）采用最终一致；当前未实现跨服务异步事件通道，ADR-0074 / spec 029 保持 Active Proposal；资金事实仍以 ledger DB 为准，差异由对账兜底 |
 | **重试** | 仅对幂等的外部调用允许自动重试，须有退避与上限；非幂等调用禁止盲目重试 |
 | **重复消息/回调** | 处理侧假设消息与回调会重复，靠幂等键 + 状态机幂等吸收，不重复入账 |
 | **超时** | 所有外部调用有超时；超时 ≠ 失败/成功，进入未知状态 |
 | **UNKNOWN** | 结果不确定时不猜成败直接落账，靠查询/对账/人工收敛 —— 支付系统最核心的正确性保障 |
+
+### 4.4.1 Payment Limit（当前支付入口能力）
+
+payment-service 当前提供用户日/月/年支付限额能力。限额属于支付事实边界，不新增服务：配置、周期用量和幂等操作分别落在 `user_payment_limits`、`user_limit_usage`、`limit_operations` 三张 payment Schema 表中。
+
+- 建单前执行 `RESERVE`，支付成功执行 `CONFIRM`，失败/关闭执行 `RELEASE`，TTL 到期执行 `EXPIRED`；重复回调和补偿重跑由状态机终态吸收与操作唯一键共同保证幂等。
+- `used_minor` / `pending_minor` 的权威数据在 MySQL；超限返回 `409 LIMIT_EXCEEDED`，且支付单不创建。
+- Redis 仅作为在途预占的 TTL 索引，不参与额度计数；Redis 不可用时保守保留占用，不阻断支付事实写入。
 
 ### 4.5 分布式事务处理策略
 
@@ -540,8 +526,10 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 
 - **Metrics（Micrometer）**：请求量、延迟、错误率 + 关键业务计数（支付成功率/失败率/超时率/渠道成功率/渠道耗时；退款成功率/失败率；履约/权益失败率；对账差异数量/金额；结算成功率/失败数）。
 - **Logs**：结构化日志（logback），关联字段含 `traceId` / `orderId` / `paymentId`；**资金动作 MUST 有审计日志**（`FINANCIAL_AUDIT` logger）。**敏感数据脱敏本期不做**（ADR-0027，`StructuredAuditLogger.mask()` 保留但生产零调用）；当前无真实卡号/凭证，接入真实渠道前 MUST 重新引入。
-- **Traces**：Micrometer Tracing 跨服务传播 `traceId`/`spanId`，初期不上独立分布式追踪基础设施。
+- **Trace 关联**：当前使用 `TraceIdFilter`、Feign 头透传和 MDC 关联 `traceId`；Micrometer Tracing / `spanId` 标准化尚未落地，当前不上独立分布式追踪基础设施。
 - **告警/SLO**：对「支付状态未知堆积」「对账差异」「退款失败」「重试耗尽」等业务异常 MUST 告警，而非只告警基础设施；核心接口定义可用性、P99、对账达成率目标。
+
+- **统一访问日志**：common-core 的 `AccessLogFilter` 在请求结束时输出单条 `ACCESS_LOG`，包含 method、URI、status、duration、受限 request/response payload，并通过 MDC 关联 `traceId`；logback 追加 `service` 字段。payload 有大小上限并保留 masking hook，但当前安全策略不启用真实脱敏。
 
 > 各服务的**精确埋点键 / 日志键**见 [systems/](systems/) 下对应文档（要素 6）。
 
@@ -576,6 +564,8 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
   地址（Spring Boot 环境变量优先级高于 `application.yml`），业务源码零变更（ADR-0070 D4）。
 - **明确不做 K8s**：单机学习项目，K8s 的调度/自愈/扩缩收益为零而认知成本为正（ADR-0070 D1）。
 - **演进路径**：本地多服务 → **Docker Compose（已达成）** → 单机部署 → CI/CD → 可观测增强 → 有证据的部分服务独立数据库迁移（Roadmap Phase 10）。
+
+- **E2E 验证层**：`deployment/e2e-tests` 通过 HTTP API 与多 Schema JDBC 断言真实栈，覆盖退款、超退、对账/结算门禁、业务单号链、幂等回放和 API 快照；默认本地/PR 构建跳过 live E2E，显式 `e2e.env=local|ci` 执行，失败产出 surefire 报告和诊断 dump。
 
 > 各服务的**运行态配置**（环境变量、启动依赖顺序、端口）见 [systems/](systems/) 下对应文档（要素 6），与本节「物理机部署」区分。
 

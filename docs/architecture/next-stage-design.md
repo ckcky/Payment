@@ -2,6 +2,8 @@
 
 > **⛔ 状态：规划草案，011~014 已全部交付（2026-09-14 标注）** —— 本文件规划的 **011~014 四个 Feature 均已交付并合入 master**。本文降级为**历史设计输入**，保留供 `011 / 012 / 013 / 014` 的 spec / plan 追溯引用（§5 / §6 / §7）。**当前有效计划以 [roadmap.md](roadmap.md) 为准**；§8「交易系统经典问题清单」仍有独立参考价值。
 
+> 本文件不是 L0 Current Architecture。§1 的“现状”是 2026-08-30 的历史快照；当前系统事实以 `technical-solution.md` 和 `systems/*.md` 为准。
+
 **版本**：Draft 0.1 ｜ **日期**：2026-08-30 ｜ **状态**：规划草案（011~014 已交付）
 
 > **编号说明**：spec 物理目录采用顺序编号，`008` 为历史缺口（保留，不补号）。ADR 编号以 [docs/adr/README.md](../adr/README.md) 为准；本文件原「ADR 提案清单（§9）」的预留号段 ADR-0038~0046 **已全部落文**（见 `docs/adr/0014-next-stage-decisions.md`），该节已删除。
@@ -291,7 +293,7 @@ total = available + reserved + sold
 | 5 | **掉单 / 单边账** | ✅ 主动查询 + 对账兜底 | 演示：不回调 → UNKNOWN → 收敛 |
 | 6 | **超卖** | ❌ 无库存 | 013 补齐；三道防线 |
 | 7 | **价格不信前端** | ⚠️ 有 `SkuSnapshot` 待核实 | 服务端 MUST 以 SKU 现价/快照重算并校验总价 |
-| 8 | **重复支付**（多标签页各付一次） | ✅ 已实现（Feature 015） | 一交易多支付单；第二笔成功 → 现状 payment catch 409 自发起自动退款；ADR-0054（Proposed）将把 surplus 判定与退款发起迁至 order transaction 层（`transactionNo + paymentNo`） |
+| 8 | **重复支付**（多标签页各付一次） | ✅ 已实现（Feature 015/016） | 一交易多支付单；surplus 由 order transaction 层判定并以 `transactionNo + paymentNo` 发起退款，payment 负责执行 |
 | 9 | **对账差异与长短款** | ✅ 4 类差异 | 可补"挂账处理" |
 | 10 | **退款并发**（退款 vs 支付回调同时到） | ✅ 悲观 + 乐观锁 | 可现场演示 |
 | 11 | **资金只追加不修改**，更正用冲正 | ✅ Ledger 复式记账 | 讲 append-only + 借贷平衡 |
