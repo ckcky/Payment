@@ -382,12 +382,19 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fulfillment?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
+      # spec 029 / ADR-0074 D11：fulfillment 亦消费 MQ（FulfillmentMqConfig），
+      # 必须指向 compose 网络内的 redis 服务名；缺此配置时回落 localhost 连不上，
+      # 消费端静默不工作（2026-09-19 实测：漏配导致履约链路断）。
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:
       nacos:
         condition: service_healthy
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - pay-arch
@@ -414,12 +421,18 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/entitlement?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
+      # spec 029 / ADR-0074 D11：entitlement 亦消费 MQ（EntitlementMqConfig），
+      # 必须指向 compose 网络内的 redis 服务名；缺此配置时消费端静默不工作。
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:
       nacos:
         condition: service_healthy
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - pay-arch

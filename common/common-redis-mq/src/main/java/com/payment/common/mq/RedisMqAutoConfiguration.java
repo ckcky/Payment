@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.List;
@@ -46,5 +47,20 @@ public class RedisMqAutoConfiguration {
                                                  org.springframework.beans.factory.ObjectProvider<TransactionChecker> checkers) {
         List<TransactionChecker> list = checkers.orderedStream().toList();
         return new HalfMessageScanner(producer, props, metrics, list);
+    }
+
+    /**
+     * 阻塞读超时不变量守卫（spec 029 回归修复）：启动期校验
+     * {@code spring.data.redis.timeout > payment.mq.block-ms}，不满足即 fail-fast。
+     *
+     * <p>该校验把「消费端静默空转、消息永不被处理」这类极难定位的配置错配，
+     * 提前暴露为显式的启动失败。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public MqTimeoutGuard mqTimeoutGuard(MqProperties props, Environment env) {
+        java.time.Duration timeout = env.getProperty("spring.data.redis.timeout", java.time.Duration.class,
+                java.time.Duration.ofSeconds(60));
+        return new MqTimeoutGuard(props, timeout);
     }
 }

@@ -82,7 +82,9 @@
 - [x] T59 `docs/architecture/systems/{order,payment,fulfillment,catalog,entitlement}-service.md` 补生产/消费事件清单（**文档期已写入，实现期按真实代码复核一遍**）
 - [x] T60 `CHANGELOG.md` + `roadmap.md` 登记
 - [x] T61 演示脚本 D1~D6（spec §5）：回滚不投递 / 崩溃回查 / 下游宕机自愈 / 广播隔离 / 轨迹 / 死信
-- [ ] T62 全量门禁：`mvn -o clean verify -fae` 全绿 + 新增通道测试 ≥30 用例（SC-9）
+- [x] T62 全量门禁：`mvn -o clean verify -fae` 全绿 + 新增通道测试 ≥30 用例（SC-9）
+      —— 2026-09-19 补跑：17 模块全 SUCCESS（6m22s），MQ 模块 19 用例全过。
+      合并前未跑测试导致阻塞读超时缺陷漏网（见 T74），此处复核并补记。
 
 ## 批次 G：链路追踪连续性 + 架构文档同步（2026-09-19 追加）
 
@@ -98,4 +100,25 @@
 - [x] T70 **`systems/*.md` 同步**：order / payment / fulfillment / catalog / entitlement 五份补各自生产/消费事件清单
 - [x] T71 `constitution.md:156` 增补 Redis 事务消息通道
 - [x] T72 `CHANGELOG.md` + `roadmap.md` 登记 spec 029 / ADR-0074
-- [ ] T73 断言：一笔完整链路（下单→支付→履约→权益）的所有日志**同一 traceId**，且可按 bizNo 检索出全链路（SC-11）
+- [x] T73 断言：一笔完整链路（下单→支付→履约→权益）的所有日志**同一 traceId**，且可按 bizNo 检索出全链路（SC-11）
+      —— 2026-09-19 实跑核验：order=OR226990801450889217 全链路 traceId=9e74c16b-… 贯通，
+      `MQ commit topic=order.paid` 日志携带同一 traceId，consumer lag=0。
+
+## 批次 H：回归修复（2026-09-19，spec 029 合并后 CI 暴露）
+
+> 批次 A~G 合并 master（`5e2c00d`）时**未跑门禁**（T62 未完成），CI `contract-snapshot`
+> 随即暴露两处缺陷。以下两项为合并后修复，非新功能。
+
+- [x] T74 **阻塞读超时致消费端空转**（spec 029 引入的真实回归）：
+      `MqProperties.blockMs` 默认 2000ms > 五服务 `spring.data.redis.timeout` 1000ms，
+      每轮 `XREADGROUP BLOCK 2000` 在 1s 处被 Lettuce 判超时 → 消费循环空转 →
+      `payment.succeeded` 永不被消费 → 订单不收敛 PAID（CI 报「订单收敛超时 30s」）。
+      修复：五服务 timeout 提到 5000ms；payment-service 补显式 redis 配置块
+      （原缺该块、回落 Lettuce 默认 60s 才侥幸正常）；新增 `MqTimeoutGuard` 启动期
+      fail-fast 校验 `redis.timeout > block-ms + 500ms`；compose 补 fulfillment /
+      entitlement 缺失的 `SPRING_DATA_REDIS_HOST`。回归测试 `MqBlockingReadTimeoutTest`（4 例）。
+- [x] T75 **contract-snapshot 冷启动 Feign 超时**（早于 spec 029 的独立缺陷）：
+      `createPayment` 走 order→payment Feign，源码默认 read-timeout 1s；
+      CI 冷启动 10 JVM 首调超时 → `feign.RetryableException` 落通用 500。
+      `e2e.yml` 早已用 `PAYMENT_FEIGN_*_TIMEOUT_MS` 规避，`verify.yml` 的该 job 漏配。
+      修复：verify.yml contract-snapshot 步骤补齐四个超时变量 + `PAYMENT_ADMIN_TOKEN`。

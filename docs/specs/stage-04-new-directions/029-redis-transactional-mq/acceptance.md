@@ -125,3 +125,26 @@
 > `constitution.md` 补「例外二 Redis 承载事务消息通道」+ 异步通道条款由 5 条硬约束扩为 7 条
 > （新增 bizNo 维度、回查须以业务库真相表为唯一判据）；
 > `CHANGELOG.md` 新增 2026-09-20 条目、`roadmap.md` 的 029 由「已立项待实现」改为「已实现」并更新模块计数（15→16 子模块 / 16→17 reactor）。
+
+## 合并后回归（2026-09-19，CI 暴露，已修复）
+
+> spec 029 合入 master（`5e2c00d`）时**未跑门禁**（T62 未完成），CI `verify.yml` 的
+> `contract-snapshot` job 随即暴露两处缺陷。二者已分别修复，详见 `tasks.md` 批次 H。
+
+- [x] **R1 阻塞读超时致消费端空转**（spec 029 引入的真实回归，T74）：
+      `MqProperties.blockMs` 默认 2000ms 大于五服务 `spring.data.redis.timeout` 的 1000ms，
+      每轮 `XREADGROUP BLOCK 2000` 在 ~1s 处被 Lettuce 判超时并抛
+      `RedisCommandTimeoutException`，消费循环捕获→sleep 1s→重试，如此空转——
+      消息永不被读取，`payment.succeeded` 不被消费，订单不收敛 PAID。
+      CI 表现为 `orderResponseSchemaIsStable` 报「订单收敛为 PAID 未在 30s 内完成」。
+      修复：五服务 timeout 提至 5000ms；payment-service 补显式 redis 配置块
+      （原缺该块、回落 Lettuce 默认 60s 才侥幸正常）；新增 `MqTimeoutGuard`
+      启动期 fail-fast；compose 补 fulfillment / entitlement 的 Redis 地址。
+      回归测试 `MqBlockingReadTimeoutTest` 4 例（显式短超时覆盖原 `StreamConsumerTest`
+      走 60s 默认超时留下的盲区）。
+- [x] **R2 contract-snapshot 冷启动 Feign 超时**（早于 spec 029 的独立缺陷，T75）：
+      `createPayment` 的 order→payment Feign 调用源码默认 read-timeout 1s，
+      CI 冷启动窗口内首调超时抛 `feign.RetryableException`，未被收编为业务码，
+      落通用 500 `INTERNAL_ERROR`，表现为 `paymentResponseSchemaIsStable` 稳定失败
+      （9/17 起多次运行同点复现）。`e2e.yml` 早已用 `PAYMENT_FEIGN_*_TIMEOUT_MS` 规避，
+      `verify.yml` 的该 job 漏配。修复：补齐四个超时变量 + `PAYMENT_ADMIN_TOKEN`。
