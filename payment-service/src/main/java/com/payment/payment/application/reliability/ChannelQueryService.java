@@ -8,6 +8,7 @@ import com.payment.payment.application.channel.ChannelRegistry;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.PaymentChannel;
 import com.payment.payment.application.channel.QueryStatusRequest;
+import com.payment.payment.application.channel.SingleChannelRegistry;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
@@ -77,7 +78,7 @@ public class ChannelQueryService {
                                ReliabilityConfig config,
                                BusinessMetrics metrics) {
         this(paymentRepository, null,
-                new com.payment.payment.infra.channel.SingleChannelRegistry(singleChannel),
+                new SingleChannelRegistry(singleChannel),
                 resolution, config, metrics);
         this.fallbackChannel = singleChannel;
     }

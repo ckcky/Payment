@@ -15,6 +15,7 @@ import com.payment.payment.application.channel.ChannelRegistry;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.PaymentChannel;
 import com.payment.payment.application.channel.RefundRequest;
+import com.payment.payment.application.channel.SingleChannelRegistry;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
@@ -22,9 +23,6 @@ import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -40,8 +38,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class PaymentRefundService {
-
-    private static final Logger log = LoggerFactory.getLogger(PaymentRefundService.class);
 
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository attemptRepository;
@@ -79,7 +75,7 @@ public class PaymentRefundService {
                                 BusinessMetrics metrics,
                                 StructuredAuditLogger auditLogger) {
         this(paymentRepository, attemptRepository,
-                new com.payment.payment.infra.channel.SingleChannelRegistry(singleChannel),
+                new SingleChannelRegistry(singleChannel),
                 ChannelAttemptRecorders.of(attemptRepository), metrics, auditLogger);
     }
 
@@ -164,15 +160,11 @@ public class PaymentRefundService {
      */
     private void recordRefundChannelAttempt(Payment payment, RefundAttemptRequest request,
                                             String channelCode, ChannelResult result) {
-        // D2：记所属支付单金额，而非退款金额
-        PaymentAttempt attempt = PaymentAttempt.refundAttempt(request.paymentNo(), channelCode,
-                payment.getAmountMinor(), payment.getCurrencyCode());
-        attemptRecorder.converge(attempt, result);
-        try {
-            attemptRecorder.save(attempt);
-        } catch (DuplicateKeyException ex) {
-            log.warn("退款渠道尝试重复（幂等吸收）paymentNo={} refundNo={} channelRef={}",
-                    request.paymentNo(), request.refundNo(), result.channelReference());
-        }
+        // FIX-4：退款尝试的「创建 + 收敛 + 落库」整体归渠道层端口（INV-5 写入口唯一）。
+        // payment 层只交出资金口径（D2：所属支付单金额，而非退款金额）与权威渠道结果，
+        // 不再自己 new / converge / save attempt，也不再自己 catch 重复键——
+        // 「重复键意味着什么」需要渠道引用的语义，只有渠道层能答（无条件吸收正是 F5 的伪装来源）。
+        attemptRecorder.recordRefundAttempt(request.paymentNo(), channelCode,
+                payment.getAmountMinor(), payment.getCurrencyCode(), result);
     }
 }

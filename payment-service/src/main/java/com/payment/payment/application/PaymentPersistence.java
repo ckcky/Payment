@@ -89,7 +89,21 @@ public class PaymentPersistence {
         // 注：本调用位于 @Transactional 方法体内，与随后的 insertNew 同事务——
         // 抛 LIMIT_EXCEEDED 时 payments / payment_attempts 都不落行（SC-003）。
         limitGate.acquire(cmd.userId(), cmd.currencyCode(), cmd.amountMinor(), payment.getPaymentNo());
-        payment = insertNew(payment);
+        InsertOutcome outcome = insertNew(payment);
+        if (!outcome.newlyCreated()) {
+            // 并发/重启后撞 uk_payments_idempotency_key：**必须在此处回放库内值并立即返回**。
+            //
+            // 修复前（FIX-2，2026-09-20 边界复审）：这里只是回查拿到既有支付单，随后**仍继续**
+            // openPaymentAttempt 建第二条 attempt、再 payment.start(新 attemptId)——而既有支付单
+            // 早已是 PROCESSING，于是 start 抛 STATE_TRANSITION_VIOLATION、整个建单事务回滚，
+            // **幂等重试被答成状态机错误**（调用方拿到 409/500，而不是首次结果）。
+            //
+            // 正确语义（FR-152 / FR-306）：幂等重复命中已存在支付单时返回**库内**值——
+            // 既不再建 attempt（保持 Payment 1:1 PaymentAttempt），
+            // 也**不用本次请求的染色值覆盖**库内已记录的模态。
+            return new PendingPayment(outcome.payment(), findPaymentAttempt(outcome.payment()), false);
+        }
+        payment = outcome.payment();
         // 渠道层写 payment_attempts（INV-5）：路由后的最终渠道码落 attempt 行
         PaymentAttempt attempt = attemptRecorder.openPaymentAttempt(
                 payment.getPaymentNo(), routedChannelCode,
@@ -141,15 +155,34 @@ public class PaymentPersistence {
                         "payment exists without a PAYMENT attempt: " + payment.getPaymentNo()));
     }
 
-    /** 插入新支付；并发/重启后撞幂等键唯一约束时，回查并返回首次结果（不重复入账）。 */
-    private Payment insertNew(Payment payment) {
+    /**
+     * 插入新支付；并发/重启后撞幂等键唯一约束时回查首次结果（不重复入账）。
+     *
+     * <p><b>必须回传「是否真的新建」</b>（FIX-2）：调用方据此在重复时<b>立即回放库内值</b>，
+     * 而不是继续为一条已存在的支付单建 attempt。只返回 {@code Payment} 是无法区分
+     * 「刚插入的」与「回查到的」的——那正是修复前那条把幂等重试答成状态机错误的路径。</p>
+     *
+     * <p><b>业务唯一键与 INSERT / duplicate 语义</b>：业务唯一键是
+     * {@code uk_payments_idempotency_key}，其取值是<b>确定性</b>的（调用方显式给，或由
+     * {@code payment:{orderNo}:{routedChannelCode}:{attemptSeq}} 派生），因此
+     * 「先查后插 + 撞键回放」已构成完整语义，<b>不引入 UPSERT</b>：支付单上的
+     * {@code status} / {@code currentAttemptId} / 渠道结果都是<b>不可被后来请求覆盖</b>的字段，
+     * 换成 {@code ON DUPLICATE KEY UPDATE} 会把这些一并改写，直接毁掉首次事实
+     * （与 FR-152 / FR-306「幂等重复返回库内值、不用本次请求染色覆盖」同向）。</p>
+     */
+    private InsertOutcome insertNew(Payment payment) {
         try {
-            return paymentRepository.save(payment);
+            return new InsertOutcome(paymentRepository.save(payment), true);
         } catch (DuplicateKeyException e) {
-            return paymentRepository.findByIdempotencyKey(payment.getIdempotencyKey())
+            Payment existing = paymentRepository.findByIdempotencyKey(payment.getIdempotencyKey())
                     .orElseThrow(() -> BizException.of(ErrorCodes.DUPLICATE,
                             "payment duplicate: " + payment.getIdempotencyKey()));
+            return new InsertOutcome(existing, false);
         }
+    }
+
+    /** {@code insertNew} 的结果：支付单 + 是否真由本次调用新建（{@code false} = 撞唯一键后回查到的既有行）。 */
+    private record InsertOutcome(Payment payment, boolean newlyCreated) {
     }
 
     /**

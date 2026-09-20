@@ -45,6 +45,8 @@ public final class ChannelAttemptRecorders {
         @Override
         public PaymentAttempt openPaymentAttempt(String paymentNo, String channelCode,
                                                  long amountMinor, String currencyCode) {
+            // FIX-3：与生产同口径的 Payment 1:1 PaymentAttempt 写侧断言
+            requireNoExistingPaymentAttempt(paymentNo);
             return repository.save(new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode));
         }
 
@@ -52,6 +54,25 @@ public final class ChannelAttemptRecorders {
         public PaymentAttempt openRefundAttempt(String paymentNo, String channelCode,
                                                 long amountMinor, String currencyCode) {
             return repository.save(PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode));
+        }
+
+        /**
+         * 退款尝试「创建 + 收敛 + 落库」（FIX-4），与 {@code ChannelAttemptRecorderImpl} 同流程。
+         *
+         * <p>本垫片只被「既有测试直接传仓储」的兼容构造使用；若仓储本身已实现端口
+         * （{@code InMemoryPaymentAttemptRepository}），{@link #of} 会直传、走不到这里。</p>
+         */
+        @Override
+        public PaymentAttempt recordRefundAttempt(String paymentNo, String channelCode,
+                                                  long amountMinor, String currencyCode, ChannelResult result) {
+            PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
+            converge(attempt, result);
+            try {
+                return repository.save(attempt);
+            } catch (org.springframework.dao.DuplicateKeyException ex) {
+                return ChannelAttemptRecorder.requireTrueRefundReplay(repository, paymentNo,
+                        result.channelReference());
+            }
         }
 
         @Override

@@ -6,6 +6,86 @@
 
 ---
 
+## [2026-09-20] fix：Payment / Channel 边界复审的 4 项实现级修复（FIX-1~FIX-4）
+
+**性质**：架构边界修复（非 spec 变更、非模型重设计）。来源是当天对 030 的
+Payment / Channel / Demo 三层边界的**只读复审**；本轮只修其中**确定存在、且不依赖 030 Spec 改动**的
+问题，Spec 固化的部分**原样未动**（见文末「未修项」）。
+
+**FIX-1（P0）INV-4 门禁盲区 + 3 处真实穿透**
+`ServiceBoundaryTest#channelRoutingAbstractionMustNotDependOnChannelInfrastructure` 的 `that()` 原为
+`com.payment.payment.application.channel..`——**不覆盖 `application..` 主体**。一个子包之差让三处真实反向依赖长期逃过门禁
+（`PaymentRetryService` / `ChannelQueryService` / `PaymentRefundService` 的兼容构造引用
+`infra.channel.SingleChannelRegistry`）：INV-4 名义合规、实际穿透。
+修法两半：① `SingleChannelRegistry`（零 infra 依赖，是「注册表」抽象的一个退化实现）由 `infra.channel`
+归位 `application.channel`；② 规则 `that()` 放宽到 `com.payment.payment.application..` 并**配阳性对照**
+（断言被检主体与禁用目标都真有类，防空转）。
+**门禁活性已实证**：临时在 `application..` 植一处 `infra.channel` 依赖，规则**如期变红并指名该类**（旧规则不会命中）；
+撤销后复绿。
+
+**FIX-2（P0）建单并发幂等路径把「幂等重试」答成状态机错误**
+`PaymentPersistence.insertPending` 撞 `uk_payments_idempotency_key` 时，`insertNew` 只回查了既有支付单，
+调用方**仍继续**为该支付单 `openPaymentAttempt` 建第二条 attempt、再 `payment.start(新 attemptId)`——
+而既有支付单已是 `PROCESSING` ⇒ 抛 `STATE_TRANSITION_VIOLATION`、建单事务整体回滚。
+**这是「只查不判」的典型**：返回值无法区分「刚插入」与「回查到的」。
+修法：`insertNew` 回传 `newlyCreated`；命中重复时**立即回放库内支付单 + 其既有 PAYMENT 尝试**
+（`created=false`），不建第二条 attempt、不推状态机——兑现 FR-152 / FR-306（幂等重复返回**库内**值，
+不用本次请求染色覆盖）。
+**未引入 UPSERT**：业务唯一键是 `uk_payments_idempotency_key`，其取值确定性（调用方给或由
+`payment:{orderNo}:{channelCode}:{attemptSeq}` 派生），「先查后插 + 撞键回放」已构成完整语义；
+`ON DUPLICATE KEY UPDATE` 会把 `status` / `currentAttemptId` / 渠道结果等**不可覆盖字段**一并改写，直接毁掉首次事实。
+回归测试 `PaymentPersistenceIdempotentRaceTest`（用「对手方先落库」的仓储桩把只在真并发下出现的分支钉成确定性）。
+
+**FIX-3（P1）Payment 1:1 PaymentAttempt 补写侧断言**
+架构定义要求该基数关系，但渠道层写入口此前**无任何断言**（design-review C-02 方案 A 未落地）。
+现于端口默认方法 `ChannelAttemptRecorder#requireNoExistingPaymentAttempt` 统一判据，
+**三个实现同口径**（生产 `ChannelAttemptRecorderImpl`、内存测试桩、仓储兼容垫片）——
+不变量若在三个实现里各写一遍，迟早漂移成「生产拦住了、测试桩没拦」。
+**库约束表达不了**：需要的是「`payment_no` 在 `attempt_type='PAYMENT'` 子集上唯一」，而 MySQL 无部分索引；
+退而求其次的 `UNIQUE(payment_no, attempt_type)` 会连**合法的多条 REFUND 尝试**一起禁掉（部分退款是正常业务）。
+
+**FIX-4（P1）退款尝试的写归位渠道层端口；重复键不再无条件吸收**
+`PaymentRefundService` 此前自己 `new PaymentAttempt.refundAttempt(…)` + `converge` + `save`，
+并在自己这边 `catch (DuplicateKeyException)` 把**一切**重复键当幂等吸收——这正是
+`uk_attempts_channel_reference` 是**单列**唯一、而退款侧把「原支付交易号」当退款流水号（F5 形态）
+撞上同支付单那条 **PAYMENT** 行时，缺陷被伪装成「幂等重放」的成因。
+修法：新增端口方法 `ChannelAttemptRecorder#recordRefundAttempt(…)`（创建 + 收敛 + 落库一步到位，仍是**一次**带终态的 INSERT）；
+撞键经 `requireTrueRefundReplay` 判定——只有「同一 `payment_no` 已有同 `channel_reference` 的 REFUND 行」
+才算真重放并吸收，其余一律抛 `INTERNAL_ERROR` 指名引用冲突。
+
+**门禁**：`./mvnw -o -B clean verify -fae` BUILD SUCCESS（17/17 模块，**845 tests / 0 failures**，较修复前 837 净增 8）；
+`payment-service` **362 tests / 0 failures**；`ServiceBoundaryTest` **10/10**（ArchUnit）。
+
+**验证（E2E 与沙箱主链路）**：本地 live 栈 e2e `Tests run: 24, Failures: 2, Errors: 4, Skipped: 1`——
+**与本次改动无关，已在 `master` 上原样复现**：`e2e-nightly` 连续 10 次失败（含 2026-09-19 20:00 那次），
+失败签名逐条一致（`RefundChainE2ETest` 两条、`OverRefundGuardE2ETest`、`ReconciliationAccuracyE2ETest.faultInjectionMatrix`）；
+本地多出的 2 条来自 `deployment/demo/scenario-audit.sh` 在 2026-09-19 11:15 预置的对账故障夹具
+（`PM-AUD-0001..0003` / `RF-AUD-0001`），CI 无此夹具。**本次改动零回归。**
+
+**Sandbox 主链路实测未破坏**：① mock 主链 `POST /orders` → `POST /orders/{no}/payments(ALIPAY)` →
+`POST /internal/payments/{no}/channel-callback(SUCCESS)` → payment `SUCCEEDED` → `payment.succeeded` →
+order `PAID`（1s 内）；② 真实沙箱链路 `X-Dye-Tag: SANDBOX` 建单**如期**返回 RSA2 已签名自动提交表单
+（`https://openapi-sandbox.dl.alipaydev.com/gateway.do?...method=alipay.trade.page.pay`，`payUrl` 首字符 `<` ⇒ `FORM_HTML`），
+支付单留在 `PROCESSING`/`UNKNOWN`、`payment_attempts.extra_json.channelMode='SANDBOX'` 且 `channel_reference` 为空（待买家确认）——
+与 ADR-0076 设计一致。
+
+**⚠️ E2E 红项的根因=已在案的存量 P0（复现确认，非本轮引入、也非本轮新发现）**：refund 系用例的「订单收敛超时」
+不是本轮改动所致，而是 `GOTCHAS.md` §C.1 早已记录的那条链——`refund.result` 事务消息**从未成功投递**。
+本轮用对照法复现了该结论：`PaymentEventPublisher.payload(RefundResultNotification)` 把**可空的 `failureReason`**
+放进 payload，退款**成功**时为 `null`，而 `TransactionalProducer.envelope` 末参是 `Map.copyOf(payload)`
+⇒ `NullPointerException(getMessage()=null)` ⇒ 被 `catch` 成 WARN「退款结果通知 order 失败 reason=null」
+（`reason=null` 即其指纹）。**对照证据**：`XLEN mq:stream:refund.result` = **0**（redis 已运行 29h），
+同期 `XLEN mq:stream:payment.succeeded` = **338** —— 后者证明该流「消费后不删」，故 0 只能是「从未投递」。
+属 spec 029 事务消息负载装箱缺陷（F4/F5/F6 链），不落在本次 Payment/Channel 边界范围，**只复现不修改**。
+
+**未修项（明确留置，不属本轮范围）**：Spec 030 以 FR 形式**固化**了若干与本轮架构定义冲突的行为
+（FR-167 把 `defer` 判定放在 payment 层、FR-151/303 要求渠道持久化层读 `DyeContext` 落模态、
+FR-153/271 要求 payment 侧 `runWith(attempt.getChannelMode())` 包裹渠道调用、FR-114/§7.3 把 `payUrl` 回落组装留给 payment），
+以及 `PaymentResultProcessor` / `RefundAttemptSettlementService` 仍在 payment 层驱动 attempt 收敛（= 渠道 Template Method 缺位）。
+这些要么改 Spec / ADR、要么动 Payment-Channel 核心分工，**按「不修改已完成的 030 Spec」与「不重设计核心模型」的口径一律未动**。
+
+---
+
 ## [2026-09-20] fix：支付宝异步通知验签口径错误（真实回调 100% 被拒）—— spec 030 F3
 
 **性质**：**资金链路阻断级缺陷**。spec 030 沙箱联调实战发现：沙箱买家真实付款后，支付宝 `TRADE_SUCCESS`

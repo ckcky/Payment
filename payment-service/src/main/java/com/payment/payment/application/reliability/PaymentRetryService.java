@@ -5,6 +5,7 @@ import com.payment.payment.application.channel.ChannelRegistry;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.payment.application.channel.SingleChannelRegistry;
 import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
@@ -57,7 +58,7 @@ public class PaymentRetryService {
      * 内部包装为「单通道注册表」——既有测试零改动。
      */
     public PaymentRetryService(PaymentChannel singleChannel, ReliabilityConfig config, BusinessMetrics metrics) {
-        this(new com.payment.payment.infra.channel.SingleChannelRegistry(singleChannel), config, metrics);
+        this(new SingleChannelRegistry(singleChannel), config, metrics);
     }
 
     /**

@@ -56,6 +56,8 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
     @Override
     public PaymentAttempt openPaymentAttempt(String paymentNo, String channelCode,
                                              long amountMinor, String currencyCode) {
+        // FIX-3：与生产同口径的 Payment 1:1 PaymentAttempt 写侧断言——测试桩 MUST 与生产一致
+        requireNoExistingPaymentAttempt(paymentNo);
         PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode);
         stampChannelMode(attempt);
         return save(attempt);
@@ -66,6 +68,23 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
                                             long amountMinor, String currencyCode) {
         PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
         stampChannelMode(attempt);
+        return save(attempt);
+    }
+
+    /**
+     * 退款尝试「创建 + 收敛 + 落库」（FIX-4），与 {@code ChannelAttemptRecorderImpl} <b>同口径</b>。
+     *
+     * <p>差异只在一处：内存实现没有唯一约束，因此不存在 {@code DuplicateKeyException} 分支
+     * （生产侧那条分支用 {@code requireTrueRefundReplay} 区分「真重放」与「引用值写错」）。
+     * 除该分支外，写入次数、盖章时机、收敛顺序与生产逐字一致——测试桩与生产口径漂移过的坑
+     * 已经踩过一次（模态落库），这里保持一致。</p>
+     */
+    @Override
+    public PaymentAttempt recordRefundAttempt(String paymentNo, String channelCode,
+                                              long amountMinor, String currencyCode, ChannelResult result) {
+        PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
+        stampChannelMode(attempt);
+        converge(attempt, result);
         return save(attempt);
     }
 
