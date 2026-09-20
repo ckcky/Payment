@@ -267,6 +267,11 @@ function paymentRequestOf() {
     : { body: { channelCode: 'MOCK' }, headers: {} };
 }
 
+/** 沙箱付款凭证形态判定：支付宝 page.pay 返回「自动提交表单 HTML」（以 '<' 开头），与 mock 的 URL 凭证形态不同。 */
+function isFormHtmlCredential(payUrl) {
+  return typeof payUrl === 'string' && payUrl.trimStart().charAt(0) === '<';
+}
+
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
 
 /* ---- 全链路 DB：9 张表按 5 个域分组（默认折叠，组头显示行数）---- */
@@ -387,7 +392,16 @@ async function placeOrder(skuId) {
   renderPayment(pr.data);
   PA.setStep(2);
   const link = document.getElementById('cashierLink');
-  if (pr.data.payUrl) {
+  if (pr.data.payUrl && isFormHtmlCredential(pr.data.payUrl)) {
+    // spec 030 / FR-114：沙箱凭证是「自动提交表单 HTML」，不是 URL——直接塞 href / window.open
+    // 会把 HTML 字符串当地址处理（无效跳转）。包装成 Blob 页：新窗口加载后表单自动 POST 到支付宝沙箱。
+    const blobUrl = URL.createObjectURL(new Blob([pr.data.payUrl], { type: 'text/html' }));
+    link.href = blobUrl; link.target = '_blank'; link.style.display = 'inline-flex';
+    link.textContent = '→ 去支付宝沙箱付款 ↗';
+    log('   payUrl: 支付宝沙箱表单凭证（自动提交 HTML，已包装为本地 Blob 页）');
+    log('   → 点上方「去支付宝沙箱付款」用沙箱买家账号付款；平台侧状态以 notify 异步回调为准');
+    window.open(blobUrl, '_blank');
+  } else if (pr.data.payUrl) {
     link.href = pr.data.payUrl; link.style.display = 'inline-flex';
     link.textContent = '→ 去收银台支付 ↗';
     log('   payUrl: ' + pr.data.payUrl);

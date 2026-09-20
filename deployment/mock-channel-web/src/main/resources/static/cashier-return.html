@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- UI 规范：docs/design/DESIGN.md（Feature 024 · Apple 基底）；token 在 /design.css -->
+<link rel="stylesheet" href="/design.css">
+<title>支付完成 — 返回页</title>
+<style>
+  .return { max-width: 420px; margin: 48px auto 0; text-align: center; }
+  .return .pa-amount { margin: 12px 0 4px; }
+  .fineprint { font-size: 12px; color: var(--pa-ink-3); line-height: 1.8; padding: 20px 0 4px; text-align: left; }
+</style>
+</head>
+<body>
+<div class="pa-main">
+  <div class="return">
+    <div class="pa-card">
+      <div class="pa-eyebrow">支付宝沙箱 · 页面回跳（return_url）</div>
+      <div style="font-size:44px;margin:16px 0 4px">✓</div>
+      <div style="font-size:17px;font-weight:600">付款流程已完成，正在返回商户</div>
+      <div class="pa-note" style="margin-top:10px" id="meta">paymentNo: —</div>
+      <div style="margin-top:20px"><a class="pa-btn pa-btn--block" href="/demo">← 返回演示控制台查看支付状态</a></div>
+      <div class="fineprint">
+        本页是买家付款后的<b>页面回跳</b>（return_url），仅用于把用户带回商户——
+        <b>不承载任何资金事实</b>：支付单状态一律以支付宝 <b>notify_url 异步回调</b>为准（FR-103）。
+        回到演示控制台后，若支付单仍显示 PROCESSING，说明回调尚未到达或仍在收敛，稍候刷新即可。
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const qs = new URLSearchParams(location.search);
+  const no = qs.get('out_trade_no') || '';
+  const trade = qs.get('trade_no') || '';
+  document.getElementById('meta').innerHTML =
+    'paymentNo: <b>' + (no || '未随链携带') + '</b>'
+    + (trade ? '<br>支付宝交易号: <b>' + trade + '</b>' : '');
+</script>
+</body>
+</html>
