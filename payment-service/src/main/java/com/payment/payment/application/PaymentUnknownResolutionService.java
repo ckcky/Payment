@@ -69,8 +69,37 @@ public class PaymentUnknownResolutionService {
             Instant enteredAt = payment.getEnteredUnknownAt();
             Duration duration = enteredAt == null ? Duration.ZERO : Duration.between(enteredAt, Instant.now());
             metrics.timer("payment.unknown.duration", duration, "module", MODULE);
+            // spec 030 / FR-257（T67）：UNKNOWN **在途时长**的分桶计数。
+            // timer 给分位数、bucket 给「有多少单卡在各档」——后者才是告警能直接用的信号
+            // （分位数看不出「有 3 单卡了 40 分钟」这种长尾个例）。
+            // **只加指标、不加自动动作**：分级阈值与是否自动处置属 H5 裁决，本 Feature 不做。
+            metrics.counter("payment.unknown_age", 1.0, "module", MODULE, "bucket", bucketOf(duration));
         }
         return changed;
+    }
+
+    /**
+     * UNKNOWN 在途时长的分桶标签（spec 030 / FR-257）。
+     *
+     * <p>分桶口径（分钟）：{@code <1 / 1-5 / 5-30 / 30-120 / >120}。分档理由：
+     * {@code <1} 属正常查询窗口内；{@code >30} 基本可以判定自动查询已无望收敛，
+     * 需要人工/对账介入。<b>阈值只影响观测分档，不触发任何自动动作</b>。</p>
+     */
+    private static String bucketOf(Duration duration) {
+        long minutes = duration.toMinutes();
+        if (minutes < 1) {
+            return "lt_1m";
+        }
+        if (minutes < 5) {
+            return "1_5m";
+        }
+        if (minutes < 30) {
+            return "5_30m";
+        }
+        if (minutes < 120) {
+            return "30_120m";
+        }
+        return "gt_120m";
     }
 
     /** 支付真正收敛后记录业务指标与资金审计（fire-and-forget，不改变控制流）。 */

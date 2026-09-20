@@ -59,6 +59,25 @@ payment:
       ALIPAY: { scenario: "${PAYMENT_CHANNEL_ALIPAY_SCENARIO:SUCCESS}" }
       WECHAT: { scenario: "${PAYMENT_CHANNEL_WECHAT_SCENARIO:SUCCESS}" }
       DOUYIN: { scenario: "${PAYMENT_CHANNEL_DOUYIN_SCENARIO:SUCCESS}" }
+      # spec 030 / FR-133：支付宝**真实渠道沙箱**（双模态的另一半，见 AlipayChannelAdapter）。
+      # enabled 默认 false —— 没显式打开就绝不连真实渠道；同时是**一键 kill switch**
+      # （沙箱出问题改配置即可全量停用，不必重新发版）。
+      # 染色 X-Dye-Tag: SANDBOX 而此处 enabled=false ⇒ 400 INVALID_ARGUMENT，
+      # **绝不静默回落 mock**（FR-241 / INV-8）：静默回落会让「在测沙箱」成为假象。
+      alipay:
+        sandbox:
+          enabled: ${PAYMENT_ALIPAY_SANDBOX_ENABLED:false}
+          gateway-url: ${PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+          # 以下三项 enabled=true 时**启动期强校验**，缺失即拒绝启动并列出全部缺失项（FR-134）。
+          # 密钥一律 env 注入：禁硬编码 / 禁入库 / 禁明文日志（FR-290 / INV-2）。
+          app-id: ${PAYMENT_ALIPAY_SANDBOX_APP_ID:}
+          app-private-key: ${PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY:}
+          alipay-public-key: ${PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY:}
+          # spec 030 / FR-140：沙箱 HTTP 超时**独立**配置，与全局 http-timeout-ms(1500ms) 解耦
+          # （沙箱走公网，与本地 mock 不是一个量级，共用必然错）。
+          # **MUST < payment.reliability.timeout(30s)**：若沙箱超时更长，会出现「整体超时先触发、
+          # 渠道还在等」——把不确定态记成确定态。
+          http-timeout-ms: ${PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS:10000}
   # 支付渠道路由（Feature 028 / ADR-0073 / FR-031）
   routing:
     # false = 回落旧行为（channelCode 必填，不选路）；灰度开关，可一键退回今天的行为（FR-020①/FR-033）

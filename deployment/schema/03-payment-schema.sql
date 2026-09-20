@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     requested_at DATETIME NOT NULL,
     responded_at DATETIME NULL,
     version INT NOT NULL DEFAULT 1,
+    -- spec 030 / FR-301①：渠道扩展属性（JSON 文本）。当前承载 channelMode（MOCK/SANDBOX），
+    -- 供**反向路径**（查询 / 退款 / 超时扫描）判读本次 attempt 的渠道模态。
+    -- 刻意用 TEXT 存 JSON 而非 MySQL 原生 JSON 类型（沿用 payload_json 先例）；
+    -- 刻意**不建索引、不参与渠道归属判定**——归属恒读 channel_code 列（FR-305/FR-309）。
+    extra_json TEXT NULL COMMENT '渠道扩展属性 JSON（spec 030；当前键 channelMode=MOCK|SANDBOX）',
     PRIMARY KEY (id),
     KEY idx_attempts_payment_no (payment_no),
     KEY idx_attempts_payment_type (payment_no, attempt_type),

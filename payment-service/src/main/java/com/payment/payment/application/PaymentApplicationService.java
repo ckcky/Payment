@@ -9,6 +9,8 @@ import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChannelRouter;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.payment.application.channel.PayCredential;
+import com.payment.payment.application.channel.PaymentScene;
 import com.payment.payment.application.channel.RouteContext;
 import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.domain.Payment;
@@ -35,6 +37,8 @@ import org.springframework.stereotype.Service;
 public class PaymentApplicationService {
 
     private static final String MODULE = "payment";
+    private static final org.slf4j.Logger LOGGER =
+            org.slf4j.LoggerFactory.getLogger(PaymentApplicationService.class);
 
     private final PaymentRepository paymentRepository;
     private final PaymentPersistence paymentPersistence;
@@ -181,13 +185,31 @@ public class PaymentApplicationService {
             return new RoutedPayment(pending.payment(), effectiveChannelCode);
         }
 
+        // spec 030 / FR-110（T31）：构造 ChargeRequest 时填充扩展字段。
+        // 兼容构造器只给 5 参，此处按 12 参全参构造（场景 / 商品 / 回调地址 / 有效期 / 付款人）。
+        // 场景校验 MUST 在调 charge **之前**（INV-8：不静默降级）。
+        PaymentScene scene = null; // spec 030 本期：编排层不推导默认场景（tasks Q7 / 零回归）
+        validateSceneIfPresent(scene, routedChannelCode);
+
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
         // 重试期间不落库，最终结果与重试次数一次性写入。
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(
                 new ChargeRequest(pending.payment().getPaymentNo(),
                         pending.attempt().getId(), cmd.amountMinor(), cmd.currencyCode(),
-                        routedChannelCode));
+                        routedChannelCode,
+                        scene, null, null, null, null, null, null));
         ChannelResult result = outcome.result();
+
+        // spec 030 / FR-115（T30）· INV-6：凭证非空 ⇒ 渠道**仅受理**、买家尚未付款 ⇒
+        // **不调 applyAndPersist**，payment 停在 PROCESSING（不记账、不通知 order）。
+        // 钱还没到却走成功收敛路径＝把「已受理」当成「已收款」，是资金事故。
+        if (result.hasCredential()) {
+            // 只记凭证种类，绝不打印 payload（INV-2：凭证 MUST NOT 进明文日志）
+            LOGGER.info("channel accepted with credential, payment stays PROCESSING paymentNo={} kind={}",
+                    pending.payment().getPaymentNo(), result.credential().kind());
+            metrics.counter("payment.awaiting_buyer", 1.0, "module", MODULE);
+            return new RoutedPayment(pending.payment(), routedChannelCode, result.credential());
+        }
 
         // 应用渠道结果并落库（独立短事务，含本次实际重试次数）
         PaymentPersistence.AppliedPayment applied = paymentPersistence.applyAndPersist(
@@ -219,21 +241,54 @@ public class PaymentApplicationService {
             }
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009，手续费 MVP 计 0）。
-            ledgerGateway.postPaymentCapture(applied.payment().getIdempotencyKey(),
+            //
+            // spec 030 / B1（FR-220）：账本幂等键**只传 paymentNo**，"PAYMENT:" 前缀由
+            // FeignLedgerPostingGateway 独占拼接（T9）——此前本处传的是 payment.getIdempotencyKey()，
+            // 与回调路径（PaymentResultProcessor）的 "PAYMENT:" + paymentNo 形成**双口径**，
+            // 同一支付单两条路径产生不同 postingKey，唯一约束无法吸收 ⇒ 重复记账（两笔分录）。
+            // 修复后两条路径均得 PAYMENT:{paymentNo}（FR-221）。
+            ledgerGateway.postPaymentCapture(applied.payment().getPaymentNo(),
                     applied.payment().getPaymentNo(), applied.payment().getAmountMinor(), 0L,
                     applied.payment().getCurrencyCode());
         }
-        return new RoutedPayment(applied.payment(), routedChannelCode);
+        return new RoutedPayment(applied.payment(), routedChannelCode, result.credential());
     }
 
     /**
-     * 建单结果：支付单 + **最终生效的渠道码**（FR-027）。
+     * spec 030 / FR-110（T31）：场景校验——{@code scene != null} 且渠道未声明支持
+     * ⇒ {@code 400 INVALID_ARGUMENT}；{@code scene == null} <b>不校验</b>（INV-8 / 零回归）。
+     *
+     * <p>{@code channelRegistry == null} 时跳过校验：那是既有兼容构造路径（无注册表），
+     * 且本期编排层不传场景——此处 MUST NOT 因此抛 NPE 破坏既有测试（SC-A-02）。</p>
+     */
+    private void validateSceneIfPresent(PaymentScene scene, String channelCode) {
+        if (scene == null || channelRegistry == null) {
+            return;
+        }
+        PaymentChannel channel = channelRegistry.resolve(channelCode);
+        if (!channel.supportedScenes().contains(scene)) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                    "channel " + channelCode + " does not support scene " + scene
+                            + "; supported: " + channel.supportedScenes());
+        }
+    }
+
+    /**
+     * 建单结果：支付单 + **最终生效的渠道码**（FR-027）+ **可选付款凭证**（spec 030 / FR-114）。
      *
      * <p>{@code channelCode} 是权威渠道口径——显式指定时即该值，自动选路时为 Router 决策结果，
      * 幂等重复时取首次落库的 attempt 渠道。调用方（HTTP 响应 / 收银台 payUrl）一律用它，
      * 不得回显请求里的原始 {@code channelCode}。</p>
+     *
+     * <p>{@code credential} 非空即「渠道已受理、买家尚未付款」（INV-6）：
+     * 调用方应把它透传给前端引导买家付款，<b>不落库</b>（INV-2）。</p>
      */
-    public record RoutedPayment(Payment payment, String channelCode) {
+    public record RoutedPayment(Payment payment, String channelCode, PayCredential credential) {
+
+        /** 兼容构造（无凭证）：既有调用点与测试零改动。 */
+        public RoutedPayment(Payment payment, String channelCode) {
+            this(payment, channelCode, null);
+        }
     }
 
     /**

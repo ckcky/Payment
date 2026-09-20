@@ -1,5 +1,7 @@
 package com.payment.payment.application;
 
+import com.payment.common.core.dye.DyeContext;
+import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
@@ -96,10 +98,15 @@ public class PaymentRefundService {
                     "payment not refundable in status " + payment.getStatus());
         }
         // INV-6 / FR-024：渠道取自被退支付单的生效支付渠道，经注册表解析——不调 Router、不硬编码
-        String channelCode = resolveEffectiveChannelCode(request.paymentNo());
+        PaymentAttempt effective = resolveEffectiveAttempt(request.paymentNo());
+        String channelCode = effective.getChannelCode();
         PaymentChannel channel = channelRegistry.resolve(channelCode);
-        ChannelResult result = channel.refund(new RefundRequest(request.paymentNo(), request.refundNo(),
-                request.amountMinor(), request.currencyCode(), channelCode));
+        // spec 030 / FR-153（T64）：退款是<b>反向路径</b>——没有入站 HTTP 请求，染色 ThreadLocal 为空。
+        // 必须用<b>落库的模态</b>（生效 attempt 行的 channelMode）包裹渠道调用；
+        // 不包裹的话，沙箱支付单的退款会退化成走 mock 渠道——原渠道的钱根本没退。
+        ChannelResult result = DyeContext.callWith(effective.getChannelMode(),
+                () -> channel.refund(new RefundRequest(request.paymentNo(), request.refundNo(),
+                        request.amountMinor(), request.currencyCode(), channelCode)));
         // D2（spec 018）：REFUND 尝试记所属支付单金额（payment 金额），而非退款金额（request.amountMinor）
         recordRefundChannelAttempt(payment, request, channelCode, result);
         String mappedStatus = switch (result.status()) {
@@ -119,12 +126,27 @@ public class PaymentRefundService {
      * 静默回落会让退款流向错误渠道（资金安全红线）。</p>
      */
     private String resolveEffectiveChannelCode(String paymentNo) {
+        return resolveEffectiveAttempt(paymentNo).getChannelCode();
+    }
+
+    /**
+     * 解析被退支付单的<b>生效支付 attempt</b>（FR-005 + spec 030 / FR-153）。
+     *
+     * <p>除 {@code channel_code} 外还带出该行的<b>模态</b>（{@code extra_json} 的
+     * {@code channelMode}）——退款要用它包裹渠道调用。<b>渠道与模态必须同源</b>：
+     * 用 A 渠道的实现配 B 渠道的模态，等于拿错渠道的协议去问另一个渠道。</p>
+     *
+     * <p><b>确定性排序（同 FR-272）</b>：多条 SUCCEEDED attempt 时恒取 {@code id} 最小者，
+     * 避免「退到哪个渠道」取决于数据库返回顺序。</p>
+     */
+    private PaymentAttempt resolveEffectiveAttempt(String paymentNo) {
         List<PaymentAttempt> attempts = attemptRepository.findByPaymentNo(paymentNo);
         return attempts.stream()
                 .filter(a -> PaymentAttempt.TYPE_PAYMENT.equals(a.getAttemptType()))
                 .filter(a -> a.getStatus() == PaymentAttemptStatus.SUCCEEDED)
-                .map(PaymentAttempt::getChannelCode)
-                .filter(code -> code != null && !code.isBlank())
+                .filter(a -> a.getChannelCode() != null && !a.getChannelCode().isBlank())
+                .sorted(java.util.Comparator.comparing(PaymentAttempt::getId,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
                 .findFirst()
                 .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR,
                         "no effective payment channel for payment " + paymentNo

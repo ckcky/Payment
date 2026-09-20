@@ -64,7 +64,9 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
                 entity.getFailureReason(),
                 entity.getErrorType() == null ? null : PaymentAttemptErrorType.valueOf(entity.getErrorType()),
                 entity.getVersion(), entity.getAttemptType(),
-                entity.getAmountMinor() == null ? 0L : entity.getAmountMinor(), entity.getCurrencyCode());
+                entity.getAmountMinor() == null ? 0L : entity.getAmountMinor(), entity.getCurrencyCode(),
+                // spec 030 / FR-302：extra_json → Map（fail-safe：坏数据 ⇒ null ⇒ 模态判 MOCK）
+                AttemptExtraCodec.decode(entity.getExtraJson()));
     }
 
     private PaymentAttemptEntity toEntity(PaymentAttempt attempt) {
@@ -82,6 +84,8 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
         entity.setFailureReason(attempt.getFailureReason());
         entity.setRetryCount(attempt.getRetryCount());
         entity.setErrorType(attempt.getErrorType() == null ? null : attempt.getErrorType().name());
+        // spec 030 / FR-302：Map → extra_json（null / 空 ⇒ 落 NULL 列值）
+        entity.setExtraJson(AttemptExtraCodec.encode(attempt.getExtra()));
         entity.setVersion(attempt.getVersion());
         return entity;
     }

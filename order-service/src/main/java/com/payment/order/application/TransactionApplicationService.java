@@ -184,20 +184,50 @@ public class TransactionApplicationService {
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
                         "transaction not found for order: " + order.getOrderNo()));
 
-        // 同单同支付单同金额的在途/重放守卫：surplus 通知重试（同一张 PM 多次回调成功）
-        // 或手工重复提交时，回放在途退款单，绝不生成第二个 TXRF 双重退款
+        // 同单同支付单同金额的在途守卫（spec 030 / B7，FR-230）：**必须区分「重放」与「重试」**——
+        //
+        //   ① 已成功推进过（渠道已受理）⇒ **回放**：直接返回在途单，**不调 payment**（避免双重退款）。
+        //      判据：`paymentRefundNo != null`（已拿到 PMRF）或状态已 `PROCESSING`。
+        //   ② 尚未受理（`REQUESTED` 且 `paymentRefundNo == null`）⇒ **重试**：
+        //      **不在此处返回**，让它继续往下走，用同一 TXRF 重放 payment 调用
+        //      （上次调用失败 / 超时，渠道侧根本没有这笔退款，重放是安全的）。
+        //
+        // 修复前 ①② 被一视同仁地当作「回放」直接返回 ⇒ 首调失败的退款单永久卡在 REQUESTED，
+        // 既不再推进也不被回收（design-review §11 C-18）。
+        //
+        // FR-231：本次修复**不改「先落库后调用」的幂等前提**——退款单仍先落库再调 payment，
+        // 绝不改为「先调渠道后落库」（那会让渠道已受理而本地无单，无法收敛）。
+        //
+        // ⚠️ 复用而非新建：`RefundOrder.idempotencyKey == refundNo`（构造时现生成雪花号），
+        // 故下方「按幂等键查」对新单**永远落空**——真正的「绝不生成第二个 TXRF」守门人就是本循环。
+        // 因此 ② 重试时 MUST **复用**找到的那个 inFlight 单（同号重放 payment 调用），
+        // 一旦放任走到下方 `new RefundOrder(...)` 就会落出第二张 TXRF ⇒ 双重退款。
+        RefundOrder unacceptedRetry = null;
         for (RefundOrder inFlight : transactionRefundRepository.findByOrderNo(order.getOrderNo())) {
             if (inFlight.getPaymentNo().equals(paymentNo)
-                    && inFlight.getAmountMinor() == amountMinor
-                    && (inFlight.getStatus() == RefundOrderStatus.REQUESTED
-                        || inFlight.getStatus() == RefundOrderStatus.PROCESSING)) {
-                log.info("refund replay by in-flight order txrf={} status={}",
-                        inFlight.getRefundNo(), inFlight.getStatus());
-                return inFlight;
+                    && inFlight.getAmountMinor() == amountMinor) {
+                boolean alreadyPushedToChannel = inFlight.getPaymentRefundNo() != null
+                        || inFlight.getStatus() == RefundOrderStatus.PROCESSING;
+                if (alreadyPushedToChannel) {
+                    log.info("refund replay by in-flight order txrf={} status={} pmrf={}（渠道已受理，回放不重调）",
+                            inFlight.getRefundNo(), inFlight.getStatus(), inFlight.getPaymentRefundNo());
+                    return inFlight;
+                }
+                // ② 未受理且仍 REQUESTED ⇒ 复用该单重放渠道调用（不新建 TXRF）
+                if (inFlight.getStatus() == RefundOrderStatus.REQUESTED) {
+                    log.warn("refund retry for unaccepted txrf={} status=REQUESTED pmrf=null（首调未受理，复用同号重放渠道调用）",
+                            inFlight.getRefundNo());
+                    // spec 030 / B7（T18 / FR-234）：在途但未被渠道受理的退款单 MUST **可被发现**。
+                    // 本 Feature 只补**指标**（告警规则与自动补偿扫描器属后续 Feature，见 tasks Q1 / H17）。
+                    metrics.counter("order.refund_stranded_requested", 1.0, "module", MODULE);
+                    unacceptedRetry = inFlight;
+                    break;
+                }
             }
         }
 
-        RefundOrder refundOrder = new RefundOrder(transaction.getTransactionNo(), order.getOrderNo(),
+        RefundOrder refundOrder = unacceptedRetry != null ? unacceptedRetry
+                : new RefundOrder(transaction.getTransactionNo(), order.getOrderNo(),
                 paymentNo, order.getUserId(), amountMinor, order.getCurrencyCode(), reason);
         // 幂等：幂等键命中且已离开 REQUESTED → 直接回放，不重复调 payment
         RefundOrder existing = transactionRefundRepository.findByIdempotencyKey(refundOrder.getIdempotencyKey())
@@ -206,14 +236,24 @@ public class TransactionApplicationService {
             log.info("refund replay by idempotency key txrf={} status={}", existing.getRefundNo(), existing.getStatus());
             return existing;
         }
+        boolean isNewRefundOrder = false;
         if (existing != null) {
             refundOrder = existing; // REQUESTED 残留（上次 payment 调用失败）：同号重试
         } else {
             refundOrder = transactionRefundRepository.save(refundOrder);
+            isNewRefundOrder = true;
         }
-        auditLogger.audit("order.refund_order_created", order.getOrderNo(), amountMinor,
-                order.getCurrencyCode(), "FINANCIAL_AUDIT", transaction.getTransactionNo(),
-                "payment", paymentNo);
+        // spec 030 / B7：只有**真正新建** TXRF 才记「创建」审计；② 重试路径复用既有单，
+        // 不重复记 created（避免审计里同一笔退款出现两条创建记录，干扰对账）。
+        if (isNewRefundOrder) {
+            auditLogger.audit("order.refund_order_created", order.getOrderNo(), amountMinor,
+                    order.getCurrencyCode(), "FINANCIAL_AUDIT", transaction.getTransactionNo(),
+                    "payment", paymentNo);
+        } else {
+            auditLogger.audit("order.refund_order_replayed", order.getOrderNo(), amountMinor,
+                    order.getCurrencyCode(), "FINANCIAL_AUDIT", transaction.getTransactionNo(),
+                    "payment", paymentNo);
+        }
 
         RefundCommandResponse response = paymentGateway.refund(new RefundCommandRequest(
                 refundOrder.getRefundNo(), refundOrder.getTransactionNo(), refundOrder.getPaymentNo(),

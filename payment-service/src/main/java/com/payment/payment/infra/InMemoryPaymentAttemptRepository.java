@@ -48,16 +48,31 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
 
     // ---- ChannelAttemptRecorder（Feature 028 / FR-002） ----
 
+    /**
+     * 与 {@code ChannelAttemptRecorderImpl} <b>同口径</b>（spec 030 / FR-151）：开尝试时同样
+     * 盖入当前染色模态。测试桩<b>MUST</b>与生产一致——否则「单测过了、生产没写模态」
+     * 这类偏差要等到真连沙箱才暴露。
+     */
     @Override
     public PaymentAttempt openPaymentAttempt(String paymentNo, String channelCode,
                                              long amountMinor, String currencyCode) {
-        return save(new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode));
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode);
+        stampChannelMode(attempt);
+        return save(attempt);
     }
 
     @Override
     public PaymentAttempt openRefundAttempt(String paymentNo, String channelCode,
                                             long amountMinor, String currencyCode) {
-        return save(PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode));
+        PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
+        stampChannelMode(attempt);
+        return save(attempt);
+    }
+
+    private void stampChannelMode(PaymentAttempt attempt) {
+        com.payment.common.core.dye.DyeMode mode = com.payment.common.core.dye.DyeContext.current();
+        attempt.putExtra(PaymentAttempt.CHANNEL_MODE_KEY,
+                (mode == null ? com.payment.common.core.dye.DyeMode.MOCK : mode).name());
     }
 
     /** 收敛 attempt（与 {@code ChannelAttemptRecorderImpl} 口径一致：先 accept 后终态）。 */
@@ -77,7 +92,13 @@ public class InMemoryPaymentAttemptRepository implements PaymentAttemptRepositor
                 }
                 yield attempt.fail(result.reason());
             }
-            case UNKNOWN -> attempt.markUnknown(result.reason());
+            case UNKNOWN -> {
+                // spec 030 / B4（T97）：与 ChannelAttemptRecorderImpl 同口径——UNKNOWN
+                // 分支补渠道引用回填（守卫在 backfillChannelReference 内）。测试桩口径必须与
+                // 生产一致，否则单测覆盖不到回填行为。
+                attempt.backfillChannelReference(result.channelReference());
+                yield attempt.markUnknown(result.reason());
+            }
         };
     }
 

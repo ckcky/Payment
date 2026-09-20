@@ -1,6 +1,7 @@
 package com.payment.common.core.config;
 
 import com.payment.common.core.client.TraceIdRequestInterceptor;
+import com.payment.common.core.dye.DyeRequestInterceptor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -22,5 +23,17 @@ public class FeignTraceAutoConfiguration {
     @ConditionalOnMissingBean
     public TraceIdRequestInterceptor traceIdRequestInterceptor() {
         return new TraceIdRequestInterceptor();
+    }
+
+    /**
+     * 染色出站拦截器（spec 030 / FR-163~FR-164）：把当前模态写进 {@code X-Dye-Tag} 供下游读取。
+     *
+     * <p>INV-5：本 Bean 与 {@link DyeFilter}（入站）**必须同批落地**——只加入站不做出站，
+     * 下游读不到染色 ⇒ 跨服务沙箱链路断掉（{@code InternalToken} 全线 403 的历史教训）。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public DyeRequestInterceptor dyeRequestInterceptor() {
+        return new DyeRequestInterceptor();
     }
 }

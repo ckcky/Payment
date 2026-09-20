@@ -4,6 +4,7 @@ import com.payment.common.core.accesslog.AccessLogFilter;
 import com.payment.common.core.accesslog.AccessLogProperties;
 import com.payment.common.core.accesslog.PassThroughBodyMasker;
 import com.payment.common.core.accesslog.SensitiveBodyMasker;
+import com.payment.common.core.dye.DyeFilter;
 import com.payment.common.core.error.GlobalExceptionHandler;
 import com.payment.common.core.idempotency.IdempotencyRegistry;
 import com.payment.common.core.idempotency.InMemoryIdempotencyRegistry;
@@ -56,6 +57,26 @@ public class CommonCoreAutoConfiguration {
         FilterRegistrationBean<TraceIdFilter> registration =
                 new FilterRegistrationBean<>(traceIdFilter);
         registration.setOrder(-200);
+        return registration;
+    }
+
+    // =========================================================================
+    // spec 030 / ADR-0076 全链路染色（FR-164~FR-166）
+    // 定序：TraceIdFilter(-200) → DyeFilter(-190) → AccessLogFilter(-100)（FR-165）
+    // =========================================================================
+
+    /** 染色入站过滤器（FR-162）；与出站 {@link DyeRequestInterceptor} 必须同批落地（INV-5）。 */
+    @Bean
+    @ConditionalOnMissingBean
+    public DyeFilter dyeFilter(BusinessMetrics metrics) {
+        return new DyeFilter(metrics);
+    }
+
+    /** DyeFilter 显式定序注册（order=-190）。 */
+    @Bean
+    public FilterRegistrationBean<DyeFilter> dyeFilterRegistration(DyeFilter dyeFilter) {
+        FilterRegistrationBean<DyeFilter> registration = new FilterRegistrationBean<>(dyeFilter);
+        registration.setOrder(-190);
         return registration;
     }
 

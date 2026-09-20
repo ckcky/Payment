@@ -113,6 +113,96 @@ class TransactionRefundTest {
         assertThat(paymentGateway.refundRequests).hasSize(1); // 不重复调 payment
     }
 
+    // =========================================================================
+    // spec 030 / B7（T14~T16）：在途守卫区分「重放 / 重试」
+    // =========================================================================
+
+    /**
+     * FR-230 / FR-235 / SC-B7-01：<b>渠道已受理</b>（TXRF = {@code PROCESSING}，已有 PMRF）
+     * ⇒ 再次提交是<b>重放</b>，渠道请求次数 <b>= 1</b>（不重复调 payment）。
+     *
+     * <p>这是 ① 回放路径的正向固化：修复前 {@code REQUESTED} 与 {@code PROCESSING} 被一视同仁，
+     * 本用例在修复前后都应通过——它保证修复<b>没有把已受理的单误判成可重试</b>（那会双重退款）。</p>
+     */
+    @Test
+    void acceptedRefundIsReplayedWithExactlyOneChannelCall() {
+        SuccessfulPurchaseScenarioTest.FakeCatalogClient client = clientWithSku();
+        TransactionApplicationService service = transactionLayer(client);
+        String orderNo = paidOrder(client);
+
+        RefundOrder first = service.createRefund(orderNo, null, 100L, "MANUAL");
+        assertThat(first.getStatus()).isEqualTo(RefundOrderStatus.PROCESSING);
+        assertThat(first.getPaymentRefundNo()).isNotNull(); // 已受理
+
+        RefundOrder second = service.createRefund(orderNo, null, 100L, "MANUAL");
+
+        assertThat(second.getRefundNo()).isEqualTo(first.getRefundNo());
+        assertThat(paymentGateway.refundRequests).hasSize(1); // 正确回放：不重复调渠道
+    }
+
+    /**
+     * FR-230 / FR-235 / SC-B7-01：<b>渠道未受理</b>（首调失败 ⇒ TXRF 留 {@code REQUESTED}
+     * 且 {@code paymentRefundNo == null}）⇒ 再次提交是<b>重试</b>，MUST 用<b>同一 TXRF</b>
+     * 重放渠道调用，渠道请求次数 <b>= 2</b>，且<b>不得产生第二张 TXRF</b>。
+     *
+     * <p>⚠️ 本用例断言的是<b>被此前实现固化的错误预期</b>：修复前在途守卫把 {@code REQUESTED}
+     * 一律当作「回放」直接返回 ⇒ 首调失败的单永久卡死，渠道请求次数恒为 1、退款永不推进。
+     * 缺陷证据链见 {@code design-review.md §11 C-18}；此处是<b>修正错误预期</b>，
+     * 而非放宽断言迎合实现。</p>
+     */
+    @Test
+    void unacceptedRefundIsRetriedWithSameTxrfAndSecondChannelCall() {
+        SuccessfulPurchaseScenarioTest.FakeCatalogClient client = clientWithSku();
+        TransactionApplicationService service = transactionLayer(client);
+        String orderNo = paidOrder(client);
+
+        paymentGateway.failFirstNCalls = 1; // 渠道首调失败
+
+        // 首调：渠道失败 ⇒ TXRF 落库为 REQUESTED、paymentRefundNo 为 null，异常向上抛出
+        assertThatThrownBy(() -> service.createRefund(orderNo, null, 100L, "MANUAL"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(paymentGateway.refundRequests).hasSize(1);
+
+        List<RefundOrder> afterFailure = refundRepository.findByOrderNo(orderNo);
+        assertThat(afterFailure).hasSize(1);
+        RefundOrder stranded = afterFailure.get(0);
+        assertThat(stranded.getStatus()).isEqualTo(RefundOrderStatus.REQUESTED);
+        assertThat(stranded.getPaymentRefundNo()).isNull(); // 渠道未受理
+
+        // 重试：MUST 复用同一 TXRF 重放渠道调用（不得新建第二张 TXRF）
+        RefundOrder retried = service.createRefund(orderNo, null, 100L, "MANUAL");
+
+        assertThat(paymentGateway.refundRequests).hasSize(2);           // 首调失败 + 重试
+        assertThat(retried.getRefundNo()).isEqualTo(stranded.getRefundNo()); // 同号复用
+        assertThat(retried.getStatus()).isEqualTo(RefundOrderStatus.PROCESSING);
+        assertThat(retried.getPaymentRefundNo()).isNotNull();           // 本次受理成功
+        // 不产生第二个 TXRF（双重退款防线）
+        assertThat(refundRepository.findByOrderNo(orderNo)).hasSize(1);
+    }
+
+    /**
+     * SC-B7-03：并发两次同参退款 ⇒ 最终<b>只产生一个</b> TXRF + 一个 PMRF（三层防线）。
+     *
+     * <p>在途守卫位于 {@code synchronized (orderNo.intern())} 内（spec 019），
+     * 配合「复用而非新建」的修复，重复提交不会落出第二张退款单。</p>
+     */
+    @Test
+    void duplicateRefundProducesSingleTxrfAndSinglePmrf() {
+        SuccessfulPurchaseScenarioTest.FakeCatalogClient client = clientWithSku();
+        TransactionApplicationService service = transactionLayer(client);
+        String orderNo = paidOrder(client);
+
+        RefundOrder r1 = service.createRefund(orderNo, null, 100L, "MANUAL");
+        RefundOrder r2 = service.createRefund(orderNo, null, 100L, "MANUAL");
+        RefundOrder r3 = service.createRefund(orderNo, null, 100L, "MANUAL");
+
+        assertThat(r2.getRefundNo()).isEqualTo(r1.getRefundNo());
+        assertThat(r3.getRefundNo()).isEqualTo(r1.getRefundNo());
+        assertThat(refundRepository.findByOrderNo(orderNo)).hasSize(1); // 只一个 TXRF
+        assertThat(paymentGateway.refundRequests).hasSize(1);            // 只一个 PMRF
+        assertThat(r3.getPaymentRefundNo()).isEqualTo(r1.getPaymentRefundNo());
+    }
+
     @Test
     void refundExceedingRefundableIsRejected() {
         SuccessfulPurchaseScenarioTest.FakeCatalogClient client = clientWithSku();
@@ -254,6 +344,11 @@ class TransactionRefundTest {
     /** 桩支付网关：记录退款命令并受理（PMRF + PROCESSING）。 */
     private static final class StubPaymentGateway implements PaymentGateway {
         final List<RefundCommandRequest> refundRequests = new ArrayList<>();
+        /**
+         * 前 N 次 {@code refund} 调用抛异常（模拟渠道首调失败 / 超时，本地单留 REQUESTED
+         * 且 {@code paymentRefundNo == null}）——供 spec 030 / B7 的「重放 vs 重试」断言使用。
+         */
+        int failFirstNCalls = 0;
 
         @Override
         public CreatePaymentResponse createPayment(CreatePaymentRequest request) {
@@ -263,6 +358,9 @@ class TransactionRefundTest {
         @Override
         public RefundCommandResponse refund(RefundCommandRequest request) {
             refundRequests.add(request);
+            if (refundRequests.size() <= failFirstNCalls) {
+                throw new IllegalStateException("channel refund failed (injected)");
+            }
             return new RefundCommandResponse("PMRF-" + request.transactionRefundNo(), "PROCESSING");
         }
     }

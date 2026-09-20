@@ -1,9 +1,12 @@
 package com.payment.payment.domain;
 
+import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -18,6 +21,14 @@ public class PaymentAttempt {
     /** 尝试类型（Feature 016 / FR-017）：支付尝试；退款尝试（复用本表，channel_reference=渠道退款流水号）。 */
     public static final String TYPE_PAYMENT = "PAYMENT";
     public static final String TYPE_REFUND = "REFUND";
+
+    /**
+     * {@code extra} 中承载渠道模态的键（spec 030 / FR-151）。
+     *
+     * <p>落库列 {@code payment_attempts.extra_json}（TEXT 存 JSON）。写入侧与读取侧
+     * <b>MUST 共用本常量</b>，避免两侧拼写漂移导致「写进去读不出来」。</p>
+     */
+    public static final String CHANNEL_MODE_KEY = "channelMode";
 
     private Long id;
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
@@ -43,6 +54,17 @@ public class PaymentAttempt {
      */
     private long amountMinor;
     private String currencyCode;
+    /**
+     * 渠道扩展属性（spec 030 / FR-302，落库列 {@code extra_json}）。
+     *
+     * <p><b>可空</b>；当前承载 {@value #CHANNEL_MODE_KEY}（{@code MOCK}/{@code SANDBOX}）。
+     * 之所以是 {@code Map} 而非专用列：模态是<b>渠道侧的扩展属性</b>，不是 payment 域的一等
+     * 字段，用 JSON 载体避免每加一个渠道属性就 ALTER 一次表（FR-300）。</p>
+     *
+     * <p><b>领域不碰 JSON</b>（FR-302）：本对象只持有 {@code Map}，序列化/反序列化落在
+     * {@code infra/persistence}，领域层 MUST NOT 依赖 Jackson。</p>
+     */
+    private Map<String, String> extra;
 
     public PaymentAttempt(String paymentNo, String channelCode, int retryCount, long amountMinor, String currencyCode) {
         this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
@@ -79,6 +101,22 @@ public class PaymentAttempt {
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
                                            Integer version, String attemptType, long amountMinor, String currencyCode) {
+        return rehydrate(id, paymentNo, channelCode, retryCount, requestedAt, respondedAt, channelReference,
+                status, failureReason, errorType, version, attemptType, amountMinor, currencyCode, null);
+    }
+
+    /**
+     * 全量重建（spec 030 / FR-302）：在 {@link #rehydrate} 之上多还原 {@code extra}
+     * （渠道扩展属性，含 {@value #CHANNEL_MODE_KEY}）。
+     *
+     * <p>保留既有 14 参重载（委托本方法、{@code extra = null}），既有调用点零改动。</p>
+     */
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+                                           Instant requestedAt, Instant respondedAt, String channelReference,
+                                           PaymentAttemptStatus status, String failureReason,
+                                           PaymentAttemptErrorType errorType,
+                                           Integer version, String attemptType, long amountMinor,
+                                           String currencyCode, Map<String, String> extra) {
         PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, retryCount, amountMinor, currencyCode);
         attempt.id = id;
         attempt.attemptType = attemptType == null ? TYPE_PAYMENT : attemptType;
@@ -89,7 +127,60 @@ public class PaymentAttempt {
         attempt.failureReason = failureReason;
         attempt.errorType = errorType;
         attempt.version = version;
+        attempt.extra = extra;
         return attempt;
+    }
+
+    /**
+     * 向 {@code extra} 写入一个渠道扩展属性（spec 030 / FR-151）。
+     *
+     * <p>首次写入时惰性建 Map：无扩展属性的 attempt 保持 {@code extra == null}，
+     * 落库即 {@code NULL}，不为「什么都没记」造一个空 JSON 对象。</p>
+     */
+    public void putExtra(String key, String value) {
+        if (this.extra == null) {
+            this.extra = new java.util.LinkedHashMap<>();
+        }
+        this.extra.put(key, value);
+    }
+
+    /** 渠道扩展属性（只读视图；无则为 {@code null}）。 */
+    public Map<String, String> getExtra() {
+        return extra == null ? null : Collections.unmodifiableMap(extra);
+    }
+
+    public void setExtra(Map<String, String> extra) {
+        this.extra = extra;
+    }
+
+    /**
+     * <b>只读派生</b>：本次 attempt 的渠道模态（spec 030 / FR-304）——
+     * <b>反向路径（查询 / 退款 / 超时扫描）读取模态的唯一入口</b>。
+     *
+     * <p><b>fail-safe（硬约束，SC-A-11）</b>：以下四类坏数据<b>一律返回 {@link DyeMode#MOCK}</b>，
+     * <b>MUST NOT</b> 抛异常中断反向路径，<b>MUST NOT</b> 误判为 {@code SANDBOX}：
+     * <ol>
+     *   <li>{@code extra == null}（存量行 {@code extra_json IS NULL}，FR-307）；</li>
+     *   <li>{@code extra_json} 是非法 JSON（反序列化失败 → 上层传 {@code null}）；</li>
+     *   <li>缺 {@value #CHANNEL_MODE_KEY} 键；</li>
+     *   <li>键值不在 {@code {MOCK, SANDBOX}} 内。</li>
+     * </ol>
+     * 判为 MOCK 的后果只是「反向路径不会去连真实渠道沙箱」，最坏是少一次真实调用；
+     * 反过来误判为 SANDBOX 会让反向路径去连一个未必存在的真实渠道——后者是资金面风险。</p>
+     */
+    public DyeMode getChannelMode() {
+        if (extra == null) {
+            return DyeMode.MOCK;
+        }
+        String raw = extra.get(CHANNEL_MODE_KEY);
+        if (raw == null || raw.isBlank()) {
+            return DyeMode.MOCK;
+        }
+        try {
+            return DyeMode.parse(raw);
+        } catch (IllegalArgumentException ex) {
+            return DyeMode.MOCK; // 非法值：fail-safe 落 MOCK，绝不中断反向路径
+        }
     }
 
     // ---- 状态机 ----

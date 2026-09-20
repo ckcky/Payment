@@ -36,4 +36,30 @@ public interface PaymentChannel {
      * 返回 SUCCESS/FAILURE 视为权威结果，由收敛服务据此推进。</p>
      */
     ChannelResult queryStatus(QueryStatusRequest request);
+
+    /**
+     * 本渠道支持的支付场景（spec 030 / FR-109）。
+     *
+     * <p><b>默认全支持</b>——既有渠道实现零改动，且 mock 渠道本就无所谓场景。
+     * 真实渠道 SHOULD 按自身真实能力<b>收窄</b>（例如支付宝沙箱只开放 {@link PaymentScene#WEB}）。</p>
+     *
+     * <p>编排层校验时机：{@code scene != null} 且不在本集合 ⇒ {@code 400 INVALID_ARGUMENT}；
+     * {@code scene == null} <b>不校验</b>（INV-8 / 零回归）。</p>
+     */
+    default java.util.Set<PaymentScene> supportedScenes() {
+        return java.util.EnumSet.allOf(PaymentScene.class);
+    }
+
+    /**
+     * 本渠道是否具备真实模式（spec 030 / FR-109 / FR-131）。
+     *
+     * <p><b>默认 {@code false}</b>：绝大多数渠道（含全部 mock）只有模拟实现。
+     * 仅真实接入了渠道 SDK / 沙箱的适配器返回 {@code true}（当前仅 {@code ALIPAY}）。</p>
+     *
+     * <p>与「染色 = SANDBOX 但本渠道 {@code supportsRealMode() == false}」联用：
+     * 那是<b>不静默降级</b>的明确失败场景（{@code 400 INVALID_ARGUMENT}，INV-8）。</p>
+     */
+    default boolean supportsRealMode() {
+        return false;
+    }
 }

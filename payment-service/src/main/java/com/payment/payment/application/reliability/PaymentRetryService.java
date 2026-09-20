@@ -67,6 +67,12 @@ public class PaymentRetryService {
      *
      * <p>渠道按 {@code request.channelCode()} 解析（INV-6）；同一 attempt 的重放必然用同一渠道
      * ——{@code channelCode} 在本次调用内不变。</p>
+     *
+     * <p><b>凭证透传（spec 030 / FR-114 · T29）</b>：返回的 {@code result} 恒为<b>最后一次</b>
+     * {@code charge} 的结果，因此天然携带最后一次渠道调用给出的 {@code credential}；重试耗尽
+     * 路径上的 {@link ChannelResult#withReason(String)} 亦<b>保留</b> credential（FR-112）。
+     * 于是调用方拿到的 {@link RetryOutcome} 永远能回答「买家去哪儿付款」——凭证不会因为
+     * 改 reason 或重放次数而被抹掉。</p>
      */
     public RetryOutcome chargeWithRetry(ChargeRequest request) {
         PaymentChannel channel = channelRegistry.resolve(channelCodeOf(request));

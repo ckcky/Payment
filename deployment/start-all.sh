@@ -97,6 +97,33 @@ fi
 # 此处显式 export 仅作兜底（e2e 场景用 PAYMENT_MOCK_CASHIER_ENABLED=false 显式关闭）
 export PAYMENT_MOCK_CASHIER_ENABLED="${PAYMENT_MOCK_CASHIER_ENABLED:-true}"
 
+# spec 030 / T112：支付宝**真实渠道沙箱**（双模态的另一半）。
+#   enabled 默认 false —— 不显式打开就绝不连真实渠道（演示默认走本地 mock，零外部依赖）。
+#   开启方式（三选一，密钥一律 env 注入，禁硬编码 / 禁入库 / 禁明文日志，FR-290 / INV-2）：
+#     PAYMENT_ALIPAY_SANDBOX_ENABLED=true \
+#     PAYMENT_ALIPAY_SANDBOX_APP_ID=<沙箱 appId> \
+#     PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY=<应用私钥> \
+#     PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥> \
+#     bash deployment/start-all.sh
+#   此时 /demo 页「运行环境」切到「支付宝沙箱」即可真实下单到沙箱收银台。
+#   enabled=true 而密钥缺失 ⇒ payment-service **启动期 FAIL FAST** 并列出全部缺失项（FR-134）。
+#   未开启而染色 SANDBOX ⇒ 400 INVALID_ARGUMENT，**绝不静默回落 mock**（FR-241 / INV-8）。
+#   本脚本只被动透传，不设任何默认密钥（缺省即"未开启"，避免误连真实渠道）。
+if [ "${PAYMENT_ALIPAY_SANDBOX_ENABLED:-false}" = "true" ]; then
+  missing_alipay=""
+  for v in PAYMENT_ALIPAY_SANDBOX_APP_ID PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY; do
+    if [ -z "${!v:-}" ]; then missing_alipay="$missing_alipay $v"; fi
+  done
+  if [ -n "$missing_alipay" ]; then
+    echo "✗ PAYMENT_ALIPAY_SANDBOX_ENABLED=true 但缺少必需变量：$missing_alipay"
+    echo "  沙箱密钥一律 env 注入（FR-290/INV-2）；缺失时 payment-service 亦会启动失败，故此处提前中止。"
+    exit 1
+  fi
+  echo "    已开启支付宝沙箱渠道（enabled=true，gateway=${PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL:-默认沙箱网关}）"
+else
+  echo "    支付宝沙箱渠道未开启（PAYMENT_ALIPAY_SANDBOX_ENABLED=${PAYMENT_ALIPAY_SANDBOX_ENABLED:-false}）—— 演示走本地 mock"
+fi
+
 SERVICES=(
   merchant-service catalog-service order-service payment-service
   fulfillment-service entitlement-service reconciliation-service settlement-service

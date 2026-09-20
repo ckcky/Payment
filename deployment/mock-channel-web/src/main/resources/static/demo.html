@@ -62,6 +62,25 @@
               <button class="pa-btn ghost pa-btn--sm" onclick="loadSkus()">刷新 SKU</button>
             </div>
 
+            <!-- spec 030 / T107：环境选择器。默认「本地 mock」——零依赖、离线可演；
+                 「支付宝沙箱」= 真实调支付宝沙箱网关（本地 mock 与真实渠道的**同一套契约**）。
+                 选择只影响下单时用的 channelCode 与是否带 X-Dye-Tag: SANDBOX 染色头，
+                 不改变任何业务语义。沙箱需 payment-service 以
+                 PAYMENT_ALIPAY_SANDBOX_ENABLED=true 启动，否则会被 400 明确拒绝
+                 （FR-241：绝不静默回落 mock）。 -->
+            <div class="pa-disc" style="margin-top:16px;--pa-acc:var(--pa-note)">
+              <button class="pa-disc__head" type="button"><span class="caret">›</span><span>运行环境（spec 030）</span><span class="cnt" id="envCnt">本地 mock</span></button>
+              <div class="pa-disc__body"><div>
+                <div class="pa-row" style="padding:10px 12px 4px">
+                  <div class="pa-seg" id="envSeg">
+                    <button type="button" data-env="MOCK" onclick="setEnv('MOCK')">本地 mock</button>
+                    <button type="button" data-env="SANDBOX" onclick="setEnv('SANDBOX')">支付宝沙箱</button>
+                  </div>
+                </div>
+                <div class="pa-note" id="envHint" style="padding:4px 12px 10px"></div>
+              </div></div>
+            </div>
+
             <!-- spec 027 / ADR-0071 FR-029：用户限额（日/月/年，元 → 提交前转分） -->
             <div class="pa-disc" style="margin-top:16px">
               <button class="pa-disc__head" type="button"><span class="caret">›</span><span>用户限额（spec 027）</span><span class="cnt">日月年 · RESERVE 硬拒绝</span></button>
@@ -88,7 +107,7 @@
           <div class="pa-step__rail"><div class="pa-step__dot">2</div><div class="pa-step__line"></div></div>
           <div class="pa-step__body">
             <h3>支付</h3>
-            <div class="pa-note">下单后自动以 MOCK 渠道创建支付单并打开收银台；若浏览器拦截了新窗口，用下面的按钮手动进入（推荐）。</div>
+            <div class="pa-note">下单后自动以当前所选环境（<span class="pa-mono" id="payEnvLabel">MOCK</span>）创建支付单并打开收银台；若浏览器拦截了新窗口，用下面的按钮手动进入（推荐）。</div>
             <div class="pa-row" style="margin-top:12px">
               <a class="pa-btn" id="cashierLink" href="#" target="_blank" rel="noopener" style="display:none">→ 去收银台支付 ↗</a>
             </div>
@@ -211,6 +230,43 @@ const api = (method, path, body, headers) => PA.api(method, path, body, headers)
 let pollTimer = null, currentOrderNo = null, currentPaymentNo = null;
 let refundPollTimer = null;   // 退款：终态收敛轮询
 
+/* ================= spec 030 / T107-T110：运行环境开关 =================
+   两个环境共用**同一套渠道内部契约**（FR-101~FR-109）：
+     MOCK    —— channelCode=MOCK，不带染色头（默认；本地 mock 收银台，离线可演）
+     SANDBOX —— channelCode=ALIPAY + X-Dye-Tag: SANDBOX（真实调支付宝沙箱网关，
+                payUrl 直接是支付宝沙箱收银台）
+   染色头只决定**协议实现**，不参与选路、不当鉴权（FR-120/FR-296）。
+   沙箱需 payment-service 以 PAYMENT_ALIPAY_SANDBOX_ENABLED=true 启动；
+   未开启而染色 SANDBOX ⇒ 400 INVALID_ARGUMENT（FR-241，**绝不静默回落 mock**）。 */
+let envMode = 'MOCK';   // 'MOCK' | 'SANDBOX'
+
+function setEnv(mode) {
+  envMode = (mode === 'SANDBOX') ? 'SANDBOX' : 'MOCK';
+  const isSandbox = envMode === 'SANDBOX';
+  // 选中态沿用 cashier.html 的 .pa-seg + .is-on 约定（design.css:152），保证与全站分段控件一致
+  document.querySelectorAll('#envSeg button').forEach(function (b) {
+    b.className = (b.getAttribute('data-env') === envMode) ? 'is-on' : '';
+  });
+  document.getElementById('envCnt').textContent = isSandbox ? '支付宝沙箱' : '本地 mock';
+  document.getElementById('envHint').innerHTML = isSandbox
+    ? '当前：<b>支付宝沙箱</b> —— 下单走 <span class="pa-mono">ALIPAY</span> 渠道 + <span class="pa-mono">X-Dye-Tag: SANDBOX</span> 染色，'
+      + '真实调支付宝沙箱网关，payUrl 即沙箱收银台。需 payment-service 以 '
+      + '<span class="pa-mono">PAYMENT_ALIPAY_SANDBOX_ENABLED=true</span> 且密钥齐备启动，否则建支付单会返回 '
+      + '<span class="pa-mono">400 INVALID_ARGUMENT</span>（不回落 mock）。'
+    : '当前：<b>本地 mock</b> —— 下单走 <span class="pa-mono">MOCK</span> 渠道、不带染色头，'
+      + '用本地 mock 收银台（<span class="pa-mono">PAYMENT_MOCK_CASHIER_ENABLED=true</span>），零外部依赖、离线可演。';
+  const lbl = document.getElementById('payEnvLabel');
+  if (lbl) lbl.textContent = isSandbox ? 'ALIPAY · SANDBOX' : 'MOCK';
+  log('◆ 运行环境切换为：' + (isSandbox ? '支付宝沙箱（ALIPAY + X-Dye-Tag: SANDBOX）' : '本地 mock（MOCK，无染色）'));
+}
+
+/** 当前环境对应的建支付单请求体与染色头（placeOrder / demoOverrun 共用，避免两处硬编码漂移）。 */
+function paymentRequestOf() {
+  return envMode === 'SANDBOX'
+    ? { body: { channelCode: 'ALIPAY' }, headers: { 'X-Dye-Tag': 'SANDBOX' } }
+    : { body: { channelCode: 'MOCK' }, headers: {} };
+}
+
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
 
 /* ---- 全链路 DB：9 张表按 5 个域分组（默认折叠，组头显示行数）---- */
@@ -308,8 +364,11 @@ async function placeOrder(skuId) {
   resetRefunds();   // 新订单：清空退款面板（退款挂在 paymentNo 维度）
 
   // Feature 015：下单只建订单，不建支付单 —— 需显式选渠道创建支付单后才收银台跳转
-  log('>> POST /proxy/order/orders/' + currentOrderNo + '/payments  {"channelCode":"MOCK"}');
-  const pr = await api('POST', '/order/orders/' + encodeURIComponent(currentOrderNo) + '/payments', { channelCode: 'MOCK' });
+  // spec 030 / T108：渠道与染色头由当前运行环境决定（不再硬编码 MOCK）
+  const req = paymentRequestOf();
+  log('>> POST /proxy/order/orders/' + currentOrderNo + '/payments  ' + JSON.stringify(req.body)
+      + (Object.keys(req.headers).length ? '  {' + Object.entries(req.headers).map(([k, v]) => k + ': ' + v).join(', ') + '}' : ''));
+  const pr = await api('POST', '/order/orders/' + encodeURIComponent(currentOrderNo) + '/payments', req.body, req.headers);
   log('<< HTTP ' + pr.status + '  ' + JSON.stringify(pr.data));
   loadLimit();   // spec 027：建支付单即发生 RESERVE，额度卡需同步
   if (pr.status === 409 && pr.data && pr.data.code === 'LIMIT_EXCEEDED') {
@@ -484,7 +543,10 @@ async function demoOverrun() {
       items: [{ skuId: 1, quantity: 1 }]
     }, { 'Idempotency-Key': crypto.randomUUID() });
     if (ord.status !== 201) { log('   第 ' + i + ' 笔下单失败：HTTP ' + ord.status); break; }
-    const pay = await api('POST', '/order/orders/' + encodeURIComponent(ord.data.orderNo) + '/payments', { channelCode: 'MOCK' });
+    // spec 030 / T109：与 placeOrder 同源取渠道与染色头。限额预占发生在建支付单时，
+    // 与渠道无关——但**仍按当前环境建单**，避免「界面显示沙箱、实际发 MOCK」的口径裂缝。
+    const req = paymentRequestOf();
+    const pay = await api('POST', '/order/orders/' + encodeURIComponent(ord.data.orderNo) + '/payments', req.body, req.headers);
     log('   第 ' + i + ' 笔建支付单 → HTTP ' + pay.status + '  ' + JSON.stringify(pay.data));
     if (pay.status === 409) {
       PA.toast('第 ' + i + ' 笔被 409 LIMIT_EXCEEDED 拒绝 —— 支付单未创建（INV-3）', 'ok');
@@ -719,6 +781,7 @@ function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   document.getElementById('pollHint').textContent = '已停止';
 }
+setEnv('MOCK');   // spec 030 / T107：默认本地 mock（零依赖、离线可演）
 loadSkus();
 loadLimit();
 </script>

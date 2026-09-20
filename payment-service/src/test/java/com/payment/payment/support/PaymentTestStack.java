@@ -4,6 +4,7 @@ import com.payment.common.dto.rpc.PaymentSucceededRequest;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.CreatePaymentCommand;
+import com.payment.payment.application.LedgerPostingGateway;
 import com.payment.payment.application.OrderGateway;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentPersistence;
@@ -45,12 +46,25 @@ public final class PaymentTestStack {
     }
 
     public PaymentApplicationService appService(PaymentChannel channel) {
+        return appService(channel, null);
+    }
+
+    /**
+     * 带账本网关的构造（spec 030 / B1 T10）：{@code ledgerGateway} 为 {@code null} 时回落
+     * 「不接账本」的兼容构造（既有测试零改动）；非空时走账本兼容构造，使**同步成功路径**
+     * 的记账调用可被记录，从而与**回调收敛路径**断言出同一个 postingKey（FR-221）。
+     */
+    public PaymentApplicationService appService(PaymentChannel channel, LedgerPostingGateway ledgerGateway) {
         PaymentPersistence persistence = new PaymentPersistence(payments, attempts);
         PaymentRetryService retryService = new PaymentRetryService(channel, fastRetryConfig(),
                 new NoopBusinessMetrics());
         // Feature 016（ADR-0054）：payment 不再持有履约网关；order 回写直接走记录式 fake
+        if (ledgerGateway == null) {
+            return new PaymentApplicationService(payments, persistence, retryService, order,
+                    new NoopBusinessMetrics(), new StructuredAuditLogger());
+        }
         return new PaymentApplicationService(payments, persistence, retryService, order,
-                new NoopBusinessMetrics(), new StructuredAuditLogger());
+                ledgerGateway, new NoopBusinessMetrics(), new StructuredAuditLogger(), channel);
     }
 
     public CreatePaymentCommand command(String idempotencyKey) {
