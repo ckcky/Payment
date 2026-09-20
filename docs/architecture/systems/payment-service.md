@@ -21,7 +21,7 @@
 
 ### 1.2 硬约束（Constitution / ADR）
 
-- **Payment ≠ Channel**：核心 Payment 领域只依赖 `application/channel/PaymentChannel` 接口，不依赖 `infra/channel` 具体实现。
+- **Payment ≠ Channel**：核心 Payment 领域只依赖 `application/channel/PaymentChannel` 接口，不依赖 `infra/channel` 具体实现。**构建期强制覆盖整个应用层**：`ServiceBoundaryTest#channelRoutingAbstractionMustNotDependOnChannelInfrastructure` 的 `that()` 为 `com.payment.payment.application..`（含 `.channel` 与 `.reliability`，不只是 `.application.channel` 一个子包），并配阳性对照防空转。2026-09-20 边界复审前该规则只覆盖 `application.channel..`，曾漏掉三处 `application..` → `infra.channel.SingleChannelRegistry` 的真实穿透。
 - **金额铁律**：金额一律最小货币单位 `long`（`amountMinor`），禁止 `float`/`double`；不变量 `amountMinor > 0`。
 - **幂等**：资金入口（创建支付意图、退款尝试）必须有幂等键，数据库唯一约束兜底。
 - **UNKNOWN 不猜成败**：超时/断连/不完整响应进 `UNKNOWN`，绝不臆断成功/失败。
@@ -399,8 +399,9 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 `PaymentController.createPayment` → `PaymentApplicationService.createPaymentIntent`（[源码](../../../payment-service/src/main/java/com/payment/payment/application/PaymentApplicationService.java)）：
 
 1. `findByIdempotencyKey` 回查；命中 → 计数 `payment.duplicate` 并返回首次结果（幂等）。
-2. 构造 `Payment`（校验 `amountMinor > 0`）→ `insertNew`：`save` 撞 `uk_payments_idempotency_key` 的 `DuplicateKeyException` 时回查返回首次结果（**数据库级幂等兜底，覆盖并发/重启后重复插入**）。
-3. `new PaymentAttempt(...)` → `save`；`payment.start(attemptId)`（PENDING → PROCESSING）。
+2. 构造 `Payment`（校验 `amountMinor > 0`）→ `insertNew`：`save` 撞 `uk_payments_idempotency_key` 的 `DuplicateKeyException` 时回查返回首次结果（**数据库级幂等兜底，覆盖并发/重启后重复插入**），并以 `newlyCreated=false` **立即结束建单**——回放库内支付单与其**既有** PAYMENT 尝试（`created=false`），不再建第二条 attempt、不再推进状态机（FR-152 / FR-306）。
+   > ⚠️ **2026-09-20 边界复审修复**：此前该分支回查后**仍继续**建第二条 attempt 再 `payment.start(...)`，而库内支付单已是 `PROCESSING` ⇒ 抛 `STATE_TRANSITION_VIOLATION` 整体回滚，**幂等重试被答成状态机错误**。回归测试 `PaymentPersistenceIdempotentRaceTest`（用「对手方先落库」的仓储桩把并发竞争钉成确定性）。
+3. 经**渠道层写入口** `ChannelAttemptRecorder.openPaymentAttempt(...)` 落 `payment_attempts`（**Payment 1:1 PaymentAttempt**，写侧断言在端口默认方法上、三个实现同口径）→ `payment.start(attemptId)`（PENDING → PROCESSING）。
 4. `channel.charge(ChargeRequest)` 调 Mock Channel，返回 `ChannelResult`（SUCCESS/FAILURE/UNKNOWN）。
 5. `PaymentResultApplier.apply(payment, attempt, result)`：按结果驱动双状态机；返回 `changed`（是否真正迁移）。
 6. `save` 支付 + 尝试（本地事务）；`changed` 时 `recordTransition`（指标 + `FINANCIAL_AUDIT` 审计）。
@@ -447,6 +448,8 @@ sequenceDiagram
 4. 退款整体决策（发起/收口/秒杀回补/履约终止/权益撤销）归 order，payment 只提供渠道事实（ADR-0054/0067）。
 
 > **REFUND 尝试的渠道归属（ADR-0072/0073）**：该行 `channel_code` 取自被退支付单的**生效 PAYMENT 尝试**（同一 `payment_no` 下 `attempt_type='PAYMENT'` 且状态 `SUCCEEDED` 的记录）。`PaymentRefundService` 据此经 `ChannelRegistry` 解析渠道实现，退款、重试和主动查询均不重新走正常支付路由，也不静默回落默认渠道；缺少有效渠道记录直接报数据错误。
+>
+> **REFUND 行的写入归渠道层端口（2026-09-20 边界复审修复）**：`payment_attempts` 的写入（建行 + 收敛 + 落库）统一走 `ChannelAttemptRecorder.recordRefundAttempt(paymentNo, channelCode, amountMinor, currencyCode, result)`——payment 层只交出资金口径（D2：所属支付单金额）与权威渠道结果，不再自己 `new` / `converge` / `save` attempt。撞 `uk_attempts_channel_reference` 时**不再无条件当幂等吸收**：仅「同一 `payment_no` 已存在同 `channel_reference` 的 REFUND 行」才算真重放，引用被非退款行占用（把原支付交易号当退款流水号，F5 形态）一律抛错——无条件吸收会让「退款渠道流水号写丢了」长期隐身。
 
 ---
 

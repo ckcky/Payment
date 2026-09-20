@@ -14,7 +14,7 @@ import com.payment.payment.application.channel.RefundRequest;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
-import com.payment.payment.infra.channel.SingleChannelRegistry;
+import com.payment.payment.application.channel.SingleChannelRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

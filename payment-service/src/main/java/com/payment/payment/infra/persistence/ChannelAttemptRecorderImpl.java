@@ -8,6 +8,7 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 /**
@@ -44,6 +45,8 @@ public class ChannelAttemptRecorderImpl implements ChannelAttemptRecorder {
     @Override
     public PaymentAttempt openPaymentAttempt(String paymentNo, String channelCode,
                                              long amountMinor, String currencyCode) {
+        // FIX-3：Payment 1:1 PaymentAttempt 的写侧断言（口径在端口默认方法上，三实现共享）
+        requireNoExistingPaymentAttempt(paymentNo);
         PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode);
         stampChannelMode(attempt);
         return attemptRepository.save(attempt);
@@ -55,6 +58,29 @@ public class ChannelAttemptRecorderImpl implements ChannelAttemptRecorder {
         PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
         stampChannelMode(attempt);
         return attemptRepository.save(attempt);
+    }
+
+    /**
+     * 退款尝试的「创建 + 收敛 + 落库」（FIX-4）：整体在渠道层完成，payment 层不再自己 new / save attempt。
+     *
+     * <p>收敛在<b>落库之前</b>完成，因此是一次带终态的 INSERT（不是「先插 PENDING 再 UPDATE」）——
+     * 与改造前 {@code PaymentRefundService} 的写入次数、状态语义逐字一致（零回归）。</p>
+     *
+     * <p>撞 {@code uk_attempts_channel_reference} 时按 {@link #requireTrueRefundReplay} 判定：
+     * 只有真幂等重放才吸收，引用值写错则抛错——不再无条件吸收（F5 的伪装来源）。</p>
+     */
+    @Override
+    public PaymentAttempt recordRefundAttempt(String paymentNo, String channelCode,
+                                              long amountMinor, String currencyCode, ChannelResult result) {
+        PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, channelCode, amountMinor, currencyCode);
+        stampChannelMode(attempt);
+        converge(attempt, result);
+        try {
+            return attemptRepository.save(attempt);
+        } catch (DuplicateKeyException ex) {
+            return ChannelAttemptRecorder.requireTrueRefundReplay(
+                    attemptRepository, paymentNo, result.channelReference());
+        }
     }
 
     /**

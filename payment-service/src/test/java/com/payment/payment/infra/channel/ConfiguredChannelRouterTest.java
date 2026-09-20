@@ -9,6 +9,7 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.payment.application.channel.ChannelRegistry;
 import com.payment.payment.application.channel.PaymentChannel;
 import com.payment.payment.application.channel.RouteContext;
+import com.payment.payment.application.channel.SingleChannelRegistry;
 import com.payment.payment.infra.config.RoutingProperties;
 import java.util.LinkedHashMap;
 import java.util.List;

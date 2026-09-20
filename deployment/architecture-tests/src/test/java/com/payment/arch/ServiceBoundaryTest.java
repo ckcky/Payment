@@ -152,21 +152,50 @@ class ServiceBoundaryTest {
     }
 
     /**
-     * INV-4（Feature 028 / ADR-0073）：渠道路由的<b>决策</b>与<b>实现</b>必须分居两层，
-     * 应用层不得反向依赖基础设施层的渠道适配器与路由器。
+     * INV-4（Feature 028 / ADR-0073，2026-09-20 FIX-1 修正覆盖范围）：渠道路由的<b>决策</b>与
+     * <b>实现</b>必须分居两层，<b>整个应用层</b>不得反向依赖基础设施层的渠道适配器与路由器。
      *
      * <p>允许的依赖方向是 {@code infra.channel → application.channel}（实现依赖抽象）。
-     * 若 {@code application.channel..} 反向 import {@code infra.channel..}，后果不是「代码难看」，
-     * 而是<b>路由决策被绑死在具体渠道实现上</b>——此后新增渠道、替换实现、写纯单测都必须
-     * 拖上整个 infra 包，ADR-0072 的两层结构当场失效。</p>
+     * 若应用层反向 import {@code infra.channel..}，后果不是「代码难看」，而是<b>路由决策被绑死在
+     * 具体渠道实现上</b>——此后新增渠道、替换实现、写纯单测都必须拖上整个 infra 包，
+     * ADR-0072 的两层结构当场失效。</p>
+     *
+     * <p><b>覆盖面修正（为什么要放宽到 {@code application..}）</b>：本规则的 {@code that()} 此前只写
+     * {@code com.payment.payment.application.channel..}，<b>不覆盖 {@code application..} 主体</b>。
+     * 一个子包之差，让三处真实反向依赖（{@code PaymentRetryService} / {@code ChannelQueryService} /
+     * {@code PaymentRefundService} 的兼容构造引用 {@code infra.channel.SingleChannelRegistry}）
+     * <b>长期逃过门禁</b>——INV-4 名义合规、实际穿透。</p>
+     *
+     * <p>修法有两半，缺一不可：① 把那条垫片实现（{@code SingleChannelRegistry}，零 infra 依赖）
+     * 从 {@code infra.channel} 归位到 {@code application.channel}；② 本规则的 {@code that()}
+     * 放宽到 {@code com.payment.payment.application..}，连 {@code .reliability} 一并纳入。</p>
+     *
+     * <p><b>防空转阳性对照</b>：否定式规则在「被检主体为空」或「禁用目标不存在」时都会静默通过
+     * （与「真的检查过」无法区分）。故先断言两侧都真有类——{@code application..} 有主体、
+     * {@code infra.channel..} 有实现；任一为空即说明包名或编译产物出了问题，规则已在空转。</p>
      */
     @Test
     void channelRoutingAbstractionMustNotDependOnChannelInfrastructure() {
+        // 阳性对照（防空转）：被检主体与禁用目标都必须真实存在
+        long applicationOwners = serviceClasses.stream()
+                .filter(c -> c.getPackageName().startsWith("com.payment.payment.application"))
+                .count();
+        long infraChannelClasses = serviceClasses.stream()
+                .filter(c -> c.getPackageName().startsWith("com.payment.payment.infra.channel"))
+                .count();
+        assertThat(applicationOwners)
+                .as("com.payment.payment.application.. 必须有类，否则本规则空转（INV-4 防空转对照）")
+                .isGreaterThan(5L);
+        assertThat(infraChannelClasses)
+                .as("com.payment.payment.infra.channel.. 必须有类，否则被禁目标不存在、规则恒通过（INV-4 防空转对照）")
+                .isGreaterThan(0L);
+
         ArchRule rule = noClasses()
-                .that().resideInAPackage("com.payment.payment.application.channel..")
+                .that().resideInAPackage("com.payment.payment.application..")
                 .should().dependOnClassesThat().resideInAPackage("com.payment.payment.infra.channel..")
-                .because("依赖方向必须是 infra.channel → application.channel；"
-                        + "应用层反向依赖适配器会把路由决策绑死在具体实现上（INV-4 / ADR-0072、ADR-0073）");
+                .because("依赖方向必须是 infra.channel → application.channel；应用层（含 application 主体，"
+                        + "不只是 application.channel 一个子包）反向依赖适配器会把路由决策绑死在具体实现上"
+                        + "（INV-4 / ADR-0072、ADR-0073）");
         rule.check(serviceClasses);
     }
 
