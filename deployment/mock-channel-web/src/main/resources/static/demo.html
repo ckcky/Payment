@@ -228,6 +228,9 @@ const esc = PA.esc;
 const api = (method, path, body, headers) => PA.api(method, path, body, headers);
 
 let pollTimer = null, currentOrderNo = null, currentPaymentNo = null;
+/** spec 030：沙箱凭证（自动提交表单 HTML）原文。存字符串而非 blob: 地址——
+ *  blob: 是页面级临时资源，本页一刷新/关闭即失效（详见 openSandboxCredential）。 */
+let sandboxCredentialHtml = null;
 let refundPollTimer = null;   // 退款：终态收敛轮询
 
 /* ================= spec 030 / T107-T110：运行环境开关 =================
@@ -270,6 +273,27 @@ function paymentRequestOf() {
 /** 沙箱付款凭证形态判定：支付宝 page.pay 返回「自动提交表单 HTML」（以 '<' 开头），与 mock 的 URL 凭证形态不同。 */
 function isFormHtmlCredential(payUrl) {
   return typeof payUrl === 'string' && payUrl.trimStart().charAt(0) === '<';
+}
+
+/** 在**新窗口**里打开沙箱表单凭证（spec 030 / FR-114）。
+ *
+ * ⚠️ 为什么不用 `URL.createObjectURL` + `window.open(blobUrl)`：
+ *   `blob:` 是**页面级临时资源** —— 只在该页面的文档存活期间、且仅对**同一浏览器会话**有效。
+ *   刷新/关闭本页、把地址复制到新标签、换浏览器打开，都会立刻失效（ERR_FILE_NOT_FOUND）。
+ *   联调时「返回上一页再点」或「复制链接去另一个窗口」是最自然的动作，必然踩中。
+ *
+ * ✅ 改为把 HTML **写进新窗口的独立文档**：新窗口有自己的文档与生命周期，
+ *   之后本页刷新、重新下单都不影响它；且整段发生在**用户点击手势**内，
+ *   不会被浏览器当作弹窗拦截（下单流程里的自动 `window.open` 是 await 之后调用的，
+ *   没有手势上下文，必被拦截）。
+ */
+function openSandboxCredential() {
+  if (!sandboxCredentialHtml) return;
+  const w = window.open('', '_blank');
+  if (!w) { PA.toast('新窗口被浏览器拦截：请允许 localhost:8091 弹出窗口后重试', 'warn', 6000); return; }
+  w.document.open();
+  w.document.write(sandboxCredentialHtml);
+  w.document.close();
 }
 
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
@@ -393,14 +417,19 @@ async function placeOrder(skuId) {
   PA.setStep(2);
   const link = document.getElementById('cashierLink');
   if (pr.data.payUrl && isFormHtmlCredential(pr.data.payUrl)) {
-    // spec 030 / FR-114：沙箱凭证是「自动提交表单 HTML」，不是 URL——直接塞 href / window.open
-    // 会把 HTML 字符串当地址处理（无效跳转）。包装成 Blob 页：新窗口加载后表单自动 POST 到支付宝沙箱。
-    const blobUrl = URL.createObjectURL(new Blob([pr.data.payUrl], { type: 'text/html' }));
-    link.href = blobUrl; link.target = '_blank'; link.style.display = 'inline-flex';
+    // spec 030 / FR-114：沙箱凭证是「自动提交表单 HTML」，不是 URL——直接塞 href 会把 HTML
+    // 字符串当地址处理（无效跳转）。
+    // ⚠️ 也不用 blob: 地址：它是页面级临时资源，本页一刷新/关闭即失效（见 openSandboxCredential）。
+    //    改为存原文，在**点击手势**里写进新窗口的独立文档。
+    sandboxCredentialHtml = pr.data.payUrl;
+    link.removeAttribute('href');
+    link.removeAttribute('target');
+    link.onclick = (e) => { e.preventDefault(); openSandboxCredential(); };
+    link.style.display = 'inline-flex';
     link.textContent = '→ 去支付宝沙箱付款 ↗';
-    log('   payUrl: 支付宝沙箱表单凭证（自动提交 HTML，已包装为本地 Blob 页）');
+    log('   payUrl: 支付宝沙箱表单凭证（自动提交 HTML，点按钮在新窗口打开）');
     log('   → 点上方「去支付宝沙箱付款」用沙箱买家账号付款；平台侧状态以 notify 异步回调为准');
-    window.open(blobUrl, '_blank');
+    log('   ⚠️ 别把新窗口地址栏里的内容复制到别的标签——它与「创建它的那个窗口」绑定，离开即失效');
   } else if (pr.data.payUrl) {
     link.href = pr.data.payUrl; link.style.display = 'inline-flex';
     link.textContent = '→ 去收银台支付 ↗';
