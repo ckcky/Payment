@@ -5,6 +5,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.channel.ChannelRegistry;
+import com.payment.payment.application.channel.CallbackUrls;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChannelRouter;
 import com.payment.payment.application.channel.ChargeRequest;
@@ -49,6 +50,15 @@ public class PaymentApplicationService {
     private final StructuredAuditLogger auditLogger;
     private final ChannelRouter channelRouter;
     private final ChannelRegistry channelRegistry;
+    /**
+     * spec 030 / FR-103 + tasks Q5 裁决「配置单值」：渠道**异步回调（notify）**地址。
+     * 空 = 未配置（沙箱链路会 400，见 {@link #configuredCallbackUrls()}）。
+     */
+    @org.springframework.beans.factory.annotation.Value("${payment.channel.notify-url:}")
+    private String channelNotifyUrl;
+    /** 买家付款后页面跳回地址（**非**资金事实，可空）。 */
+    @org.springframework.beans.factory.annotation.Value("${payment.channel.return-url:}")
+    private String channelReturnUrl;
     /** spec 029 / FR-201 / T28：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
     private final PaymentEventPublisher mq;
 
@@ -191,13 +201,17 @@ public class PaymentApplicationService {
         PaymentScene scene = null; // spec 030 本期：编排层不推导默认场景（tasks Q7 / 零回归）
         validateSceneIfPresent(scene, routedChannelCode);
 
+        // spec 030 / FR-103 + Q5：回调地址来自**配置单值**（不按单动态拼）。未配置 ⇒ null，
+        // 沙箱链路会在 charge 之前 400（INV-8：不静默降级）；mock 链路不读该字段，零回归。
+        CallbackUrls callbackUrls = configuredCallbackUrls();
+
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
         // 重试期间不落库，最终结果与重试次数一次性写入。
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(
                 new ChargeRequest(pending.payment().getPaymentNo(),
                         pending.attempt().getId(), cmd.amountMinor(), cmd.currencyCode(),
                         routedChannelCode,
-                        scene, null, null, null, null, null, null));
+                        scene, null, callbackUrls, null, null, null, null));
         ChannelResult result = outcome.result();
 
         // spec 030 / FR-115（T30）· INV-6：凭证非空 ⇒ 渠道**仅受理**、买家尚未付款 ⇒
@@ -261,6 +275,27 @@ public class PaymentApplicationService {
      * <p>{@code channelRegistry == null} 时跳过校验：那是既有兼容构造路径（无注册表），
      * 且本期编排层不传场景——此处 MUST NOT 因此抛 NPE 破坏既有测试（SC-A-02）。</p>
      */
+    /**
+     * spec 030 / FR-103 + tasks Q5 裁决「配置单值」：把配置的 notify / return 地址装进
+     * {@link CallbackUrls}，供渠道下单时透传。
+     *
+     * <p><b>未配置 notify-url ⇒ 返回 {@code null}</b>：与 spec 030 之前的行为逐字节一致
+     * （零回归；mock 链路不读该字段）。沙箱链路会在 {@code charge} <b>之前</b>因缺
+     * {@code notifyUrl} 抛 {@code 400 INVALID_ARGUMENT}——<b>不静默降级</b>（INV-8）：
+     * 没有异步通知就拿不到资金事实，而页面跳回（returnUrl）MUST NOT 驱动支付状态。</p>
+     *
+     * <p>字段由 Spring {@code @Value} 注入；不经过 Spring 容器时（既有测试直接 new）
+     * 保持 {@code null} ⇒ 本方法返回 {@code null}，既有断言全部不变。</p>
+     */
+    private CallbackUrls configuredCallbackUrls() {
+        if (channelNotifyUrl == null || channelNotifyUrl.isBlank()) {
+            return null;
+        }
+        String returnUrl = (channelReturnUrl == null || channelReturnUrl.isBlank())
+                ? null : channelReturnUrl;
+        return new CallbackUrls(channelNotifyUrl, returnUrl);
+    }
+
     private void validateSceneIfPresent(PaymentScene scene, String channelCode) {
         if (scene == null || channelRegistry == null) {
             return;

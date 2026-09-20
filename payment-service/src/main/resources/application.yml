@@ -49,6 +49,15 @@ payment:
     # 退款「受理 + 异步推送」模式（spec 019 / D7）
     refund-async: ${PAYMENT_CHANNEL_REFUND_ASYNC:true}
     refund-async-delay-ms: 1000
+    # spec 030 / FR-103 + tasks Q5 裁决「配置单值」：渠道**异步回调（notify）**地址。
+    # notify 是资金事实的**唯一权威来源**；页面跳回（returnUrl）**不承载**资金事实，
+    # MUST NOT 据其推进支付状态。
+    # 未配置（空）时：mock 链路不受影响；沙箱/真实渠道链路在 charge **之前** 400
+    # INVALID_ARGUMENT —— 绝不静默降级（INV-8），否则会出现「下单成功却永远收不到钱的通知」。
+    # 本地演示若需收真实沙箱回调，此项 MUST 为**公网可达**地址（内网穿透见 runbook §4.3）。
+    notify-url: ${PAYMENT_CHANNEL_NOTIFY_URL:}
+    # 买家付款后页面跳回地址（非资金事实，可空；沙箱可只配 notify-url）。
+    return-url: ${PAYMENT_CHANNEL_RETURN_URL:}
     # per-channel 场景覆盖（Feature 028 / FR-014、FR-010）：未配回落全局 mock-scenario。
     # 场景名必须严格等于枚举名（SUCCESS / FAILURE / TIMEOUT / TRANSPORT_ERROR / BUSINESS_UNKNOWN），
     # 坏值在 Bean 创建期 FAIL FAST（ADR-0049 第 2 条）。
