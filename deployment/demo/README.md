@@ -179,6 +179,7 @@ PAYMENT_ALIPAY_SANDBOX_ENABLED=true \
 PAYMENT_ALIPAY_SANDBOX_APP_ID=<沙箱应用 appId> \
 PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY=<应用私钥> \
 PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥> \
+PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay/notify \
   bash deployment/start-all.sh
 ```
 
@@ -187,6 +188,23 @@ PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥> \
   静默回落会让「在测沙箱」成为假象。
 - 可选覆盖：`PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL`（默认 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`）、
   `PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS`（默认 `10000`，**MUST < `payment.reliability.timeout`(30s)**，FR-140）。
+
+**`PAYMENT_CHANNEL_NOTIFY_URL` 是沙箱动线的第 5 个必需项**（spec 030 FR-103 / tasks Q5「配置单值」）：
+
+- notify 是**资金事实的唯一权威来源**，页面跳回（`returnUrl`）不承载资金事实、不得驱动支付状态；
+- 未配置 ⇒ 沙箱 `charge` **直接 `400 INVALID_ARGUMENT`**（`sandbox charge requires callbackUrls.notifyUrl`），
+  **不静默降级**为 mock（INV-8）；本地 mock 动线不受影响；
+- 该地址**必须公网可达**——填 `localhost` 支付宝回调不到，支付会一直停 `PROCESSING`。
+  本地演示可用内网穿透临时拿到公网域名：
+
+  ```bash
+  cloudflared tunnel --url http://127.0.0.1:8084     # 输出 https://xxxx.trycloudflare.com
+  export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/alipay/notify
+  ```
+
+  ⛔ **穿透＝把 payment-service 暴露公网**，而 `/internal/**` 鉴权（ADR-0024）与 JSON 回调验签（ADR-0025）
+  仍为空实现（仅本次新增的支付宝 notify 端点自带 RSA2 验签）。**只在临时演示时开启，用完即关**，
+  详见 `docs/operations/runbook.md` §4.4。
 
 ### 两条动线的预期结果
 

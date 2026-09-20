@@ -139,6 +139,66 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 `payment_limit_redis_error` / `payment_limit_redis_unavailable`；
 审计 `limit.exceeded`（超限拒绝）与 `limit.overrun`（软超限）。
 
+### 4.3 支付宝沙箱渠道（spec 030 / ADR-0076）
+
+沙箱是**真实渠道**（走公网 `openapi-sandbox.dl.alipaydev.com`），不是 mock 的换皮。`enabled` 默认 `false`，
+**没显式打开就绝不连真实渠道**；同时是一键 kill switch——沙箱出问题改配置即可全量停用，不必重新发版。
+
+| 环境变量 | 默认 | 说明 |
+|---|---|---|
+| `PAYMENT_ALIPAY_SANDBOX_ENABLED` | `false` | 总开关。`false` 时**不装配** `AlipaySdkGateway` Bean（tasks Q6） |
+| `PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL` | `https://openapi-sandbox.dl.alipaydev.com/gateway.do` | 支付宝沙箱网关（一般不用改） |
+| `PAYMENT_ALIPAY_SANDBOX_APP_ID` | 空 | `enabled=true` 时**启动期强校验**，缺失即拒启 |
+| `PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY` | 空 | 同上。应用私钥（PKCS#8），请求签名用 |
+| `PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY` | 空 | 同上。支付宝公钥，**notify 验签**用 |
+| `PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS` | `10000` | 与全局 `http-timeout-ms`(1500ms) 解耦（沙箱走公网，量级不同）。**MUST < `payment.reliability.timeout`(30s)**，否则「整体超时先触发、渠道还在等」，把不确定态记成确定态 |
+
+**两道启动期强校验**（配错不许静默走默认，ADR-0049 第 2 条）：
+
+1. `AlipaySandboxProperties.@PostConstruct validate()`：`enabled=true` 且三项密钥任一缺失 ⇒ 启动失败，**一次性列出全部缺失项**（FR-134）；
+2. `deployment/start-all.sh`：`enabled=true` 但三项未导出 ⇒ `exit 1`，不会带着半套配置把栈拉起来。
+
+**密钥纪律**（FR-290 / INV-2）：禁硬编码 / 禁入库 / 禁明文日志。`AlipaySandboxProperties.toString()`
+已剔除密钥字段——即便误打了整个配置对象也不会泄漏。全仓检索应**零**私钥 PEM、`client_secret` 明文。
+
+**不静默降级**（FR-241 / INV-8）：带 `X-Dye-Tag: SANDBOX` 但 `enabled=false` ⇒ `400 INVALID_ARGUMENT`。
+绝不会「明明在测沙箱、却悄悄走了 mock」——那会让排查彻底失控。
+
+### 4.4 渠道回调地址与内网穿透（spec 030 / FR-103 / tasks Q5）
+
+| 配置项 | 环境变量 | 默认 | 说明 |
+|---|---|---|---|
+| `payment.channel.notify-url` | `PAYMENT_CHANNEL_NOTIFY_URL` | 空 | 渠道**异步回调（notify）**地址，**配置单值**（不按单动态拼） |
+| `payment.channel.return-url` | `PAYMENT_CHANNEL_RETURN_URL` | 空 | 买家付款后页面跳回地址（**非**资金事实，可空） |
+
+- **notify 是资金事实的唯一权威来源**；页面跳回（`returnUrl`）**不承载**资金事实，MUST NOT 据其推进支付状态。
+- **未配置 `notify-url` 时**：mock 链路不受影响（不读该字段）；沙箱 / 真实渠道链路在 `charge` **之前**
+  抛 `400 INVALID_ARGUMENT`（`sandbox charge requires callbackUrls.notifyUrl`）——**不静默降级**（INV-8）。
+  否则会出现「下单成功却永远收不到钱的通知」这种最难排查的故障。
+- **沙箱 / 真实渠道下此地址 MUST 公网可达**：填 `http://localhost:8084/...` 支付宝回调不到，
+  支付会一直停在 `PROCESSING`（INV-6：渠道受理 ≠ 买家已付款）。
+
+**本地演示收真实沙箱回调 → 需要内网穿透**（示例，任选其一）：
+
+```bash
+# 例：cloudflared（无需注册即可拿临时域名）
+cloudflared tunnel --url http://127.0.0.1:8084
+# 输出形如 https://xxxx.trycloudflare.com
+export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/alipay/notify
+export PAYMENT_CHANNEL_RETURN_URL=https://xxxx.trycloudflare.com/cashier/return
+```
+
+⛔ **穿透的风险（必须先读）**：穿透等于把 payment-service 暴露到公网。当前 `/internal/**` 鉴权
+（ADR-0024）与 JSON 回调验签（ADR-0025）仍为**空实现**，仅本次新增的支付宝 notify 端点自带真实
+RSA2 验签（spec 030）。因此：
+
+- **只在临时演示时开启，用完立即关闭**穿透与 `PAYMENT_ALIPAY_SANDBOX_ENABLED`；
+- 演示期间不要在同一实例上跑真实资金数据；
+- 事后核对 `FINANCIAL_AUDIT` 日志与对账差异（§6「疑似伪造渠道回调」条目）。
+
+**排障**：notify 被拒看 `payment.notify_rejected{reason}` 指标与审计 `notify.rejected`（三段式校验：
+验签 → 渠道引用 → 金额/币种，任一不过即**不推进状态**）。
+
 ## 5. 关键指标
 | 指标 | 含义 | 关注点 |
 | --- | --- | --- |
@@ -186,12 +246,34 @@ docker cp deployment/prometheus/rules/payment-alerts.yml payment-prometheus:/tmp
 docker exec payment-prometheus promtool check rules /tmp/check.yml
 ```
 
+### 5.2 流量染色观测（spec 030 / ADR-0076）
+
+| 项 | 值 |
+|---|---|
+| 请求头 | `X-Dye-Tag: MOCK` \| `X-Dye-Tag: SANDBOX`（大小写不敏感） |
+| 缺省 | 未带 / 空白 ⇒ **`MOCK`**（与 spec 030 前逐字节一致） |
+| MDC key | `dyeMode`（日志可按模态过滤） |
+| 响应头 | 回写 `X-Dye-Tag`，便于确认「这一跳到底按哪个模态执行的」 |
+| 过滤链定序 | `TraceIdFilter(-200)` → `DyeFilter(-190)` → `AccessLogFilter(-100)`（FR-165） |
+| 拒绝指标 | `dye_tag_rejected_total{reason=invalid}` |
+
+- **非法值 fail fast**：`SANDBOX` 拼成 `SANBOX` ⇒ `400` + 指标，**不静默回落 MOCK**（ADR-0049 第 2 条）。
+- **出站透传**由 `DyeRequestInterceptor` 保证。入站与出站 MUST 同批生效（INV-5）：只做入站、不做出站 ⇒
+  下游服务读不到染色 ⇒ 全线按未染色处理（历史教训：`InternalToken` 曾因只做入站导致全线 403）。
+- **代理无需改动**：`mock-channel-web` 的 `DemoProxyController` 是**黑名单式**头透传（只跳过 hop-by-hop），
+  `X-Dye-Tag` 原样透传。
+- ⛔ **染色不是安全边界**：它不参与鉴权，也不参与路由决策。`ChannelRouter` 不得读 `DyeContext`
+  （INV-3），由 `architecture-tests` 在构建期强制。看到 `X-Dye-Tag` 被用作权限依据即为缺陷。
+
 ## 6. 常见故障与处置
 
 | 现象 | 可能原因 | 处置 |
 | --- | --- | --- |
 | `POST /payments` 500 `DuplicateKeyException` | `MockChannelAdapter` 重启后渠道引用从 1 重新计数，撞 `payment_attempts.uk_attempts_channel_reference` | 已用运行级 UUID 前缀修复；若仍出现，清空历史 `payment_attempts` 后重启 |
 | 支付长时间 `UNKNOWN` | 渠道超时后主动查询未收敛 | 用 `POST /payments/{id}/resolve` 带 `X-Admin-Token` 人工裁定（仅接受 SUCCESS/FAILURE） |
+| 沙箱下单 `400 sandbox charge requires callbackUrls.notifyUrl` | 未配 `PAYMENT_CHANNEL_NOTIFY_URL`（Q5 配置单值） | 配 `payment.channel.notify-url` 为**公网可达**地址（本地需内网穿透，见 §4.4）；这是配置错误，**不会**自动降级为 mock（INV-8） |
+| 带 `X-Dye-Tag: SANDBOX` 却 `400` | `PAYMENT_ALIPAY_SANDBOX_ENABLED=false`，或三项沙箱密钥缺失 | 按 §4.3 配齐 6 项后重启；启动期强校验会**一次性列出**缺失项 |
+| `X-Dye-Tag` 拼错（如 `SANBOX`）⇒ `400` | 非法取值 | 这是**预期**的 fail fast（不静默回落 MOCK）；看 `dye_tag_rejected_total{reason=invalid}` |
 | ~~渠道回调全部 `403`~~ | ~~验签失败~~ | ⛔ **不会发生**：验签为空实现（ADR-0025），回调一律放行。若将来接入验签后出现，核对 `X-Channel-Timestamp`（毫秒）与窗口、核对密钥、看 `payment.callback_signature_rejected` 的 `reason` |
 | 回调 Controller 报 body 为空 | 过滤器消费了原始 body 却未换包装器 | 不应发生（`CachedBodyHttpServletRequest` 已处理）；若出现检查 `WebConfig` 过滤器注册 |
 | ~~内部端点 `403` / `503`~~ | ~~鉴权失败~~ | ⛔ **不会发生**：鉴权为空实现（ADR-0024），`/internal/**` 恒定放行。接入真实鉴权后按 §4「接入真实鉴权/验签时」的 4 步复核（入站与出站**必须成对启用**） |
