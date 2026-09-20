@@ -211,9 +211,36 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
 - **本地 mock 动线**：下单 → 自动建 `MOCK` 支付单（无染色）→ 打开 mock 收银台 → 支付 → 回调 → 订单 `PAID`、
   履约/权益发放。全链路零外部依赖，`demo/reset.sh` 后可重复演示。
 - **支付宝沙箱动线**：下单 → 建 `ALIPAY` 支付单（`X-Dye-Tag: SANDBOX`）→ `charge` 真实调 `alipay.trade.page.pay`
-  拿回签名跳转 URL（`PayCredential.REDIRECT_URL`）→ 浏览器打开**支付宝沙箱收银台** → 用沙箱买家账号付款 →
+  拿回**自动提交表单 HTML**（`PayCredential.FORM_HTML`，⚠️ **不是 URL** —— 详见下方「沙箱收银台怎么付」）→
+  浏览器打开**支付宝沙箱收银台** → 用沙箱买家账号付款 →
   支付宝异步通知打到 `POST /internal/channels/alipay/notify` → 三段式校验（验签 → 渠道引用/金额/币种 → 收敛）
   通过后收敛 `SUCCEEDED`，订单 `PAID`。沙箱下单后 `charge` 阶段 payment 停 `PROCESSING`（凭证待支付，INV-6）。
+
+### 沙箱收银台怎么付（⚠️ 踩坑高发区）
+
+沙箱收银台（`openapi-sandbox.dl.alipaydev.com`）呈现的是**沙箱专用交易码**，**真实支付宝 App 扫不了**
+（会提示无法识别 / 账户异常）。官方给出的两条官方路径：
+
+| 路径 | 怎么做 | 前置 |
+|---|---|---|
+| **A. PC 端沙箱账号登录支付**（推荐，不用手机） | 在收银台页面上改用**沙箱买家账号**登录并支付 | 沙箱控制台 → 沙箱账号 → **买家**：账号 + 登录密码 + 支付密码 |
+| **B. 沙箱版客户端扫码** | 用**支付宝客户端沙箱版**的「扫一扫」扫收银台二维码 | 沙箱 App **仅支持 Android**（iOS 不支持）；须用**买家账号**登录沙箱 App |
+
+**公共约束（官方文档）**：
+
+- 沙箱**只支持余额支付**，不支持银行卡 / 余额宝；买家账号余额可在控制台点「充值」。
+- 沙箱 App 与真实支付宝 App **可共存**；务必确认 App 内处于「沙箱环境」。
+- **买卖家同号**会报 `AE150003030`「系统有点儿忙，一会儿再试试」⇒ 换买家账号。
+- 沙箱数据**每日凌晨重置**。
+- 本项目网关默认 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`（**新沙箱**）；若 `appId`/密钥
+  取自**老沙箱**，会报 `invalid-app-id` 或「系统繁忙」⇒ 到 <https://open.alipay.com/develop/sandbox/app>
+  点「升级沙箱环境」并换成新沙箱的应用/网关/账号信息。
+
+> ⚠️ **`notify_url` 仍需公网可达**（否则支付会一直停 `PROCESSING`，INV-6）。隧道域名一变，
+> 必须同步更新 `PAYMENT_CHANNEL_NOTIFY_URL` 并**重启 payment-service**，否则回调打不进来。
+>
+> 💡 **只想验证「下单 → 收银台 → 回调 → 收敛 → 记账」闭环时，不必碰沙箱**：把运行环境切回
+> **本地 mock**（默认，不染色）即可 —— 零外部依赖、零手机、零公网穿透。
 
 > 回调三段式任一段不通过即**拒绝且不改任何状态**（INV-10，验签失败 → `403`）；成功响应体**恰为纯文本 `success`**（FR-206）。
 

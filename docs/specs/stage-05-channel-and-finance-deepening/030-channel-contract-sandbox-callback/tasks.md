@@ -111,7 +111,7 @@
 - [x] **T74** 金额换算用 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`，**禁 `double`/`float`** [FR-139][INV-1]
 - [x] **T75** 改 `payment-service/.../infra/channel/AlipayChannelAdapter.java`：**双模态分发**；**`MOCK` 分支 MUST `super` 委托**（基类 4 件横切行为口径 100% 不变）[FR-130]
 - [x] **T76** `AlipayChannelAdapter.supportsRealMode()` 返回 `true`；`supportedScenes()` 按真实能力**收窄**；其余三个渠道维持 `default false` [FR-131]
-- [x] **T77** `charge`（沙箱分支）调 `alipay.trade.page.pay`，GET 签名 URL → `accepted(null, "awaiting buyer", PayCredential.redirectUrl(url, expireAt))` [FR-136]
+- [x] **T77** `charge`（沙箱分支）调 `alipay.trade.page.pay`，取 **自动提交表单 HTML**（⚠️ 实况修正：`pageExecute().getBody()` 返回的是整段 `<form>` HTML，**不是 GET 签名 URL**）→ `accepted(null, "awaiting buyer", PayCredential.formHtml(html, expireAt))`（`Kind = FORM_HTML`，见 spec §2.5 F1）[FR-136]
 - [x] **T78** `queryStatus`（沙箱分支）调 `alipay.trade.query` 并映射三态：`TRADE_SUCCESS`/`TRADE_FINISHED` → `success(trade_no)`；`TRADE_CLOSED` → `businessFailure`；`WAIT_BUYER_PAY` → `businessUnknown`（**不臆断**）[FR-137]
 - [x] **T79** `refund`（沙箱分支）调 `alipay.trade.refund`（**同步返回**，`code=10000` 即 `success(refund_no)`）[FR-138]
 - [x] **T80** 沙箱 HTTP 超时独立配置 `http-timeout-ms`（默认 `10000`），且 **MUST < `payment.reliability.timeout`(30s)**；配置注释显式说明 [FR-140][R4]
