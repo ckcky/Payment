@@ -69,13 +69,14 @@ order `PAID`（1s 内）；② 真实沙箱链路 `X-Dye-Tag: SANDBOX` 建单**�
 支付单留在 `PROCESSING`/`UNKNOWN`、`payment_attempts.extra_json.channelMode='SANDBOX'` 且 `channel_reference` 为空（待买家确认）——
 与 ADR-0076 设计一致。
 
-**⚠️ 顺带定位到一处与本轮无关的存量 P0（未修，需独立处理）**：`refund.result` 事务消息**从未成功投递过**——
-`RefundResultProcessor.notifyOrder` 走 `PaymentEventPublisher.publishRefundResult`，其负载含 `failureReason` 键，
-退款**成功**时该值为 `null`，而 `TransactionalProducer.envelope` 用 `Map.copyOf(payload)` 装箱 ⇒
-`NullPointerException(message=null)` ⇒ 被 `catch` 成 WARN「退款结果通知 order 失败 reason=null」。
-证据：`XLEN mq:stream:refund.result` = **0**（redis 已运行 29h），同期 `mq:stream:payment.succeeded` = **338**；
-且这**正是** `RefundChainE2ETest` / `OverRefundGuardE2ETest` 长期「订单收敛超时」的根因。
-属 spec 029 事务消息负载装箱缺陷，不落在本次 Payment/Channel 边界范围内，故**只记录不修改**。
+**⚠️ E2E 红项的根因=已在案的存量 P0（复现确认，非本轮引入、也非本轮新发现）**：refund 系用例的「订单收敛超时」
+不是本轮改动所致，而是 `GOTCHAS.md` §C.1 早已记录的那条链——`refund.result` 事务消息**从未成功投递**。
+本轮用对照法复现了该结论：`PaymentEventPublisher.payload(RefundResultNotification)` 把**可空的 `failureReason`**
+放进 payload，退款**成功**时为 `null`，而 `TransactionalProducer.envelope` 末参是 `Map.copyOf(payload)`
+⇒ `NullPointerException(getMessage()=null)` ⇒ 被 `catch` 成 WARN「退款结果通知 order 失败 reason=null」
+（`reason=null` 即其指纹）。**对照证据**：`XLEN mq:stream:refund.result` = **0**（redis 已运行 29h），
+同期 `XLEN mq:stream:payment.succeeded` = **338** —— 后者证明该流「消费后不删」，故 0 只能是「从未投递」。
+属 spec 029 事务消息负载装箱缺陷（F4/F5/F6 链），不落在本次 Payment/Channel 边界范围，**只复现不修改**。
 
 **未修项（明确留置，不属本轮范围）**：Spec 030 以 FR 形式**固化**了若干与本轮架构定义冲突的行为
 （FR-167 把 `defer` 判定放在 payment 层、FR-151/303 要求渠道持久化层读 `DyeContext` 落模态、
