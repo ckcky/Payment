@@ -6,6 +6,36 @@
 
 ---
 
+## [2026-09-20] fix：支付宝异步通知验签口径错误（真实回调 100% 被拒）—— spec 030 F3
+
+**性质**：**资金链路阻断级缺陷**。spec 030 沙箱联调实战发现：沙箱买家真实付款后，支付宝 `TRADE_SUCCESS`
+异步通知**到达但被拒**（`POST /internal/channels/alipay/notify` → **403**），支付单永远停在 `UNKNOWN`、
+资金事实永远收敛不了。**既有 834 tests 全绿的门禁无法发现它**——所有 notify 相关测试都把
+`verifyNotify` **stub 掉**，「真报文 + 真验签」这条路径**零自动化覆盖**。
+
+**根因**：`AlipaySdkGateway.verifyNotify` 用的是 `AlipaySignature.rsaCheckV2`。在 `alipay-sdk-java 4.40.996.ALL`
+（已 `javap -c` 反编译核对）里两个方法语义**是反的**：`getSignCheckContentV1` 剔除 `sign` **和** `sign_type`；
+`getSignCheckContentV2` **只**剔除 `sign`（保留 `sign_type`）。而支付宝给异步通知签名时**不含 `sign_type`**
+⇒ V2 拼出的待签串多出一段 `sign_type=RSA2`，验签必然失败。真实报文实测（同一条通知、同一把公钥，
+差异仅 `sign_type=RSA2` 一项）：**V1 待签串 597 字符通过 / V2 待签串 612 字符失败**。
+
+**修复**：
+- `verifyNotify` 改用 `rsaCheckV1`，并传 `LinkedHashMap` 副本（SDK 的 `getSignCheckContent*` 会就地 `remove`，
+  不污染调用方的 `params`）。
+- 新增 `AlipayNotifySignatureVerificationTest`（自签密钥对，离线可跑，不依赖沙箱密钥与公网）：
+  ① 真实形态通知（`sign_type` 不参与签名）**必须**通过；② **阳性对照**——让 `sign_type` 参与签名
+  **必须**判为不通过（防止将来被「修」回 V2 语义）；③ 空报文 / 缺 `sign` 一律不通过（INV-10）。
+
+**live 回归（修复后实测）**：支付单 `PM227388464260329472` ⇒ notify `验签通过` → `200 success`
+⇒ 由 `UNKNOWN/TIMEOUT` **收敛为 `SUCCEEDED`**；订单 `PAID`；ledger `PAYMENT:PM227388464260329472` POSTED，
+分录 **DEBIT 9900 / CREDIT 9900**（借贷平衡）。
+
+**判据修正（重要）**：此前把「空体探针返回 403」当作「验签正常」的证据 —— **错误推论**：
+空报文本来就该 403，它既证明不了密钥正确，更证明不了**算法口径**正确。
+**判据必须是一条真实的渠道报文。**
+
+---
+
 ## [2026-09-20] feat：spec 030 统一渠道契约 + Mock/沙箱双模态 + 回调基础闭环（ADR-0075 / ADR-0076）
 
 **范围**：渠道层从「单一 mock 实现」演进为「统一契约 + 双模态（本地 mock / 真实沙箱）+ 回调闭环」。

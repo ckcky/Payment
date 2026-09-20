@@ -6,6 +6,8 @@
 > **当前状态**：**已实现并已合入 master（`e348090`）**；本文件为**合并后补做的验收记录**（2026-09-20）。
 > 代码与文档实况：`feature/030-channel-contract-sandbox-callback` + `feature/030-demo-sandbox-ui` 均已 `--no-ff` 合入 master。
 > **验收结论**：INV-1~INV-10 **全绿**；SC 清单 **除 §3.2 沙箱手工 live 动线外全部通过**；
+> §3.2 **已完成 5/6**（2026-09-20 联调实战：收银台渲染、买家付款、notify 收敛 `SUCCEEDED`、ledger 复式记账均已验通），
+> **唯「沙箱退款回归原模态」一条待人工**；期间发现的 **F3 验签缺陷（§3.2.1）已修复并回归**。
 > 按「不允许部分完成」口径，**本文件不自行宣布「通过」**，签署栏留待负责人（见 §6）。
 
 **证据记号**（本文件新增，便于复核）：
@@ -131,23 +133,61 @@
 
 前置：配置 `PAYMENT_ALIPAY_*` 环境变量；内网穿透暴露 `notify_url`；置 `payment.channel.adapters.alipay.sandbox.enabled=true`。
 
-- [x] demo 页选「支付宝沙箱」⇒ 请求带 `X-Dye-Tag: SANDBOX` ⇒ order → payment 全链路透传
-      —— 🟢 live 已验证（2026-09-20 联调：`X-Dye-Tag` 经 Feign 出站拦截器传播；此前的「order 容器内 common-core 无 Dye 类」问题已由重建镜像修复）
-- [x] payment 侧 `channel_code = ALIPAY`、`extra_json.channelMode = 'SANDBOX'`
-      —— 🟢 live 已验证（建单实况：支付单 `PROCESSING`，模态落库 `SANDBOX`）
-- [ ] `window.open(payUrl)` 打开**支付宝沙箱收银台**（不再跳本地 mock 收银台）
-      —— ⏳ **半完成**：凭证形态已修（`FORM_HTML` + `demo.html` Blob 包装 + `/cashier/return` 回跳页），
-      但「打开后确实呈现沙箱收银台而非空白页」**尚未由买家账号确认** ⇒ 见下方「未验证范围」
-- [ ] 沙箱买家账号付款 ⇒ notify 到达 ⇒ payment 收敛 `SUCCEEDED`；`payment_attempts.channel_reference = trade_no` —— ⏳ **未完成**（需真实买家账号付款）
-- [ ] ledger 有 `PAYMENT:{paymentNo}` 分录（**恰好一条**） —— ⏳ **未完成**（依赖上一条收敛）
-- [ ] 退款：沙箱单退款走**沙箱分支**（模态从库还原），渠道**未被重新路由** —— ⏳ **未完成**（需先有一笔沙箱成功支付）
+- [x] 打开**支付宝沙箱收银台**（不再跳本地 mock 收银台）
+      —— 🟢 live 已验证（2026-09-20：`unitradeprod-sandbox.dl.alipaydev.com/appAssign.htm`
+      → `excashier-sandbox.dl.alipaydev.com/standard/auth.htm`）。落地页是沙箱收银台本体：
+      **左栏「扫码支付」二维码 + 右栏「登录支付宝账户付款」**；右栏字段只有
+      **账户名（手机号/邮箱）+ 支付密码**（页面原话「请输入账户的支付密码，不是登录密码」）。
+      可用**真实 Chromium 自动化**驱动：填买家账号 + 支付密码 → 下一页「确认付款」（余额支付）。
+      ⚠️ 收银台页宽 `min-width: 990px`：窗口过窄时**右栏登录区被挤出可视区，只剩二维码**。
+- [x] 沙箱买家账号付款 ⇒ notify 到达 ⇒ payment 收敛 `SUCCEEDED`；`payment_attempts.channel_reference = trade_no`
+      —— 🟢 live 已验证（2026-09-20，支付单 `PM227388464260329472` / 订单 `OR227388461777330177`）：
+      `19:21:27 支付宝 notify 验签通过 out_trade_no=… trade_status=TRADE_SUCCESS`
+      → `POST /internal/channels/alipay/notify status=200 resp=success`
+      ⇒ 支付单由 `UNKNOWN/TIMEOUT` **收敛为 `SUCCEEDED`** —— **UNKNOWN 权威收敛**路径实证。
+      ⚠️ 本项曾被 §3.2.1 的 F3 缺陷**阻塞整整一轮联调**（真实回调 100% 验签失败）。
+- [x] ledger 有 `PAYMENT:{paymentNo}` 分录（**恰好一条**）
+      —— 🟢 live 已验证：`posting_no=LP227388687976165376`、`idempotency_key=PAYMENT:PM227388464260329472`、
+      `status=POSTED`，分录 **2 条：DEBIT 9900 / CREDIT 9900**（借贷平衡）；订单 `PAID`（`paid_minor=9900`）；
+      履约记录 / 权益各 1 行。
+- [ ] 退款：沙箱单退款走**沙箱分支**（模态从库还原），渠道**未被重新路由**
+      —— ⏳ **未完成**（本轮未做沙箱退款）。**其前置已解除**（上一项已产生一笔真实沙箱成功支付）。
+
+#### 3.2.1 F3（🔴 联调实测发现并已修复）：真实 notify **必然验签失败**
+
+- **现象**：沙箱买家真实付款后，支付宝 `TRADE_SUCCESS` 通知**确实到达**，但被
+  `AlipayNotifyController` 以 **403** 拒绝（`支付宝 notify 验签失败，拒绝（不触达收敛链路）`）
+  ⇒ 支付单永远停在 `UNKNOWN`、资金事实**永远收敛不了**。
+- **根因**：`AlipaySdkGateway.verifyNotify` 调用的是 `AlipaySignature.rsaCheckV2`。
+  在该 SDK 版本（`alipay-sdk-java 4.40.996.ALL`，**已 `javap -c` 反编译核对**）里两个方法语义**是反的**：
+  `getSignCheckContentV1` 剔除 `sign` **和** `sign_type`；`getSignCheckContentV2` **只**剔除 `sign`（保留 `sign_type`）。
+  而支付宝给异步通知签名时**不含 `sign_type`** ⇒ V2 拼出的待签串多出一段 `sign_type=RSA2`，**必然验签失败**。
+- **证据（同一条报文、同一把支付宝公钥，可离线复现）**：
+
+  | 待签串口径 | 长度 | 验签 |
+  |---|---|---|
+  | V1（剔除 `sign` + `sign_type`） | 597 | **通过** |
+  | V2（仅剔除 `sign`） | 612 | 失败 |
+
+  21 个参与签名的参数**只差 `sign_type=RSA2` 一项**；公钥本身正确（用正确口径可验通同一签名）。
+- **修复**：`verifyNotify` 改用 `rsaCheckV1`，并传 `LinkedHashMap` 副本（SDK 的 `getSignCheckContent*`
+  会就地 `remove`，不污染调用方的 `params`）。
+- **为什么 834 tests 全绿也没抓到**：所有 notify 相关测试都把 `verifyNotify` **stub 掉**了
+  ⇒「真报文 + 真验签」这条路径**零自动化覆盖**。已新增 `AlipayNotifySignatureVerificationTest`
+  （自签密钥对，离线可跑，不依赖沙箱密钥/公网），含**阳性对照**
+  「`sign_type` 参与签名必须判为不通过」，防止将来被「修」回 V2 语义。
+- **⚠️ 教训（判据）**：此前把「空体探针返回 403」当作「验签正常」的证据——**这是错误推论**。
+  空报文本来就该 403，它既证明不了密钥正确，更证明不了**算法口径**正确。
+  **判据必须是一条真实的渠道报文。**
 
 **已 live 验证的相邻项（记录在案）**：公网回调端点 `POST /internal/channels/alipay/notify` 空体 ⇒ **403**（验签 fail-closed，ADR-0052 生效）。
+⚠️ 该结果**不能**作为「验签口径正确」的证据（见 §3.2.1 教训）。
 
 > ⚠️ **未验证范围 MUST 显式记录**（ADR-0076 R10）——不得默认通过。
-> **本轮明确未验证**：① 沙箱收银台渲染结果；② 买家付款 → notify → `SUCCEEDED` 端到端收敛；
-> ③ 沙箱退款回归原模态。**前置阻塞**：`notify_url` 需公网可达（联调用的 ngrok 隧道已失效），
-> 且需支付宝沙箱**买家账号**手工付款——两者均非 CI 可覆盖，属人工动线。
+> **本轮仍未验证**：① 沙箱退款回归原模态（前置已解除，留待下一轮）；
+> ② 金额不符 / 串号等异常分支的**真实**渠道报文（目前仍由固定向量单测覆盖）。
+> **已解除的阻塞**：`notify_url` 公网可达（ngrok 固定域名隧道已常驻并封装为 `deployment/demo/start-tunnel.sh`）；
+> 沙箱**买家账号**付款（本次已实战走通，路径见 §3.2）。
 
 ---
 

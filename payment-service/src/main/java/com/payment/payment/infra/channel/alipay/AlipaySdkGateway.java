@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -206,8 +207,25 @@ public class AlipaySdkGateway implements AlipayGateway {
             return false;
         }
         try {
-            // rsaCheckV2 = 支付宝异步通知的标准验签（内部会剔除 sign / sign_type）
-            return AlipaySignature.rsaCheckV2(rawParams, properties.getAlipayPublicKey(),
+            // ⚠️ **必须用 rsaCheckV1，不能用 rsaCheckV2**（2026-09-20 沙箱真实回调实测踩坑）。
+            //
+            // 本 SDK 版本（alipay-sdk-java 4.40.996.ALL，已反编译核对）里两个方法的语义**是反的**：
+            //     getSignCheckContentV1 → 剔除 sign **和** sign_type   ✅ 符合支付宝签名的规范
+            //     getSignCheckContentV2 → **只**剔除 sign（保留 sign_type） ❌
+            // 而支付宝给异步通知签名时**不含 sign_type**，于是 V2 拼出的待签串会多出一段
+            // `sign_type=RSA2`，真实回调必然验签失败——现象是**所有 notify 都被 403 拒掉、
+            // 支付单永远收敛不了**（本地 403 探针会掩盖这一点：空报文本来就该 403，
+            // 「探针 403」证明不了密钥与算法口径正确）。
+            //
+            // 真报文对照（同一条 TRADE_SUCCESS 通知、同一把支付宝公钥）：
+            //     V1 待签串 597 字符 → 验签通过
+            //     V2 待签串 612 字符 → 验签失败
+            // 回归测试见 AlipayNotifySignatureVerificationTest（含「sign_type 必须被剔除」的阳性对照）。
+            //
+            // ⚠️ 别再按方法名推断语义（"V2 比 V1 新所以更对"）——这是实测结论。
+            // 传副本：SDK 的 getSignCheckContent* 会就地 remove，不污染调用方的 params。
+            return AlipaySignature.rsaCheckV1(new LinkedHashMap<>(rawParams),
+                    properties.getAlipayPublicKey(),
                     properties.getCharset(), properties.getSignType());
         } catch (AlipayApiException ex) {
             // 验签异常一律当「验签不通过」——绝不能因异常放行（INV-10）
