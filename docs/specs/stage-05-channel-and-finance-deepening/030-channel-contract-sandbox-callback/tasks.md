@@ -1,10 +1,14 @@
 # Tasks: 030 统一渠道契约 + Mock/沙箱双模态 + 回调基础闭环
 
-> **状态**：**未开工**（本轮只写 Plan，不写代码）。
-> **前置门**：门 1 / 门 2 **已通过**；门 3 **部分通过**（H4 ✅ / H17 ⏳）；门 0 **剩余 D-* 漂移收口**（Phase 0，不依赖裁决）。
+> **状态**：**已全部完成（142/142）并已合入 master**（`feature/030-channel-contract-sandbox-callback` 合并点 `3a39a7a`；
+> 演示侧 `feature/030-demo-sandbox-ui` 合并点 `e348090`）。验收记录见 [acceptance.md](acceptance.md)（2026-09-20 收口）。
+> **前置门**：门 1 / 门 2 **已通过**；门 3 **部分通过**（H4 ✅ / H17 ⏳）；门 0 **已完成**（Phase 0）。
 > **实现顺序约束**：Phase 0（文档）→ Phase 1/2（**两个资金缺陷，可独立先做**）→ Phase 3（契约）→ Phase 4（染色骨架，**必须整体落地**）→ Phase 5（落库）→ Phase 6（反向自足）→ Phase 7（沙箱）→ Phase 8（回调）→ Phase 9（demo）→ Phase 10（测试门禁）→ Phase 11（L0 回写）。
 > **编号引用**：`[FR-nnn]` 见 [spec.md](spec.md)；`[INV-n]` 见 spec §7.8 / §11.2；`[SC-*]` 见 [acceptance.md](acceptance.md)。
 > **路径约定**：`payment-service/` / `order-service/` / `common/common-core/` 为模块根；`.../` 表示沿用上一行已给出的包路径前缀。
+> **收口补记（2026-09-20）**：T11 的并发半部**已真库实测交付**（`ledger-service` 的 `LedgerPostingConcurrencyTest`，Testcontainers-MySQL，
+> 3 tests / 0 skip / 0 fail）；另修 2 处「声明 ≠ 实况」——凭证形态（`FORM_HTML`）与 INV-7 ArchUnit 包名空转，
+> 见 [spec §2.5](spec.md#25-实现期实况修正2026-09-20两处声明--实况)。
 
 ---
 
@@ -159,14 +163,14 @@
 - [x] **T117** 新增 `payment-service/src/test/java/com/payment/payment/contract/ChannelContractCompatTest`：5 参 / 3 参兼容构造器可用；`withReason` **保留** `credential` [SC-A-02]
 - [x] **T118** 新增 `.../contract/PayCredentialTest`：`isRedirectFamily()` 语义 [FR-111]
 - [x] **T119** 新增 `.../infra/channel/AlipayAmountConversionTest`：固定向量 `amountMinor=1 → "0.01"`、`100000000 → "1000000.00"`；无 `double`/`float` [SC-A-03]
-- [x] **T120** 新增 `.../infra/channel/AlipaySandboxChargeTest`（**mock `AlipayGateway`**）：沙箱产出 `REDIRECT_URL` 凭证；**`MOCK` 分支尾号 `11` 仍 `timeout`**（零分叉）[SC-A-13][T-A-15]
+- [x] **T120** 新增 `.../infra/channel/AlipaySandboxChargeTest`（**mock `AlipayGateway`**）：沙箱产出 **`FORM_HTML`** 凭证（⚠️ 实况修正：原写 `REDIRECT_URL`，见 spec §2.5 F1）；**`MOCK` 分支尾号 `11` 仍 `timeout`**（零分叉）[SC-A-13][T-A-15]
 - [x] **T121** 新增 `.../api/AlipayNotifyControllerTest`（`@SpringBootTest` + `MockMvc`）：验签失败 `403` 且不触达收敛服务；成功**恰好返回纯文本 `success`**；`WAIT_BUYER_PAY` **不推进** [SC-A-14]
 - [x] **T122** 新增 `.../domain/PaymentAttemptExtraJsonTest`：写入侧强制含键；读取侧四类坏数据 fail-safe 一律 `MOCK`；幂等重复不覆盖；存量 `NULL` ⇒ `MOCK` [FR-303][FR-304][SC-A-11]
 - [x] **T123** 新增 `.../infra/channel/DyeNotAffectingRoutingTest`：相同 `RouteContext` 在两种染色下选出**同一** `channelCode` [FR-120][INV-3][SC-A-08]
 - [x] **T124** 新增 `.../application/PaymentCallbackValidationTest`：金额 / 币种 / 引用归属三类拒绝各自断言「不推进 + 指标 + 审计」 [SC-B2-01~04]
 - [x] **T125** 新增 `.../application/PaymentCallbackPathParityTest`：JSON 路径与 notify 路径校验行为**一致** [SC-B2-06]
 - [x] **T126** 新增 `.../integration/AlipaySandboxNotifyScenarioTest`：沙箱下单 → 凭证 → notify → 收敛 `SUCCEEDED`（全程离线，mock `AlipayGateway` + 固定签名向量）[SC-A-05][SC-A-13]
-- [x] **T127** 新增 `deployment/architecture-tests/src/test/java/com/payment/arch/ServiceBoundaryTest` 断言：`application/**` **MUST NOT** 依赖 `com.alipay.sdk`；`ChannelRouter` **不读** `DyeContext` [INV-7][FR-122][INV-3][SC-A-09]
+- [x] **T127** 新增 `deployment/architecture-tests/src/test/java/com/payment/arch/ServiceBoundaryTest` 断言：`application/**` **MUST NOT** 依赖 SDK Java 包 `com.alipay.api`（含阳性对照）；`ChannelRouter` **不读** `DyeContext` [INV-7][FR-122][INV-3][SC-A-09]
 - [x] **T128** 全量门禁：`./mvnw -B clean verify -fae` **全绿**（含 `architecture-tests`）[SC-A-01]
 - [x] **T129** 零回归核验：不染色路径下既有支付 / 退款 / 可靠性 / 集成 / E2E 测试 **零改动**通过（`git diff --stat` 中**无既有测试文件被改**，Phase 1/2 的**修正型**断言除外并已在 PR 说明）[SC-A-15][T-R-01]
 - [x] **T130** 凭证泄漏核查：全仓 grep 确认**无**签名 URL / 私钥 / `client_secret` 出现在日志、测试夹具或文档示例中 [INV-2][SC-A-04]

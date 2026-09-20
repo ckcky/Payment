@@ -45,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <h3>动线（与 demo.html 沙箱动线同构）</h3>
  * <pre>
  *   ① 建单：payment=PROCESSING + attempt（stamp SANDBOX）
- *   ② 染色 SANDBOX 下单：adapter.charge → accepted + REDIRECT_URL 凭证，payment 仍 PROCESSING（INV-6）
+ *   ② 染色 SANDBOX 下单：adapter.charge → accepted + FORM_HTML 凭证，payment 仍 PROCESSING（INV-6）
  *   ③ 支付宝推 notify（TRADE_SUCCESS，金额一致）→ 200 "success"
  *   ④ 收敛：payment=SUCCEEDED，attempt=SUCCEEDED，通知 order
  * </pre>
@@ -64,11 +64,17 @@ class AlipaySandboxNotifyScenarioTest {
     private AlipayNotifyController notifyController;
 
     /**
-     * 脚本化支付宝网关：按脚本演绎「下单返回签名 URL」与「验签通过」，
+     * 脚本化支付宝网关：按脚本演绎「下单返回自动提交表单 HTML」与「验签通过」，
      * 不触碰任何网络。query/refund 本动线不用。
      */
     private static final class ScriptedGateway implements AlipayGateway {
-        String redirectUrl = "https://openapi-sandbox.dl.alipaydev.com/gateway.do?sign=fake-signed";
+        /**
+         * 真实 SDK 的 pagePay 返回形态：**自动提交表单 HTML**（不是 URL）。
+         * 桩与真实网关形态一致，「凭证 Kind」这条断言才有意义。
+         */
+        String pageFormHtml = "<form name=\"punchout_form\" method=\"post\" "
+                + "action=\"https://openapi-sandbox.dl.alipaydev.com/gateway.do?sign=fake-signed\">"
+                + "<script>document.forms[0].submit();</script></form>";
         boolean pagePayCalled = false;
         String capturedOutTradeNo;
         long capturedAmountMinor;
@@ -81,7 +87,7 @@ class AlipaySandboxNotifyScenarioTest {
             capturedOutTradeNo = outTradeNo;
             capturedAmountMinor = amountMinor;
             capturedNotifyUrl = notifyUrl;
-            return PagePayResult.ok(redirectUrl);
+            return PagePayResult.ok(pageFormHtml);
         }
 
         @Override
@@ -160,15 +166,15 @@ class AlipaySandboxNotifyScenarioTest {
         // ② 染色 SANDBOX 下单
         ChannelResult chargeResult = DyeContext.callWith(DyeMode.SANDBOX, () -> adapter.charge(chargeRequest()));
 
-        // 渠道受理 ≠ 买家已付款：OUTCOME=ACCEPTED，且带跳转凭证
+        // 渠道受理 ≠ 买家已付款：OUTCOME=ACCEPTED，且带付款凭证（自动提交表单 HTML）
         assertThat(gateway.pagePayCalled).as("必须真的走到了沙箱网关").isTrue();
         assertThat(gateway.capturedOutTradeNo).isEqualTo(PAYMENT_NO);
         assertThat(gateway.capturedAmountMinor).as("金额必须是分（不经过 double）").isEqualTo(10_00L);
         assertThat(gateway.capturedNotifyUrl).as("notifyUrl 必须透传给渠道").isEqualTo(NOTIFY_URL);
 
         assertThat(chargeResult.credential()).isNotNull();
-        assertThat(chargeResult.credential().kind()).isEqualTo(PayCredential.Kind.REDIRECT_URL);
-        assertThat(chargeResult.credential().payload()).isEqualTo(gateway.redirectUrl);
+        assertThat(chargeResult.credential().kind()).isEqualTo(PayCredential.Kind.FORM_HTML);
+        assertThat(chargeResult.credential().payload()).isEqualTo(gateway.pageFormHtml);
 
         // INV-6 关键断言：钱还没到，payment MUST 保持 PROCESSING，不得记账/通知
         assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())

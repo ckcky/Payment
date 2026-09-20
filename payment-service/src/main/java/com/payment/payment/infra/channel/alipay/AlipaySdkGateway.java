@@ -28,8 +28,10 @@ import java.util.Map;
 /**
  * 支付宝网关的 SDK 实现（spec 030 / FR-132 / FR-141 / INV-7）。
  *
- * <p><b>本类是全仓唯一允许 import {@code com.alipay.sdk} 的类</b>（INV-7 / SC-A-09，
- * ArchUnit 构建期断言）。所有渠道协议细节——签名、验签、参数组装、金额换算、错误归一化
+ * <p><b>本类是全仓唯一允许 import {@code com.alipay.api} 的类</b>（Maven 坐标写作
+ * {@code com.alipay.sdk:alipay-sdk-java}，但 Java 包名是 {@code com.alipay.api}；
+ * 两者混淆会让包名匹配型的架构门禁静默空转）；INV-7 / SC-A-09 由 ArchUnit 构建期断言。
+ * 所有渠道协议细节——签名、验签、参数组装、金额换算、错误归一化
  * ——全部关在这里；出去只有 {@link AlipayGateway} 的平台自有类型（FR-141）。
  * 换实现（如纯 JDK 的 {@code HttpClient} + {@code SHA256withRSA}）只需另写一个类，零扩散。</p>
  *
@@ -95,18 +97,20 @@ public class AlipaySdkGateway implements AlipayGateway {
         request.setBizModel(model);
 
         try {
-            // pageExecute 返回**已签名的跳转 URL**（放在 response.body）：
+            // pageExecute 返回**已签名的「自动提交表单」HTML**（放在 response.body）——
+            // 不是 URL！浏览器渲染这段 HTML 会自动 POST 到网关换回收银台页。
+            // 把它当 URL 直接 window.open 只会得到空白页（spec 030 联调实测过）。
             // 沙箱下这一步不会让买家付钱，只是拿到「去哪儿付款」的凭证（FR-136）。
             AlipayTradePagePayResponse response = client.pageExecute(request);
-            String url = response == null ? null : response.getBody();
-            if (url == null || url.isBlank()) {
-                // 没拿到 URL 就不是「受理成功」——不能返回 accepted，否则买家去了一个空白页
-                log.warn("alipay.trade.page.pay 未返回跳转 URL outTradeNo={} code={}", outTradeNo,
+            String pageFormHtml = response == null ? null : response.getBody();
+            if (pageFormHtml == null || pageFormHtml.isBlank()) {
+                // 没拿到凭证就不是「受理成功」——不能返回 accepted，否则买家去了一个空白页
+                log.warn("alipay.trade.page.pay 未返回付款凭证（表单 HTML） outTradeNo={} code={}", outTradeNo,
                         response == null ? "<null>" : response.getCode());
-                return PagePayResult.transportFailure("page pay returned no redirect url (channel did not accept)");
+                return PagePayResult.transportFailure("page pay returned no credential payload (channel did not accept)");
             }
             log.info("alipay.trade.page.pay 已受理 outTradeNo={} 金额分={}", outTradeNo, amountMinor);
-            return PagePayResult.ok(url);
+            return PagePayResult.ok(pageFormHtml);
         } catch (AlipayApiException ex) {
             // 通信层异常（超时 / 断连 / 证书问题）⇒ 可重试语义
             log.warn("alipay.trade.page.pay 通信失败 outTradeNo={}: {}", outTradeNo, ex.getMessage());

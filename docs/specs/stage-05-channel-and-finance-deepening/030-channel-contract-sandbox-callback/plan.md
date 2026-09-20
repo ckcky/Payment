@@ -140,7 +140,7 @@
 | `.../application/channel/Goods.java` | **新增** | `(title, description)` + `of(title)`（FR-102） |
 | `.../application/channel/CallbackUrls.java` | **新增** | `(notifyUrl, returnUrl)` + `notifyOnly(url)`；Javadoc **显式声明** `returnUrl` 不承载资金事实（FR-103） |
 | `.../application/channel/Payer.java` | **新增** | `(payerId, clientIp)` + `of(payerId)` / `byClientIp(ip)`（FR-104） |
-| `.../application/channel/PayCredential.java` | **新增** | `(Kind kind, String payload, Instant expiresAt)`；六值 `Kind`；`redirectUrl(...)` / `isRedirectFamily()`（FR-111） |
+| `.../application/channel/PayCredential.java` | **新增** | `(Kind kind, String payload, Instant expiresAt)`；六值 `Kind`；`redirectUrl(...)` / `formHtml(...)` / `h5Url(...)` / `qrCode(...)` / `isRedirectFamily()`（FR-111） |
 | `.../application/channel/ChargeRequest.java` | 改 | 扩为 12 字段 + **保留 5 参兼容构造器**（FR-105） |
 | `.../application/channel/RefundRequest.java` | 改 | 扩为 9 字段（含 `channelTransactionId` / `outRequestNo` / `reason` / `refundNotifyUrl`）+ **保留 5 参构造器**（FR-106） |
 | `.../application/channel/QueryStatusRequest.java` | 改 | 扩为 4 字段（含 `channelTransactionId`）+ **保留 3 参构造器**（FR-107） |
@@ -213,7 +213,7 @@
 | `.../infra/config/AlipaySandboxProperties.java` | **新增** | `@ConfigurationProperties("payment.channel.adapters.alipay.sandbox")`；`enabled` 默认 **`false`**；`enabled=true` 时**启动期强校验**必需项非空，缺失 ⇒ **启动失败并列出缺失项**（FR-133 / FR-134） |
 | `.../infra/channel/alipay/AlipaySdkGateway.java` | **新增** | SDK 收口实现（签名 / 验签 / 参数组装 / 金额换算 / 错误归一化为 `ChannelResult`）（FR-132 / FR-141） |
 | `.../infra/channel/AlipayChannelAdapter.java` | 改 | **双模态分发**；**`MOCK` 分支必须 `super` 委托**（基类 4 件横切行为口径 100% 不变）（FR-130）；`supportsRealMode()=true`，`supportedScenes()` 按真实能力收窄（FR-131） |
-| `.../infra/channel/alipay/*` | 改 | `charge` 调 `alipay.trade.page.pay` → `accepted(null, "awaiting buyer", PayCredential.redirectUrl(...))`（FR-136）；`queryStatus` 三态映射（FR-137）；`refund` 同步返回（FR-138） |
+| `.../infra/channel/alipay/*` | 改 | `charge` 调 `alipay.trade.page.pay` → `accepted(null, "awaiting buyer", PayCredential.formHtml(...))`（FR-136；⚠️ 实况修正：SDK 返回**自动提交表单 HTML**，`Kind = FORM_HTML` 而非 `REDIRECT_URL`，见 spec §2.5 F1）；`queryStatus` 三态映射（FR-137）；`refund` 同步返回（FR-138） |
 
 **关键约束**：
 - 金额换算 **MUST** 用 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`，**禁 `double`/`float`**（FR-139 / INV-1）；

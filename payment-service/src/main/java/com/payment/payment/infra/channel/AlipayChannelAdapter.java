@@ -165,11 +165,18 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
     // ---- 沙箱分支 ----
 
     /**
-     * 沙箱下单（FR-136）：{@code alipay.trade.page.pay} 的 GET 签名 URL 作为凭证。
+     * 沙箱下单（FR-136）：{@code alipay.trade.page.pay} 的**自动提交表单 HTML** 作为凭证。
      *
      * <p>关键语义：返回 {@code accepted(null, "awaiting buyer", credential)}——
      * <b>渠道受理 ≠ 买家已付款</b>。渠道流水号此时通常还没有（买家还没付），故 {@code null}。
      * 调用方据此让 payment 停 {@code PROCESSING}（INV-6：不记账、不通知 order）。</p>
+     *
+     * <p><b>Kind 修正（2026-09-20）</b>：官方 SDK 的 {@code pageExecute().getBody()} 返回的是
+     * 整段 {@code <form>} HTML，<b>不是 URL</b>（官方示例的用法是「把表单 HTML 直接写到页面上」）。
+     * 此前这里标成 {@link PayCredential.Kind#REDIRECT_URL}，使
+     * {@code credential.isRedirectFamily()} 对被误标的凭证返回 {@code true}——
+     * 消费端据此「直接 {@code window.open}」，浏览器把 HTML 当相对地址解析 ⇒ <b>空白页</b>。
+     * 现改用 {@link PayCredential.Kind#FORM_HTML}（该枚举本就为此而设，此前无人使用）。</p>
      */
     private ChannelResult sandboxCharge(ChargeRequest request) {
         CallbackUrls callbackUrls = request.callbackUrls();
@@ -195,7 +202,7 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
             // 通信失败 ⇒ 可重试语义（与 mock 的 TIMEOUT 同一处理路径）
             return ChannelResult.transportFailure(TransportCode.CONNECTION_ERROR, result.reason());
         }
-        PayCredential credential = PayCredential.redirectUrl(result.redirectUrl(), expireAt);
+        PayCredential credential = PayCredential.formHtml(result.redirectUrl(), expireAt);
         return ChannelResult.accepted(null, "awaiting buyer", credential);
     }
 

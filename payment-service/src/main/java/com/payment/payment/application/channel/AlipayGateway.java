@@ -6,10 +6,11 @@ import java.util.Map;
 /**
  * 支付宝网关端口（spec 030 / FR-132 / INV-7）。
  *
- * <p><b>存在的唯一理由：把 SDK 关进笼子。</b>官方 SDK 体积大、传递依赖多、带已知 CVE
- * （FR-295 / ADR-0076，风险已由 H3 显式接受）。收口手段不是「小心使用」，而是
+ * <p><b>存在的唯一理由：把 SDK 关进笼子。</b>官方 SDK（Maven 坐标 {@code com.alipay.sdk:alipay-sdk-java}）
+ * 体积大、传递依赖多、带已知 CVE（FR-295 / ADR-0076，风险已由 H3 显式接受）。收口手段不是「小心使用」，而是
  * <b>架构约束</b>：{@code application/**} 与 {@code domain/**} 只认本端口，
- * {@code com.alipay.sdk} 只允许出现在 {@code infra/channel/alipay/AlipaySdkGateway}
+ * SDK 的 Java 包 {@code com.alipay.api}（注意：非 Maven groupId {@code com.alipay.sdk}）
+ * 只允许出现在 {@code infra/channel/alipay/AlipaySdkGateway}
  * 一个类里（ArchUnit 构建期断言，SC-A-09）。将来把 SDK 换成纯 JDK 实现
  * （{@code HttpClient} + {@code SHA256withRSA}），只需新写一个实现类——<b>零扩散</b>。</p>
  *
@@ -32,7 +33,16 @@ import java.util.Map;
 public interface AlipayGateway {
 
     /**
-     * 电脑网站支付（{@code alipay.trade.page.pay}）：返回<b>已签名的 GET 跳转 URL</b>。
+     * 电脑网站支付（{@code alipay.trade.page.pay}）：返回<b>已签名的「自动提交表单」HTML</b>。
+     *
+     * <p><b>这不是一个 URL</b>（2026-09-20 修正）：官方 SDK 的
+     * {@code client.pageExecute(request).getBody()} 返回的是一段
+     * {@code <form …>} + {@code document.forms[0].submit()} 的 HTML 片段，
+     * 由<b>浏览器渲染后自动 POST</b> 到网关换回收银台页。把它当成地址交给
+     * {@code window.open(...)} / {@code <a href>}，浏览器会按「相对地址」解析这段 HTML——
+     * <b>结果是一个空白页</b>（spec 030 联调时真实踩过）。
+     * 调用方 MUST 按形态分流：以 {@code '<'} 开头即为表单 HTML，需包装成可加载的页面
+     * （如前端用 Blob URL）再打开，详见 {@code demo.html#isFormHtmlCredential}。</p>
      *
      * <p>沙箱下这一步<b>不会</b>让买家付钱，只是拿到「去哪儿付款」的凭证（FR-136）。
      * 故调用方 MUST 把结果当 {@code accepted} 处理、payment 停 {@code PROCESSING}
@@ -89,9 +99,10 @@ public interface AlipayGateway {
     // ---- 结果类型（平台自有语义，不含任何 SDK 类型） ----
 
     /**
-     * 页面支付结果：成功拿到跳转 URL，或失败。
+     * 页面支付结果：成功拿到付款凭证（自动提交表单 HTML），或失败。
      *
-     * @param redirectUrl 已签名的跳转 URL（失败时为 {@code null}）
+     * @param redirectUrl 付款凭证原文——**自动提交表单 HTML**（不是 URL；失败时为 {@code null}）；
+     *                    字段名为历史沿用，语义见 {@link #pagePay} 的说明
      * @param transportOk 通信是否成功完成
      * @param reason      失败说明（<b>平台语义</b>，不含渠道错误码原文）
      */

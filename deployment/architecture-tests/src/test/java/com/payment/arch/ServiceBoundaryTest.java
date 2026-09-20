@@ -1,5 +1,6 @@
 package com.payment.arch;
 
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
@@ -222,18 +223,41 @@ class ServiceBoundaryTest {
      * 这样将来要换「纯 JDK 实现」或另一个 SDK 版本，改动被限制在一个类里，**零扩散**。</p>
      *
      * <p>规则落在<b>应用层</b>（{@code application..}，含 {@code application.channel..} 的端口定义）
-     * 与<b>领域层</b>（{@code domain..}）——这两层都不许出现 {@code com.alipay.sdk}。</p>
+     * 与<b>领域层</b>（{@code domain..}）——这两层都不许出现 {@code com.alipay.api}。</p>
+     *
+     * <p><b>包名口径（2026-09-20 修正）</b>：SDK 的 <em>Maven 坐标</em>是
+     * {@code com.alipay.sdk:alipay-sdk-java}，但它编译出来的 <em>Java 包</em>是
+     * {@code com.alipay.api}（{@code AlipayClient} / {@code AlipaySignature} …）。
+     * 本规则此前写作 {@code com.alipay.sdk..}——<b>该包不存在，规则恒通过</b>，
+     * 是一条空转的假绿门禁：即使有人在应用层 import SDK，构建也不会红。
+     * 现按真实包名匹配，并加<b>阳性对照</b>把这类笔误钉死（见下）。</p>
      *
      * <p><b>为什么用字符串包名而非 {@code dependOnClassesThat().resideInAPackage(…)} 的常量</b>：
-     * SDK 不在本模块的 classpath 上（本模块只按目录导入各服务字节码），故只能用包名字符串匹配。</p>
+     * SDK 不在本模块的 classpath 上（本模块只按目录导入各服务字节码），故只能用包名字符串匹配。
+     * 正因如此，包名写错不会有编译错误——只会静默失效。</p>
      */
     @Test
     void alipaySdkMustBeConfinedToItsInfrastructureAdapter() {
+        // 阳性对照（防空转）：先证明「收口主体存在」且「它确实依赖 com.alipay.api..」。
+        // 否定式规则（noClasses…）在没有命中任何类时与「真的检查过」无法区分，
+        // 故必须由正向的证据先证明这个包名在 ArchUnit 依赖模型里是「可命中的」。
+        JavaClass sdkAdapter = serviceClasses.stream()
+                .filter(c -> c.getSimpleName().equals("AlipaySdkGateway"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "找不到 AlipaySdkGateway：INV-7 的收口主体不存在，本规则将空转（假绿）"));
+        boolean referencesSdkPackage = sdkAdapter.getDirectDependenciesFromSelf().stream()
+                .anyMatch(d -> d.getTargetClass().getPackageName().startsWith("com.alipay.api"));
+        assertThat(referencesSdkPackage)
+                .as("AlipaySdkGateway 必须真实引用 com.alipay.api..；为 false 说明包名又写错了，"
+                        + "下面的否定式规则会静默空转（INV-7 防空转对照）")
+                .isTrue();
+
         ArchRule rule = noClasses()
                 .that().resideInAnyPackage(
                         "com.payment.payment.application..",
                         "com.payment.payment.domain..")
-                .should().dependOnClassesThat().resideInAPackage("com.alipay.sdk..")
+                .should().dependOnClassesThat().resideInAPackage("com.alipay.api..")
                 .because("支付宝 SDK 是第三方闭源依赖，必须被端口实现 AlipaySdkGateway（infra.channel.alipay）独占；"
                         + "应用层/领域层一旦 import 它，SDK 的升级节奏就会绑架业务代码，换实现将全仓扩散（INV-7 / ADR-0076）");
         rule.check(serviceClasses);
