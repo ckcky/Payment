@@ -336,6 +336,27 @@ services:
       PAYMENT_ADMIN_TOKEN: demo-admin-token
       PAYMENT_CHANNEL_SECRET: demo-channel-secret-2026
       PAYMENT_CHANNEL_MOCK_SCENARIO: ${PAYMENT_CHANNEL_MOCK_SCENARIO:-SUCCESS}
+      #   ---- spec 030 / ADR-0076：支付宝真实渠道沙箱（双模态的另一半）----
+      #   enabled 默认 false —— 不显式打开就绝不连真实渠道（演示默认走本地 mock，零外部依赖）。
+      #   开启（宿主执行 compose 前先 export，密钥一律 env 注入：禁硬编码/禁入库/禁明文日志，INV-2）：
+      #     export PAYMENT_ALIPAY_SANDBOX_ENABLED=true
+      #     export PAYMENT_ALIPAY_SANDBOX_APP_ID=<沙箱 appId>
+      #     export PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY=<应用私钥>
+      #     export PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥>
+      #     export PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay/notify
+      #   enabled=true 而三项密钥缺失 ⇒ payment-service **启动期 FAIL FAST** 并列出全部缺失项（FR-134）。
+      #   PAYMENT_CHANNEL_NOTIFY_URL（FR-103 / tasks Q5「配置单值」）：notify 是资金事实的唯一权威
+      #       来源；缺失 ⇒ 沙箱 charge 直接 400 INVALID_ARGUMENT（INV-8，**不静默回落 mock**）。
+      #       **容器模式下该地址同样必须公网可达**（内网穿透指向宿主 8084 即可，因为 8084 已
+      #       publish 到宿主；穿透指向宿主 8084 = 命中本容器）。见 runbook §4.4。
+      PAYMENT_ALIPAY_SANDBOX_ENABLED: ${PAYMENT_ALIPAY_SANDBOX_ENABLED:-false}
+      PAYMENT_ALIPAY_SANDBOX_APP_ID: ${PAYMENT_ALIPAY_SANDBOX_APP_ID:-}
+      PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY: ${PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY:-}
+      PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY: ${PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY:-}
+      PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL: ${PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL:-https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+      PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS: ${PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS:-10000}
+      PAYMENT_CHANNEL_NOTIFY_URL: ${PAYMENT_CHANNEL_NOTIFY_URL:-}
+      PAYMENT_CHANNEL_RETURN_URL: ${PAYMENT_CHANNEL_RETURN_URL:-}
       #   SPRING_PROFILES_ACTIVE=demo        激活演示专用 Bean（spec 028 / FR-035）：
       #       `POST /internal/channels/{code}/status` 渠道可用性开关 —— scenario-routing.sh
       #       的 S3/S4 靠它把渠道置 DOWN。**不激活该 profile 时端点不存在**（404/500），

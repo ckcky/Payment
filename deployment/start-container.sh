@@ -40,6 +40,33 @@ fi
 source "$ROOT_DIR/deployment/lib-mode-guard.sh"
 guard_no_host_apps "start-container.sh" || exit 1
 
+# ---- 1b. 前置：沙箱渠道的启动期强校验（spec 030 / FR-134 + FR-103）----
+# 与宿主模式 start-all.sh 同口径：配错不许静默走默认（ADR-0049 第 2 条）。
+# compose 只做透传，缺失时容器会 FAIL FAST，但那时报错埋在容器日志里；此处提前中止更好排查。
+if [ "${PAYMENT_ALIPAY_SANDBOX_ENABLED:-false}" = "true" ]; then
+  missing_sandbox=""
+  for v in PAYMENT_ALIPAY_SANDBOX_APP_ID PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY; do
+    if [ -z "${!v:-}" ]; then missing_sandbox="$missing_sandbox $v"; fi
+  done
+  if [ -n "$missing_sandbox" ]; then
+    echo "✗ PAYMENT_ALIPAY_SANDBOX_ENABLED=true 但缺少必需变量：$missing_sandbox" >&2
+    echo "  沙箱密钥一律 env 注入（FR-290/INV-2）；缺失时 payment-service 亦会启动失败。" >&2
+    exit 1
+  fi
+  if [ -z "${PAYMENT_CHANNEL_NOTIFY_URL:-}" ]; then
+    echo "✗ PAYMENT_ALIPAY_SANDBOX_ENABLED=true 但未设置 PAYMENT_CHANNEL_NOTIFY_URL。" >&2
+    echo "  notify 是资金事实的唯一权威来源（FR-103 / Q5）；缺失时沙箱下单必然 400 INVALID_ARGUMENT。" >&2
+    echo "  本地演示请先用内网穿透拿到公网域名（8084 已 publish 到宿主，穿透指向宿主 8084 即可）：" >&2
+    echo "      ngrok http 8084" >&2
+    echo "      export PAYMENT_CHANNEL_NOTIFY_URL=https://<ngrok-域名>/internal/channels/alipay/notify" >&2
+    exit 1
+  fi
+  echo "    已开启支付宝沙箱渠道（容器模式，gateway=${PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL:-默认沙箱网关}）"
+  echo "    回调地址（须为支付宝侧可访问的公网地址）：${PAYMENT_CHANNEL_NOTIFY_URL}"
+else
+  echo "    支付宝沙箱渠道未开启（PAYMENT_ALIPAY_SANDBOX_ENABLED=${PAYMENT_ALIPAY_SANDBOX_ENABLED:-false}）—— 演示走本地 mock"
+fi
+
 SERVICES=(
   merchant-service catalog-service order-service payment-service
   fulfillment-service entitlement-service reconciliation-service settlement-service
