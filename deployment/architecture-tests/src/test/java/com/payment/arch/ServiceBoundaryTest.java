@@ -213,6 +213,55 @@ class ServiceBoundaryTest {
     }
 
     /**
+     * INV-7（spec 030 / ADR-0076）：<b>支付宝 SDK 只能被端口实现类引用</b>。
+     *
+     * <p>SDK 是第三方闭源依赖：它的类名、异常、返回结构随时可能随版本变化，把它散布到
+     * 应用层或领域层，等于让 SDK 的升级节奏绑架平台的业务代码。spec 030 的收口方式是
+     * 「端口/适配器」——平台侧定义 {@code AlipayGateway}（只用平台自有类型），
+     * 唯一实现 {@code AlipaySdkGateway}（位于 {@code infra.channel.alipay}）独占 SDK 引用。
+     * 这样将来要换「纯 JDK 实现」或另一个 SDK 版本，改动被限制在一个类里，**零扩散**。</p>
+     *
+     * <p>规则落在<b>应用层</b>（{@code application..}，含 {@code application.channel..} 的端口定义）
+     * 与<b>领域层</b>（{@code domain..}）——这两层都不许出现 {@code com.alipay.sdk}。</p>
+     *
+     * <p><b>为什么用字符串包名而非 {@code dependOnClassesThat().resideInAPackage(…)} 的常量</b>：
+     * SDK 不在本模块的 classpath 上（本模块只按目录导入各服务字节码），故只能用包名字符串匹配。</p>
+     */
+    @Test
+    void alipaySdkMustBeConfinedToItsInfrastructureAdapter() {
+        ArchRule rule = noClasses()
+                .that().resideInAnyPackage(
+                        "com.payment.payment.application..",
+                        "com.payment.payment.domain..")
+                .should().dependOnClassesThat().resideInAPackage("com.alipay.sdk..")
+                .because("支付宝 SDK 是第三方闭源依赖，必须被端口实现 AlipaySdkGateway（infra.channel.alipay）独占；"
+                        + "应用层/领域层一旦 import 它，SDK 的升级节奏就会绑架业务代码，换实现将全仓扩散（INV-7 / ADR-0076）");
+        rule.check(serviceClasses);
+    }
+
+    /**
+     * INV-3（spec 030 / FR-120、FR-122）：<b>染色只决定协议实现，不参与路由决策</b>。
+     *
+     * <p>染色（{@code X-Dye-Tag} ⇒ {@code DyeContext}）回答的是「这次调用走 mock 还是真实沙箱」，
+     * 是一个<b>实现选择</b>；而路由（{@code ChannelRouter}）回答的是「这笔订单该走哪家渠道」，
+     * 是一个<b>业务决策</b>。两者一旦混在一起，「同一订单换个环境就路由到不同渠道」——
+     * 那是把钱送错地方的隐患，且会让演示环境的结论无法外推到生产。</p>
+     *
+     * <p>因此本规则禁止 {@code ChannelRouter} 读 {@code DyeContext}：路由必须是染色的<b>纯函数</b>，
+     * 相同 {@code RouteContext} 在两种染色下选出同一 {@code channelCode}（由
+     * {@code DyeNotAffectingRoutingTest} 从行为侧验证）。</p>
+     */
+    @Test
+    void channelRouterMustNotReadDyeContext() {
+        ArchRule rule = noClasses()
+                .that().haveSimpleName("ChannelRouter")
+                .should().dependOnClassesThat().resideInAPackage("com.payment.common.core.dye..")
+                .because("染色只决定协议实现（mock/沙箱），路由是业务决策；二者混淆会导致同一订单在不同环境"
+                        + "路由到不同渠道，使演示结论无法外推（INV-3 / FR-120、FR-122）");
+        rule.check(serviceClasses);
+    }
+
+    /**
      * 定位某服务的编译输出目录（ledger-service 的 artifactId 与目录名一致，无需特例）。
      *
      * <p>本模块位于 {@code deployment/architecture-tests}，工作目录即该目录，
