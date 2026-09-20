@@ -158,7 +158,47 @@ bash deployment/demo/stop-stack.sh
 - 键名约定集中在 `common-redis-mq` 的 `MqKeys`：`mq:stream:{topic}` / `mq:half:{topic}:{msgId}` /
   `mq:half:idx` / `mq:dlq:{topic}` / `mq:half:checks:{topic}:{msgId}`。
 
-## Mock 渠道场景切换（ADR-0049）
+## 运行环境开关：本地 mock / 支付宝沙箱（spec 030）
+
+演示控制台 `http://localhost:8091/demo` 的「运行环境」折叠区可在两个环境间切换，**默认本地 mock**：
+
+| 环境 | 建支付单请求 | 渠道行为 | 前置 |
+|---|---|---|---|
+| **本地 mock**（默认） | `channelCode=MOCK`，不带染色头 | 本地 mock 收银台，离线可演 | `PAYMENT_MOCK_CASHIER_ENABLED=true`（start-all.sh 默认已开） |
+| **支付宝沙箱** | `channelCode=ALIPAY` + `X-Dye-Tag: SANDBOX` | **真实**调支付宝沙箱网关，`payUrl` 即沙箱收银台 | 见下 |
+
+两个环境共用**同一套渠道内部契约**（spec 030 FR-101~FR-109）；染色头 `X-Dye-Tag` 只决定**协议实现**，
+不参与选路、不当鉴权（FR-120 / FR-296）。切换只影响下单时用的 `channelCode` 与是否带染色头，不改任何业务语义。
+
+### 开启支付宝沙箱环境
+
+密钥一律 env 注入（禁硬编码 / 禁入库 / 禁明文日志，FR-290 / INV-2）。启动时带上三项必需变量：
+
+```bash
+PAYMENT_ALIPAY_SANDBOX_ENABLED=true \
+PAYMENT_ALIPAY_SANDBOX_APP_ID=<沙箱应用 appId> \
+PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY=<应用私钥> \
+PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥> \
+  bash deployment/start-all.sh
+```
+
+- `enabled=true` 而任一密钥缺失 ⇒ `start-all.sh` **提前中止**，payment-service 亦会**启动期 FAIL FAST** 并列出全部缺失项（FR-134）。
+- 未开启而页面染色 `SANDBOX` ⇒ 建支付单返回 **`400 INVALID_ARGUMENT`**，**绝不静默回落 mock**（FR-241 / INV-8）——
+  静默回落会让「在测沙箱」成为假象。
+- 可选覆盖：`PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL`（默认 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`）、
+  `PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS`（默认 `10000`，**MUST < `payment.reliability.timeout`(30s)**，FR-140）。
+
+### 两条动线的预期结果
+
+- **本地 mock 动线**：下单 → 自动建 `MOCK` 支付单（无染色）→ 打开 mock 收银台 → 支付 → 回调 → 订单 `PAID`、
+  履约/权益发放。全链路零外部依赖，`demo/reset.sh` 后可重复演示。
+- **支付宝沙箱动线**：下单 → 建 `ALIPAY` 支付单（`X-Dye-Tag: SANDBOX`）→ `charge` 真实调 `alipay.trade.page.pay`
+  拿回签名跳转 URL（`PayCredential.REDIRECT_URL`）→ 浏览器打开**支付宝沙箱收银台** → 用沙箱买家账号付款 →
+  支付宝异步通知打到 `POST /internal/channels/alipay/notify` → 三段式校验（验签 → 渠道引用/金额/币种 → 收敛）
+  通过后收敛 `SUCCEEDED`，订单 `PAID`。沙箱下单后 `charge` 阶段 payment 停 `PROCESSING`（凭证待支付，INV-6）。
+
+> 回调三段式任一段不通过即**拒绝且不改任何状态**（INV-10，验签失败 → `403`）；成功响应体**恰为纯文本 `success`**（FR-206）。
+
 
 `payment.channel.mock-scenario` 是**构造期注入**的，运行期不可热切换。需要换场景时重启支付服务：
 

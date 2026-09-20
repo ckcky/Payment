@@ -143,13 +143,13 @@
 
 ## Phase 9 —— demo 环境开关
 
-- [ ] **T107** 改 `deployment/mock-channel-web/src/main/resources/static/demo.html`：新增环境选择器（本地 mock / 支付宝沙箱），默认本地 mock
-- [ ] **T108** 解除 `placeOrder(...)` 中硬编码 `{channelCode:'MOCK'}`：mock → `MOCK`（不带染色头）；沙箱 → `ALIPAY` + `X-Dye-Tag: SANDBOX`
-- [ ] **T109** 同步处理 `demoOverrun(...)` 的同一处硬编码
-- [ ] **T110** 确认 `window.open(pr.data.payUrl)` **无需改动**；沙箱时直接打开支付宝沙箱收银台
-- [ ] **T111** 改 `deployment/demo/README.md`：环境开关说明 + 两条动线的预期结果
-- [ ] **T112** 改 `deployment/start-all.sh`：透传 `PAYMENT_ALIPAY_*` 环境变量
-- [ ] **T113** 确认 `DemoProxyController` 与 `cashier.html` **零改动**（代理已黑名单式逐头透传，S12）
+- [x] **T107** 改 `deployment/mock-channel-web/src/main/resources/static/demo.html`：新增环境选择器（本地 mock / 支付宝沙箱），默认本地 mock
+- [x] **T108** 解除 `placeOrder(...)` 中硬编码 `{channelCode:'MOCK'}`：mock → `MOCK`（不带染色头）；沙箱 → `ALIPAY` + `X-Dye-Tag: SANDBOX`
+- [x] **T109** 同步处理 `demoOverrun(...)` 的同一处硬编码
+- [x] **T110** 确认 `window.open(pr.data.payUrl)` **无需改动**；沙箱时直接打开支付宝沙箱收银台
+- [x] **T111** 改 `deployment/demo/README.md`：环境开关说明 + 两条动线的预期结果
+- [x] **T112** 改 `deployment/start-all.sh`：透传 `PAYMENT_ALIPAY_*` 环境变量
+- [x] **T113** 确认 `DemoProxyController` 与 `cashier.html` **零改动**（代理已黑名单式逐头透传，S12）
 
 ## Phase 10 —— 测试与门禁收敛
 
