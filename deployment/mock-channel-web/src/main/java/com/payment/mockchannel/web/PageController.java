@@ -30,6 +30,12 @@ public class PageController {
         return "forward:/demo.html";
     }
 
+    /** 沙箱付款回跳页（spec 030 / FR-103）：支付宝 return_url 落地，纯展示、不承载资金事实。 */
+    @GetMapping("/cashier/return")
+    public String cashierReturn() {
+        return "forward:/cashier-return.html";
+    }
+
     /** 渠道路由演示页（Feature 028 / spec §5.1）。 */
     @GetMapping("/routing")
     public String routing() {
