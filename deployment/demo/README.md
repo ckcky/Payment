@@ -195,12 +195,52 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
 - 未配置 ⇒ 沙箱 `charge` **直接 `400 INVALID_ARGUMENT`**（`sandbox charge requires callbackUrls.notifyUrl`），
   **不静默降级**为 mock（INV-8）；本地 mock 动线不受影响；
 - 该地址**必须公网可达**——填 `localhost` 支付宝回调不到，支付会一直停 `PROCESSING`。
-  本地演示可用内网穿透临时拿到公网域名：
+  本地演示用内网穿透拿到公网域名：
+
+  ```bash
+  # 推荐：ngrok 固定域名（脚本封装了下面三个本机坑）
+  bash deployment/demo/start-tunnel.sh          # 前台常驻，Ctrl-C 停止
+  # 固定域名 chance-eligibly-mutiny.ngrok-free.dev（NGROK_DOMAIN= 可覆盖）
+  ```
+
+  对应的 payment-service 变量：
+
+  ```bash
+  export PAYMENT_CHANNEL_NOTIFY_URL=https://chance-eligibly-mutiny.ngrok-free.dev/internal/channels/alipay/notify
+  export PAYMENT_CHANNEL_RETURN_URL=https://chance-eligibly-mutiny.ngrok-free.dev/cashier/return
+  ```
+
+  也可用 cloudflared（临时随机域名，每次重启都变）：
 
   ```bash
   cloudflared tunnel --url http://127.0.0.1:8084     # 输出 https://xxxx.trycloudflare.com
-  export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/alipay/notify
   ```
+
+  **⚠️ 隧道三个本机坑（全部实测踩过）**：
+
+  1. **必须清代理变量**：ngrok 免费版把「agent 走 http/s 代理」当付费功能，检测到 `http_proxy`
+     直接失败 `ERR_NGROK_9009`。`start-tunnel.sh` 已 `unset`。
+  2. **必须前台阻塞运行，不能 `nohup ... &`**：本机沙箱会在命令结束时回收子进程，
+     后台化的 ngrok 会被静默杀掉——**表现为隧道「启动成功」但公网立刻返回
+     `ERR_NGROK_3200`（endpoint offline）**。判断依据：本地 `127.0.0.1:4040/api/tunnels`
+     有隧道，但公网域名返回 ngrok 的 404 页。
+  3. ngrok 3.39 起 `--domain` 已废弃，用 `--url`。
+
+  **验证隧道真通**（返回 `403 signature verification failed` 就是通了——空报文验签必然失败，这是对的）：
+
+  ```bash
+  curl -s --noproxy '*' -X POST -d 'out_trade_no=probe' \
+    https://chance-eligibly-mutiny.ngrok-free.dev/internal/channels/alipay/notify
+  ```
+
+  ⚠️ 探针**必须带 `-d`（或显式 `Content-Type: application/x-www-form-urlencoded`）**。
+  不带 body 时 curl 不设 Content-Type，端点的 `consumes=application/x-www-form-urlencoded`
+  会在**进入方法之前**拒绝，得到 **500**（而非 403）——极易被误判成「验签有 bug」。
+  同理，`ERR_NGROK_3200` 与「500」都不是 403，别把它们当成验签结论。
+
+  **⚠️ `returnUrl` 目前指向不存在的端点**：`/cashier/return` 在 payment-service 上**没有映射**
+  （实测 404）。买家付款后浏览器会跳回该地址看到 404（还会叠一层 ngrok 警告页），
+  **这不代表支付失败**——`returnUrl` 不承载资金事实，以 demo 页/接口查到的支付单状态为准（FR-103）。
 
   ⛔ **穿透＝把 payment-service 暴露公网**，而 `/internal/**` 鉴权（ADR-0024）与 JSON 回调验签（ADR-0025）
   仍为空实现（仅本次新增的支付宝 notify 端点自带 RSA2 验签）。**只在临时演示时开启，用完即关**，
