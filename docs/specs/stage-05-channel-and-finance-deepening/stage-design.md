@@ -272,7 +272,7 @@ AlipayChannelAdapter.charge(req):
 
 - 端口 `application/channel/AlipayGateway`（`pagePay` / `query` / `refund` / `verifyNotify`），
   实现 `infra/channel/alipay/AlipaySdkGateway`；
-- **`application/**` MUST NOT 依赖 `com.alipay.sdk`**（ArchUnit 断言）；
+- **`application/**` MUST NOT 依赖 SDK 的 Java 包 `com.alipay.api`**（ArchUnit 断言；⚠️ 是包名不是 Maven 坐标 `com.alipay.sdk`，写错会空转）；
 - 版本在**根 pom `dependencyManagement`** 锁定，子模块 MUST NOT 写版本（engineering-standards §9）。
 
 **G. 回调入站多协议共存**（ADR-0076 R7）：

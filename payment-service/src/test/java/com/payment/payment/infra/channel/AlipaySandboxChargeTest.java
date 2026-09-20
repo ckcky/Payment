@@ -9,6 +9,7 @@ import com.payment.payment.application.channel.CallbackUrls;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.channel.Goods;
+import com.payment.payment.application.channel.PayCredential;
 import com.payment.payment.application.channel.PaymentScene;
 import java.time.Instant;
 import java.util.HashMap;
@@ -33,9 +34,22 @@ import org.junit.jupiter.api.Test;
  */
 class AlipaySandboxChargeTest {
 
+    /**
+     * 真实 SDK 的 {@code pageExecute().getBody()} 返回形态：**自动提交表单 HTML**，不是 URL。
+     *
+     * <p>桩的载荷形态必须与真实网关一致，否则测的就不是真实契约——此前桩返回一个 URL 字符串，
+     * 于是「凭证 Kind」这条断言跟着错标成了 {@code REDIRECT_URL}（2026-09-20 修正）。</p>
+     */
+    private static final String PAGE_PAY_FORM_HTML =
+            "<form name=\"punchout_form\" method=\"post\" "
+                    + "action=\"https://openapi-sandbox.dl.alipaydev.com/gateway.do\">"
+                    + "<input type=\"hidden\" name=\"biz_content\" value=\"{}\">"
+                    + "<input type=\"submit\" value=\"立即支付\" style=\"display:none\"></form>"
+                    + "<script>document.forms[0].submit();</script>";
+
     /** 只记录调用、可编排结果的最小网关桩。 */
     private static final class StubGateway implements AlipayGateway {
-        PagePayResult pagePayResult = PagePayResult.ok("https://sandbox.alipay.com/sign?sig=abc");
+        PagePayResult pagePayResult = PagePayResult.ok(PAGE_PAY_FORM_HTML);
         int pagePayCalls;
         String lastOutTradeNo;
         long lastAmountMinor;
@@ -146,14 +160,13 @@ class AlipaySandboxChargeTest {
         // 走的是真实网关，不是 mock 的 timeout 注入
         assertThat(gateway.pagePayCalls).isEqualTo(1);
         assertThat(result.hasCredential()).isTrue();
-        assertThat(result.credential().kind()).isEqualTo(
-                com.payment.payment.application.channel.PayCredential.Kind.REDIRECT_URL);
+        assertThat(result.credential().kind()).isEqualTo(PayCredential.Kind.FORM_HTML);
         assertThat(result.status()).isEqualTo(ChannelResult.Status.UNKNOWN); // 受理 ≠ 成功
         assertThat(result.retryable()).isFalse();
     }
 
     @Test
-    @DisplayName("SANDBOX ⇒ 产出 REDIRECT_URL 凭证，且网关收到原始金额/单号/notifyUrl")
+    @DisplayName("SANDBOX ⇒ 产出 FORM_HTML 凭证（不是 REDIRECT_URL），且网关收到原始金额/单号/notifyUrl")
     void sandboxProducesRedirectCredentialAndPassesThrough() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
@@ -163,8 +176,9 @@ class AlipaySandboxChargeTest {
         ChannelResult result = adapter.charge(charge(12_345L));
 
         assertThat(result.hasCredential()).isTrue();
-        assertThat(result.credential().payload()).isEqualTo("https://sandbox.alipay.com/sign?sig=abc");
-        assertThat(result.credential().isRedirectFamily()).isTrue();
+        assertThat(result.credential().payload()).isEqualTo(PAGE_PAY_FORM_HTML);
+        // 表单 HTML **不是**跳转家族：消费端不得直接 window.open（否则就是空白页）
+        assertThat(result.credential().isRedirectFamily()).isFalse();
         // 凭证有效期跟随请求 expireAt（供前端判断「什么时候该重新下单」）
         assertThat(result.credential().expiresAt()).isEqualTo(Instant.parse("2026-09-20T12:00:00Z"));
         // 网关收到的是**分**（换算发生在网关层，Adapter 不预换算——避免双处换算漂移）

@@ -161,12 +161,12 @@
 | # | 目标 | 可验证产出 |
 |---|---|---|
 | G1 | **契约能容纳四家**：内部统一契约同时兼容支付宝 / 微信 v3 / 抖音 / Stripe，渠道私有参数有处可放且不污染通用字段 | 四家参数映射表驱动单测；既有 4 处构造点 / 6 处测试桩**零改动编译** |
-| G2 | **凭证能回到浏览器**：渠道返回的「怎么付款」有类型化载体，经现有 `payUrl` 链路回到前端 | `payUrl` = 支付宝沙箱签名跳转 URL |
-| G3 | **沙箱下单真的跳第三方**：染色为 `SANDBOX` 时真调渠道，**不再跳我们的 mock 收银台** | 手工 live：`window.open(payUrl)` 打开支付宝沙箱收银台 |
+| G2 | **凭证能回到浏览器**：渠道返回的「怎么付款」有类型化载体，经现有 `payUrl` 链路回到前端 | `payUrl` = 支付宝沙箱**自动提交表单 HTML**（`PayCredential.Kind = FORM_HTML`，**不是 URL**；见 §2.5 实况修正） |
+| G3 | **沙箱下单真的跳第三方**：染色为 `SANDBOX` 时真调渠道，**不再跳我们的 mock 收银台** | 手工 live：把凭证渲染成页面后打开支付宝沙箱收银台（表单 HTML 需先包装，**直接 `window.open` 会得到空白页**） |
 | G4 | **模态可追溯**：`payment_attempts` 记录本次交互模态，**反向三条路径据此还原** | 沙箱单的退款 / 主动查询断言 `extra_json.channelMode='SANDBOX'` |
 | G5 | **回调基础闭环**：`Signature Validation → Channel Reference Validation → Amount/Currency Validation` 三段式可执行、可验收 | 验签失败 403；金额不符拒绝推进；串号引用被拒 |
 | G6 | **UNKNOWN 语义纪律**：超时**不转 FAILED**，只进 UNKNOWN，且**仅经权威结果收敛** | 超时单收敛路径单测 + `payment.unknown_age` 可观测 |
-| G7 | **Payment Domain 不依赖具体渠道 SDK**：SDK / 签名 / 参数映射 / 错误码全部隔离在 `infra` 之后 | ArchUnit：`application/**` MUST NOT 依赖 `com.alipay.sdk` |
+| G7 | **Payment Domain 不依赖具体渠道 SDK**：SDK / 签名 / 参数映射 / 错误码全部隔离在 `infra` 之后 | ArchUnit：`application/**` MUST NOT 依赖 **Java 包** `com.alipay.api`（Maven 坐标 `com.alipay.sdk:alipay-sdk-java`，两者不可混用） |
 | G8 | **demo 可选环境**：演示页选「本地 mock / 支付宝沙箱」，经全链路染色传到适配器 | demo 页环境选择器 + 全链路透传 E2E |
 
 ### 2.2 B 类：Existing behavior correctness closure（4 项，**受控范围**）
@@ -288,7 +288,22 @@ flowchart TB
 - **`ChannelRouter` 与协议层完全解耦**：它只产出 `channelCode`，不引用 `infra/channel/**`（INV-4）；
 - **`common-core` 是染色的唯一落点**：一处实现即覆盖 9 个服务（S10 / S11），**order-service 与代理零改动**；
 - **`payment_attempts` 是反向路径的唯一事实来源**：`UNK` 与 `TS` 都从它还原渠道与模态（§4.2）；
-- **SDK 只出现在 `INFRA` 子图**：`application/**` 不依赖 `com.alipay.sdk`（INV-7）。
+- **SDK 只出现在 `INFRA` 子图**：`application/**` 不依赖 **Java 包** `com.alipay.api`（INV-7）。
+
+### 2.5 实现期实况修正（2026-09-20，两处「声明 ≠ 实况」）
+
+> 本 Spec 的 G2/G3/FR-122/FR-136 与 SC-A-04/SC-A-09 在实现与联调后被证明与真实 SDK 行为/门禁实况不符。
+> 修正**不改变任何决策语义**（凭证仍类型化、SDK 仍收口），只是把声明对齐到实况。两处均为**发现的缺陷**，不是范围变更。
+
+| # | 项 | 原声明 | 实况（证据） | 处置 |
+|---|---|---|---|---|
+| **F1** | 沙箱凭证**形态** | 「**GET 签名 URL**」，`PayCredential.redirectUrl(url, …)` ⇒ `Kind = REDIRECT_URL` | SDK 的 `client.pageExecute(request).getBody()` 返回**整段自动提交表单 HTML**（`<form method="post">` + `document.forms[0].submit()`）——官方示例的用法即「把表单 HTML 输出到页面」；联调实况 `payUrl` 首字符为 `<`（`demo.html` 为此加了 `isFormHtmlCredential` 兜底） | `Kind.FORM_HTML`（该枚举本就为此而设，此前**从未被使用**）+ 新增 `PayCredential.formHtml(...)` 工厂；`AlipayChannelAdapter.sandboxCharge` 改用之 |
+| **F2** | INV-7 的 ArchUnit 门禁 | 「`application/**` MUST NOT 依赖 `com.alipay.sdk`」由 ArchUnit 构建期强制 | 该 **Java 包不存在**（`com.alipay.sdk` 只是 Maven groupId）；真实包是 `com.alipay.api`，全仓仅 `AlipaySdkGateway` 引用（1 个 class）。`resideInAPackage("com.alipay.sdk..")` ⇒ 规则**恒通过**，是**空转的假绿门禁** | 规则改为 `com.alipay.api..`，并加**阳性对照**（断言 `AlipaySdkGateway` 真实依赖该包），使同类笔误立即红 |
+
+**F1 的连锁影响（为何必须修）**：`PayCredential.isRedirectFamily()` 的契约语义是「消费端可直接 `window.open(payload)`」。
+把表单 HTML 标成 `REDIRECT_URL` 让该判据对被误标的凭证返回 `true` ⇒ 调用方按「可直接跳转」处理 ⇒
+浏览器把 HTML 当相对地址解析 ⇒ **空白页**。这正是 spec 030 联调时「点了弹出空白收银台」的根因之一。
+**纪律**：形态判据恒用 `Kind`，**不得**靠 payload 首字符嗅探（`demo.html` 的兜底属展示层防御，不是契约）。
 
 ---
 
@@ -559,7 +574,7 @@ PENDING / ACCEPTED ──markUnknown──► UNKNOWN ──(权威结果)──
 |---|---|
 | FR-120 | **染色 MUST NOT 参与选路**（INV-3）：`ChannelRouter` **MUST NOT** 读取 `DyeContext`；相同 `RouteContext` 在两种染色下选出**同一** `channelCode`（ArchUnit 或单测固化） |
 | FR-121 | **染色 MUST NOT 让反向路径改换渠道**（INV-4）；反向路径的模态来源是**落库列**而非请求头 |
-| FR-122 | **Payment Domain MUST NOT 依赖具体渠道 SDK**：`application/channel/**` MUST NOT 依赖 `com.alipay.sdk`（ArchUnit 断言） |
+| FR-122 | **Payment Domain MUST NOT 依赖具体渠道 SDK**：`application/channel/**` MUST NOT 依赖 **Java 包 `com.alipay.api`**（ArchUnit 断言；⚠️ 规则包名必须用真实 Java 包，写 Maven groupId `com.alipay.sdk` 会**恒通过**——见 §2.5 空转门禁修正） |
 | FR-123 | 渠道配置**语义不变**：`payment.channel.*`（`http-timeout-ms` / `mock-scenario` / `refund-async*` / `adapters.{ALIPAY,WECHAT,DOUYIN}.scenario`）与 `payment.routing.*` 默认值**全部不变**（等价于旧 030 的既有配置口径） |
 
 ### 7.5 Channel Adapter（SDK / 签名 / 参数映射 / 错误码全部隔离）
@@ -572,7 +587,7 @@ PENDING / ACCEPTED ──markUnknown──► UNKNOWN ──(权威结果)──
 | FR-133 | 新增 `AlipaySandboxProperties`（`@ConfigurationProperties("payment.channel.adapters.alipay.sandbox")`）：`enabled` / `gateway-url` / `app-id` / `merchant-private-key` / `alipay-public-key` / `notify-url` / `return-url` / `http-timeout-ms` / `sign-type` |
 | FR-134 | `enabled` 默认 **`false`**（既是装配门控，也是**一键 kill switch**）；`enabled=true` 时**启动期强校验**必需项非空，缺失 ⇒ **启动失败并列出缺失项** |
 | FR-135 | 新增依赖 `com.alipay.sdk:alipay-sdk-java`（版本在根 pom `dependencyManagement` 锁定）；**CVE 与体积风险显式接受并记入 ADR-0076** |
-| FR-136 | `charge`（沙箱分支）调 `alipay.trade.page.pay`，用 **GET 签名 URL** 作为凭证：`accepted(null, "awaiting buyer", PayCredential.redirectUrl(url, expireAt))` |
+| FR-136 | `charge`（沙箱分支）调 `alipay.trade.page.pay`，用 **自动提交表单 HTML** 作为凭证：`accepted(null, "awaiting buyer", PayCredential.formHtml(payload, expireAt))` —— ⚠️ **实况修正（2026-09-20）**：`pageExecute().getBody()` 返回的是整段 `<form>` HTML（**不是 URL**），故此处的 `Kind` 为 **`FORM_HTML`** 而非 `REDIRECT_URL`；原文按「GET 签名 URL」实现导致消费端误按可直接跳转处理（空白页） |
 | FR-137 | `queryStatus`（沙箱分支）调 `alipay.trade.query`：`TRADE_SUCCESS`/`TRADE_FINISHED` → `success(trade_no)`；`TRADE_CLOSED` → `businessFailure`；`WAIT_BUYER_PAY` → `businessUnknown`（**不臆断**） |
 | FR-138 | `refund`（沙箱分支）调 `alipay.trade.refund`（**同步返回**，`code=10000` 即 `success(refund_no)`） |
 | FR-139 | 金额换算 **MUST** 用 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`；**禁止 `double` / `float`**（INV-1） |
@@ -626,7 +641,7 @@ PENDING / ACCEPTED ──markUnknown──► UNKNOWN ──(权威结果)──
 | INV-4 | 退款 / 重试 / 主动查询 **MUST** 用 `payment_attempts.channel_code` 解析渠道，**禁止重新路由**；染色 **MUST NOT** 让反向路径改换渠道 |
 | INV-5 | 染色的 `DyeFilter`（入站）与 `DyeRequestInterceptor`（出站）**MUST 在同一批落地**（依据 S17：`InternalToken` 曾因只做入站校验导致**全线 403**） |
 | INV-6 | `ChannelResult.credential != null` ⇒ 渠道仅**受理**、买家尚未付款 ⇒ payment **MUST 停在 `PROCESSING`**，**MUST NOT** 走成功收敛路径 |
-| INV-7 | `application/**` **MUST NOT** 依赖 `com.alipay.sdk`（构建期 ArchUnit 断言） |
+| INV-7 | `application/**` **MUST NOT** 依赖 SDK 的 **Java 包 `com.alipay.api`**（构建期 ArchUnit 断言；⚠️ 原写 Maven 坐标 `com.alipay.sdk` 会因该包不存在而**恒通过**——见 §2.5 F2） |
 | INV-8 | **不静默降级**：染色值非法 / 染色 `SANDBOX` 但渠道未启用真实模式 / 请求了渠道未声明的 `PaymentScene` ⇒ **MUST 明确失败（`400 INVALID_ARGUMENT`）** |
 | **INV-9** | **超时 MUST NOT 转 `FAILED`**：`TimeoutScanner` 只写 `UNKNOWN`（宪法 §V.7） |
 | **INV-10** | **回调 MUST NOT 在校验失败时推进状态**：验签 / 引用归属 / 金额币种任一失败 ⇒ 拒绝且**原状态不变** |
@@ -660,8 +675,8 @@ sequenceDiagram
     A->>G: pagePay(...)
     G->>G: RSA2 签名（SDK 仅在 infra，INV-7）
     G->>AL: alipay.trade.page.pay
-    AL-->>G: 签名跳转 URL（同步响应不含 trade_no）
-    G-->>A: PayCredential(REDIRECT_URL, url, expireAt)
+    AL-->>G: 自动提交表单 HTML（整段 form；同步响应不含 trade_no）
+    G-->>A: PayCredential(FORM_HTML, formHtml, expireAt)
     A-->>P: accepted(channelReference = null, awaiting buyer, credential)
     P->>P: credential != null ⇒ 不调 applyAndPersist（INV-6）
     Note over P: payment 停 PROCESSING；不记账、不通知 order；<br/>attempt.channel_reference 仍为 NULL，等 notify 带回
@@ -1145,7 +1160,7 @@ ALTER TABLE payment_attempts
 | **L2 契约/端口测试** | `PaymentChannel` 端口与 6 处测试桩 | **兼容构造器 + `default` 方法** ⇒ 既有桩**零改动编译** |
 | **L3 集成测试** | Spring 上下文、MockMvc、回调端点 | 过滤器链定序、染色透传、notify 端点返回纯文本 `success` |
 | **L4 场景/E2E** | 全链路 | 沙箱下单 → 凭证 → 回调 → 收敛；非法染色 400；金额不符拒绝 |
-| **L5 架构测试** | ArchUnit | `application/**` **不依赖** `com.alipay.sdk`；`ChannelRouter` **不读** `DyeContext` |
+| **L5 架构测试** | ArchUnit | `application/**` **不依赖** SDK Java 包 `com.alipay.api`（含阳性对照）；`ChannelRouter` **不读** `DyeContext` |
 | **L6 手工 live** | 真机沙箱 | **不进 CI**（不可复现、需密钥 + 公网 `notify_url`）；**未验证范围 MUST 显式记录** |
 
 ### 15.2 必测清单（按目标归类）
@@ -1169,7 +1184,7 @@ ALTER TABLE payment_attempts
 | T-A-13 | 沙箱协议离线可测 | 签名/验签/参数排序用**固定向量**钉死；**不连沙箱、不访问公网** |
 | T-A-14 | notify 端点 | 合法通知 → 收敛且**恰好返回纯文本 `success`**；验签失败 → `403` 且不触达收敛服务；`WAIT_BUYER_PAY` → 不推进 |
 | T-A-15 | mock 行为零分叉 | 不染色 + 金额尾号 `11` ⇒ 仍 `timeout`（MOCK 分支 `super` 委托，基类注入口径 100% 不变） |
-| T-A-16 | ArchUnit | `application/**` 不依赖 `com.alipay.sdk`；`ChannelRouter` 不读 `DyeContext` |
+| T-A-16 | ArchUnit | `application/**` 不依赖 SDK Java 包 `com.alipay.api`（阳性对照证明非空转）；`ChannelRouter` 不读 `DyeContext` |
 
 **B 类（收口）**
 

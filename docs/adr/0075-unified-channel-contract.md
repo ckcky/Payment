@@ -103,6 +103,12 @@
 
 `REDIRECT_URL` 与 `H5_URL` **刻意不合并**（C10）：两者都是 URL，但前者任意端可开、后者**必须手机浏览器**。保留两个 Kind 是为了让调用方能做正确的端侧判断，而不是把差异藏在字符串里。
 
+> **实现期实况补记（2026-09-20）**：本条的反面正是实现时踩的坑——支付宝沙箱的 `pageExecute().getBody()`
+> 返回的是**自动提交表单 HTML**，却一度被标成 `REDIRECT_URL`，于是「把 HTML 塞进叫 URL 的字段」这个
+> 本条明确要消灭的语义错配，在**同一份实现**里又出现了一次，并通过 `isRedirectFamily()`
+> 把错误传导给消费端（⇒ 空白页）。**已修正为 `FORM_HTML`**：`Kind` 是形态的唯一判据，
+> 消费端 MUST NOT 嗅探 `payload` 首字符。详见 spec 030 §2.5 F1。
+
 **D5. 凭证不落库。**
 
 `payload` 含签名、有时效、长度远超 `payment_attempts.channel_reference VARCHAR(128)`，且不具备「渠道交易流水号」的唯一性语义（会撞 `uk_attempts_channel_reference`）。持久化的渠道标识**恒为** `channel_reference`。
@@ -165,10 +171,12 @@ MUST 用 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`，**禁止 `double
   - 付款凭证有类型化载体后，模拟渠道与真实渠道在**同一个抽象**下产出结果（mock 也可以返回 `QR_CODE` 做演示）；
   - 退款/查单补上渠道交易号后，真实渠道的**精确收敛**路径才成立。
 - **代价 / 已知缺口**：
-  - ⚠️ **非跳转型凭证本期无处承载**：`CreatePaymentResponse` 只有 `payUrl` 一个字段，
-    二维码 / 表单 HTML / JSAPI 参数集 / `client_secret` **无法端到端**，且前端无法区分凭证类型。
-    本期只打通 `REDIRECT_URL` / `H5_URL`（支付宝沙箱场景）；补齐需改 `common-dto`（跨服务变更），
-    记入 spec 030 §8 L1，下期单独立项；
+  - ⚠️ **凭证类型在跨服务 DTO 上丢失**：`CreatePaymentResponse` 只有 `payUrl` 一个 `String`，
+    `Kind` **不过 DTO 边界** ⇒ 前端拿到的只是一段不透明字符串，**无法据类型分流渲染**。
+    本期实际走通的是 **`FORM_HTML`（支付宝沙箱场景）**：它确实端到端到了浏览器（作为 `payUrl` 字符串），
+    但前端只能**靠首字符 `'<'` 嗅探**形态——这正是「把表单 HTML 当 URL 打开 ⇒ 空白页」的来源
+    （见下方「实现期实况补记」）。二维码 / JSAPI 参数集 / `client_secret` 仍**无法端到端**。
+    补齐需改 `common-dto`（跨服务变更），记入 spec 030 §8 L1，下期单独立项；
   - `ChargeRequest` / `RefundRequest` 字段数上升，构造点易错 → 靠兼容构造器 + 后续引入 Builder 缓解；
   - 两套构造重载并存期间，代码里会同时出现「5 参旧式」与「12 参新式」，**实现期 MUST 只在新增路径用新式**，
     存量调用点按需迁移（不在本 ADR 范围）。

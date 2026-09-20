@@ -344,7 +344,8 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 | 项 | 值 |
 |---|---|
 | 双模态分派 | `AlipayChannelAdapter`（**单 Adapter 双模态**，FR-130 / N11）——按 `DyeContext` 分发：`MOCK` 走 `super` 委托（基类 4 件横切行为零漂移），`SANDBOX` 走真实协议 |
-| 端口收口（INV-7） | `application/channel/AlipayGateway` 为端口（**只用平台自有类型**）；`infra/channel/alipay/AlipaySdkGateway` 是**唯一** import `com.alipay.sdk` 的类。ArchUnit 构建期强制（`ServiceBoundaryTest#alipaySdkMustBeConfinedToItsInfrastructureAdapter`） |
+| 沙箱凭证形态 | 电脑网站支付 `alipay.trade.page.pay` ⇒ `PayCredential(Kind.FORM_HTML)`——payload 是**自动提交表单 HTML**（`pageExecute().getBody()`），**不是 URL**。消费端 MUST 按 `Kind` 分流：URL 可直接 `window.open`，表单 HTML 须先包装成可加载页面（`demo.html` 用 Blob URL）否则**空白页**。⚠️ 2026-09-20 修正：此前误标 `REDIRECT_URL` 正是空白页根因 |
+| 端口收口（INV-7） | `application/channel/AlipayGateway` 为端口（**只用平台自有类型**）；`infra/channel/alipay/AlipaySdkGateway` 是**唯一** import SDK **Java 包 `com.alipay.api`** 的类（⚠️ 不是 Maven 坐标 `com.alipay.sdk:alipay-sdk-java`，两者混淆会让门禁空转）。ArchUnit 构建期强制（`ServiceBoundaryTest#alipaySdkMustBeConfinedToItsInfrastructureAdapter`，含阳性对照） |
 | 沙箱配置 | `infra/config/AlipaySandboxProperties`（`payment.channel.adapters.alipay.sandbox.*`，`enabled` 默认 `false`）；密钥一律 env 注入，`toString()` 省略密钥（INV-2），启动期强校验缺失项（FR-134） |
 | 沙箱未启用 | 染色 `SANDBOX` 而 `enabled=false` ⇒ **400 INVALID_ARGUMENT**，**不静默回落 mock**（FR-241 / INV-8） |
 | 场景收窄 | `supportedScenes()`：沙箱取 `{WEB}`，mock 取全集（FR-131） |

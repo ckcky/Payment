@@ -32,9 +32,16 @@ public record PayCredential(Kind kind, String payload, Instant expiresAt) {
 
     /** 凭证形态。 */
     public enum Kind {
-        /** 浏览器跳转 URL（支付宝 pagePay GET 签名 URL、微信 MWEB 等）。 */
+        /** 浏览器跳转 URL（微信 MWEB 等；**可**直接 {@code window.open(payload)}）。 */
         REDIRECT_URL,
-        /** 自动提交的表单 HTML（部分渠道返回整段 form）。 */
+        /**
+         * 自动提交的表单 HTML（整段 {@code <form>} + 自动 submit 脚本）。
+         *
+         * <p><b>支付宝电脑网站支付（{@code alipay.trade.page.pay}）走这一档</b>——
+         * {@code pageExecute().getBody()} 返回的是整段表单，**不是 URL**（2026-09-20 修正）：
+         * 此前被误标为 {@link #REDIRECT_URL}，导致消费端按「可直接跳转」处理，
+         * 把 HTML 当地址打开 ⇒ <b>空白页</b>。</p>
+         */
         FORM_HTML,
         /** 二维码内容串（NATIVE 扫码场景，需消费端自行渲染成二维码图）。 */
         QR_CODE,
@@ -49,6 +56,17 @@ public record PayCredential(Kind kind, String payload, Instant expiresAt) {
     /** 跳转类凭证工厂（REDIRECT_URL）。 */
     public static PayCredential redirectUrl(String url, Instant expiresAt) {
         return new PayCredential(Kind.REDIRECT_URL, url, expiresAt);
+    }
+
+    /**
+     * 表单 HTML 凭证工厂（FORM_HTML）——支付宝电脑网站支付的形态。
+     *
+     * <p>消费端 **MUST NOT** 直接把它交给 {@code window.open} / {@code <a href>}：
+     * 需先包装成可加载的页面（前端可用 {@code Blob} URL）再由浏览器渲染提交。
+     * 判据是 {@link Kind}，**不是** payload 的首字符——靠字符串嗅探形态是要消灭的反模式。</p>
+     */
+    public static PayCredential formHtml(String html, Instant expiresAt) {
+        return new PayCredential(Kind.FORM_HTML, html, expiresAt);
     }
 
     /** H5 凭证工厂。 */

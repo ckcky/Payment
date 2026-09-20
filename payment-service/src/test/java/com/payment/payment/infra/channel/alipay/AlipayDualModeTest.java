@@ -7,6 +7,7 @@ import com.payment.payment.application.channel.CallbackUrls;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.channel.Goods;
+import com.payment.payment.application.channel.PayCredential;
 import com.payment.payment.application.channel.PaymentScene;
 import com.payment.payment.application.channel.QueryStatusRequest;
 import com.payment.payment.application.channel.RefundRequest;
@@ -33,10 +34,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class AlipayDualModeTest {
 
+    /** 真实 SDK 的 pagePay 返回形态：**自动提交表单 HTML**（不是 URL），桩必须与之一致。 */
+    private static final String PAGE_PAY_FORM_HTML =
+            "<form name=\"punchout_form\" method=\"post\" "
+                    + "action=\"https://openapi-sandbox.dl.alipaydev.com/gateway.do\">"
+                    + "<script>document.forms[0].submit();</script></form>";
+
     /** 可编排的网关桩，记录被调用情况。 */
     private static final class StubGateway implements AlipayGateway {
 
-        PagePayResult pagePayResult = PagePayResult.ok("https://sandbox.alipay.com/signed?x=1");
+        PagePayResult pagePayResult = PagePayResult.ok(PAGE_PAY_FORM_HTML);
         QueryResult queryResult = QueryResult.unknown("waiting");
         RefundResult refundResult = RefundResult.ok("ch-refund-1");
         Map<String, String> lastQuery = new HashMap<>();
@@ -113,7 +120,7 @@ class AlipayDualModeTest {
     // ---- FR-136：沙箱 charge 产凭证 ----
 
     @Test
-    @DisplayName("SANDBOX ⇒ 返回 accepted + redirectUrl 凭证，payment 将停 PROCESSING [FR-136]")
+    @DisplayName("SANDBOX ⇒ 返回 accepted + FORM_HTML 凭证，payment 将停 PROCESSING [FR-136]")
     void sandboxChargeProducesCredential() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
@@ -125,8 +132,10 @@ class AlipayDualModeTest {
         assertThat(gateway.pagePayCalls).isEqualTo(1);
         assertThat(result.status()).isEqualTo(ChannelResult.Status.UNKNOWN); // 受理 ≠ 成功
         assertThat(result.hasCredential()).isTrue();
-        assertThat(result.credential().payload()).isEqualTo("https://sandbox.alipay.com/signed?x=1");
-        assertThat(result.credential().isRedirectFamily()).isTrue();
+        assertThat(result.credential().kind()).isEqualTo(PayCredential.Kind.FORM_HTML);
+        assertThat(result.credential().payload()).isEqualTo(PAGE_PAY_FORM_HTML);
+        // 表单 HTML 不是跳转家族：消费端不得直接 window.open（否则打开的是空白页）
+        assertThat(result.credential().isRedirectFamily()).isFalse();
     }
 
     @Test

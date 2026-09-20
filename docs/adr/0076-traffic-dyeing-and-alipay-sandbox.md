@@ -152,8 +152,11 @@ AlipayChannelAdapter.charge(req):
 - **风险显式接受**（G15）：34.3 MB jar + 4 个传递依赖（`fastjson` / `okhttp` / `bcprov` / `dom4j`）+ **≥9 个已知 CVE**。
   这是本 ADR **唯一**的「主动引入复杂度」决策，代价与理由一并登记，供将来复核。
 - **收口方式**：端口 `application/channel/AlipayGateway`（`pagePay` / `query` / `refund` / `verifyNotify`）；
-  实现 `infra/channel/alipay/AlipaySdkGateway`。**`application/**` MUST NOT 依赖 `com.alipay.sdk`**（ArchUnit 断言）。
-  将来若决定换纯 JDK 实现，**只替换一个类，核心领域零扩散**。
+  实现 `infra/channel/alipay/AlipaySdkGateway`。**`application/**` MUST NOT 依赖 SDK 的 Java 包 `com.alipay.api`**
+  （ArchUnit 断言）。**注意坐标与包名不是一回事**：Maven 坐标写作 `com.alipay.sdk:alipay-sdk-java`，
+  但 **Java 包名是 `com.alipay.api`**；把门禁写成匹配 `com.alipay.sdk` 会因为该包不存在而**静默空转（假绿）**
+  ——2026-09-20 已修正并加阳性对照（详见 `030/acceptance.md` L10）。将来若决定换纯 JDK 实现，
+  **只替换一个类，核心领域零扩散**。
 - **版本管理**：在**根 pom `dependencyManagement`** 锁定；子模块 MUST NOT 写版本（工程规范 §9）。
 
 **R7. 支付宝通知走独立的 RSA2 入站端点，不复用 HMAC 过滤器。**
@@ -206,7 +209,8 @@ AlipayChannelAdapter.charge(req):
 - **K2**：`ChannelRouter` 实现 MUST NOT 引用 `DyeContext`（R3）。
 - **K3**：反向路径 MUST 用 `payment_attempts` 落库的模态（**H2 修订后 = `extra_json.channelMode`，经 `attempt.getChannelMode()` 读取**）还原，MUST NOT 依赖 ThreadLocal、MUST NOT 解析渠道引用字符串。
 - **K4**：`AlipayChannelAdapter` 的 `MOCK` 分支 MUST `super` 委托，MUST NOT 复制或改写基类 4 件横切行为。
-- **K5**：`application/**` MUST NOT 依赖 `com.alipay.sdk`；SDK 相关类型 MUST NOT 出现在任何端口签名中。
+- **K5**：`application/**` MUST NOT 依赖 SDK 的 **Java 包** `com.alipay.api`（**不是** Maven 坐标 `com.alipay.sdk`——
+  两者混淆会让包名匹配型门禁静默空转，2026-09-20 修正）；SDK 相关类型 MUST NOT 出现在任何端口签名中。
 - **K6**：`payment_attempts` 的模态列（**H2 修订后 = `extra_json` 的 `channelMode` 键**）的 schema 变更 MUST 三处齐备（建表语句 + 增量迁移 + 测试 schema）。
 - **K6b**（**2026-09-19 新增，随 H2 载体修订**）：`extra_json` 写入侧 MUST 强制含 `channelMode` 键；读取侧 MUST fail-safe（`NULL` / 非法 JSON / 缺键 / 值非法 ⇒ 一律 `MOCK`，**MUST NOT** 误判为 `SANDBOX`）。
 - **K7**：`notify` 端点 MUST 返回**恰好**纯文本 `success`；MUST NOT 打印完整通知报文；MUST NOT 在验签失败时触达收敛服务。

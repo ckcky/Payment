@@ -34,8 +34,8 @@
 
 **支付宝沙箱适配器（Phase 7，INV-7）**：
 - **单 Adapter 双模态**（`AlipayChannelAdapter`）：`MOCK` 走 `super` 委托（零分叉），`SANDBOX` 走真实协议。
-- **端口收口**：`AlipayGateway`（平台自有类型）→ `AlipaySdkGateway`（**唯一** import `com.alipay.sdk` 的类，
-  ArchUnit 构建期强制）。将来换纯 JDK 实现**零扩散**。SDK 供应链风险由 ADR-0076 显式接受。
+- **端口收口**：`AlipayGateway`（平台自有类型）→ `AlipaySdkGateway`（**唯一** import SDK 的 **Java 包 `com.alipay.api`** 的类，
+  ArchUnit 构建期强制 + 阳性对照；⚠️ 非 Maven 坐标 `com.alipay.sdk`）。将来换纯 JDK 实现**零扩散**。SDK 供应链风险由 ADR-0076 显式接受。
 - 沙箱未启用（`enabled=false`）而染色 `SANDBOX` ⇒ **400**，**绝不静默回落 mock**（INV-8）。
 - 金额换算 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`——**禁 `double`/`float`**（INV-1）。
 
@@ -50,15 +50,28 @@
 **演示环境开关（Phase 9）**：`demo.html` 新增「本地 mock / 支付宝沙箱」选择器，默认 mock；
 `start-all.sh` 透传 `PAYMENT_ALIPAY_SANDBOX_*` 并在缺失时**启动即失败**。
 
-**门禁实况（Phase 10）**：`./mvnw -o -B clean verify -fae` → **16 个 reactor 模块全 BUILD SUCCESS**，
-**766 tests / 0 failures / 0 errors**（含 `architecture-tests` 的结构断言）。
-新增 ArchUnit 规则：`application/**` 与 `domain/**` **MUST NOT** 依赖 `com.alipay.sdk`（INV-7）；
+**门禁实况（Phase 10）**：`./mvnw -o -B clean verify -fae` → **17 个 reactor 模块全 BUILD SUCCESS**，
+**834 tests / 0 failures / 0 errors / 0 skipped**（含 `architecture-tests` 的结构断言）。
+新增 ArchUnit 规则：`application/**` 与 `domain/**` **MUST NOT** 依赖 SDK 的 **Java 包 `com.alipay.api`**（INV-7；⚠️ 非 Maven 坐标 `com.alipay.sdk`，写错会让门禁恒通过）；
 `ChannelRouter` **MUST NOT** 读 `DyeContext`（INV-3）。
 零回归核验：既有测试仅 `TransactionRefundTest`（授权的修正型断言）与 `PaymentCaptureLedgerPostingTest`（加强断言）被改；
 全仓**零**私钥 / 零 `client_secret`；既有渠道配置默认值**全部不变**。
 
-**未落地（已知限制）**：B1/B7 的**并发**用例在 H2 上可能假绿，需 Testcontainers-MySQL 真库（T131）；
-沙箱真调需手机装沙箱钱包 App 扫码，无法进 CI，由 demo 动线手工覆盖。
+**未落地（已知限制）**：B7 的**并发**用例在 H2 上可能假绿，需真库（落点 033 / H16）；
+B1 的并发限制**已解除**——`LedgerPostingConcurrencyTest` 走 Testcontainers-MySQL 真库实跑通过（3 tests / 0 skip / 25.7s）。
+沙箱真调需真实买家账号 + 公网 `notify_url`，无法进 CI，由 demo 动线手工覆盖（见验收 §3.2）。
+
+**合并后收口修正（2026-09-20，本次收口）**：
+- **F1 凭证形态误标**：支付宝 `pageExecute().getBody()` 返回的是**自动提交表单 HTML**（**不是 URL**），
+  却被标成 `PayCredential.Kind.REDIRECT_URL`，使 `isRedirectFamily()` 返回 `true`，消费端按「可直接跳转」处理
+  ⇒ **点开是空白页**（联调实测）。修：新增 `PayCredential.formHtml(...)`，`AlipayChannelAdapter` 改用 `FORM_HTML`；
+  3 处测试桩载荷改为真实表单 HTML 形态并更正断言（避免「桩与真实契约不一致」导致断言跟着错标）。
+- **F2 架构门禁空转假绿**：INV-7 的 ArchUnit 规则原写 `resideInAPackage("com.alipay.sdk..")`，
+  而**该 Java 包不存在**（`com.alipay.sdk` 只是 Maven groupId；真实包是 `com.alipay.api`）⇒ 规则**恒通过**、形同虚设。
+  修：规则改为 `com.alipay.api..`，并加**阳性对照**（先断言 `AlipaySdkGateway` 确实依赖该包），同类笔误将立即变红。
+- **文档同步**：`030/spec.md §2.5` 新增两表、`030/acceptance.md` 重写（🟢/🔵/⏳ 证据记号）、`030/tasks.md` 头部状态；
+  `adr/0075`·`adr/0076`·`adr/README`·`technical-solution.md`·`systems/payment-service.md`·`stage-design.md` 包名/形态对齐。
+- 收口门禁：`./mvnw -o -B clean verify -fae` → **17/17 BUILD SUCCESS，834 tests / 0 failures / 0 errors / 0 skipped**。
 
 ---
 

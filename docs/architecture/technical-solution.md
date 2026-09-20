@@ -219,7 +219,7 @@ graph LR
 | 可观测 | Micrometer + Micrometer Tracing | 指标与链路追踪（**[目标] 未落地**：当前 0 依赖，实际为 `TraceIdFilter` + MDC，见宪法 §Obs.3） |
 | 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器（**[目标] 未落地**：实际全 H2 MySQL 兼容模式，见 backlog。⚠️ spec 030 / T131：B1/B7 **并发**用例在 H2 上**可能假绿**，需 Testcontainers-MySQL 真库） |
 | 代码质量 | Checkstyle + Spotless | CI 强制（**[目标] 未落地**：根 pom 与 CI 均无插件） |
-| 第三方 SDK | 支付宝 `alipay-sdk-java`（沙箱渠道） | spec 030 / [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md)：**端口收口**——只允许 `infra/channel/alipay/AlipaySdkGateway` 一个类 import `com.alipay.sdk`（ArchUnit 构建期强制，INV-7）；SDK 供应链风险已显式接受 |
+| 第三方 SDK | 支付宝 `alipay-sdk-java`（沙箱渠道） | spec 030 / [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md)：**端口收口**——只允许 `infra/channel/alipay/AlipaySdkGateway` 一个类 import SDK 的 **Java 包 `com.alipay.api`**（⚠️ Maven 坐标是 `com.alipay.sdk:alipay-sdk-java`，门禁匹配的是包名，写错会空转；ArchUnit 构建期强制 + 阳性对照，INV-7）；SDK 供应链风险已显式接受 |
 
 ### 3.6 项目目录结构（Maven 多模块单仓库）
 
@@ -587,7 +587,7 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 - **染色头 `X-Dye-Tag` 不是安全边界**：它只决定**协议实现**（mock / 沙箱），**未被**用作鉴权、权限或路由判定（FR-296 / INV-3）。篡改它最坏只是让本次调用走另一条协议路径，不改变资金事实归属。
 - **notify 端点自带验签**：不依赖「不暴露公网」作为唯一保护（FR-297）——验签 + 语义校验是端点的内在能力，公网暴露不改变其安全语义。
 - **SDK 供应链风险显式接受**：`alipay-sdk-java` 传递依赖多、带已知 CVE，风险由 [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md) 显式接受；收口手段是端口约束（INV-7，ArchUnit 强制），将来可换纯 JDK 实现（`HttpClient` + `SHA256withRSA`）而**零扩散**。
-- **凭证不落库 / 不进日志**（INV-2）：`PayCredential.payload`（签名跳转 URL 等）MUST NOT 入库、MUST NOT 打印明文；持久化渠道标识恒为 `payment_attempts.channel_reference`。
+- **凭证不落库 / 不进日志**（INV-2）：`PayCredential.payload`（签名跳转 URL / **自动提交表单 HTML** 等）MUST NOT 入库、MUST NOT 打印明文；持久化渠道标识恒为 `payment_attempts.channel_reference`。
 
 ### 5.3 可观测性（全局）
 
