@@ -241,6 +241,11 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 **错误**：`400 INVALID_ARGUMENT`（status 非法或校验失败）；`404 NOT_FOUND`。
 
+> **与支付宝 notify 端点并存（spec 030）**：本端点是**渠道无关的 JSON 入站回调**（`amountMinor` 仅落观测，**不做**金额拦截）；
+> 支付宝异步通知走独立端点 `POST /internal/channels/alipay/notify`（见 [§3.11.1](#3111-支付宝-notify-端点spec-030--fr-201fr-211)），
+> 后者自带**三段式语义校验**（验签 → 引用归属 → 金额/币种）。二者**收敛语义一致**（共用 `PaymentCallbackService`），
+> 差异仅在报文形态与验签层位。
+
 ### 3.6 退款相关内部 RPC（退款域已并入本服务，ADR-0064；spec 019 双层退款单）
 
 `POST /internal/payments/query-amount`
@@ -334,7 +339,34 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 **凭证语义（INV-6）**：`credential != null` ⇒ 渠道仅**受理**、买家尚未付款 ⇒ payment **MUST** 停 `PROCESSING`，**MUST NOT** 走成功收敛路径。凭证经 `RoutedPayment` 透传至 `CreatePaymentResponse.payUrl`（`payUrl` 优先取凭证，无凭证回落 mock 收银台链接，FR-114）。
 
-> ⚠️ **本节状态**：spec 030 **实现完成后**由 T138 补齐「实现实况」表（配置类 / 双模态分发 / 沙箱适配器）。当前契约条款已由 ADR-0075 定稿，**先于实现登记，不代表代码已具备**。
+**实现实况**（spec 030 Phase 3~8，✅ 已实现）：
+
+| 项 | 值 |
+|---|---|
+| 双模态分派 | `AlipayChannelAdapter`（**单 Adapter 双模态**，FR-130 / N11）——按 `DyeContext` 分发：`MOCK` 走 `super` 委托（基类 4 件横切行为零漂移），`SANDBOX` 走真实协议 |
+| 端口收口（INV-7） | `application/channel/AlipayGateway` 为端口（**只用平台自有类型**）；`infra/channel/alipay/AlipaySdkGateway` 是**唯一** import `com.alipay.sdk` 的类。ArchUnit 构建期强制（`ServiceBoundaryTest#alipaySdkMustBeConfinedToItsInfrastructureAdapter`） |
+| 沙箱配置 | `infra/config/AlipaySandboxProperties`（`payment.channel.adapters.alipay.sandbox.*`，`enabled` 默认 `false`）；密钥一律 env 注入，`toString()` 省略密钥（INV-2），启动期强校验缺失项（FR-134） |
+| 沙箱未启用 | 染色 `SANDBOX` 而 `enabled=false` ⇒ **400 INVALID_ARGUMENT**，**不静默回落 mock**（FR-241 / INV-8） |
+| 场景收窄 | `supportedScenes()`：沙箱取 `{WEB}`，mock 取全集（FR-131） |
+| 金额换算 | `BigDecimal.valueOf(amountMinor, 2).toPlainString()`——**禁 `double`/`float`**（INV-1 / FR-139） |
+| 渠道状态映射 | `AlipayTradeStatus`（`SUCCESS` / `CLOSED` / `WAIT_BUYER_PAY` / `UNKNOWN`）——渠道协议概念的平台投影，不外泄渠道私有错误码（FR-141） |
+
+> **本节状态**：契约条款由 ADR-0075 定稿，实现实况由 T138 于 spec 030 实现完成后补齐（2026-09-20）。
+
+### 3.11.1 支付宝 notify 端点（spec 030 / FR-201~FR-211）
+
+| 项 | 值 |
+|---|---|
+| 端点 | `POST /internal/channels/alipay/notify`（`application/x-www-form-urlencoded`） |
+| 实现 | `api/AlipayNotifyController`（`@ConditionalOnBean(AlipayGateway.class)`——沙箱未装配则端点不存在） |
+| 三段式校验 | ① 验签（失败 ⇒ **403** 且**不触达**收敛，INV-10）→ ② 渠道引用归属（防串号，FR-212）→ ③ 金额 / 币种（不符 ⇒ 拒绝推进，FR-210/211） |
+| 响应体 | **恰好** 纯文本 `success`（FR-206）；校验失败返回 `rejected: ...`（**非** success，触发渠道重试）；异常返回 `processing error` |
+| 校验失败三件套 | 不推进任何状态 + 计指标（`payment.notify_rejected`，带 `reason` 维度）+ 写审计（`FINANCIAL_AUDIT`），**缺一不可**（FR-213） |
+| 收敛复用 | `PaymentCallbackService.handleCallback`（终态吸收 + 乱序保护 + 幂等），**不新建收敛链路**（FR-205） |
+| 状态映射 | `TRADE_SUCCESS` / `TRADE_FINISHED` → success；`TRADE_CLOSED` → businessFailure；`WAIT_BUYER_PAY` / 未知 → businessUnknown（**不推进**，FR-204） |
+| 模态包裹 | 收敛以 `DyeContext.runWith(SANDBOX, ...)` 包裹——反向路径无入站请求，须按协议还原模态 |
+
+> 与既有 JSON 回调路径（§3.5）的关系：两条路径**收敛语义一致**（共用 `handleCallback`，SC-B2-06，由 `PaymentCallbackPathParityTest` 锁定）；差异在报文形态与验签层位（JSON 走 `ChannelCallbackSignatureFilter`，notify 在 controller 内），**不构成语义分叉**。
 
 ### 3.12 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
@@ -487,6 +519,19 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 | 连接池大小 `spring.datasource.hikari.maximum-pool-size` | 默认 10 | — | `[目标]` 按并发调优（如 20） |
 | 出站 Feign 超时 | 未配置 | — | `[目标]` connect 1s / read 3s |
 
+**支付宝沙箱渠道（spec 030，✅ 已实现）**——默认**关闭**，全部经环境变量注入（禁硬编码 / 禁入库，INV-2）：
+
+| 配置项 | 默认 | 说明 |
+|---|---|---|
+| `payment.channel.adapters.alipay.sandbox.enabled` | `false` | **一键 kill switch**；`false` 时 `AlipaySdkGateway` Bean 不装配（`@ConditionalOnProperty`），染色 `SANDBOX` ⇒ 400（FR-241 / INV-8） |
+| `PAYMENT_ALIPAY_SANDBOX_APP_ID` | 空 | 沙箱应用 appId；`enabled=true` 时**启动期强校验**，缺失则拒绝启动并列出全部缺失项 |
+| `PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY` | 空 | 应用私钥（PEM）；同上强校验；`toString()` 省略（INV-2） |
+| `PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY` | 空 | 支付宝公钥（PEM）；同上强校验 |
+| `PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL` | `https://openapi-sandbox.dl.alipaydev.com/gateway.do` | 沙箱网关地址 |
+| `PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS` | `10000` | 沙箱 HTTP 超时**独立**于全局 1500ms；**MUST < `payment.reliability.timeout`(30s)** |
+
+> 既有 `payment.channel.*`（`http-timeout-ms` / `mock-scenario` / `refund-async*` / `adapters.{ALIPAY,WECHAT,DOUYIN}.scenario`）与 `payment.routing.*` 的**默认值全部不变**（T133）——本 Feature 只**新增** `...alipay.sandbox.*`。
+
 ### 6.3 启动依赖顺序
 
 ```text
@@ -509,6 +554,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 | `payment.unknown` | counter | module=payment | 支付未知 |
 | `payment.duplicate_callback` | counter | module=payment | 重复回调被吸收 |
 | `payment.unknown.duration` | timer | module=payment | UNKNOWN 收敛耗时 |
+| `payment.notify_rejected` | counter | module=payment, reason=`signature`/`amount`/`currency`/`channel_reference`/`app_id`/`other`/`processing_error`/`unexpected_error` | 支付宝 notify 被拒（spec 030 / FR-213）；`reason` 维度区分拒绝原因 |
 
 **资金审计日志（`FINANCIAL_AUDIT` logger，`StructuredAuditLogger`）**：
 

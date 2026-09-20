@@ -180,11 +180,11 @@
 
 ## Phase 11 —— L0 文档回写（**实现完成后**）
 
-- [ ] **T138** 改 `docs/architecture/systems/payment-service.md`：补 `### 3.11 渠道内部契约`（消除悬空锚点）；补 §2.5 / §3.2 的模态落库与 notify 端点**现状**
-- [ ] **T139** 改 `docs/architecture/technical-solution.md`：§2.4 / §3.5 / §4.3 / §5.2 同步
-- [ ] **T140** 改 `CHANGELOG.md`：置顶本 Feature 条目；如需发版按 `VERSION` → 发版流程
-- [ ] **T141** 跑 `docs/guides/engineering-standards.md` §11 **五条 grep 自检**（ADR 引用一致性 / 编号唯一性 / 版本集中 / 产物污染 / 链接与锚点可达）[SC-A-16]
-- [ ] **T142** 确认**未**把 `stage-design` 的 `【目标】` 项写入 L0 文档（避免虚假合规）[N21]
+- [x] **T138** 改 `docs/architecture/systems/payment-service.md`：补 `### 3.11 渠道内部契约`（消除悬空锚点）；补 §2.5 / §3.2 的模态落库与 notify 端点**现状**
+- [x] **T139** 改 `docs/architecture/technical-solution.md`：§2.4 / §3.5 / §4.3 / §5.2 同步
+- [x] **T140** 改 `CHANGELOG.md`：置顶本 Feature 条目；如需发版按 `VERSION` → 发版流程
+- [x] **T141** 跑 `docs/guides/engineering-standards.md` §11 **五条 grep 自检**（ADR 引用一致性 / 编号唯一性 / 版本集中 / 产物污染 / 链接与锚点可达）[SC-A-16]
+- [x] **T142** 确认**未**把 `stage-design` 的 `【目标】` 项写入 L0 文档（避免虚假合规）[N21]
 
 ---
 

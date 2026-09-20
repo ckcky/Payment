@@ -76,6 +76,11 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 - **预留空函数、恒放行**：入站内部鉴权 `verifyServiceToken()`（ADR-0024）、渠道回调验签 `verifySignature()`（ADR-0025/0052）、对外 API 鉴权（ADR-0024）。
 - **不做（代码已回退）**：部分退款 —— 单笔退款只回三态、成功恒为全额；`PARTIALLY_SUCCEEDED` 仅作不可达枚举保留（ADR-0016 / ADR-0047）。
 
+**spec 030 新增预留挂点（2026-09-20）**：
+- **已实现（非预留）**：支付宝异步通知验签 `AlipayGateway#verifyNotify` —— 走真实 RSA2 验签（`AlipaySdkGateway`），**不是**空实现；这是「接入真实渠道」这一前提成立后的对应实现。
+- **仍恒放行**：渠道回调验签 `ChannelCallbackSignatureFilter#verifySignature`（ADR-0025/0052）**保持不变**（JSON 回调路径），与本 Feature 无关。
+- **风险口径**：前者自带验签 + 语义校验，**不依赖「不暴露公网」**作为唯一保护（FR-297）；后者的既有风险敞口不变（ADR-0024/0025）。
+
 **预留契约（防隐性故障源）**：「预留空实现」MUST 为纯 no-op、不干扰主流程、不得留下"假绿"（测试名与 Javadoc 显式标注空实现、留 `TODO(ADR-00xx)`），且**挂点位置单一明确**：
 
 - 入站内部鉴权 → `payment-service/web/InternalServiceAuthInterceptor#verifyServiceToken`
@@ -212,8 +217,9 @@ graph LR
 | API 网关 | Spring Cloud Gateway | 响应式网关（本 MVP 延后启用） |
 | 熔断 | Resilience4j 或 Sentinel | 延迟到需要时再引入 |
 | 可观测 | Micrometer + Micrometer Tracing | 指标与链路追踪（**[目标] 未落地**：当前 0 依赖，实际为 `TraceIdFilter` + MDC，见宪法 §Obs.3） |
-| 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器（**[目标] 未落地**：实际全 H2 MySQL 兼容模式，见 backlog） |
+| 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器（**[目标] 未落地**：实际全 H2 MySQL 兼容模式，见 backlog。⚠️ spec 030 / T131：B1/B7 **并发**用例在 H2 上**可能假绿**，需 Testcontainers-MySQL 真库） |
 | 代码质量 | Checkstyle + Spotless | CI 强制（**[目标] 未落地**：根 pom 与 CI 均无插件） |
+| 第三方 SDK | 支付宝 `alipay-sdk-java`（沙箱渠道） | spec 030 / [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md)：**端口收口**——只允许 `infra/channel/alipay/AlipaySdkGateway` 一个类 import `com.alipay.sdk`（ArchUnit 构建期强制，INV-7）；SDK 供应链风险已显式接受 |
 
 ### 3.6 项目目录结构（Maven 多模块单仓库）
 
@@ -398,6 +404,10 @@ sequenceDiagram
 
 渠道超时/断连/响应不完整时，Payment/Refund **进入 UNKNOWN**（不是失败别名）。收敛路径：主动查询接口、后续回调、对账、人工处理；在未收敛前**不得重复执行不可确认的资金动作**。
 
+**支付宝异步通知端点（spec 030 / FR-201~FR-213，✅ 已实现）**：`POST /internal/channels/alipay/notify` 走**三段式校验**——① 验签（RSA2，失败 ⇒ **403** 且**不触达**收敛，INV-10）→ ② 渠道引用归属（防串号）→ ③ 金额 / 币种。响应体 **MUST 恰好**为纯文本 `success`；校验失败返回非 `success` 触发渠道重试，并留下**三件套**（不推进 + 指标 `payment.notify_rejected` + `FINANCIAL_AUDIT`），**缺一不可**。收敛**复用**既有 `PaymentCallbackService.handleCallback`（终态吸收 / 乱序 / 幂等），**不新建链路**。状态映射与查询路径同口径（`WAIT_BUYER_PAY` ⇒ UNKNOWN **不推进**）。
+
+> 两条回调路径（JSON `/internal/payments/{no}/channel-callback` 与支付宝 notify）**收敛语义一致**，差异仅在报文形态与验签层位（SC-B2-06，`PaymentCallbackPathParityTest` 锁定）。
+
 > **决策记录（Feature 003 / ADR 集合 `docs/adr/0003-payment-reliability-decisions.md`）**：
 > - 超时进 UNKNOWN、主动查询收敛、有限重试、终态冲突策略（迟到成功不覆盖已失败）已 **Accept**（ADR-0003/0004/0005/0007）。
 > - **人工收敛端点（原 ADR-0006 / spec US4）已实现**：`POST /payments/{id}/resolve` + `ResolveAuthorizationInterceptor`（未配置 `PAYMENT_ADMIN_TOKEN` 时返回 503 拒绝，不放行），详见 `runbook.md`。高危资金操作由 admin-token 守卫 + 审计日志兜底；完整权限体系仍待路线图 Phase 9 统一建设。自动收敛（主动查询 + 超时 + 重试）覆盖绝大多数 UNKNOWN，剩余保持 UNKNOWN 依赖对账流程兜底（ADR-0007）。
@@ -570,6 +580,14 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 - **风控**：只预留空实现挂点，不启用任何规则（§2.4 #4）。
 
 **运维前提**：上述「本期不做」成立的前提是**部署环境不对公网暴露**（当前为单机/Compose 本地部署，§6）。一旦服务暴露到不可信网络，鉴权 MUST 先于功能上线补齐。
+
+**spec 030 补充（2026-09-20）**：
+
+- **支付宝沙箱密钥**：`app-private-key` / `alipay-public-key` 一律 env 注入（`PAYMENT_ALIPAY_SANDBOX_*`），**禁硬编码 / 禁入库**；`AlipaySandboxProperties.toString()` 省略密钥（INV-2）。配置仅在 `enabled=true` 时生效，默认关闭。
+- **染色头 `X-Dye-Tag` 不是安全边界**：它只决定**协议实现**（mock / 沙箱），**未被**用作鉴权、权限或路由判定（FR-296 / INV-3）。篡改它最坏只是让本次调用走另一条协议路径，不改变资金事实归属。
+- **notify 端点自带验签**：不依赖「不暴露公网」作为唯一保护（FR-297）——验签 + 语义校验是端点的内在能力，公网暴露不改变其安全语义。
+- **SDK 供应链风险显式接受**：`alipay-sdk-java` 传递依赖多、带已知 CVE，风险由 [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md) 显式接受；收口手段是端口约束（INV-7，ArchUnit 强制），将来可换纯 JDK 实现（`HttpClient` + `SHA256withRSA`）而**零扩散**。
+- **凭证不落库 / 不进日志**（INV-2）：`PayCredential.payload`（签名跳转 URL 等）MUST NOT 入库、MUST NOT 打印明文；持久化渠道标识恒为 `payment_attempts.channel_reference`。
 
 ### 5.3 可观测性（全局）
 

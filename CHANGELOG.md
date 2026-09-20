@@ -6,6 +6,62 @@
 
 ---
 
+## [2026-09-20] feat：spec 030 统一渠道契约 + Mock/沙箱双模态 + 回调基础闭环（ADR-0075 / ADR-0076）
+
+**范围**：渠道层从「单一 mock 实现」演进为「统一契约 + 双模态（本地 mock / 真实沙箱）+ 回调闭环」。
+本 Feature 分 12 个 Phase（Phase 0~11），前 6 个 Phase 为**资金缺陷修复与契约奠基**，后 6 个为**沙箱真调与回调闭环**。
+
+**两个资金缺陷修复（Phase 1/2，独立可交付）**：
+- **B1 账本幂等键双口径**（🔴）：同一支付单的**同步成功**路径与**回调收敛**路径产生**不同**的 posting 键
+  （`PAYMENT:payment:{orderNo}:{code}:{seq}` vs `PAYMENT:PAYMENT:{paymentNo}`），导致同一笔钱记两次账。
+  修复：两条路径统一为 `PAYMENT:{paymentNo}`，前缀拼接**只留** `FeignLedgerPostingGateway` 一处（FR-220/221/222）。
+- **B7 在途守卫区分「重放 / 重试」**（🟠）：order 侧退款在途守卫把 `REQUESTED`（渠道未受理）与
+  `PROCESSING`（渠道已受理）一视同仁——前者重试**不**重放渠道调用（漏退），后者重试会**重复**调渠道（双重退款）。
+  修复：判据改为「是否已成功推进过」，并**修正** `TransactionRefundTest` 中固化了错误预期的断言（`hasSize(1)` ⇒ 2）。
+
+**统一渠道契约（Phase 3，零破坏）**：
+- `ChargeRequest` 5→12 字段、`RefundRequest` 5→9、`QueryStatusRequest` 3→4，**保留兼容构造器**（既有调用点零改动，SC-A-02）。
+- 新增 `PayCredential`（付款凭证，6 种 `Kind`）与 `ChannelResult.credential`——修复前真实渠道的「跳转 URL」无处承载。
+- `PaymentChannel` 新增 `supportedScenes()` / `supportsRealMode()` 两个 `default` 方法（不破坏既有实现）。
+
+**流量染色（Phase 4/5/6）**：
+- `DyeMode`（MOCK/SANDBOX）+ `DyeContext` ThreadLocal + 入站过滤器 / 出站拦截器；
+  染色头 `X-Dye-Tag` **只决定协议实现**，**不参与**路由决策（INV-3，ArchUnit 强制）。
+- 模态落库：`payment_attempts.extra_json` 的 `channelMode` 键（**通用扩展列**，非专用列）。
+  读取侧 **fail-safe**：`NULL` / 非法 JSON / 缺键 / 非法值四类坏数据一律读作 `MOCK`，绝不中断反向路径（FR-304）。
+- 反向路径自足：查询 / 退款 / 超时扫描按**落库模态**还原协议实现（FR-270/271/272），
+  并修**确定性排序**（原无 `ORDER BY` 的 `findFirst()` 使「查哪个渠道」不可复现）。
+
+**支付宝沙箱适配器（Phase 7，INV-7）**：
+- **单 Adapter 双模态**（`AlipayChannelAdapter`）：`MOCK` 走 `super` 委托（零分叉），`SANDBOX` 走真实协议。
+- **端口收口**：`AlipayGateway`（平台自有类型）→ `AlipaySdkGateway`（**唯一** import `com.alipay.sdk` 的类，
+  ArchUnit 构建期强制）。将来换纯 JDK 实现**零扩散**。SDK 供应链风险由 ADR-0076 显式接受。
+- 沙箱未启用（`enabled=false`）而染色 `SANDBOX` ⇒ **400**，**绝不静默回落 mock**（INV-8）。
+- 金额换算 `BigDecimal.valueOf(amountMinor, 2).toPlainString()`——**禁 `double`/`float`**（INV-1）。
+
+**支付宝回调闭环（Phase 8，INV-10）**：
+- 新端点 `POST /internal/channels/alipay/notify`，**三段式校验**（验签 → 引用归属 → 金额/币种）。
+- 验签失败 ⇒ **403** 且**不触达**收敛（状态零改动）；响应体 **MUST 恰好**为纯文本 `success`（FR-206）。
+- 校验失败**三件套**：不推进 + 计指标（`payment.notify_rejected`）+ `FINANCIAL_AUDIT` 审计，缺一不可（FR-213）。
+- 收敛**复用**既有 `PaymentCallbackService.handleCallback`，**不新建链路**（FR-205）；
+  两条回调路径收敛语义一致（SC-B2-06）。
+- **INV-6**：`credential != null` ⇒ 渠道仅受理、买家未付款 ⇒ payment **停 `PROCESSING`**，不走成功收敛。
+
+**演示环境开关（Phase 9）**：`demo.html` 新增「本地 mock / 支付宝沙箱」选择器，默认 mock；
+`start-all.sh` 透传 `PAYMENT_ALIPAY_SANDBOX_*` 并在缺失时**启动即失败**。
+
+**门禁实况（Phase 10）**：`./mvnw -o -B clean verify -fae` → **16 个 reactor 模块全 BUILD SUCCESS**，
+**766 tests / 0 failures / 0 errors**（含 `architecture-tests` 的结构断言）。
+新增 ArchUnit 规则：`application/**` 与 `domain/**` **MUST NOT** 依赖 `com.alipay.sdk`（INV-7）；
+`ChannelRouter` **MUST NOT** 读 `DyeContext`（INV-3）。
+零回归核验：既有测试仅 `TransactionRefundTest`（授权的修正型断言）与 `PaymentCaptureLedgerPostingTest`（加强断言）被改；
+全仓**零**私钥 / 零 `client_secret`；既有渠道配置默认值**全部不变**。
+
+**未落地（已知限制）**：B1/B7 的**并发**用例在 H2 上可能假绿，需 Testcontainers-MySQL 真库（T131）；
+沙箱真调需手机装沙箱钱包 App 扫码，无法进 CI，由 demo 动线手工覆盖。
+
+---
+
 ## [2026-09-19] fix：spec 029 合并后回归修复（CI contract-snapshot 转绿）
 
 **范围**：spec 029 合入 master（`5e2c00d`）时未跑门禁，CI `verify.yml` 的 `contract-snapshot`
