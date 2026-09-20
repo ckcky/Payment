@@ -6,8 +6,10 @@
 > **当前状态**：**已实现并已合入 master（`e348090`）**；本文件为**合并后补做的验收记录**（2026-09-20）。
 > 代码与文档实况：`feature/030-channel-contract-sandbox-callback` + `feature/030-demo-sandbox-ui` 均已 `--no-ff` 合入 master。
 > **验收结论**：INV-1~INV-10 **全绿**；SC 清单 **除 §3.2 沙箱手工 live 动线外全部通过**；
-> §3.2 **已完成 5/6**（2026-09-20 联调实战：收银台渲染、买家付款、notify 收敛 `SUCCEEDED`、ledger 复式记账均已验通），
-> **唯「沙箱退款回归原模态」一条待人工**；期间发现的 **F3 验签缺陷（§3.2.1）已修复并回归**。
+> §3.2 **5 项已验通**（2026-09-20 联调实战：收银台渲染、买家付款、notify 收敛 `SUCCEEDED`、ledger 复式记账）；
+> 第 6 项「沙箱退款回归原模态」的**模态子项已验证**（退款确实走了真实沙箱分支，渠道未被重新路由），
+> **但退款闭环被本节新发现的 F4/F5/F6 阻断 ⇒ 该条不勾选**（见 §3.2.2）。
+> 期间发现的 **F3 验签缺陷（§3.2.1）已修复并回归**；**F4/F5/F6 已定位到代码行、尚未修复**（涉及跨服务契约 / 公共模块，待裁决）。
 > 按「不允许部分完成」口径，**本文件不自行宣布「通过」**，签署栏留待负责人（见 §6）。
 
 **证据记号**（本文件新增，便于复核）：
@@ -151,7 +153,16 @@
       `status=POSTED`，分录 **2 条：DEBIT 9900 / CREDIT 9900**（借贷平衡）；订单 `PAID`（`paid_minor=9900`）；
       履约记录 / 权益各 1 行。
 - [ ] 退款：沙箱单退款走**沙箱分支**（模态从库还原），渠道**未被重新路由**
-      —— ⏳ **未完成**（本轮未做沙箱退款）。**其前置已解除**（上一项已产生一笔真实沙箱成功支付）。
+      —— 🟢 **「模态从库还原 + 渠道未被重新路由」这一条已 live 验证**（2026-09-20），
+      但**整条退款闭环未成立** ⇒ 本项**不勾选**，新暴露的 F4/F5/F6 见 §3.2.2。
+      🟢 证据（订单 `OR227388461777330177` / 支付单 `PM227388464260329472`，部分退款 1000 分）：
+      `PaymentRefundService.refund` 用**落库的模态**（生效 attempt 行的 `channelMode=SANDBOX`）经
+      `DyeContext.callWith(...)` 包裹渠道调用，日志实证走的是**真实沙箱网关**：
+      `alipay.trade.refund 成功 outTradeNo=PM227388464260329472 refundNo=PMRF227392725400563712
+      channelRefundNo=2026092022001429280508654228`（SDK 侧 `biz_content.refund_amount=10.00`）。
+      ⇒ 若曾静默回落 mock，渠道侧根本不会有这次真实退款。
+      ⚠️ 但同一轮实测暴露 3 个缺陷（§3.2.2），**资金事实与订单状态不一致**：
+      `payment.refunds` = `SUCCEEDED`，而 `order.transaction_refunds` = `REQUESTED`、订单仍 `PAID`。
 
 #### 3.2.1 F3（🔴 联调实测发现并已修复）：真实 notify **必然验签失败**
 
@@ -183,11 +194,75 @@
 **已 live 验证的相邻项（记录在案）**：公网回调端点 `POST /internal/channels/alipay/notify` 空体 ⇒ **403**（验签 fail-closed，ADR-0052 生效）。
 ⚠️ 该结果**不能**作为「验签口径正确」的证据（见 §3.2.1 教训）。
 
+#### 3.2.2 F4 / F5 / F6（🔴 沙箱退款实测新发现，**均未修复**）
+
+> 一次部分退款（1000 分）触发。三件事**互相独立**，但**同时**让「退款闭环」不成立。
+> 均已定位到具体代码行与可复现证据；**修复方案涉及跨服务契约 / 公共模块，留待负责人裁决**。
+
+**F6（🔴 根因级）—— 成功退款的事件**永远发不出去**：`Map.copyOf` 拒绝 `null`**
+
+- **根因**：`common/common-redis-mq` 的 `TransactionalProducer.envelope` 末参写的是
+  `payload == null ? Map.of() : Map.copyOf(payload)`。`Map.copyOf`（JDK 不可变集合）
+  **遇到 null 键或 null 值直接抛 `NullPointerException`，且该 NPE 的 `getMessage()` 为 `null`**。
+  而 `PaymentEventPublisher.payload(RefundResultNotification)` 把 `failureReason` 放进了 payload，
+  **成功退款的 `failure_reason` 恰为 `NULL`** ⇒ 构造 envelope 即抛 NPE。
+- **现象**：`RefundResultProcessor.notifyOrder` 捕获后只打一行
+  `退款结果通知 order 失败（事实不回滚，重试/对账兜底）… reason=null` —— `reason=null` 正是它自带的痕迹。
+- **证据链（可复现）**：
+  | 检查 | 结果 | 含义 |
+  |---|---|---|
+  | `java -e` 探针：`Map.copyOf` 含 null 值 | `NullPointerException`，`getMessage()==null` | 与日志 `reason=null` 精确吻合 |
+  | `payment.refunds.failure_reason`（成功单） | `<NULL>` | 触发条件对每笔成功退款**必然成立** |
+  | `XLEN mq:stream:refund.result` | **0** | 该 topic **一条都没发出去过** |
+  | `XINFO GROUPS mq:stream:refund.result` → `last-delivered-id` | **`0-0`**（order 与 trace 两个组都是） | 从未投递过任何一条 |
+  | 对照 `XLEN mq:stream:payment.succeeded` | 291，且 19:21 那条 msgId **仍在流里** | 流**消费后不删**⇒ `0` 只能解释为「从未发布」，排除「被消费光/被清理」 |
+  | `grep -c 'refund.result'` 当前容器日志 | 0 | 连 `MQ 发布 refund.result` 这行日志都没打出来 |
+  | 配置来源 | `@ConditionalOnProperty(..., matchIfMissing = true)`；compose **未设** `PAYMENT_MQ_ENABLED` | **默认即开启**，非本次重建引入 |
+- **影响**：`spec 029` 用 `refund.result` **替代**了同步 `OrderGateway.notifyRefundResult`（FR-203 / SC-1「同步通知点清零」）。
+  该路径从未生效 ⇒ **order 侧的 TXRF 永远等不到终态**（本次实证：`PMRF=SUCCEEDED` 而 `TXRF=REQUESTED`）。
+  这是一条**资金事实丢失**级缺口：钱退了，订单层不知道。
+- **建议修法（待裁决）**：① 最小修 —— `envelope` 改用允许 null 的不可变包装（`Collections.unmodifiableMap(new LinkedHashMap<>(payload))`）；
+  ② 语义修 —— payload **剔除 null 值**（下游客只看缺失键，不解析 null）；
+  ③ 加回归测试：**payload 含 null 值必须能发布成功**（当前 0 覆盖，故 837 全绿也没抓到）。
+
+**F5（🔴）—— 退款把「原交易号」当「渠道退款流水号」，撞唯一约束后被静默吸收**
+
+- **根因**：`AlipaySdkGateway.refund` 成功分支 `return RefundResult.ok(response.getTradeNo())`。
+  `alipay.trade.refund` 的响应里 `trade_no` 是**原支付交易号**（退款无独立流水号，退款侧标识是 `out_request_no`）。
+  ⇒ 退款 attempt 的 `channel_reference` 与**支付 attempt 的完全相同**。
+- **证据**：退款日志 `channelRefundNo=2026092022001429280508654228` 与
+  `payment_attempts` 中**支付 attempt（id=43）的 `channel_reference` 逐字相同**；
+  随后 `退款渠道尝试重复（幂等吸收）` —— 因 `uk_attempts_channel_reference`（`channel_reference` **单列唯一**）
+  拒绝写入 ⇒ **REFUND attempt 行根本没落库**（该支付单现在只有 1 行 `PAYMENT` 尝试），
+  连带 `RefundAttemptSettlementService` 报 `退款尝试收敛未找到匹配行且无唯一在途（不臆测归属）`。
+- **为什么 mock 下不暴露**：mock 的引用形态是 `mock-refund-ref-…` / `alipay-refund-ref-…`（与支付引用天然不同）
+  ⇒ **只有真实渠道会退化成「引用相同」**。again：沙箱独有。
+- **影响**：REFUND attempt **缺失** ⇒ 对账（spec 018 / FR-017）拿不到退款侧渠道流水号；
+  「退款渠道尝试重复」是**误报**（它并非重复，而是引用了错的值），会把真实异常掩盖成幂等重放。
+- **建议修法（待裁决）**：退款侧渠道引用改用**退款自己的标识**（`out_request_no` = PMRF，
+  或 `trade_no + ':' + outRequestNo` 复合键）；`RefundResult.ok(...)` 的实参语义需要与
+  spec 018 的「渠道退款流水号」定义对齐后再定。
+
+**F4（🟠）—— Feign 读超时 1000ms < 沙箱退款 4.5s，order 侧必然超时**
+
+- **根因**：`order-service` / `payment-service` 的 `application.yml` 里
+  `read-timeout: ${PAYMENT_FEIGN_READ_TIMEOUT_MS:1000}`（**默认 1s**），
+  而沙箱退款是**同步**渠道调用：`alipay.trade.refund` 实测耗时 `30ms + 4463ms + 52ms` ⇒ 整请求 `costMs=5051`。
+- **现象**：order 侧 `feign.RetryableException: Read timed out executing POST
+  http://payment-service/internal/payments/refund-command` ⇒ `POST /internal/orders/refund` 返回 **500**。
+- **影响**：调用方拿到 500 而**资金其实已经退了**（payment 侧照常完成 200/`SUCCEEDED`）；
+  设计上本应由 `refund.result` 异步兜底收敛 —— 但该路径被 F6 打断 ⇒ **两侧永久不一致**。
+  mock 模态不暴露（mock 退款异步 1s 推送、调用即时返回），**又是沙箱独有**。
+- **建议修法（待裁决）**：① 应急 —— 为 `refund-command` 单独放宽读超时（如 10s）；
+  ② 治理 —— 让 `refund-command` **不阻塞渠道调用**（受理即返回 `REQUESTED`，终态全靠 `refund.result` 收敛），
+  与 spec 019「order 发起 + 收口 / payment 只管渠道事实」的分工一致，但**改动面更大**。
+
 > ⚠️ **未验证范围 MUST 显式记录**（ADR-0076 R10）——不得默认通过。
-> **本轮仍未验证**：① 沙箱退款回归原模态（前置已解除，留待下一轮）；
+> **本轮仍未验证 / 未修复**：① 「沙箱退款回归原模态」的**闭环**（模态子项已验通，闭环被 F4/F5/F6 阻断）；
 > ② 金额不符 / 串号等异常分支的**真实**渠道报文（目前仍由固定向量单测覆盖）。
 > **已解除的阻塞**：`notify_url` 公网可达（ngrok 固定域名隧道已常驻并封装为 `deployment/demo/start-tunnel.sh`）；
-> 沙箱**买家账号**付款（本次已实战走通，路径见 §3.2）。
+> 沙箱**买家账号**付款（本次已实战走通，路径见 §3.2）；**沙箱退款回归原模态**（已验证走真实沙箱分支）。
+> **本轮新发现且已定位未修复**：F4 / F5 / F6（见 §3.2.2）。
 
 ---
 
