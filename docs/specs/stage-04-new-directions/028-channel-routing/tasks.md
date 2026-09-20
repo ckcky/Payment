@@ -1,4 +1,4 @@
-# Tasks: 026 支付两层结构 + 渠道路由
+# Tasks: 028 支付两层结构 + 渠道路由
 
 > **状态**：**已实现完成**（批次 A–G 全绿；`mvn -o clean verify -fae` 16 模块 BUILD SUCCESS）。实现于 `feature/028-channel-routing` 分支，`--no-ff` 合并 master。
 > 批次顺序 **A → B → C → D → E → F → G** 不可乱序（后批次依赖前批次类型）；A/B 必须同批交付（spec §1.4）。
