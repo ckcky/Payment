@@ -227,6 +227,9 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
   3. ngrok 3.39 起 `--domain` 已废弃，用 `--url`。
 
   **验证隧道真通**（返回 `403 signature verification failed` 就是通了——空报文验签必然失败，这是对的）：
+  ⚠️ 但它**不能证明「验签口径正确」**——空报文本来就该 403，既证明不了密钥对得上，
+  也证明不了待签串拼装正确。2026-09-20 的 F3 缺陷（真实回调 100% 验签失败）**正是被这个 403 掩盖了一整轮**。
+  **判据必须是一条真实的渠道报文**（见 `acceptance.md` §3.2.1）。
 
   ```bash
   curl -s --noproxy '*' -X POST -d 'out_trade_no=probe' \
@@ -276,9 +279,36 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
   取自**老沙箱**，会报 `invalid-app-id` 或「系统繁忙」⇒ 到 <https://open.alipay.com/develop/sandbox/app>
   点「升级沙箱环境」并换成新沙箱的应用/网关/账号信息。
 
+**「在哪里登录」= 收银台右半边（2026-09-20 抓真实页面核对）**：
+
+收银台（`excashier-sandbox.dl.alipaydev.com/standard/auth.htm`）是个**两栏页**：
+
+- **左栏**「扫码支付」= 二维码（沙箱码真实 App 扫不了，见上）；
+- **右栏**「登录支付宝账户付款」= 账号密码登录区，字段**只有两个**：
+  **账户名**（placeholder「手机号码/邮箱」，填买家 `xxxx@sandbox.com`）+ **支付密码**
+  （页面原话「请输入账户的**支付密码**，不是登录密码」）。
+  提交后进「确认付款」页（余额支付）→ 再输一次支付密码 → 完成。
+
+⚠️ **窗口太窄就只能看见二维码**：该页 `document.body.style.minWidth = '990px'`，窄窗口下右栏被挤出可视区。
+**先拉宽窗口 / 全屏**，再谈登录。
+
+⚠️ **别用收款方账号登录**：收银台「收款方」显示的是**卖家** `xxxx@sandbox.com`（本单实测
+`qcfbvf8519@sandbox.com`），拿它登录会因买卖家同号报 `AE150003030`。买家账号是**另一个** `@sandbox.com`。
+
+> 🔧 **这条动线可用真实 Chromium 全自动化走通**（填账号 + 支付密码 → 确认付款）。
+> 2026-09-20 实测一轮「建单 → 收银台 → 付款 → 回调 → 收敛 → 记账」全闭环：
+> 支付单由 `UNKNOWN` 收敛 `SUCCEEDED`、订单 `PAID`、ledger 出 `PAYMENT:{paymentNo}` 借贷平衡分录。
+
 > ⚠️ **`notify_url` 仍需公网可达**（否则支付会一直停 `PROCESSING`，INV-6）。隧道域名一变，
 > 必须同步更新 `PAYMENT_CHANNEL_NOTIFY_URL` 并**重启 payment-service**，否则回调打不进来。
->
+
+> 🔴 **改动 notify 验签前必读（F3，2026-09-20 实测缺陷）**：`AlipaySdkGateway.verifyNotify` **必须**用
+> `AlipaySignature.rsaCheckV1`，**不能**用 `rsaCheckV2`——本 SDK 版本（`4.40.996.ALL`）里 V2 的待签串
+> **保留了 `sign_type`**，而支付宝给通知签名时不含它 ⇒ 真实回调**必然 403**、支付单永远收敛不了。
+> 回归测试 `AlipayNotifySignatureVerificationTest`（含「`sign_type` 参与签名必须失败」的阳性对照）
+> 会拦住改回 V2 的提交。完整证据链见
+> [`acceptance.md` §3.2.1](../../docs/specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/acceptance.md)。
+
 > 💡 **只想验证「下单 → 收银台 → 回调 → 收敛 → 记账」闭环时，不必碰沙箱**：把运行环境切回
 > **本地 mock**（默认，不染色）即可 —— 零外部依赖、零手机、零公网穿透。
 
