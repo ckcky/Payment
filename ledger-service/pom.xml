@@ -65,6 +65,19 @@
             <artifactId>h2</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- spec 030 / T11：并发记账「唯一约束吸收」的**真库**验证（Testcontainers-MySQL）。
+             版本由根 pom 的 testcontainers-bom 统一管理。
+             本机无 Docker 守护进程时该测试类整体 skip（不 fail），门禁不假红。 -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
             <!-- ADR-0059：Nacos 服务发现 -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>

@@ -23,7 +23,7 @@
 - [x] **T8** 改 `payment-service/src/main/java/com/payment/payment/application/PaymentResultProcessor.java:188`：由传 `"PAYMENT:" + paymentNo` 改为只传 **`paymentNo`**（去掉手工前缀）[FR-220]
 - [x] **T9** 确认 `payment-service/src/main/java/com/payment/payment/infra/client/FeignLedgerPostingGateway.java:42` **独占**前缀拼接且**未被修改**——**前缀只留一处** [FR-220][FR-222]
 - [x] **T10** 加强 `payment-service/src/test/java/com/payment/payment/application/PaymentCaptureLedgerPostingTest.java` 与 `PaymentApplicationServiceTest.java`：断言两条路径产生**同一**键 `PAYMENT:{paymentNo}` [FR-221][SC-B1-01][SC-B1-02]
-- [ ] **T11** 补测试：同一支付单**先同步成功再收到回调** ⇒ 账本分录数 **= 1**（不是 2）✅ **已交付**（`PaymentCaptureLedgerPostingTest#syncSuccessThenCallbackProducesExactlyOnePosting` + `#bothSuccessPathsProduceTheSamePostingKey`）；并发两条路径（🔴 **需 Testcontainers-MySQL 真库**，见 T131，本 Feature 先写用例 ⇒ **并发半部按裁决延后**）⇒ 唯一约束吸收，分录数 **= 1** [FR-223][SC-B1-03][SC-B1-04]
+- [x] **T11** 补测试：同一支付单**先同步成功再收到回调** ⇒ 账本分录数 **= 1**（不是 2）✅ **已交付**（`PaymentCaptureLedgerPostingTest#syncSuccessThenCallbackProducesExactlyOnePosting` + `#bothSuccessPathsProduceTheSamePostingKey`）；并发两条路径 ⇒ 唯一约束吸收，分录数 **= 1** ✅ **已交付**（`LedgerPostingConcurrencyTest`，Testcontainers-MySQL **真库实测**：8 线程并发同键 INSERT ⇒ 恰好 1 个赢家、7 个被 `uk_postings_idempotency_key` 吸收、落库 1 条；DDL 直接读 `09-ledger-schema.sql` 并断言约束存在；无 Docker 守护进程时整体 **skip 不 fail**）[FR-223][SC-B1-03][SC-B1-04]
 
 ## Phase 2 —— B7 在途守卫区分「重放 / 重试」（**order-service，🟠**）
 
