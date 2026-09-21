@@ -1521,9 +1521,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (topic, group) (redis_streams_pending_messages)",
+          "expr": "sum by (stream, group) (redis_stream_group_messages_pending)",
           "refId": "A",
-          "legendFormat": "{{topic}} / {{group}}"
+          "legendFormat": "{{stream}} / {{group}}"
         }
       ],
       "options": {
@@ -1563,9 +1563,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (topic, group) (redis_streams_entries_processed_total)",
+          "expr": "sum by (stream, group) (redis_stream_group_entries_read)",
           "refId": "A",
-          "legendFormat": "{{topic}} / {{group}}"
+          "legendFormat": "{{stream}} / {{group}}"
         }
       ],
       "options": {
