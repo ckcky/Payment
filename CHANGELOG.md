@@ -6,6 +6,41 @@
 
 ---
 
+## [2026-09-21] docs：032~035 设计轮（对账真实化 / 测试基础设施 / 可靠性 / 可观测 SLO，纯文档不动代码）
+
+**性质**：Design-only（docs-only）。**未改任何 Java 业务代码、未改业务逻辑、未建 migration、未加测试、未引入运行时依赖**；
+031 仍在负责人处待裁决，本轮**未触碰其 162 个工作区改动**。
+
+- **新 Spec（四份，v1.0 均为「🟡 设计完成，待 Architecture Review」）**：
+  [`032-reconciliation-real-statement`](docs/specs/stage-05-channel-and-finance-deepening/032-reconciliation-real-statement/spec.md)（497 行）/
+  [`033-test-infrastructure`](docs/specs/stage-05-channel-and-finance-deepening/033-test-infrastructure/spec.md)（536 行）/
+  [`034-reliability-hardening`](docs/specs/stage-05-channel-and-finance-deepening/034-reliability-hardening/spec.md)（480 行）/
+  [`035-observability-slo`](docs/specs/stage-05-channel-and-finance-deepening/035-observability-slo/spec.md)（467 行）。
+- **跨 Feature 收口**：[`design-summary.md`](docs/specs/stage-05-channel-and-finance-deepening/design-summary.md) ——
+  统一术语、依赖图（含对 stage-design §9.2 的 4 处修正）、Domain Ownership / Source of Truth / 幂等边界 /
+  恢复边界 / 观测边界 / 测试边界六张表、禁止耦合清单 P-1~P-9、实现顺序六道门、阶段级 Out of Scope、
+  7 项 Architecture Review 清单（下挂 27 项逐条裁决）、本轮明确未做的事。
+- **新 ADR（四条，均 🟡 Proposed，未 Accepted 前不得实现）**：
+  [ADR-0080](docs/adr/0080-reconciliation-statement-and-fund-facts.md)（账单导入对象 + `(merchantId, referenceType, reference)` 三级匹配 +
+  复用 5 态差异生命周期 + 032 为 `CHANNEL_SETTLEMENT`/`CHANNEL_FEE` 唯一产生方 + 结算口径先于差异策略化）、
+  [ADR-0081](docs/adr/0081-test-carrier-and-schema-replayability.md)（Testcontainers 放宽至**仅测试作用域** + schema 双路径重放门禁 +
+  RPC 边允许清单；**变更 Constitution §Engineering.3**）、
+  [ADR-0082](docs/adr/0082-failure-recovery-ownership-and-compensation.md)（恢复三不变式 R-1/R-2/R-3 + 调用方侧 `pending_postings`
+  一张表复用形状 + C-19 后置动作同事务 + **移除** Resilience4j + refund 侧对称有界收敛）、
+  [ADR-0083](docs/adr/0083-observability-baseline-slo-and-cardinality.md)（4 SLO 以 Recording Rule 表达 + 高基数政策 HC-1~HC-4
+  + 报文/密钥不入日志取**路径排除**（不推翻 ADR-0027）+ **否决 APM**、保留自研 traceId）。
+- **以代码为事实来源的三处基线校正**（写设计前先核对，纠正了 stage-design 的低估）：
+  ① Testcontainers **已在用**（`LedgerPostingConcurrencyTest`，030/T11）⇒ 033 是「把一次性手搓泛化为基座」而非首次引入，
+  真实缺口是 **CI 从不重放增量迁移脚本**（`.github/workflows/e2e.yml:76-89`）与 **27 处 `CREATE TABLE IF NOT EXISTS` 对存量表不补列**；
+  ② UNKNOWN 侧**已有**有界查询 + critical 告警 + 双侧人工 resolve ⇒ 034 的真实缺口是**五个「有指标无出口」的失败面**
+  （记账 RPC、DLQ 只写不读、refund 域零调度器、卡 `REQUESTED`、C-19 崩溃窗口）；
+  ③ 93 个业务指标标签键**恰好**只有 16 种低基数维度，但**无任何条文或检查守住** ⇒ 035 的高基数政策是「守增量」不是「追历史」，既有指标零改名。
+- **登记治理收口**：ADR README 索引 + 编号速查 + 水位推进至 **ADR-0084**；specs README 注册 032~035 与 design-summary；
+  roadmap 新增「stage-05 设计状态」条（**明确标为设计完成待评审，不得标 Implemented**）；
+  stage-design §9.2 补 4 处依赖修正与两条硬顺序约束；traceability §3 标注五条 ADR **L0 尚无落点**。
+- **本轮显式不做**：未运行 demo/E2E 验证设计可行性、未复核 031 工作区代码与其设计的一致性、
+  未验证 SLO 目标值可达性（全部标 `[目标]`）、未做工作量与排期估算（tasks.md 属 Spec Kit 下一阶段）。
+
 ## [2026-09-21] docs：031 Ledger / Accounting 地基收敛（审计 → Spec → ADR-0077~0079，纯文档不动代码）
 
 **性质**：架构审计与设计收敛（docs-only）。**未改任何业务代码、未建 migration、未实现功能**。

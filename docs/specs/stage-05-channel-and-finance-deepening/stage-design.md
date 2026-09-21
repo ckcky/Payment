@@ -672,14 +672,24 @@ AlipayChannelAdapter.charge(req):
 | 0 | **文档收口**（非 Feature，先做） | 修 §1.4 的 D-1~D-6 六项漂移；ADR-0075/0076 登记进 README 两张表 + traceability | — | docs-only，可直推 master |
 | 1 | `030-channel-contract-sandbox-callback` | **渠道契约实现轮**：统一契约 + 类型化凭证 + 染色 + 模态落库 + 支付宝沙箱适配器 + notify 端点 + demo 开关 | ADR-0075/0076 ✅ **已转 Accepted** | 代码（**Spec + Plan 已就绪**） |
 | 2 | `031-ledger-accounting-foundation` | §4.2 **G0（Event + Rule + 两级科目）**+ G1（余额投影）+ G2（期间与试算平衡）+ G3（待记账台账，含 M1/H3 收编） | 030 完成；**ADR-0077~0079 待裁决**（H6/H12/D-1~D-7） | 代码 + **Schema 变更**（**Spec v1.0 已就绪**，[spec](031-ledger-accounting-foundation/spec.md)） |
-| 3 | `032-reconciliation-real-statement` | §5 R1（真实账单来源）+ R2（**N1 商户维度**，其中 `merchantId` 事实链前置已随 031 D-4 落）+ R4（差异处置策略化） | 涉及 `common-dto` 变更 | 代码 + **跨服务 API 变更** |
-| 4 | `033-test-infrastructure` | §8 T1（Testcontainers 渐进）+ T2（迁移可重放门禁）+ T3（ArchUnit RPC 环） | 无（**应与 031/032 并行**——其真库并发断言依赖本项） | 工程 |
-| 5 | `034-reliability-hardening` | §6 B1（熔断裁决）+ B2（UNKNOWN 分级）+ B3（幂等键治理）+ B4（后置失败台账，复用 031 G3 模式） | B1 须先裁决 | 代码 + **行为变更** |
-| 6 | `035-observability-slo` | §7 O1（SLO 落地）+ O2（告警补齐）+ O3（密钥不入日志约束） | 依赖 O1 目标值确认 | 配置 + 少量代码 |
+| 3 | `032-reconciliation-real-statement` | §5 R1（真实账单来源）+ R2（**N1 商户维度**，其中 `merchantId` 事实链前置已随 031 D-4 落）+ R4（差异处置策略化） | 031（事件契约 / 期间 / 科目）；涉及 `common-dto` 变更 | 代码 + **跨服务 API 变更**（**Spec v1.0 已就绪**，[spec](032-reconciliation-real-statement/spec.md)；决策 [ADR-0080](../../adr/0080-reconciliation-statement-and-fund-facts.md) Proposed） |
+| 4 | `033-test-infrastructure` | §8 T1（Testcontainers 渐进）+ T2（迁移可重放门禁）+ T3（ArchUnit RPC 环） | 无（**应与 031/032 并行**——其真库并发断言依赖本项） | 工程（**Spec v1.0 已就绪**，[spec](033-test-infrastructure/spec.md)；决策 [ADR-0081](../../adr/0081-test-carrier-and-schema-replayability.md) Proposed） |
+| 5 | `034-reliability-hardening` | §6 B1（熔断裁决）+ B2（UNKNOWN 分级）+ B3（幂等键治理）+ B4（后置失败台账，复用 031 G3 模式） | 031 G3 台账设计 + 032 差异闭环；B1 须先裁决 | 代码 + **行为变更**（**Spec v1.0 已就绪**，[spec](034-reliability-hardening/spec.md)；决策 [ADR-0082](../../adr/0082-failure-recovery-ownership-and-compensation.md) Proposed） |
+| 6 | `035-observability-slo` | §7 O1（SLO 落地）+ O2（告警补齐）+ O3（密钥不入日志约束） | 依赖 031/032/034 产生的新指标与 O1 目标值确认 | 配置 + 少量代码（**Spec v1.0 已就绪**，[spec](035-observability-slo/spec.md)；决策 [ADR-0083](../../adr/0083-observability-baseline-slo-and-cardinality.md) Proposed） |
 
 **顺序理由**：0 是「把账先对平」；1 是唯一「不做就永远只是 mock」的方向，且设计已定稿；
 2/3 在资金纵深上互为支撑；4 是 2/3 的**质量前置**（不做 Testcontainers，2/3 的真库并发就测不到）；
 5 含行为变更，须单独裁决；6 依赖前序产生的新指标。
+
+> **✅ 2026-09-21 设计轮更新**：`032`~`035` 的 Feature spec 已全部落文（本轮 **design-only**，未实现）。
+> 本表是**提案期的粗粒度建议**，定稿后的依赖关系以 [design-summary.md](design-summary.md) **§2 依赖图**为准；
+> 该节给出对本表 §9.2 的 **4 处修正**：① 031↔032 是**双向**依赖（031 §16 把 `CHANNEL_FEE` 产生方挂在 032）；
+> ② 033 与 031/032 并行成立，但 **033 的 L2b 载体必须早于 031 的实现验收**，否则 031 §10 的并发缺口继续挂着；
+> ③ 034 只**部分**依赖 031——034-A（C-19 事务）/ 034-C（refund 扫描）/ 034-E（DLQ 读与重放）/ 034-F（熔断移除）可提前；
+> ④ 035 亦只**部分**依赖前序——035-A（基数政策）与 A-07 告警用已有指标即可上线。
+> 另有两条**硬顺序约束**（design-summary §12）：034-A（C-19）MUST 早于 032 的 R4；032 内部「结算口径改造」MUST 先于「差异策略化」。
+> 本表 §9.3 的 H1~H10 由 design-summary **§14 的 7 项 Architecture Review 清单**收口，
+> 其下挂 **27 项逐条裁决**（031 的 D-1~D-7 + H-032-1~6 + H-033-1~5 + H-034-1~5 + H-035-1~4，是否合并为「门 0」一次裁决由负责人定节奏）。
 
 ### 9.3 与治理的关系：必须先由人类确认的清单
 
