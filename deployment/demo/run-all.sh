@@ -27,6 +27,13 @@ echo "  PaymentArch 演示总入口"
 echo "=================================================="
 bash "$HERE/reset.sh"
 bash "$HERE/scenario-happy-path.sh"
+# ⚠️ 审计批必须在产生「当日终态资金事实」的场景（refund/routing/unknown/mq）之前跑：
+# CERTIFICATE 核对读 ledgerPostings() 不分期间，当日其他场景的分录会成 ORPHAN_POSTING
+# 差异挂进审计批 ⇒ 关批门禁拒（2026-09-22 035 demo 实测；CI e2e 同序：audit 排第二）。
+bash "$HERE/scenario-audit.sh"
+# spec 029：Redis 事务消息通道（D1~D6；需 payment-redis 容器可访问）
+bash "$HERE/scenario-mq.sh"
+bash "$HERE/scenario-reconciliation.sh"
 # spec 028：渠道路由六场景（S1~S6；断言读 payment_attempts.channel_code 列）
 bash "$HERE/scenario-routing.sh"
 bash "$HERE/scenario-refund.sh"
@@ -34,11 +41,6 @@ bash "$HERE/scenario-refund.sh"
 bash "$HERE/restart-payment.sh" BUSINESS_UNKNOWN
 bash "$HERE/scenario-payment-unknown.sh"
 bash "$HERE/restart-payment.sh" SUCCESS
-bash "$HERE/scenario-reconciliation.sh"
-# spec 017：审计四核对 + 挂账调账闭环（故障注入幂等，依赖 3306 本地演示库）
-bash "$HERE/scenario-audit.sh"
-# spec 029：Redis 事务消息通道（D1~D6；需 payment-redis 容器可访问）
-bash "$HERE/scenario-mq.sh"
 
 echo ""
 info "✅ 全部演示场景通过（主链 / 渠道路由 / 退款 / UNKNOWN 收敛 / 每日对账 / 审计闭环 / 消息通道）"
