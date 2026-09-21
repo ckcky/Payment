@@ -125,7 +125,9 @@ public class MybatisRefundRepository implements RefundRepository {
                 entity.getUserId(), entity.getAmountMinor(), entity.getCurrencyCode(),
                 entity.getReason(), entity.getIdempotencyKey(), loadItems(entity.getRefundNo()),
                 entity.getTransactionRefundNo(), entity.getTransactionNo(),
-                RefundStatus.valueOf(entity.getStatus()), entity.getFailureReason(), entity.getVersion());
+                RefundStatus.valueOf(entity.getStatus()), entity.getFailureReason(), entity.getVersion(),
+                // spec 034 / T12：DB 维护的 updated_at 随聚合带出（UNKNOWN 年龄事实源，只读）
+                entity.getUpdatedAt() == null ? null : entity.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant());
     }
 
     private RefundEntity toEntity(Refund refund) {

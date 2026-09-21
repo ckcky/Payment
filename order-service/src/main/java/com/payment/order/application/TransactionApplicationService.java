@@ -167,6 +167,25 @@ public class TransactionApplicationService {
                 .sum();
     }
 
+    /**
+     * 搁浅退款单重放入口（spec 034 §7.3 F-5 / T13，供 {@code StrandedRefundOrderScanner} 调用）：
+     * 对「REQUESTED 且未获 payment 受理（pmrf=null）」的既有 TXRF，重放 {@code doCreateRefund}
+     * 的②重试分支——同号复用 + 重发 payment 命令，绝不新建第二张 TXRF。
+     *
+     * <p><b>不走 {@code createRefund} 受理入口</b>：那会重新做可退余额校验，而搁浅单本身
+     * 已计入在途占用，双算必然误拒；本入口不新增退款决策，只是重试一次已受理的命令——
+     * 资金上限仍由 payment 侧 {@code RefundPolicy} 累计校验把守（030「最后防线」口径）。
+     * 重放频次上限（≤2）与耗尽审计由扫描器负责。</p>
+     */
+    public RefundOrder retryStrandedRefund(RefundOrder stranded) {
+        Order order = orderRepository.findByOrderNo(stranded.getOrderNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                        "order not found for stranded refund: " + stranded.getOrderNo()));
+        metrics.counter("order.refund_stranded_replay", 1.0, "module", MODULE);
+        return doCreateRefund(order, stranded.getPaymentNo(), stranded.getAmountMinor(),
+                stranded.getReason(), "STRANDED_RETRY");
+    }
+
     /** surplus 处置（FR-004/FR-005）：记录多收事实并生成交易层退款单驱动退款（spec 019 双层单号）。 */
     private void surplusRefund(Order order, PaymentSucceededRequest request, String cause) {
         metrics.counter("order.surplus_payment", 1.0, "module", MODULE, "cause", cause);

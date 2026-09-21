@@ -82,3 +82,47 @@ groups:
         annotations:
           summary: "对账发现差异"
           description: "对账差异累计 {{ $value }} 条，需人工核对原始支付/退款事实。"
+
+      # ===== spec 034 / T15：可靠性加固四条（A-05 / A-06 / A-08 / A-09）=====
+
+      # A-05 台账积压（spec 034 §9）：pending_postings PENDING 行持续 > 0，
+      # 说明出站记账/通知补投不收敛（Ledger 或 order 持续不可达）
+      - alert: LedgerPostingPendingBacklog
+        expr: ledger_posting_pending{module="posting"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "出站失败台账积压"
+          description: "{{ $value }} 行台账 PENDING 超过 10 分钟未补投成功，需检查 Ledger/order 可用性。"
+
+      # A-06 DLQ 非空（spec 034 §10）：消费重试耗尽的消息落死信，> 0 即需人工查看/重放
+      - alert: MqDlqNonEmpty
+        expr: sum(mq_dlq_size) by (topic) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MQ 死信队列非空"
+          description: "topic {{ $labels.topic }} 有 {{ $value }} 条死信消息，需排查消费失败原因并决定重放。"
+
+      # A-08 UNKNOWN 超 24h（spec 034 §7.2 G7）：扫描期年龄分桶计数出现 gt_24h 桶
+      - alert: UnknownAgedOver24h
+        expr: increase(payment_unknown_age_total{module="payment",bucket="gt_24h"}[10m]) > 0
+            or increase(refund_unknown_age_total{module="refund",bucket="gt_24h"}[10m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "UNKNOWN 单龄超 24 小时"
+          description: "过去 10 分钟扫描发现跨期 UNKNOWN（支付/退款），对账兜底与关账门禁受影响，需人工介入。"
+
+      # A-09 台账补投耗尽（spec 034 §9）：ledger_posting_abandoned 出现即有行退出自动补投
+      - alert: LedgerPostingAbandoned
+        expr: increase(ledger_posting_abandoned_total{module="posting"}[10m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "台账补投耗尽置 ABANDONED"
+          description: "过去 10 分钟 {{ $value }} 行台账重试耗尽，需人工 POST /internal/*/pending-postings/{id}/replay。"

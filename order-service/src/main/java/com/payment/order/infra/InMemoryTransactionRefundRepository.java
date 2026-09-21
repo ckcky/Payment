@@ -23,6 +23,11 @@ public class InMemoryTransactionRefundRepository implements TransactionRefundRep
         if (refundOrder.getId() == null) {
             refundOrder.setId(idGen.incrementAndGet());
         }
+        // spec 034 / T13：内存实现的 updated_at 语义对齐 DB 列（首次落库起即有值；
+        // 已有值不覆盖——TT-7 以 rehydrate 注入回拨时间戳，保存不得洗掉）。
+        if (refundOrder.getUpdatedAt() == null) {
+            refundOrder.markPersistedAt(java.time.Instant.now());
+        }
         byId.put(refundOrder.getId(), refundOrder);
         byIdempotencyKey.put(refundOrder.getIdempotencyKey(), refundOrder);
         return refundOrder;
@@ -56,6 +61,14 @@ public class InMemoryTransactionRefundRepository implements TransactionRefundRep
     public List<RefundOrder> findByOrderNo(String orderNo) {
         return byId.values().stream()
                 .filter(r -> r.getOrderNo().equals(orderNo))
+                .toList();
+    }
+
+    @Override
+    public List<RefundOrder> findByStatus(com.payment.order.domain.RefundOrderStatus status) {
+        return byId.values().stream()
+                .filter(r -> r.getStatus() == status)
+                .sorted(java.util.Comparator.comparing(RefundOrder::getId))
                 .toList();
     }
 }

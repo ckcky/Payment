@@ -53,7 +53,9 @@ public class RefundResultProcessor {
         /** 渠道异步回调推送收敛（POST /internal/refunds/{refundNo}/channel-callback）。 */
         CHANNEL_CALLBACK,
         /** 人工裁定收敛（POST /internal/refunds/{refundNo}/resolve）。 */
-        RESOLVE
+        RESOLVE,
+        /** 渠道主动查询收敛（spec 034 §7.3 / T12：RefundUnknownQueryScheduler 权威答复，与 resolve 同构）。 */
+        CHANNEL_QUERY
     }
 
     private final RefundRepository refundRepository;
