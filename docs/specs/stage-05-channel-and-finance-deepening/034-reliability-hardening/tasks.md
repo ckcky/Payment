@@ -5,9 +5,9 @@
 
 ## 034-A：C-19 同事务化（方案 A）
 
-- ⬜ T1 `TransactionApplicationService` 注入 `TransactionTemplate`（构造器，对齐 OrderApplicationService 先例），把 `onRefundResult` 的「TXRF complete + `refunded_minor` 累加 + `order.applyRefund` + refund/order 两表 save」包进同一事务；`!firstTerminal` 提前返回、MQ 通知、审计保持事务外（成功后执行）
-- ⬜ T2 TT-1（L2b，order-service real-db）：`FaultHooks.killConnection` 注入「TXRF save 后、order save 前」崩溃窗口 → 重放回调 → 断言 TXRF 与 order `refunded_minor` 一致收敛；order-service pom 增 `deployment/test-infra` test 依赖
-- ⬜ T3 构建通过 + 提交 `fix(034): C-19 ...`
+- ✅ T1 `TransactionApplicationService` 注入 `TransactionTemplate`（构造器，对齐 OrderApplicationService 先例），把 `onRefundResult` 的「TXRF complete + `refunded_minor` 累加 + `order.applyRefund` + refund/order 两表 save」包进同一事务；`!firstTerminal` 提前返回、MQ 通知、审计保持事务外（成功后执行）
+- ✅ T2 TT-1（L2b，order-service real-db）：`FaultHooks.killConnection` 注入「TXRF save 后、order save 前」崩溃窗口 → 重放回调 → 断言 TXRF 与 order `refunded_minor` 一致收敛；order-service pom 增 `deployment/test-infra` test 依赖
+- ✅ T3 构建通过 + 提交 `fix(034): C-19 ...`
 
 ## 034-B：出站失败台账 pending_postings
 

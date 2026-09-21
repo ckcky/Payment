@@ -56,7 +56,8 @@ class TransactionCallbackConflictTest {
         return new TransactionApplicationService(orderRepository, transactionRepository,
                 new InMemoryTransactionRefundRepository(), orderLayer(client), paymentGateway,
                 fulfillmentGateway, client, new NoopBusinessMetrics(), new StructuredAuditLogger(),
-                com.payment.order.application.MqTestSupport.off());
+                com.payment.order.application.MqTestSupport.off(),
+                new com.payment.order.application.NoopTransactionManager());
     }
 
     private SuccessfulPurchaseScenarioTest.FakeCatalogClient clientWithSku() {
