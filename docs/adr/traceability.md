@@ -50,4 +50,6 @@
 
 ADR-0001（Spring Cloud 架构）、ADR-0003~0007（支付可靠性集合）、ADR-0008~0011（Ledger 设计集合）、ADR-0016~0017（退款模型/编排）、ADR-0022~0023（结算调整项/闸门）、ADR-0029~0033（分布式演进）、ADR-0034~0037（内部令牌，已不做）、ADR-0054~0058（核心资金正确性 / 入口与基础设施 / 性能基线，见 `docs/adr/0016~0018-*.md`）。
 
+**stage-05 设计轮（2026-09-21，🟡 Proposed，L0 尚无落点）**：ADR-0077~0079（spec 031）、ADR-0080（032）、ADR-0081（033）、ADR-0082（034）、ADR-0083（035）——**五条均只纪录于 ADR 文件与各自 spec**，`technical-solution.md` 与 `systems/*.md` **未体现**其任何 `【目标】`。这是刻意状态：本轮为 design-only，未裁决、未实现，故**不得**进入 L0 当前系统事实（见 [design-summary §15](../specs/stage-05-channel-and-finance-deepening/design-summary.md)）。裁决 Accepted 并实现后，再按本节惯例逐条上移到 §1 并补落点。
+
 > 迁移说明：本索引原为 `technical-solution.md` §9，2026-09-14 文档治理时移出，使技术方案只描述系统现状。
