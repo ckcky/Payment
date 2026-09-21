@@ -36,4 +36,21 @@ public final class MqTopics {
 
     private MqTopics() {
     }
+
+    /**
+     * topic 是否在已知清单内（spec 034 / T20）：DLQ 管理端点用它拒绝未知 topic——
+     * 否则一个 typo 的 replay 会把死信 XADD 到没人消费的 {@code mq:stream:{typo}}，
+     * 消息无声卡死。新增 topic 时把常量加入 {@link #ALL} 即自动纳入。
+     */
+    public static boolean isKnown(String topic) {
+        if (topic == null) {
+            return false;
+        }
+        for (String t : ALL) {
+            if (t.equals(topic)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

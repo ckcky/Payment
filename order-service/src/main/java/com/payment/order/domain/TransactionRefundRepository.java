@@ -20,4 +20,9 @@ public interface TransactionRefundRepository {
     List<RefundOrder> findByTransactionNo(String transactionNo);
 
     List<RefundOrder> findByOrderNo(String orderNo);
+
+    /**
+     * 按状态查询（spec 034 / T13：搁浅退款扫描器用）。实现按 id 升序返回（确定性扫描顺序）。
+     */
+    List<RefundOrder> findByStatus(RefundOrderStatus status);
 }

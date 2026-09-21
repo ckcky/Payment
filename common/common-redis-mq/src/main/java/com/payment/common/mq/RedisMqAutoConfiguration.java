@@ -2,11 +2,14 @@ package com.payment.common.mq;
 
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
+import com.payment.common.mq.dlq.MqDlqConfiguration;
+import com.payment.common.mq.dlq.MqDlqAdminController;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -28,6 +31,7 @@ import java.util.List;
 @AutoConfiguration
 @EnableConfigurationProperties(MqProperties.class)
 @ConditionalOnProperty(prefix = "payment.mq", name = "enabled", havingValue = "true", matchIfMissing = true)
+@Import({MqDlqConfiguration.class, MqDlqAdminController.class})
 public class RedisMqAutoConfiguration {
 
     @Bean

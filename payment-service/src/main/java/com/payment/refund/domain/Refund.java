@@ -41,6 +41,12 @@ public class Refund {
     private final List<RefundItem> items;
     private RefundStatus status = RefundStatus.REQUESTED;
     private String failureReason;
+    /**
+     * DB 维护的 {@code updated_at}（只读观测属性，spec 034 / T12）：退款进入 UNKNOWN 后
+     * 无任何写路径触碰该行，列值稳定——以此为「UNKNOWN 年龄」事实源（退避窗口推导），
+     * 不新增列（spec 034 §7.2 红线）。内存新建值为 null（尚未持久化），调用方须容忍。
+     */
+    private java.time.Instant updatedAt;
 
     public Refund(String orderNo, String paymentNo, String userId, long amountMinor,
                   String currencyCode, String reason, String idempotencyKey, List<RefundItem> items) {
@@ -83,6 +89,18 @@ public class Refund {
                                    String idempotencyKey, List<RefundItem> items,
                                    String transactionRefundNo, String transactionNo,
                                    RefundStatus status, String failureReason, Integer version) {
+        return rehydrate(id, refundNo, orderNo, paymentNo, userId, amountMinor, currencyCode,
+                reason, idempotencyKey, items, transactionRefundNo, transactionNo,
+                status, failureReason, version, null);
+    }
+
+    /** 持久化重建（spec 034 / T12 扩展）：带 DB 维护的 updated_at（UNKNOWN 年龄事实源，只读）。 */
+    public static Refund rehydrate(Long id, String refundNo, String orderNo, String paymentNo, String userId,
+                                   long amountMinor, String currencyCode, String reason,
+                                   String idempotencyKey, List<RefundItem> items,
+                                   String transactionRefundNo, String transactionNo,
+                                   RefundStatus status, String failureReason, Integer version,
+                                   java.time.Instant updatedAt) {
         Refund refund = new Refund(orderNo, paymentNo, userId, amountMinor, currencyCode,
                 reason, idempotencyKey, items, transactionRefundNo, transactionNo);
         refund.id = id;
@@ -90,6 +108,7 @@ public class Refund {
         refund.status = status;
         refund.failureReason = failureReason;
         refund.version = version;
+        refund.updatedAt = updatedAt;
         return refund;
     }
 
@@ -268,5 +287,20 @@ public class Refund {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    /** DB 维护的 updated_at（只读观测属性；内存新建为 null）。 */
+    public java.time.Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    /**
+     * 仓储落库时刻回填（spec 034 / T12：内存仓储用；MyBatis 路径由实体列映射，
+     * 不经此方法）。只写空值——已持久化的行时间戳不因重放保存而前移。
+     */
+    public void markPersistedAt(java.time.Instant persistedAt) {
+        if (this.updatedAt == null) {
+            this.updatedAt = persistedAt;
+        }
     }
 }

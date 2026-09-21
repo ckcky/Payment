@@ -42,6 +42,9 @@ public class ChannelQueryService {
 
     private static final String MODULE = "payment";
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(ChannelQueryService.class);
+
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository attemptRepository;
     private final ChannelRegistry channelRegistry;
@@ -86,36 +89,87 @@ public class ChannelQueryService {
     /** 兼容路径的渠道兜底（仅当 attempt 仓储为 null 时使用，即既有单测场景）。 */
     private PaymentChannel fallbackChannel;
 
+    /**
+     * 毒丸一次性告警守卫（spec 034 / 诊断②）：无 recorded attempt 的脏数据单每次扫描都会
+     * 在 resolveRecordedTarget 抛错——修复前会让整轮 abort 且每 15s 刷一次栈；
+     * 现单条隔离，同一单只 warn 一次（进程内去重，计数器照常累计）。
+     */
+    private final java.util.Map<String, Boolean> poisonPillWarned = new java.util.concurrent.ConcurrentHashMap<>();
+
     /** 主动查询一轮：返回本轮收敛为终态的支付数量。 */
     public int queryRound() {
         int converged = 0;
         for (Payment payment : paymentRepository.findByStatus(PaymentStatus.UNKNOWN)) {
+            // spec 034 / T14：扫描期 UNKNOWN 年龄分桶观测（label 仅 bucket+module，无单号）
+            if (payment.getEnteredUnknownAt() != null) {
+                metrics.counter("payment_unknown_age", 1.0, "module", MODULE,
+                        "bucket", bucketOf(java.time.Duration.between(
+                                payment.getEnteredUnknownAt(), java.time.Instant.now())));
+            }
             if (payment.getQueryAttempts() >= config.getQueryMaxAttempts()) {
                 continue; // 已达上限：停止自动查询，转人工/对账（FR-003 / spec 场景3）
             }
-            RecordedTarget target = resolveRecordedTarget(payment);
-            payment.recordQueryAttempt();
-            paymentRepository.save(payment);
-            // spec 030 / FR-270（T60）：查询必须带**渠道交易号**（attempt.channel_reference）。
-            // 修复前传的是平台侧 transactionId——拿平台号去问渠道，渠道定位不到原交易，
-            // 主动查询因此永远收敛不了（C-12 / S21）。
-            QueryStatusRequest queryRequest = new QueryStatusRequest(payment.getPaymentNo(),
-                    payment.getTransactionId(), payment.getIdempotencyKey(), target.channelReference());
-            // spec 030 / FR-271（T61）：反向路径没有入站请求，ThreadLocal 为空——
-            // 必须用**落库的模态**包裹渠道调用，否则沙箱单会退化成 mock 查询。
-            ChannelResult result = DyeContext.callWith(target.mode(), () -> {
-                metrics.counter("payment.query", 1.0, "module", MODULE);
-                return target.channel().queryStatus(queryRequest);
-            });
-            if (result.status() != ChannelResult.Status.UNKNOWN) {
-                if (resolution.resolve(String.valueOf(payment.getId()), result)) {
+            try {
+                if (queryOnce(payment)) {
                     converged++;
                 }
-            } else if (payment.getQueryAttempts() >= config.getQueryMaxAttempts()) {
-                metrics.counter("payment.query_exhausted", 1.0, "module", MODULE);
+            } catch (RuntimeException ex) {
+                // spec 034 / 诊断②：单条毒丸不中断整轮、不再每 15s 刷栈——一次性 warn + 计数
+                metrics.counter("payment.query_poison_pill", 1.0, "module", MODULE);
+                if (poisonPillWarned.put(payment.getPaymentNo(), Boolean.TRUE) == null) {
+                    log.warn("主动查询单条毒丸跳过（每单仅告警一次）paymentNo={} reason={}",
+                            payment.getPaymentNo(), ex.getMessage());
+                }
             }
         }
         return converged;
+    }
+
+    /**
+     * 单笔 UNKNOWN 支付的一次主动查询（spec 034 / 诊断② 从 queryRound 抽出）：
+     * 记录尝试、按落库渠道查询、非 UNKNOWN 结果交收敛服务。
+     *
+     * @return true = 本轮收敛为终态
+     */
+    private boolean queryOnce(Payment payment) {
+        RecordedTarget target = resolveRecordedTarget(payment);
+        payment.recordQueryAttempt();
+        paymentRepository.save(payment);
+        // spec 030 / FR-270（T60）：查询必须带**渠道交易号**（attempt.channel_reference）。
+        // 修复前传的是平台侧 transactionId——拿平台号去问渠道，渠道定位不到原交易，
+        // 主动查询因此永远收敛不了（C-12 / S21）。
+        QueryStatusRequest queryRequest = new QueryStatusRequest(payment.getPaymentNo(),
+                payment.getTransactionId(), payment.getIdempotencyKey(), target.channelReference());
+        // spec 030 / FR-271（T61）：反向路径没有入站请求，ThreadLocal 为空——
+        // 必须用**落库的模态**包裹渠道调用，否则沙箱单会退化成 mock 查询。
+        ChannelResult result = DyeContext.callWith(target.mode(), () -> {
+            metrics.counter("payment.query", 1.0, "module", MODULE);
+            return target.channel().queryStatus(queryRequest);
+        });
+        if (result.status() != ChannelResult.Status.UNKNOWN) {
+            return resolution.resolve(String.valueOf(payment.getId()), result);
+        }
+        if (payment.getQueryAttempts() >= config.getQueryMaxAttempts()) {
+            metrics.counter("payment.query_exhausted", 1.0, "module", MODULE);
+        }
+        return false;
+    }
+
+    /** UNKNOWN 年龄分桶（spec 034 §7.2 / T14 目录）：0_5m / 5_30m / 30m_24h / gt_24h。 */
+    public static String bucketOf(java.time.Duration age) {
+        if (age.isNegative()) {
+            age = java.time.Duration.ZERO; // 时钟回拨防御
+        }
+        if (age.compareTo(java.time.Duration.ofMinutes(5)) < 0) {
+            return "0_5m";
+        }
+        if (age.compareTo(java.time.Duration.ofMinutes(30)) < 0) {
+            return "5_30m";
+        }
+        if (age.compareTo(java.time.Duration.ofHours(24)) < 0) {
+            return "30m_24h";
+        }
+        return "gt_24h";
     }
 
     /**

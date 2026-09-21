@@ -57,7 +57,8 @@ class TransactionRefundTest {
         return new TransactionApplicationService(orderRepository, transactionRepository, refundRepository,
                 orderLayer(client), paymentGateway, fulfillmentGateway, client,
                 new NoopBusinessMetrics(), new StructuredAuditLogger(),
-                com.payment.order.application.MqTestSupport.off());
+                com.payment.order.application.MqTestSupport.off(),
+                new com.payment.order.application.NoopTransactionManager());
     }
 
     /** 已支付订单（SKU-A x2 = 200 分），返回 orderNo。 */

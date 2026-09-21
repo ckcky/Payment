@@ -76,11 +76,22 @@ public class MybatisTransactionRefundRepository implements TransactionRefundRepo
                 .stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public List<RefundOrder> findByStatus(RefundOrderStatus status) {
+        return mapper.selectList(Wrappers.<TransactionRefundEntity>lambdaQuery()
+                        .eq(TransactionRefundEntity::getStatus, status.name())
+                        .orderByAsc(TransactionRefundEntity::getId))
+                .stream().map(this::toDomain).toList();
+    }
+
     private RefundOrder toDomain(TransactionRefundEntity entity) {
         RefundOrder refundOrder = RefundOrder.rehydrate(entity.getId(), entity.getRefundNo(), entity.getPaymentRefundNo(),
                 entity.getTransactionNo(), entity.getOrderNo(), entity.getPaymentNo(), entity.getUserId(),
                 entity.getAmountMinor(), entity.getCurrencyCode(),
-                RefundOrderStatus.valueOf(entity.getStatus()), entity.getReason(), entity.getVersion());
+                RefundOrderStatus.valueOf(entity.getStatus()), entity.getReason(), entity.getVersion(),
+                // spec 034 / T13：DB 维护的 updated_at 随聚合带出（搁浅判定时间事实源，只读）
+                entity.getUpdatedAt() == null ? null
+                        : entity.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant());
         refundOrder.setFailureReason(entity.getFailureReason());
         return refundOrder;
     }

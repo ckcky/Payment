@@ -34,7 +34,7 @@ import org.springframework.stereotype.Component;
  * 但排序降级（排在所有 UP 之后）；显式指定 {@code DOWN} → {@code 409 CHANNEL_UNAVAILABLE}。</p>
  *
  * <p><b>硬约束</b>：INV-3 确定性（无随机数/时间/计数器，FR-021）；FR-022 调用失败后不改选；
- * FR-023 选路发生在建单之前；FR-034 尾注不读 CircuitBreaker 状态。</p>
+ * FR-023 选路发生在建单之前；FR-034 尾注不读出站弹性组件状态（034-F 起出站无熔断器）。</p>
  */
 @Component
 public class ConfiguredChannelRouter implements ChannelRouter {

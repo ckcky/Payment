@@ -39,6 +39,12 @@ public class RefundOrder {
     private String failureReason;
     /** 幂等键（=TXRF，uk_transaction_refunds_idempotency_key）。 */
     private String idempotencyKey;
+    /**
+     * DB 维护的 {@code updated_at}（只读观测属性，spec 034 / T13）：搁浅判定（
+     * 「最后写触碰」距今超阈值且仍 REQUESTED 未受理）的时间事实源，不新增列。
+     * 内存新建值为 null（尚未持久化），调用方须容忍。
+     */
+    private java.time.Instant updatedAt;
 
     public RefundOrder(String transactionNo, String orderNo, String paymentNo, String userId,
                        long amountMinor, String currencyCode, String reason) {
@@ -62,6 +68,15 @@ public class RefundOrder {
                                         String orderNo, String paymentNo, String userId, long amountMinor,
                                         String currencyCode, RefundOrderStatus status, String reason,
                                         Integer version) {
+        return rehydrate(id, refundNo, paymentRefundNo, transactionNo, orderNo, paymentNo, userId,
+                amountMinor, currencyCode, status, reason, version, null);
+    }
+
+    /** 持久化重建（spec 034 / T13 扩展）：带 DB 维护的 updated_at（搁浅判定时间事实源，只读）。 */
+    public static RefundOrder rehydrate(Long id, String refundNo, String paymentRefundNo, String transactionNo,
+                                        String orderNo, String paymentNo, String userId, long amountMinor,
+                                        String currencyCode, RefundOrderStatus status, String reason,
+                                        Integer version, java.time.Instant updatedAt) {
         RefundOrder r = new RefundOrder(transactionNo, orderNo, paymentNo, userId,
                 amountMinor, currencyCode, reason);
         r.id = id;
@@ -70,7 +85,23 @@ public class RefundOrder {
         r.paymentRefundNo = paymentRefundNo;
         r.status = status;
         r.version = version;
+        r.updatedAt = updatedAt;
         return r;
+    }
+
+    /** DB 维护的 updated_at（只读观测属性；内存新建为 null）。 */
+    public java.time.Instant getUpdatedAt() {
+        return updatedAt;
+    }
+
+    /**
+     * 仓储落库时刻回填（spec 034 / T13：内存仓储用；MyBatis 路径由实体列映射，
+     * 不经此方法）。只写空值——已持久化的行时间戳不因重放保存而前移。
+     */
+    public void markPersistedAt(java.time.Instant persistedAt) {
+        if (this.updatedAt == null) {
+            this.updatedAt = persistedAt;
+        }
     }
 
     /** payment 受理成功：回填 PMRF（双号互记）并推进到 PROCESSING。REQUESTED 之外的状态不适用。 */

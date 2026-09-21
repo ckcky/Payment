@@ -68,6 +68,11 @@ public class InMemoryRefundRepository implements RefundRepository {
         if (refund.getId() == null) {
             refund.setId(idGen.incrementAndGet());
         }
+        // spec 034 / T12：内存实现的 updated_at 语义对齐 DB 列（DB 为 ON UPDATE 维护，
+        // 首次落库起即有值；已有值不覆盖——幂等重放保留原始时间戳，UNKNOWN 年龄不失真）。
+        if (refund.getUpdatedAt() == null) {
+            refund.markPersistedAt(java.time.Instant.now());
+        }
         byId.put(refund.getId(), refund);
         return refund;
     }

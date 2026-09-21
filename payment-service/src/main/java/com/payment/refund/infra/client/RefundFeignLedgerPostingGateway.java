@@ -6,6 +6,8 @@ import com.payment.common.dto.rpc.AccountingEventResponse;
 import com.payment.common.dto.rpc.AccountingEventType;
 import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.refund.application.LedgerPostingGateway;
+import com.payment.posting.application.PostingEventTypes;
+import com.payment.posting.application.PostingPendingRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -31,10 +33,14 @@ public class RefundFeignLedgerPostingGateway implements LedgerPostingGateway {
 
     private final LedgerFeignClient ledgerClient;
     private final BusinessMetrics metrics;
+    /** spec 034 / T7：失败落台账（补偿辅助），成功路径零改动。 */
+    private final PostingPendingRecorder pendingRecorder;
 
-    public RefundFeignLedgerPostingGateway(LedgerFeignClient ledgerClient, BusinessMetrics metrics) {
+    public RefundFeignLedgerPostingGateway(LedgerFeignClient ledgerClient, BusinessMetrics metrics,
+                                           PostingPendingRecorder pendingRecorder) {
         this.ledgerClient = ledgerClient;
         this.metrics = metrics;
+        this.pendingRecorder = pendingRecorder;
     }
 
     @Override
@@ -56,8 +62,12 @@ public class RefundFeignLedgerPostingGateway implements LedgerPostingGateway {
                     facts.refundNo(), facts.merchantId(), facts.channelCode(),
                     response.postingId(), response.entries().size());
         } catch (RuntimeException ex) {
-            // 记账失败不回滚退款成功事实；记录待记账，交由重试/对账兜底（ADR-0018）
+            // 记账失败不回滚退款成功事实；登记台账（退避补投）+ 对账兜底（ADR-0018，spec 034 §9）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
+            pendingRecorder.recordFailure(PostingEventTypes.REFUND,
+                    AccountingSourceType.REFUND.name(), facts.refundNo(),
+                    AccountingEventType.REFUND.name() + ":" + facts.refundNo(),
+                    request, ex.getMessage());
             log.error("退款记账失败，进入待记账兜底：refundNo={} reason={}",
                     facts.refundNo(), ex.getMessage());
         }

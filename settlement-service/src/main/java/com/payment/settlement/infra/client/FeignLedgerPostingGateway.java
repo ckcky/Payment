@@ -6,6 +6,8 @@ import com.payment.common.dto.rpc.AccountingEventResponse;
 import com.payment.common.dto.rpc.AccountingEventType;
 import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.settlement.application.LedgerPostingGateway;
+import com.payment.settlement.posting.application.PostingEventTypes;
+import com.payment.settlement.posting.application.PostingPendingRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,10 +30,13 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
 
     private final LedgerFeignClient ledgerClient;
     private final BusinessMetrics metrics;
+    private final PostingPendingRecorder pendingRecorder;
 
-    public FeignLedgerPostingGateway(LedgerFeignClient ledgerClient, BusinessMetrics metrics) {
+    public FeignLedgerPostingGateway(LedgerFeignClient ledgerClient, BusinessMetrics metrics,
+                                     PostingPendingRecorder pendingRecorder) {
         this.ledgerClient = ledgerClient;
         this.metrics = metrics;
+        this.pendingRecorder = pendingRecorder;
     }
 
     @Override
@@ -50,6 +55,12 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
         } catch (RuntimeException ex) {
             // 记账失败不回滚结算成功事实；记录待记账，交由重试/对账兜底（ADR-0023）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
+            // 出站失败台账（spec 034 §9.1）：登记原请求载荷，交由 PostingRetryScheduler 退避补投；
+            // 登记自身失败不抛（R-1：结算成功事实永不因台账写入失败回滚），对账 MISSING_POSTING 兜底
+            pendingRecorder.recordFailure(PostingEventTypes.MERCHANT_SETTLEMENT,
+                    AccountingSourceType.SETTLEMENT.name(), facts.batchNo(),
+                    AccountingEventType.MERCHANT_SETTLEMENT.name() + ":" + facts.batchNo(),
+                    request, ex.getMessage());
             log.error("结算记账失败，进入待记账兜底：batchNo={} reason={}", facts.batchNo(), ex.getMessage());
         }
     }

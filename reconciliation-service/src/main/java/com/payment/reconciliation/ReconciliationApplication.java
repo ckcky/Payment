@@ -9,7 +9,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableFeignClients
 @EnableScheduling
-@MapperScan({"com.payment.reconciliation.infra.persistence", "com.payment.reconciliation.audit.infra"})
+@MapperScan({"com.payment.reconciliation.infra.persistence", "com.payment.reconciliation.audit.infra",
+        "com.payment.reconciliation.posting.infra.persistence"})
 public class ReconciliationApplication {
 
     public static void main(String[] args) {

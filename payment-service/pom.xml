@@ -48,10 +48,9 @@
             <groupId>io.github.openfeign</groupId>
             <artifactId>feign-micrometer</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
-        </dependency>
+        <!-- spec 034-F / H-034-1：Resilience4j 已移除——零注解零实例配置，唯一作用是
+             给 Feign 异常包一层包装；真实弹性由 Feign Retryer（幂等只读 GET）+ 应用层
+             重试/查询政策 + MQ 自有退避承担（spec 034 §1.4）。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -90,6 +89,14 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- spec 034 / TT-2~4：真库级台账性质验证（033 基座：容器/DDL 装配由基座承接，
+             real-db 用例按基座契约无 Docker 时整体 skip）。 -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>test-infra</artifactId>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
