@@ -199,38 +199,105 @@ RSA2 验签（spec 030）。因此：
 **排障**：notify 被拒看 `payment.notify_rejected{reason}` 指标与审计 `notify.rejected`（三段式校验：
 验签 → 渠道引用 → 金额/币种，任一不过即**不推进状态**）。
 
-## 5. 关键指标
-| 指标 | 含义 | 关注点 |
-| --- | --- | --- |
-| `payment.initiated` | 支付单创建 | 与订单创建量对比，突降说明下单链路异常 |
-| `payment.timeout` | 超时判定（超时后转 UNKNOWN） | 持续升高说明渠道不稳定，需人工收敛 |
-| `payment.retry` / `payment.retry_exhausted` | 重试 / 重试达上限 | `retry_exhausted` 出现即转主动查询，持续出现说明渠道不可用 |
-| `payment.query` / `payment.query_exhausted` | 渠道主动查询 / 查询达上限 | `query_exhausted` 出现 = 无法自动收敛，必须人工介入 |
-| `payment.unknown.duration`（timer） | UNKNOWN 收敛耗时 | 只反映「已收敛的那些」的耗时，**不能**用于统计 UNKNOWN 存量 |
-| `payment.duplicate` / `payment.duplicate_callback` | 幂等命中 | 突增可能是上游重试风暴 |
-| `payment.order_notify_failed` | 通知订单失败（多为 RPC 抖动） | 事实不回滚，由对账兜底 |
-| `payment.order_illegal_state_rejected` | 支付成功但订单以非法前态拒收 | **资金风险信号**：款已收、订单不认账，需人工核对（已写 `FINANCIAL_AUDIT`） |
-| `payment_routing_total` | 路由决策（`result ∈ {explicit, explicit_disabled, routed, no_available_channel, unavailable_explicit}`；`routed` 另带 `routed` 标签＝渠道码） | `no_available_channel` 出现即**配置事故**（全部关渠或全 DOWN），需人工检查 `payment.routing.channels.*.enabled` 与 `availability` |
-| `refund.rejected` | 退款被业务规则拒绝 | 突增需确认是否超退/状态非法 |
-| `refund.order_notify_failed` / `refund.ledger_posting_failed` | 退款下游联动失败 | 退款事实不回滚，需人工补单 |
-| `ledger.posting_failed` | 记账失败 | 出现后资金事实与账本不一致，需补记账 |
-| `reconciliation.difference` | 对账差异（按 type 分） | 非 0 即需人工核对原始事实 |
-| ~~`payment.succeeded` / `payment.failed` / `payment.unknown`~~ | ~~支付终态分布~~ | ⛔ **无此埋点**（2026-09-09 核对）：终态分布请查库或 `payment.initiated` 与超时/重试计数推导 |
-| ~~`payment.callback_signature_rejected`~~ | ~~渠道回调验签被拒~~ | ⛔ **已移除**：验签为空实现（ADR-0025），回调一律放行，无此埋点 |
-| ~~`payment.risk_triggered`~~ | ~~最小风控命中~~ | ⛔ **已移除**：风控不做（ADR-0028），类已删除 |
-| ~~`payment.internal_auth_rejected`~~ | ~~内部端点鉴权被拒~~ | ⛔ **已移除**：鉴权为空实现（ADR-0024），无此埋点 |
-| `FINANCIAL_AUDIT` 日志 | 资金动作审计（独立 logger） | 支付/退款/结算/记账各一条，含 traceId |
+## 5. 指标目录（唯一登记处，spec 035 / G1 / ADR-0083）
 
-### 5.1 告警规则与埋点的同步约束
+> **纪律（M-2/HC-3）**：新指标未进本表不得上线；新 label 必须同 PR 登记值域。**告警意义 = 无 的指标不进目录**
+> （反数量竞赛）。`metrics.counter/timer/gauge` 的 Micrometer 名 → Prometheus 名：点号→下划线、
+> counter 自动补 `_total`、timer 展开 `_count/_sum/_bucket`。类型判据（N-4）：积压/存量 = Gauge，
+> 发生次数 = Counter；金额一律最小货币单位整数（N-3）。
+> 本表覆盖 spec 035 §5.2 目录 + 告警引用项 + 031/032/034 新增收口；order/fulfillment/权益等域的
+> 既有低危计数可用 §5.2 的 grep 命令枚举，不逐条登记（历史存量零改名零删除，M-1）。
 
-业务告警定义在 `deployment/prometheus/rules/payment-alerts.yml`，Grafana 面板见
-`deployment/grafana/dashboards/payment-arch.json`（「业务告警 · 资金风险信号」行）。
+### 5.1 目录（指标 → 类型 → 值域 → 意义 → 告警 → Owner）
+
+**Payment / Refund / 渠道（Owner: payment）**
+
+| 指标（Prometheus 名） | 类型 | 维度（值域） | 业务意义 | 告警映射（§5.4 锚点） |
+|---|---|---|---|---|
+| `payment_initiated_total` | Counter | `module` | 支付单创建量 | 分母（突降=下单链路故障，看板②） |
+| `payment_timeout_total` | Counter | `module` | 超时判定（转 UNKNOWN 前必经） | **A-04 PaymentUnknownBacklog** |
+| `payment_retry_total` / `payment_retry_exhausted_total` | Counter | `module` | 重试 / 重试达上限转主动查询 | PaymentRetryExhausted |
+| `payment_query_total` / `payment_query_exhausted_total` | Counter | `module` | 渠道主动查询 / 查询也耗尽（只能人工收敛） | PaymentQueryExhausted（critical） |
+| `payment_unknown_duration_seconds` | Timer | `module` | UNKNOWN 收敛耗时（**只含已收敛者，不能算存量**） | 看板观测，不作告警 |
+| `payment_unknown_age_total` / `refund_unknown_age_total` | Counter | `bucket`(`0_5m`/`5_30m`/`30m_24h`/`gt_24h`) | UNKNOWN 老化分布（034 §7.2） | **A-05 / A-06 UnknownAgedOver24h**（critical） |
+| `payment_duplicate_total` / `payment_duplicate_callback_total` | Counter | `module` | 幂等命中 | 突增=上游重试风暴（观测） |
+| `payment_order_notify_failed_total` | Counter | `module` | 支付成功通知订单失败（RPC 抖动，对账兜底） | 观测（联动 A-07 家族） |
+| `payment_order_illegal_state_rejected_total` | Counter | `module` | 款已收、订单非法前态拒收 = **资金风险** | PaymentOrderIllegalStateRejected（critical） |
+| `payment_routing_total` | Counter | `result`(`explicit`/`explicit_disabled`/`routed`/`no_available_channel`/`unavailable_explicit`), `routed`(渠道码) | 路由决策分布 | `no_available_channel`>0=配置事故（观测） |
+| `refund_rejected_total` | Counter | `module`, `reason` | 退款被业务规则拒绝 | RefundFailure |
+| `refund_order_notify_failed_total` / `refund_ledger_posting_failed_total` | Counter | `module` | 退款下游联动失败（事实不回滚） | RefundDownstreamFailure（critical） |
+| `channel_request_total` | Counter | `channelCode`(配置枚举), `result`(`success`/`failed`/`unknown`/`exception`) | 渠道出站调用量与结果（035 T32 埋于查询路径） | A-03 分母 |
+| `channel_timeout_total` | Counter | `channelCode` | 渠道超时（**不是**平台错误；UNKNOWN/异常代理） | **A-03 ChannelTimeoutSpike**（critical） |
+| `limit_inflight_leak` | Gauge | `module`, `window`(`settle_missing`) | 额度预占泄漏残留（027 两阶段） | **A-19 LimitInflightLeak** |
+| `payment_limit_compensation_failed_total` | Counter | `module` | 额度补偿执行失败 | 观测（联动 A-19） |
+
+**Ledger 账务（Owner: ledger）**
+
+| 指标 | 类型 | 维度（值域） | 业务意义 | 告警映射 |
+|---|---|---|---|---|
+| `ledger_posted_total` | Counter | `module`, `eventType`(规则枚举), `source`(`PAYMENT`/`REFUND`/`SETTLEMENT`/…) | **记账吞吐 = 资金事实入账速率** | SLO-4 分母参照 |
+| `ledger_posting_failed_total` | Counter | `module`(payment/refund/settlement 调用方进程) | 调用方视角入账失败（事实与账本开始背离） | **A-07 LedgerPostingFailure**（critical，035 前零告警 P0 缺口） |
+| `audit_posting_failed_total` | Counter | `module`(reconciliation) | 审计调整记账网关失败 | **A-07**（同条 or 分支） |
+| `ledger_posting_pending` | Gauge | `module` | 失败台账 PENDING 行数 = **账务积压**（034 §9，三调用方同名各自登记） | **A-08 LedgerPostingPendingBacklog**；SLO-4 主信号 |
+| `ledger_posting_abandoned_total` | Counter | `module` | 补投重试耗尽置 ABANDONED（只能人工） | **A-09 LedgerPostingAbandoned**（critical） |
+| `ledger_unbalanced_total` | Counter | `module`, `currency`(3 位码) | 构造期借贷平衡拒绝（035 T31 新增） | **A-10 TrialBalanceBreak**（critical） |
+| `trial_balance_break_total` | Counter | `module`, `currency` | 关账试算不平次数（**偏差**：spec 表格初稿为 Gauge{currency,period}，按 N-4「发生次数=Counter」实现且避开 period 慢性泄漏，账龄由 A-13/看板承担） | **A-10** |
+| `balance_rebuild_applied_total` | Counter | `module` | 余额投影 rebuild 次数（**正常应 ≈0**） | **A-11 BalanceRebuildUsed** |
+| `period_close_rejected_total` | Counter | `module`, `reason`(`pending_posting`/`unbalanced`) | 关账被拒（运营信号） | 看板⑧/观测，非告警 |
+
+**Reconciliation 对账（Owner: finance）**
+
+| 指标 | 类型 | 维度（值域） | 业务意义 | 告警映射 |
+|---|---|---|---|---|
+| `reconciliation_difference_total` | Counter | `module`, `kind`(032 §8.3 八类) | 差异产生速率 | ReconciliationDifference（A-12 雏形） |
+| `reconciliation_difference_resolved_total` | Counter | `module` | 差异收口速率 | A-13 减项 |
+| （无独立 gauge）**对账积压** | PromQL 差值 | — | `Σdifference − Σdifference_resolved` = 未收口存量（035 plan §3 裁决：不新增 `reconciliation_pending` 埋点，**偏差记录**） | **A-13 ReconciliationPendingAging** |
+| `reconciliation_statement_import_total` | Counter | `channel`, `result`(`accepted`/`rejected`/`duplicate`) | 账单导入健康度（032） | **A-14 StatementSourceDegraded** |
+| `reconciliation_statement_unavailable_total` | Counter | `channel` | 无可用 NORMALIZED 导入（**取代已退役的 sample.csv 静默回退**，`statement_fallback` 不再存在） | **A-14**（>0 即告警） |
+| `reconciliation_difference_amount_minor_total` | Counter | 金额（minor 整数） | 差异金额累积 | 观测（看板 对账 行） |
+
+**Settlement 结算（Owner: settlement）**
+
+| 指标 | 类型 | 维度（值域） | 业务意义 | 告警映射 |
+|---|---|---|---|---|
+| `settlement_pending_amount` | Gauge | `module`, `state`(`pending`/`processing`/`unknown`) | **积压金额**（未收口批次净额绝对值，minor；钱压着不是条数压着，035 T33） | **A-15 SettlementBacklog** |
+| `settlement_failed_total` | Counter | `module` | 出款批次失败 | **A-16 SettlementBatchFailure**（critical） |
+| `settlement_gate_rejected_total` | Counter | `module`, `reason`(闸门枚举) | 已确认事实闸门拒绝（fail-closed） | 高值=上游账务/对账不健康（观测+首查） |
+
+**MQ 消息通道（Owner: oncall）**
+
+| 指标 | 类型 | 维度（值域） | 业务意义 | 告警映射 |
+|---|---|---|---|---|
+| `mq_prepared_total` / `mq_committed_total` / `mq_rolled_back_total` | Counter | `topic`(`payment`/`order`/`settlement` 等枚举) | 事务消息生产侧：半消息落 ZSet / 提交可见 / 事务回滚丢弃（034 §10 语义） | 吞吐分母；committed 骤降=本地事务异常 |
+| `mq_consumed_total` / `mq_retried_total` / `mq_dead_letter_total` / `mq_checked_total` / `mq_half_backlog_total` | Counter | `topic`, `group`/`state` | 消费 / 退避重投 / 转死信 / 回查分派 / 到期半消息 | A-18 前兆链（half_backlog→checked UNKNOWN→dead_letter） |
+| `mq_dlq_size` | Gauge | `topic` | **死信积压 = 已丢失的自动化出口**（034 §10） | **A-18 MqDlqNonEmpty**（critical） |
+| `mq_half_backlog_total` | Counter | `topic`(`all`) | 半消息到期待回查 | A-18 前兆（观测） |
+| （exporter）`redis_stream_group_lag` / `redis_stream_group_messages_pending` | Gauge | `stream`, `group` | 消费积压 / PEL 未确认（依赖 compose `REDIS_EXPORTER_CHECK_STREAMS=mq:stream:*`，035 T34 修正） | **A-17 MqConsumerLag** |
+
+**平台 / 治理（Owner: platform）**
+
+| 指标 | 类型 | 维度（值域） | 业务意义 | 告警映射 |
+|---|---|---|---|---|
+| `dye_tag_rejected_total` | Counter | `reason`(`invalid`) | 非法染色值被拒（fail fast，ADR-0049） | **A-20 DyeRejectedAnomalous**（info：转工单不 page） |
+| `http_server_requests_seconds_*` | Timer(自动) | `uri`(归一化模式), `method`, `status`, `job` | 四信号 + **SLO-1/2/3 的 SLI 源** | A-01 / A-02（经 burn rate） |
+| `FINANCIAL_AUDIT` 日志 | 日志流 | 单行 JSON（traceId/bizNo/幂等键/金额/币种/前后态） | 资金动作审计 | 各资金告警的第一步取证 |
+
+⛔ **确认不存在的埋点（勿再引用）**：`payment_succeeded/failed/unknown_total`（终态分布请查库）、
+`payment_callback_signature_rejected`（验签空实现 ADR-0025）、`payment_risk_triggered`（风控已删 ADR-0028）、
+`payment_internal_auth_rejected`（鉴权空实现 ADR-0024）、`statement_fallback`（032 退役回退）。
+
+### 5.2 告警规则与埋点的同步约束
+
+业务告警定义在 `deployment/prometheus/rules/payment-alerts.yml`（24 条，五要素齐，spec 035 §9），
+SLO Recording Rules 在 `deployment/prometheus/rules/slo-recording.yml`（4 个 SLI + 预算余量 + 双窗
+burn rate），Grafana 面板见 `deployment/grafana/dashboards/payment-arch.json`
+（「业务告警 · 资金风险信号」+「⑦ SLO 与错误预算」+「⑧ 资金健康」行）。
 
 **告警表达式引用的是 Micrometer 指标名（点号→下划线、计数器加 `_total`）。若表达式里的指标
 在代码中不存在，规则永远不会触发，且不会有任何报错**——2026-09-09 实测：旧规则引用的
 `payment_unknown_total`、`refund_failed_total` 在 Prometheus 里均为 0 series，属于上线起从未触发过的死规则。
 
-因此变更埋点时**必须**同步三处：代码 `metrics.counter/timer` 键 → 告警规则 → Grafana 面板。
+因此变更埋点时**必须**同步四处：代码 `metrics.counter/timer/gauge` 键 → 本目录 §5.1 → 告警规则 → Grafana 面板。
 核对方式（需全栈运行）：
 
 ```bash
@@ -241,12 +308,13 @@ grep -rhoE 'metrics\.[a-z]+\("[a-z_.]+"' <service>/src/main/java | sed 's/.*("//
 curl -s --noproxy '*' --data-urlencode 'query=payment_timeout_total' \
   http://127.0.0.1:9090/api/v1/query | python3 -c "import sys,json;print(len(json.load(sys.stdin)['data']['result']))"
 
-# 3) 规则文件语法（把待校验文件拷进 prometheus 容器再用 promtool）
-docker cp deployment/prometheus/rules/payment-alerts.yml payment-prometheus:/tmp/check.yml
-docker exec payment-prometheus promtool check rules /tmp/check.yml
+# 3) 规则文件语法（两个文件都要查；promtool 同时校验 recording rule 表达式合法性）
+docker cp deployment/prometheus/rules/payment-alerts.yml payment-prometheus:/tmp/alerts.yml
+docker cp deployment/prometheus/rules/slo-recording.yml payment-prometheus:/tmp/slo.yml
+docker exec payment-prometheus promtool check rules /tmp/alerts.yml /tmp/slo.yml
 ```
 
-### 5.2 流量染色观测（spec 030 / ADR-0076）
+### 5.3 流量染色观测（spec 030 / ADR-0076）
 
 | 项 | 值 |
 |---|---|
@@ -264,6 +332,51 @@ docker exec payment-prometheus promtool check rules /tmp/check.yml
   `X-Dye-Tag` 原样透传。
 - ⛔ **染色不是安全边界**：它不参与鉴权，也不参与路由决策。`ChannelRouter` 不得读 `DyeContext`
   （INV-3），由 `architecture-tests` 在构建期强制。看到 `X-Dye-Tag` 被用作权限依据即为缺陷。
+
+### 5.4 告警处置（24 条 · 五要素齐，spec 035 §9 / §14 M-4）
+
+> 段落模板：**症状 → 影响面 → 第一步查询 → 判定分支 → 处置动作 → 升级路径与 Owner**。
+> `A-xx` 编号与 `payment-alerts.yml` 头部映射注释一一对应；`[目标]` 阈值未实测前
+> **只出报表不 page**（H-035-1 已批准的静默期口径）。severity=critical 的六条（A-01/03/05/06/07/09/10/14/16/18
+> 中标 critical 者）为资金路径，其余 warning/info 走工单节奏。
+
+**A-01 SloAvailabilityBudgetBurn（critical，owner oncall）** 症状：资金入口 30 天错误预算以 >14.4× 速率超烧（fast 1h 且 slow 6h 双窗同越）。影响面：下单/支付受理/退款受理的可用性承诺。第一步：看板⑦ 看 `slo:burn_rate_fast{group="payment_entry"}` 哪个入口在掉。分支：若 `up{}=0` ⇒ 进程挂了走 §6；若 5xx 集中于某 uri ⇒ 走 ACCESS_LOG `status=5xx` 聚合定位接口。处置：修复或回滚该接口；预算烧完后 30 天内后续越阈只做记录（发布冻结评估）。升级：owner 处置不了 30 分钟升级到平台值班。
+
+**A-02 SloLatencyP99Breached（warning，owner oncall）** 症状：同步接口 P99 超阈（查询 500ms / 命令 1s）且双窗 burn 同越。影响面：用户等待、上游超时连锁。第一步：`http_server_requests` 分 uri 看哪条路径变慢。分支：DB 慢（HikariCP 活跃连接打满）⇒ 查慢 SQL；GC/资源 ⇒ §8 容量。处置：限流/扩容/回滚变慢变更。升级：持续 1h 未回落升 payment/ledger 对应域 owner。
+
+**A-03 ChannelTimeoutSpike（critical，owner payment）** 症状：`channel_timeout/channel_request` >10%（样本≥5）持续 10m。影响面：UNKNOWN 成批产生的前兆，渠道不稳定。第一步：分 `channelCode` 判断单渠道还是全域；沙箱/公网可达性。分支：单渠道 ⇒ 摘除该渠道路由（`payment.routing.channels.*.enabled`）；全域 ⇒ 网络/本侧超时档（034 §8 三档）。处置：切流+通知渠道方；预期预告 A-04 跟进。升级：渠道方无响应 2h 升 payment owner。
+
+**A-04 PaymentUnknownBacklog（warning，owner payment）** 症状：5m 内新增超时转 UNKNOWN。影响面：资金事实未定。第一步：`GET /internal/payments/unknown` 看队列。分支：查询在收敛（`PaymentQueryExhausted` 未同烧）⇒ 观察；耗尽 ⇒ 转 A-05/人工。处置：等待自动收敛为主，禁止直接改 status（状态机红线）。升级：与 A-05 联动。
+
+**A-05 / A-06 UnknownAgedOver24h（critical，owner oncall）** 症状：支付/退款 UNKNOWN 单龄 >24h（`bucket="gt_24h"`）。影响面：**跨期悬置资金事实**——关账门禁与对账兜底都会被挡。第一步：`GET /internal/payments/unknown?age=` 定位单。分支：渠道侧有终态 ⇒ 人工 resolve 推进；渠道无应答 ⇒ 与渠道方核销。处置：人工 resolve 端点（034 §7.1），落 `FINANCIAL_AUDIT`。升级：涉及金额 > 阈值直接升资金运营。
+
+**A-07 LedgerPostingFailure（critical，owner ledger）** 症状：`ledger_posting_failed` 或 `audit_posting_failed` 出现。影响面：资金事实与账本开始背离。第一步：`GET pending-postings?status=PENDING`（034 §9）确认台账已登记。分支：已登记 ⇒ 自动补投在跑，观察是否清零；未登记 ⇒ 登记链路缺陷，开缺陷单。处置：Ledger 服务健康检查；连续出现走 A-09 人工 replay。升级：30m 不收敛升 ledger owner。
+
+**A-08 LedgerPostingPendingBacklog（warning，owner ledger）** 症状：PENDING 台账行 >0 超 10m。影响面：账务积压（下游 Ledger/order 持续不可达）。第一步：pending-postings 明细看 caller 与原因。分支：Ledger 宕 ⇒ 恢复后自动收敛；同批反复失败 ⇒ 数据问题（科目缺失/期间 CLOSED）。处置：修依赖或修数据后等补投；退避耗尽前一般无需人工。升级：出现 ABANDONED 转 A-09。
+
+**A-09 LedgerPostingAbandoned（critical，owner ledger）** 症状：补投重试耗尽置 ABANDONED。影响面：该行**退出自动化**，只能人工。第一步：ABANDONED 列表取 id。处置：修根因后 `POST /internal/*/pending-postings/{id}/replay`（034 §9，幂等重放）；补投成功后核对对账 MISSING_POSTING 不再产生。升级：立即升 ledger owner（资金账实不符候选）。
+
+**A-10 TrialBalanceBreak（critical，owner ledger，最高优先）** 症状：试算不平或构造期不平衡拒绝出现。影响面：**复式记账被破坏 = 账务不可信**。第一步：`GET /trial-balance` 定位不平币种与差值。分支：构造期拒绝（`ledger_unbalanced`）⇒ 分录未落，查事件构造；关账不平（`trial_balance_break`）⇒ 已有存量不平。处置：结算出款已被 031 §10 门禁 fail-closed 挡住（H-035-4 裁决：不再加自动熔断）；`/balances/rebuild` 前后分录比对定位漂移。升级：账务 owner 直接介入，未平前禁止关账与出款。
+
+**A-11 BalanceRebuildUsed（warning，owner ledger）** 症状：发生过投影 rebuild（正常应 ≈0）。影响面：说明存在绕过 PostingEngine 的写或已发生漂移。第一步：谁调了 `/balances/rebuild`（ACCESS_LOG）+ 漂移原因。处置：若为人工修复则补齐根因缺陷单；若为自动触发属缺陷。升级：无资金损失则走缺陷流程。
+
+**A-12 ReconciliationDifference（warning，owner finance）** 症状：存在未解决对账差异。影响面：外部资金事实与内部不一致。第一步：032 差异队列按 `kind` 看形态（单渠道 or 全域）。分支：AMOUNT_MISMATCH ⇒ 核对原始报文；MISSING_LOCAL/MISSING_CHANNEL ⇒ 账单完整性。处置：`resolve(diffNo)` 人工收口（备注必填，ADR-0019）。升级：单渠道集中 ⇒ 联动 A-14。
+
+**A-13 ReconciliationPendingAging（warning，owner finance）** 症状：未收口差异（Σdifference−Σresolved）>0 持续 24h。影响面：**关账将被门禁挡**（031 §11）。第一步：PENDING 列表分型 + 是否单商户集中。处置：批量收口或 SUSPENSE 挂账决策（人类口径）。升级：账期截止前 3 天未清升 finance owner。
+
+**A-14 StatementSourceDegraded（critical，owner finance）** 症状：账单不可得或导入整批 REJECTED（1d 窗）。影响面：**对账失去外部锚点**（sample.csv 回退已退役，宁停不假对账）。第一步：渠道账单文件/接口可用性（`channel` 标签定位）。分支：`statement_unavailable` ⇒ 催渠道出单；`import{result="rejected"}` ⇒ 解析失败明细（032 §11 导入批次状态）。处置：修复格式/重传后重导（指纹幂等，可安全重放）。升级：该渠道当期无法对账 ⇒ finance 决策是否延后关账。
+
+**A-15 SettlementBacklog（warning，owner settlement）** 症状：未收口批次净额 > 阈值（100 万元占位 [目标]）。影响面：商户的钱压着。第一步：批次状态列表（`state` 标签分 pending/processing/unknown）。分支：gate 拒绝多 ⇒ 看 `settlement_gate_rejected_total{reason}` 回溯上游（对账未确认/事实缺商户）。处置：推进上游收口。升级：`state=unknown` 批次 ⇒ 出款结果未知，按 A-16 流程先于本条处理。
+
+**A-16 SettlementBatchFailure（critical，owner settlement）** 症状：出款批次失败。影响面：出款动作与账本可能半成功。第一步：同 batchNo 可否安全重放（034 X-14 幂等边界：EXECUTING/UNKNOWN 态禁重放）。分支：Ledger 已记出款分录 ⇒ 只重推出款指令；未记 ⇒ 整批重试。处置：人工驱动，禁止脚本盲重放。升级：立即升 settlement owner + 资金运营。
+
+**A-17 MqConsumerLag（warning，owner oncall）** 症状：`redis_stream_group_lag`/`messages_pending` >100 持续 10m。影响面：事件在堆、下游状态滞后。第一步：消费方服务 `up{}`；`XAUTOCLAIM`（claimStale）是否触发。分支：进程死 ⇒ 拉起即收敛；进程活在但慢 ⇒ 看消费异常日志/DB 瓶颈。处置：重启消费者或扩容。升级：伴随 A-18 说明已在转死信，优先处理 A-18。
+
+**A-18 MqDlqNonEmpty（critical，owner oncall）** 症状：DLQ 非空。影响面：**消息永久失去自动处理机会**。第一步：DLQ 管理端点看条目 `dlqReason`（消费超上限 or 回查 UNKNOWN 超上限）。处置：修复根因后按 034 §10 replay（单条或按 topic）；确认幂等承接方不会重复副作用。升级：涉及资金事件（记账/结算）⇒ 同步对应域 owner 核对台账。
+
+**A-19 LimitInflightLeak（warning，owner payment）** 症状：`limit_inflight_leak` >0 持续 30m。影响面：用户额度被已死预占错限。第一步：LimitCompensationScanner 日志是否在跑。处置：手工触发一轮补偿；找 RESERVE 无 CONFIRM/RELEASE 的悬挂单核对支付终态。升级：持续不减 ⇒ 补偿判据缺陷，开缺陷单升 payment owner。
+
+**A-20 DyeRejectedAnomalous（info，owner platform）** 症状：有调用方发送非法 `X-Dye-Tag`。影响面：无资金影响，配置漂移信号。第一步：ACCESS_LOG 定位来源服务。处置：转工单给来源团队改配置（值域见 ADR-0021）。**不 page**。
 
 ## 6. 常见故障与处置
 
