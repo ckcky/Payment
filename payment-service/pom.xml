@@ -91,6 +91,14 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- spec 034 / TT-2~4：真库级台账性质验证（033 基座：容器/DDL 装配由基座承接，
+             real-db 用例按基座契约无 Docker 时整体 skip）。 -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>test-infra</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
