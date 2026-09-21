@@ -45,7 +45,8 @@ class ReconciliationPeriodScenarioTest {
 
     private ReconciliationApplicationService service() {
         return ReconciliationTestSupport.service(repository, imports,
-                period -> List.of(new PlatformFact("CH-AUD-0001", "PAYMENT", 10000L, "CNY", "SUCCEEDED")),
+                // fixture 2026 起为 v2 账单（typed 强键匹配）：fake 事实须携带同商户号才可命中强键
+                period -> List.of(new PlatformFact("CH-AUD-0001", "PAYMENT", 10000L, "CNY", "SUCCEEDED", "1")),
                 period -> List.of(),
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }

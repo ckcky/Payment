@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# demo/scenario-audit.sh —— spec 017 审计四核对 + 挂账调账闭环演示
+# demo/scenario-audit.sh —— spec 017 审计四核对 + 挂账调账闭环演示（032 实账化升级）
 # 前置：服务已启动（start-demo.sh）；audit-faults.sql 幂等注入故障（本脚本自动执行）。
-# 断言（plan §9.1）：
-#   ① 故障注入（F1~F7，幂等）+ 渠道账单 CSV（F8，随 reconciliation jar 加载）
+# 断言（plan §9.1 + spec 032 T25）：
+#   ⓪ 账单导入：POST /internal/reconciliation/statement-imports（SHA-256 指纹幂等，v2 CSV）
+#   ① 故障注入（F1~F7，幂等；created_at 收进周期内——032 起 confirmed-facts(period) 按期间过滤）
 #   ② 触发 CERTIFICATE 审计批 → HAS_DIFFERENCE，batchNo=AB 前缀
 #   ③ 差异含 MISSING_POSTING(PM-AUD-0003) / ORPHAN_POSTING(PM-AUD-GHOST1)
 #      / AMOUNT_MISMATCH(PM-AUD-0001) / DUPLICATE_POSTING(PM-AUD-0002) / SETTLEMENT 跨账差异
-#   ④ 有未收口差异时 close 被拒（400）
+#   ④ 有未收口差异时 close 被拒（400/409）
+#   ④b F7 人工收口：POST .../differences/{id}/resolve（备注必填，直达 RESOLVED——调账无法转绿的跨账差异关闭路径）
 #   ⑤ 挂账：adjustNo=AD 前缀 + postingNo=LP 前缀，差异 → SUSPENDED
 #   ⑥ 调账转出后 SUSPENSE 归零
-#   ⑦ 全部差异处置收口（VERIFIED/ADJUSTED）
+#   ⑦ 全部差异处置收口（VERIFIED/ADJUSTED；RESOLVED 已由 ④b 收口）
 #   ⑧ close 成功 → CLOSED；⑨ 试算平衡 balanced=true；⑩ 处置台账留痕
 # 环境变量：AUDIT_PERIOD（默认 2026-08-31，绑定渠道账单 CSV）、AUDIT_FULL=1 追加 ALL scope。
 set -euo pipefail
@@ -20,6 +22,23 @@ source "$HERE/lib.sh"
 PERIOD="${AUDIT_PERIOD:-2026-08-31}"
 
 wait_for_services
+
+# ---- ⓪ 账单导入（032 T25：账单真实化——审计账实核对以导入台账为账单口径，sample.csv 回退已退役）----
+echo "==> ⓪ 导入渠道账单（period=${PERIOD}，v2 CSV，指纹幂等）"
+CSV_FILE="$HERE/../../reconciliation-service/src/main/resources/fixtures/channel-statements/${PERIOD}.csv"
+[ -f "$CSV_FILE" ] || fail "渠道账单 CSV 不存在: $CSV_FILE"
+IMPORT_PAYLOAD="$(python3 -c "
+import json, sys
+content = open(sys.argv[1], encoding='utf-8').read()
+print(json.dumps({'channelCode': 'MOCK', 'period': sys.argv[2], 'sourceType': 'FILE',
+                  'content': content, 'importedBy': 'scenario-audit'}))
+" "$CSV_FILE" "$PERIOD")"
+http POST "$RECON_URL/internal/reconciliation/statement-imports" "$IMPORT_PAYLOAD"
+assert_status 201 "账单导入（幂等重放同为 201）"
+jget "d['status']"
+assert_eq "$VALUE" "NORMALIZED" "账单导入 → NORMALIZED"
+jget "d['importNo']"; IMPORT_NO="$VALUE"
+case "$IMPORT_NO" in SI*) info "PASS: importNo=${IMPORT_NO}（SI 前缀，rowCount 见响应）" ;; *) fail "importNo 非 SI 前缀: $IMPORT_NO" ;; esac
 
 # ---- ① 故障注入（pymysql 直连本地演示库，与 truncate-transactional.py 同通道）----
 echo "==> ① 注入审计演示故障（F1~F7，幂等；仅限本地演示库）"
@@ -118,6 +137,22 @@ case "$STATUS" in
   400) info "PASS: 未收口差异时关批被拒（400 门禁生效）" ;;
   *) fail "未收口差异时关批应被拒，实际 $STATUS" ;;
 esac
+
+# ---- ④b F7 人工收口（spec 032 T22 / plan §2.8，跨账差异关闭路径）----
+echo "==> ④b F7 SETTLEMENT 跨账差异人工收口（resolve 直达 RESOLVED，备注必填）"
+SETTLE_ID="$(echo "$DIFF_JSON" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+hits=[x['id'] for x in d if x.get('kind')=='AMOUNT_MISMATCH' and x.get('sourceType')=='SETTLEMENT']
+print(hits[0] if hits else '')
+")"
+[ -n "$SETTLE_ID" ] || fail "未找到 F7 SETTLEMENT 跨账差异，无法演示人工收口路径"
+http POST "$RECON_URL/internal/audit/batches/$BATCH_NO/differences/$SETTLE_ID/resolve" \
+  "{\"resolutionNote\":\"F7 跨账差异线下核实：结算批次净额与账本差额已由人工确认收口\",\"resolvedBy\":\"demo-auditor\"}"
+assert_status 200 "F7 人工收口成功"
+jget "d['status']"
+assert_eq "$VALUE" "RESOLVED" "F7 差异 → RESOLVED（人工结论收口）"
+info "PASS: F7 跨账差异经人工收口直达 RESOLVED（调账无法转绿差异的关闭路径）"
 
 # ---- ⑤⑥ 挂账 → 转出（以 MISSING_POSTING 为特写）----
 echo "==> ⑤ 挂账 MISSING_POSTING（PM-AUD-0003）"
