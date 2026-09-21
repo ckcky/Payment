@@ -48,10 +48,9 @@
             <groupId>io.github.openfeign</groupId>
             <artifactId>feign-micrometer</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
-        </dependency>
+        <!-- spec 034-F / H-034-1：Resilience4j 已移除——零注解零实例配置，唯一作用是
+             给 Feign 异常包一层包装；真实弹性由 Feign Retryer（幂等只读 GET）+ 应用层
+             重试/查询政策 + MQ 自有退避承担（spec 034 §1.4）。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>

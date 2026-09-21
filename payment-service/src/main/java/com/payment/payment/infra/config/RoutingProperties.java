@@ -30,8 +30,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *   <li>{@code availability.status} 非法值。</li>
  * </ul>
  *
- * <p><b>可用性与 Resilience4j 无关（FR-034 尾注 / D6 / S11）</b>：熔断是<b>调用后</b>出站保护，
- * 可用性是<b>调用前</b>路由输入，两者不互喂。本类不读取任何 CircuitBreaker 状态。</p>
+ * <p><b>可用性与出站弹性无关（FR-034 尾注 / D6 / S11）</b>：重试/熔断是<b>调用后</b>出站保护，
+ * 可用性是<b>调用前</b>路由输入，两者不互喂。本类不读取任何出站弹性组件的状态
+ * （034-F 起 payment 出站不接熔断器，spec 034 §1.4 / H-034-1）。</p>
  */
 @ConfigurationProperties(prefix = "payment.routing")
 public class RoutingProperties {
