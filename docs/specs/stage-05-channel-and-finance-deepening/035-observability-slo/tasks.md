@@ -30,26 +30,26 @@
 
 - [x] ✅ T41 `slo-recording.yml` 4 组 SLI + error_budget_remaining + burn fast(1h)/slow(6h)；SLO-4 双信号非比率（§17 判据 4）；prometheus.yml `rule_files` 挂载（`9f6e843`）
 - [x] ✅ T42 `docs/operations/slo-report.md` 新建（目标 `[目标]` 标注 + 调优追加表 + 月度模板）；technical-solution §5.3 指针化（`7836285`）
-- [ ] 🟢 T43 `promtool check rules` 两文件（payment-prometheus 容器内）——待 demo 重建后执行
+- [x] ✅ T43 `promtool check rules` 两文件全过：alerts **24 rules SUCCESS** + slo-recording **21 rules SUCCESS**（payment-prometheus 容器内，2026-09-22）
 
 ## Phase 5 — 035-D/E 告警扩容（G4）
 
 - [x] ✅ T51 新增 13 条（A-01/02/03/07/10/11/13/14/15/16/17/19/20）五要素齐全（`ea677aa`）
 - [x] ✅ T52 既有各条补 `runbook_url`/`dashboard`/`owner`，零删除零改名（AC-6 对照 master 逐名核验）（`ea677aa`）
-- [ ] 🟢 T53 runbook §5.4 二十四段处置（症状→第一步→判定→处置→升级，M-4）已落（`7836285`，编号 §5.3→§5.4 因染色段落顺延）；promtool 复验随 T43
+- [x] ✅ T53 runbook §5.4 二十四段处置（症状→第一步→判定→处置→升级，M-4）（`7836285`，编号 §5.3→§5.4 因染色段落顺延）+ T43 promtool 复验全过
 
 ## Phase 6 — 035-G Grafana（G7）
 
 - [x] ✅ T61 `payment-arch.json` 新增「⑦ SLO 与错误预算」（6 面板，目标=threshold 线）与「⑧ 资金健康」（10 面板值班首屏）；61 panels、id 唯一、JSON 校验通过（`7836285`；⑥/⑦ 编号顺延偏差见 acceptance §3.3）
-- [ ] ⬜ T62 demo 栈重建后看板数据路径抽查（`/api/v1/rules` 装载 + 新 Gauge 序列非空，尽力而为）
+- [x] ✅ T62 真栈数据路径抽查（acceptance §4）：rules 24+21 实载；`settlement_pending_amount`=3 / `limit_inflight_leak`=1 / `ledger_posting_pending`=3 / `redis_stream_group_lag`=18 / `slo:burn_rate_fast`=3 序列非空；ACCESS_LOG 模式化 uri 与 `/internal/channels/**` 零日志实证
 
 ## Phase 7 — 文档收口
 
 - [x] ✅ T71 runbook §5 重写为指标目录唯一登记处（六域分表 + 值域 + 告警映射 + Owner + 黑名单）；technical-solution §5.3 指针化（`7836285`）
 - [x] ✅ T72 ADR-0083 🟢 Accepted + adr/README 索引/速查/水位 + traceability stage-05 五行落点收口（`72cc867`）
-- [ ] 🟢 T73 acceptance.md 框架已落（AC-1~8 + 偏差 §3 七条 + 七域映射 §5），全量回归与 demo 数值待回填
-- [ ] 🟢 T74 specs README 035→🟢 + 状态说明、roadmap stage-05 状态行 + 035 已实现条目（27 项裁决全收口）已改未提交；CHANGELOG `feat(035)` 待全量数回填
-- [ ] ⬜ T75 全量 `./mvnw -o clean verify -fae` ≥968 全绿 + demo 五场景 PASS
+- [x] ✅ T73 acceptance.md 收口：AC-1~8 逐条 + 偏差与套件修复 §3 八条 + 全量 981 绿 + demo 七场景 PASS + promtool/数据路径实证 + 七域映射
+- [ ] 🟢 T74 specs README 035→🟢 + 状态说明、roadmap stage-05 状态行 + 035 已实现条目（27 项裁决全收口）已落（`149660a`）；CHANGELOG `feat(035)` 收尾中
+- [x] ✅ T75 全量 `./mvnw -o clean verify -fae`：**981 tests 全绿（0 失败/0 错误/0 跳过，EXIT=0）** + demo `run-all.sh` 七场景全 PASS（含 CI nightly 五场景）
 
 ## Phase 8 — 收口
 
