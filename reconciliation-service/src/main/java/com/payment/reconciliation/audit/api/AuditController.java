@@ -67,6 +67,17 @@ public class AuditController {
                 request.operator(), request.reviewer(), request.reason()));
     }
 
+    /**
+     * 人工确认收口（spec 032 §7.2 / T22，F7 关闭路径）：备注必填。
+     * CROSS_LEDGER_MISMATCH 等调账后 recheck 无法转绿的差异，人工确认直达 RESOLVED 后关批。
+     */
+    @PostMapping("/batches/{batchNo}/differences/{differenceId}/resolve")
+    public AuditDifferenceResponse resolve(@PathVariable String batchNo, @PathVariable Long differenceId,
+                                           @Valid @RequestBody ResolveAuditDifferenceRequest request) {
+        return AuditDifferenceResponse.from(applicationService.resolveDifference(
+                batchNo, differenceId, request.resolutionNote(), request.resolvedBy(), request.resolvedAt()));
+    }
+
     @PostMapping("/batches/{batchNo}/recheck")
     public AuditBatchResponse recheck(@PathVariable String batchNo) {
         return toResponse(applicationService.recheck(batchNo));

@@ -84,6 +84,51 @@ class AccountingVocabularyBoundaryTest {
                 .as("spec 031 §7.7：科目 code 常量 / direction 字面量禁落 ledger 与契约枚举之外").isEmpty();
     }
 
+    /**
+     * 032/T18 词汇门禁扩展：渠道资金事实事件类型（{@code CHANNEL_FEE} / {@code CHANNEL_SETTLEMENT}）
+     * 是 ledger 的**事件类型决策词汇**，仅允许 reconciliation（上报编排方）、ledger（决策方）与
+     * common-dto 契约枚举（{@code AccountingEventType}）引用。其余上游 hand-roll 同名字符串字面量
+     * 即宣告事件类型决策权扩散，构建必须失败（与科目门禁同口径：只扫带引号字面量）。
+     */
+    @Test
+    void channelFundEventTypeLiteralsMustBeConfinedToReconciliationLedgerAndContractEnums() throws IOException {
+        Path repoRoot = Path.of("..", "..").toAbsolutePath().normalize();
+        List<String> tokens = List.of("CHANNEL_FEE", "CHANNEL_SETTLEMENT");
+        List<Path> exempt = List.of(
+                Path.of("ledger-service"),
+                Path.of("reconciliation-service"),
+                Path.of("common", "common-dto", "src", "main", "java", "com", "payment", "common", "dto", "rpc"));
+
+        List<String> violations = new ArrayList<>();
+        int scannedFiles = 0;
+        try (Stream<Path> walk = Files.walk(repoRoot)) {
+            List<Path> mainSources = walk
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> p.toString().contains("src" + java.io.File.separator + "main"
+                            + java.io.File.separator + "java"))
+                    .filter(p -> isModuleSource(repoRoot, p))
+                    .filter(p -> exempt.stream().noneMatch(rel -> repoRoot.relativize(p).startsWith(rel)))
+                    .toList();
+            for (Path file : mainSources) {
+                scannedFiles++;
+                List<String> lines = Files.readAllLines(file);
+                for (int i = 0; i < lines.size(); i++) {
+                    for (String token : tokens) {
+                        if (lines.get(i).contains('"' + token + '"')) {
+                            violations.add(repoRoot.relativize(file) + ":" + (i + 1) + " → \"" + token + '"');
+                        }
+                    }
+                }
+            }
+        }
+
+        assertThat(scannedFiles)
+                .as("扫描到的上游 main 源文件数（0 或过小说明目录定位失效，门禁在空转）").isGreaterThan(100);
+        assertThat(violations)
+                .as("032/T18：CHANNEL_FEE / CHANNEL_SETTLEMENT 事件类型字面量禁落 reconciliation/ledger/契约枚举之外")
+                .isEmpty();
+    }
+
     /** 模块源码 = src/main/java 之前只有一层目录（服务在根、common 子模块在 common/ 下一层）。 */
     private boolean isModuleSource(Path repoRoot, Path file) {
         Path relative = repoRoot.relativize(file);
