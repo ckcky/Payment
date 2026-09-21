@@ -105,17 +105,33 @@ class ChannelFundPostingServiceTest {
         assertThat(gateway.requests).isEmpty();
     }
 
+    /** TC-032-14（§11 #8）：期间 CLOSED ⇒ PERIOD_CLOSED 原样上抛、不静默降级，更正走下一期间。 */
+    @Test
+    void periodClosedErrorPropagatesUnchanged() {
+        ReconciliationTestSupport.seedImport(imports, "MOCK", "2026-08", List.of(
+                line(1, "PAYMENT", "CH-1", 1000L, 0L)));
+        gateway.failWith = BizException.of(ErrorCodes.PERIOD_CLOSED, "period 2026-08 is CLOSED");
+
+        assertThatThrownBy(() -> service.postChannelFundFacts("MOCK", "2026-08"))
+                .isInstanceOfSatisfying(BizException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCodes.PERIOD_CLOSED));
+    }
+
     private static StatementLine line(int lineNo, String type, String reference, long amountMinor, long feeMinor) {
         return new StatementLine(null, lineNo, "MOCK", "TXN-" + lineNo, type, reference, "CHANNEL_TXN",
                 "M-1", amountMinor, feeMinor, "CNY", "SUCCEEDED", null, "raw-" + lineNo);
     }
 
-    /** 记录式出站网关：只收集请求，不连 ledger。 */
+    /** 记录式出站网关：只收集请求，不连 ledger；failWith 非空即模拟业务拒绝。 */
     private static class RecordingGateway implements FundPostingGateway {
         final List<AccountingEventRequest> requests = new ArrayList<>();
+        BizException failWith;
 
         @Override
         public PostingResult postEvent(AccountingEventRequest request) {
+            if (failWith != null) {
+                throw failWith;
+            }
             requests.add(request);
             return new PostingResult("LP-" + (requests.size()), String.valueOf(requests.size()));
         }
