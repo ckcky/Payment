@@ -149,6 +149,7 @@ async function sendCallback(status, signMode, extra) {
   const res = await fetch('/mock-channel/callback', {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
   });
+  PA.noteTrace(res);  // 与 api() 同口径：记录响应回传的 traceId，供下方日志行关联服务端日志
   const data = await res.json();
   log('<< HTTP ' + res.status + '  ' + JSON.stringify(data));
   if (data.body && data.body.indexOf('"status"') >= 0) {
@@ -191,6 +192,7 @@ async function switchChannel(target) {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ channelCode: target })
     });
+    PA.noteTrace(res);  // 与 api() 同口径：记录代理回传的 traceId，供下方日志行关联服务端日志
     const text = await res.text();
     log('<< HTTP ' + res.status + '  ' + text);
     if (res.ok) {

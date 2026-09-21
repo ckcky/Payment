@@ -1,5 +1,6 @@
 package com.payment.mockchannel.web;
 
+import com.payment.common.core.trace.TraceIdFilter;
 import com.payment.mockchannel.config.MockChannelProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -69,17 +70,30 @@ public class DemoProxyController {
                 spec.body(new String(body, StandardCharsets.UTF_8));
             }
             ResponseEntity<String> upstream = spec.retrieve().toEntity(String.class);
-            return ResponseEntity.status(upstream.getStatusCode())
+            // 透传上游 X-Trace-Id：演示控制台的日志行要靠它关联服务端日志（demo/trace-grep.sh <traceId>），
+            // 重建响应时其余头维持最小集（Content-Type / Cache-Control），不放大暴露面
+            ResponseEntity.BodyBuilder response = ResponseEntity.status(upstream.getStatusCode())
                     .contentType(MediaType.APPLICATION_JSON)
                     // 禁止浏览器缓存代理响应：reset 前后同一 URL 的数据会变（如空 SKU 列表），
                     // 缓存旧响应会让 /demo 永远显示过期状态
-                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                    .body(rewriteClientFacingPayUrl(upstream.getBody()));
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store");
+            String traceId = upstream.getHeaders().getFirst(TraceIdFilter.TRACE_ID_HEADER);
+            if (traceId != null) {
+                response.header(TraceIdFilter.TRACE_ID_HEADER, traceId);
+            }
+            return response.body(rewriteClientFacingPayUrl(upstream.getBody()));
         } catch (HttpStatusCodeException e) {
-            return ResponseEntity.status(e.getStatusCode())
+            // 异常响应同样透传 traceId：4xx/5xx（409 幂等、429 限流等）失败链路的日志关联不能断
+            ResponseEntity.BodyBuilder response = ResponseEntity.status(e.getStatusCode())
                     .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(e.getResponseBodyAsString());
+                    .contentType(MediaType.APPLICATION_JSON);
+            if (e.getResponseHeaders() != null) {
+                String traceId = e.getResponseHeaders().getFirst(TraceIdFilter.TRACE_ID_HEADER);
+                if (traceId != null) {
+                    response.header(TraceIdFilter.TRACE_ID_HEADER, traceId);
+                }
+            }
+            return response.body(e.getResponseBodyAsString());
         } catch (Exception e) {
             return ResponseEntity.internalServerError().contentType(MediaType.APPLICATION_JSON)
                     .body("{\"error\":\"proxy error: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "\"}");

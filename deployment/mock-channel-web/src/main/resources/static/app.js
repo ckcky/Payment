@@ -140,7 +140,10 @@
   function log(msg, cls) {
     if (!logEl) return;
     var line = el('div', 'line' + (cls ? ' ' + cls : ''));
-    line.innerHTML = '<span class="t">[' + now() + ']</span> ' + esc(msg);
+    var html = '<span class="t">[' + now() + ']</span> ' + esc(msg);
+    // 追加最近一次 API 回传的 traceId：复制后可直接 demo/trace-grep.sh <traceId> 捞服务端日志
+    if (lastTraceId) html += ' traceId=' + esc(lastTraceId);
+    line.innerHTML = html;
     logEl.appendChild(line);
     logEl.scrollTop = logEl.scrollHeight;
     if (lastEl) lastEl.textContent = String(msg).split('\n').pop();
@@ -169,6 +172,16 @@
 
   /* ---------------- 通用 API ---------------- */
   var apiBase = '';
+  // 最近一次 API 响应回传的 traceId（服务端 TraceIdFilter 写入 X-Trace-Id 响应头）：
+  // 日志行末尾带上它，才能用 demo/trace-grep.sh <traceId> 捞到服务端日志
+  var lastTraceId = null;
+  /** 记录响应回传的 traceId 并返回。res: fetch 的 Response；api() 自动调用，页面里绕过 api() 的裸 fetch 需自行调用。 */
+  function noteTrace(res) {
+    if (!res || !res.headers) return null;
+    var t = res.headers.get('X-Trace-Id');
+    if (t) lastTraceId = t;
+    return t;
+  }
   function api(method, path, body, headers) {
     var hd = Object.assign({}, headers || {});
     var opt = { method: method, headers: hd, cache: 'no-store' };
@@ -177,7 +190,8 @@
       return res.text().then(function (text) {
         var data = null;
         try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-        return { ok: res.ok, status: res.status, data: data, text: text };
+        var traceId = noteTrace(res);
+        return { ok: res.ok, status: res.status, data: data, text: text, traceId: traceId };
       });
     });
   }
@@ -222,7 +236,7 @@
 
   global.PA = {
     esc: esc, fmtMoney: fmtMoney, log: log, clearLog: clearLog, toast: toast,
-    api: api, setApiBase: function (b) { apiBase = b || ''; },
+    api: api, setApiBase: function (b) { apiBase = b || ''; }, noteTrace: noteTrace,
     bindDisclosures: bindDisclosures, toggle: toggle, setStep: setStep, rollTo: rollTo,
     openDrawer: openDrawer, el: el, now: now
   };
