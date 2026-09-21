@@ -30,7 +30,9 @@
 
 ## 4. 测试（Testing）
 
-- **框架**：JUnit 5 + Mockito + AssertJ；集成测试**当前全 H2（MySQL 兼容模式）**。`[目标]` Testcontainers（真实 MySQL 等容器）—— **未落地**，见 `docs/operations/code-debt-backlog.md`。
+- **框架**：JUnit 5 + Mockito + AssertJ；集成测试以 H2（MySQL 兼容模式）为默认载体；**真库子层（L2b）已落地**——`deployment/test-infra`（ADR-0081，仅测试作用域）提供 Testcontainers 真实 MySQL 共享基座：单例容器 + 类内独占库 + DDL 单一来源 `deployment/schema`；无 Docker 时 skip 且汇总行显式打印「N 个真库测试被跳过」（不得静默），CI `real-db` job 无 Docker 即红（skip 即红，禁假绿）。
+- **分层升级判据（spec 033 §3，写进规范的核心一条）**：凡断言「**只会有一个赢家**」「**并发下不双记**」「**唯一约束挡住了**」的测试，MUST NOT 停留在 H2 或 `InMemory*Repository` 桩上——桩能证明「撞键后的处理逻辑对」，证不了「真的会撞键且只有一个赢」，此类断言 MUST 落 L2b 真库层（先例：`ledger-service` `LedgerPostingConcurrencyTest`）。逐级判据：需要跨聚合或事务 ⇒ 升 L2；涉及唯一键竞争 / 并发时序 / 方言特性 / 间隙锁 ⇒ 升 L2b；需要多服务协作 ⇒ 升 L4。
+- **归属边界（spec 033 §4）**：测试基座（`deployment/test-infra`、`@Tag("real-db")` 标签机制、CI job）与业务用例分属不同 Feature——基座 Feature 不代写业务断言；业务 Feature 交付用例本体时引用基座，MUST NOT 绕过基座私起容器或私连宿主 3306（L2b 不与 `start-all.sh` / `start-container.sh` 抢端口，容器与测试统一 UTC）。
 - **覆盖**：资金逻辑 MUST 有测试；表驱动测试优先；关键路径（支付成功/失败/超时/重复回调）有集成测试。支付重点覆盖：重复请求、重复回调、支付超时、支付状态未知、渠道失败、重试、重复消息、服务重启、最终一致性。
 - **红线**：不得删测试来通过；不得改测试迎合错误实现（Constitution §AI Development）。
 - **跨服务调用**：通过公开 HTTP/RPC 用例；调用方和被调用方都必须处理超时、重试和幂等。服务内部事件不作为跨服务通信。
@@ -116,3 +118,21 @@
    ```bash
    grep -rhoE '\]\([^)]*\.md[^)]*\)' docs | sed 's/](//;s/)//' | sort -u   # 抽查目标是否存在
    ```
+6. **RPC 边允许清单一致**：`deployment/architecture-tests/src/test/resources/rpc-edges.txt`（`@FeignClient` 运行时边基线，`RpcEdgeAllowListTest` 逐行全等断言）在新增 / 删除 Feign 边后 MUST 同步更新；各服务 spec 的调用关系描述与该清单一致。
+   ```bash
+   grep -rn '@FeignClient' --include='*.java' */*-api/src */*-service/src 2>/dev/null | wc -l   # 与 rpc-edges.txt 行数（去注释）比对
+   ```
+
+## 12. 迁移脚本可重放（Schema Migration Replay，ADR-0081）
+
+> 来源：030 文件头先例的规范化（spec 033 §6.2）。机器门禁：`deployment/schema-lint.sh`（CI `schema-lint` job，秒级静态断言）与 `deployment/schema-replay.sh`（CI `schema-replay` job，空库全量 + 存量基线演进双路径重放，快照 diff 必须为空）。适用于 `deployment/schema/NN-*.sql` 增量脚本：
+
+1. **MUST**：增量脚本对「列/索引/表已存在」幂等，统一用 `information_schema` 守卫 + `SET @sql = IF(...)` + `PREPARE/EXECUTE/DEALLOCATE`（先例：`015` / `018` / `019` / `030` / `031`）。
+2. **MUST NOT**：`ADD COLUMN IF NOT EXISTS` / `ADD INDEX IF NOT EXISTS`（MariaDB 方言，MySQL 8 直接语法错）。
+3. **MUST**：脚本自带 `USE <schema>`；**MUST NOT** 依赖调用方的当前库。
+4. **MUST**：文件头写清三件事——作用 / 幂等策略 / **存量行为**（回填 or 显式不回填及理由，先例：`030-payment-attempt-extra-json.sql` 的「刻意不回填」）。
+5. **MUST NOT**：在增量脚本里 `DROP COLUMN`（历史事实列只停写不删，031 §14④ 同一口径）。
+6. **SHOULD**：`NN-<feature-slug>.sql` 编号 = Feature 号，与 `docs/specs/<stage>/<feature>` 一一对应。
+
+- **全量文件与增量脚本分工**：`CREATE TABLE IF NOT EXISTS` 遇存量表会整段跳过（D-A 类缺陷）——新列 MUST 由独立增量脚本承载，全量文件仅描述「全新库」的目标形状。
+- **基线演进**：每个 Feature 交付时，若其增量脚本已被全量文件吸收，MUST 把「吸收前的全量 dump」落为 `deployment/schema/baseline/<NNN>.sql`（门禁输入数据，非可执行迁移；首个基线 = 033），供重放路径 B 暴露「全量文件与增量脚本描述不一致」类缺陷。

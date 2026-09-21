@@ -6,6 +6,38 @@
 
 ---
 
+## [2026-09-21] feat(033)：测试基础设施——真库共享基座（仅测试作用域）+ schema 双路径重放门禁 + RPC 边允许清单（ADR-0081 Accepted）
+
+**性质**：Feature 033 实现落地。负责人 2026-09-21 裁决 H-033-1~H-033-5 按 spec 推荐方案批准（Testcontainers
+仅测试作用域 / 基线入库 / refund 保留标注遗留 / R-A 边允许清单 / skip 即红）。**纯测试基础设施与门禁**：
+不改任何生产行为，既有 H2 用例与 `InMemory*Repository` 桩零删除，033 自身零业务断言（用例本体归 031/032/payment 域）。
+
+- **真库共享基座**（ADR-0081 决策 1）：新模块 `deployment/test-infra`（仅测试作用域依赖）——Testcontainers
+  单例 MySQL（跨类复用）+ 类内独占库 `t_<类名>_<hash>` + `SchemaBootstrap`（DDL 单一来源 `deployment/schema`，
+  路径白名单 + 剥 CREATE DATABASE/USE + 必含约束断言，禁假绿②）+ `RealDb` 组合注解（`@Tag("real-db")` +
+  spring.datasource System property 注入）+ `DockerContract`（无 Docker 本地 skip 并显式汇总 /
+  `realdb.required=true` 时 fail，禁假绿①）+ `FaultHooks` / `MetricsAssert`；容器与测试统一 utf8mb4 / UTC。
+- **既有真库测试切换基座**：`LedgerPostingConcurrencyTest` 迁移共享基座，**三条用例与断言逐字保留**（spec §11
+  显式授权的泛化）。
+- **schema 门禁**（ADR-0081 决策 2）：`schema-lint.sh`（L-1 MariaDB 方言禁令 / L-2 initdb 与 schema 库集合一致 /
+  L-3 ALTER 必带 information_schema 守卫）+ `016` 守卫模式改写（语义不变）+ initdb `refund` 遗留标注（H-033-3）+
+  `schema-replay.sh` 双路径重放（A 空库全量连跑两遍幂等自检 + B 基线恢复→全量+增量，information_schema 快照
+  diff 必须为空）+ 首基线 `deployment/schema/baseline/033.sql`（33 表 / 9 库，H-033-2）；D-A 缺陷注入实测可证伪
+  （注入列 → exit 1 且 diff 定位）。
+- **架构门禁**（ADR-0081 决策 3）：`RpcEdgeAllowListTest` + `rpc-edges.txt`（15 条 `@FeignClient` 运行时边逐行
+  全等，允许清单式）+ `src/main` 禁 `org.testcontainers` L5 规则（封口「仅测试作用域」）。
+- **CI 挂载**：`schema.yml` 新增（lint + replay）；`verify.yml` 追加 `real-db` job（`-Drealdb.required=true`，
+  skip 即红，既有 job 零改动）；`e2e.yml` 追加 nightly 五个离线 demo 场景（happy-path / audit / mq /
+  reconciliation / refund，§16 R6 排除涉沙箱）+ ACCESS_LOG 断言 + `verify-random-order`
+  （`-Dsurefire.runOrder=random`）；`demo/reset.sh` 容器名环境变量间接寻址（compose 默认不变）。
+- **规范收口**：engineering-standards §4 测试载体与 L1→L2b 升级判据 + 归属边界、§11 漂移清单第 6 条
+  （rpc-edges 一致性）、新增 §12「迁移脚本可重放」六条（spec §6.2 升格）；Constitution §Engineering.3 同步；
+  ADR-0081 🟢 Accepted + 索引同步；roadmap / specs README / spec 033 三件套（plan/tasks/acceptance）齐。
+- **验证**：全量 `./mvnw -o clean verify -fae` **915 tests 全绿（0 失败 / 0 错误 / 0 跳过）**，16 模块 BUILD
+  SUCCESS；schema-lint / schema-replay 本机实跑 exit 0；详见 spec 033 [acceptance.md](docs/specs/stage-05-channel-and-finance-deepening/033-test-infrastructure/acceptance.md)。
+
+---
+
 ## [2026-09-21] feat(031)：Ledger / Accounting 地基——Accounting Event 入站契约 + 两级科目 + 余额投影（ADR-0077~0079 Accepted）
 
 **性质**：Feature 031 实现落地。负责人 2026-09-21 裁决 D-1~D-7 按 spec 推荐方案批准并开工。

@@ -166,7 +166,7 @@ Sync Impact Report:
 1. **Code Quality**：`[目标]` Checkstyle + Spotless（CI 强制）—— **当前未落地**：根 POM 与 CI 均未配置这两个插件，实际靠人工评审与 ArchUnit 门禁保障；引入前须评估对既有代码的批量改动量。命名遵循 Java 惯例，包名 `com.payment.<service>.<layer>`；错误显式传递，业务错误（`BizException`）与系统错误（`SystemException`）分离；全局异常处理器兜底。
 2. **分层**：`api → application → domain ← infra`，依赖单向；`domain` 不依赖任何框架层；DTO / Entity 分离，跨服务只传 DTO / 事件。
 3. **Testing**：JUnit 5 + Mockito + AssertJ。资金逻辑 MUST 有测试；表驱动测试优先；关键路径（支付成功/失败/超时/重复回调/渠道失败/服务重启/最终一致）有集成测试。**MUST NOT** 删测试或改测试迎合错误实现。
-   - **集成测试载体**：`[目标]` Testcontainers —— **当前未落地**：仅声明 BOM、0 处使用，实际全部集成测试跑在 H2（test scope，MySQL 兼容模式）。切换前须先解决本机 Docker 可用性与 CI 环境的一致性，并逐个模块验证 H2 与 MySQL 的方言差异（尤其约束、时区、JSON 类型）。
+   - **集成测试载体**：Testcontainers **已落地**（spec 033 / ADR-0081，2026-09-21）：共享基座 `deployment/test-infra`，**仅测试作用域**（`src/main` 禁依赖，ArchUnit 门禁强制），L2b 真库子层默认仍 H2，唯一键竞争 / 并发时序 / 方言特性类断言升级 L2b（判据见 engineering-standards §4）；无 Docker 本地 skip 且显式汇总，CI `real-db` job 无 Docker 即红。
 4. **Documentation & ADR**：不可逆/重要决策 MUST 立 ADR（`docs/adr/NNNN-*.md`）；领域需求以 Spec（`docs/specs/<feature>/spec.md`）为单一事实源。
 5. **CI/CD**：Maven Wrapper（mvnw）锁定版本；`mvnw verify`（compile+test）→ lint → 打包；配置与代码分离（Nacos / 环境变量）；Conventional Commits + 功能分支 + PR Review。
 6. **Dependency Management**：父 POM + `dependencyManagement` 统一版本（Spring Boot BOM + Spring Cloud BOM）；最小化依赖，每个新依赖 MUST 有理由（ADR 或 commit）。
