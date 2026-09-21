@@ -35,7 +35,7 @@ import org.testcontainers.utility.DockerImageName;
  * 并发记账的**真库**验证（spec 030 / T11，FR-223 / SC-B1-03 / SC-B1-04）。
  *
  * <h3>为什么必须是真库</h3>
- * 既有 {@code LedgerIdempotencyTest} 用「首次 save 抛 {@code DuplicateKeyException}」的仓储桩
+ * 既有 {@code PostingIdempotencyTest} 用「首次 save 抛 {@code DuplicateKeyException}」的仓储桩
  * **确定性模拟**撞键——它验证的是「撞键后服务回查首次结果」这条应用逻辑，
  * 但「并发下真的只会有一个赢家」这件事，桩是证不了的：那是
  * {@code uk_postings_idempotency_key} 唯一约束的职责。本类用 Testcontainers-MySQL
@@ -145,11 +145,13 @@ class LedgerPostingConcurrencyTest {
 
     // ---------- 支撑 ----------
 
-    /** 插入一条记账批次；撞唯一键返回 {@code false}（被吸收），成功返回 {@code true}。 */
+    /** 插入一条记账交易；撞唯一键返回 {@code false}（被吸收），成功返回 {@code true}。 */
     private static boolean insertPosting(String postingNo, String idempotencyKey) throws SQLException {
-        String sql = "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id, "
-                + "status, currency, created_at, updated_at, version) "
-                + "VALUES (?, ?, 'PAYMENT', ?, 'POSTED', 'CNY', NOW(), NOW(), 1)";
+        // 031 形态：event_type/period/posted_at 均 NOT NULL（幂等键为账本派生 {eventType}:{sourceId}）
+        String sql = "INSERT INTO postings (posting_no, event_type, idempotency_key, source_type, "
+                + "source_id, status, currency, period, posted_at, created_at, updated_at, version) "
+                + "VALUES (?, 'PAYMENT_CAPTURE', ?, 'PAYMENT', ?, 'POSTED', 'CNY', "
+                + "DATE_FORMAT(NOW(), '%Y-%m'), NOW(), NOW(), NOW(), 1)";
         try (Connection c = newConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, postingNo);
