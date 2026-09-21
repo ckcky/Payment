@@ -48,6 +48,9 @@
         <!-- ADR-0048 修订版：Mock 渠道收银台（演示组件，非领域服务；不进 ServiceBoundaryTest.SERVICES）
              非领域资产统一收口在 deployment/ 下（同 demo/、performance/） -->
         <module>deployment/mock-channel-web</module>
+        <!-- ADR-0081 / spec 033：真库测试共享基座（Testcontainers 仅测试作用域；
+             deployment 非领域组件收口纪律；各服务以 test scope 依赖，生产依赖树零变化） -->
+        <module>deployment/test-infra</module>
         <!-- spec 022 / ADR-0069：全链路自动化测试（黑盒，live 栈，默认 skipTests，
              仅 -De2e.env=local|ci 时执行；nightly workflow 专用） -->
         <module>deployment/e2e-tests</module>

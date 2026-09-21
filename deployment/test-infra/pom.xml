@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        test-infra（ADR-0081 决策 1 / spec 033 §5.2）：真库测试共享基座 —— 仅测试作用域。
+
+        定位：测试基础设施，非领域服务，非运行时组件 —— 故收口在 deployment/ 下
+        （AGENTS.md「非领域组件收口 deployment/」纪律），也不进入 ServiceBoundaryTest.SERVICES。
+        各服务以 <scope>test</scope> 依赖本模块，生产依赖树零变化
+        （L5 规则「src/main 不得依赖 org.testcontainers」在 RpcEdgeAllowListTest 封口）。
+
+        五件事（spec 033 §5.2）：
+          RealMysqlTestSupport —— 容器生命周期（单例跨类复用）+ 类内独占 database + Docker 可用性契约；
+          SchemaBootstrap      —— DDL 单一来源装配（只能来自 deployment/schema/，C-1）；
+          RealDb               —— @SpringBootTest 组合注解（真库数据源 + @Tag("real-db")）；
+          FaultHooks           —— 真库级故障注入钩子（F-2，spec §10，供 034 复用）；
+          MetricsAssert        —— MeterRegistry 断言工具（供 035 复用）。
+
+        纪律（C-5）：本模块内 MUST NOT 出现业务词汇（payment/ledger/settlement 语义）——
+        它是「能证伪的能力」的载体，不是业务用例的垃圾场（spec 033 §4 归属边界）。
+    -->
+    <parent>
+        <groupId>com.payment</groupId>
+        <artifactId>payment-arch</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <!-- 本模块收口在 deployment/ 下，需上溯两级到仓库根 -->
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>test-infra</artifactId>
+    <name>test-infra</name>
+    <description>真库测试共享基座（Testcontainers-MySQL + SchemaBootstrap + FaultHooks + MetricsAssert，仅测试作用域）</description>
+
+    <!--
+        本模块是「测试用的库」：以下依赖均为测试资产的组成部分，对消费方经
+        test-scope 依赖传递后仍只在测试 classpath 出现。版本一律由根 pom 的
+        spring-boot-dependencies / testcontainers-bom 统一管理，此处零版本号。
+    -->
+    <dependencies>
+        <!-- 测试基座的公共 API（消费方本来就有；这里以默认 scope 随 test-scope 依赖传递） -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+
+        <!-- 真库载体：容器 + MySQL 驱动（DriverManager 直连，规格由 BOM 管理） -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+        </dependency>
+
+        <!-- RealDb 组合注解：@SpringBootTest 元注解 + SpringExtension（消费方为 Boot 服务，天然齐备） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+        </dependency>
+
+        <!-- MetricsAssert（spec 033 §5.2，供 035 复用；Micrometer 已是全站观测栈） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
+        <!-- 本模块自身的测试（基座自证：合成表并发唯一 / DDL 来源契约 / 降级决策） -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
