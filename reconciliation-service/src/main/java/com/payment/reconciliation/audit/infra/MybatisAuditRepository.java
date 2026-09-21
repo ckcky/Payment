@@ -234,7 +234,7 @@ public class MybatisAuditRepository implements AuditRepository {
 
     private AuditAdjustment toAdjustmentDomain(AuditAdjustmentEntity entity) {
         return new AuditAdjustment(entity.getId(), entity.getAdjustNo(), entity.getBatchId(),
-                entity.getDifferenceId(),
+                entity.getDifferenceId(), entity.getDiffNo(),
                 com.payment.reconciliation.audit.domain.AuditAdjustmentKind.valueOf(entity.getKind()),
                 entity.getDebitAccountCode(), entity.getCreditAccountCode(),
                 entity.getAmountMinor() == null ? 0 : entity.getAmountMinor(), entity.getCurrency(),
@@ -248,6 +248,7 @@ public class MybatisAuditRepository implements AuditRepository {
         entity.setAdjustNo(adjustment.getAdjustNo());
         entity.setBatchId(adjustment.getBatchId());
         entity.setDifferenceId(adjustment.getDifferenceId());
+        entity.setDiffNo(adjustment.getDiffNo());
         entity.setKind(adjustment.getKind().name());
         entity.setDebitAccountCode(adjustment.getDebitAccountCode());
         entity.setCreditAccountCode(adjustment.getCreditAccountCode());

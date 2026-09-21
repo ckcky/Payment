@@ -14,6 +14,10 @@ public class ReconciliationBatchEntity extends BaseEntity {
     private String batchNo;
     private String period;
     private String source;
+    /** 对账渠道（spec 032 §9 ④；历史批次缺省 MOCK）。 */
+    private String channelCode;
+    /** 账单导入批次 id（NULL = 032 前历史批次）。 */
+    private Long importId;
     /** 对账状态机枚举名（状态机逻辑在领域层，持久化只存枚举名）。 */
     private String status;
     private String matchesJson;
@@ -44,6 +48,22 @@ public class ReconciliationBatchEntity extends BaseEntity {
 
     public void setSource(String source) {
         this.source = source;
+    }
+
+    public String getChannelCode() {
+        return channelCode;
+    }
+
+    public void setChannelCode(String channelCode) {
+        this.channelCode = channelCode;
+    }
+
+    public Long getImportId() {
+        return importId;
+    }
+
+    public void setImportId(Long importId) {
+        this.importId = importId;
     }
 
     public String getStatus() {

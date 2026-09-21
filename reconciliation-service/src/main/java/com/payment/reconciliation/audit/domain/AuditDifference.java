@@ -142,6 +142,24 @@ public final class AuditDifference {
         this.status = AuditDifferenceStatus.VERIFIED;
     }
 
+    /**
+     * 人工确认收口（spec 032 §7.2 / plan §2.8，F7 关闭路径）：备注必填（ADR-0019 纪律）。
+     * 已 RESOLVED 再次收口为幂等空操作；其余任意状态均可由人工确认直达 RESOLVED
+     * （CROSS_LEDGER_MISMATCH 等调账后 recheck 无法转绿的差异，由人工结论收口）。
+     */
+    public void resolve(String note, String actor, String atIso) {
+        if (note == null || note.isBlank()) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "resolution note must not be blank");
+        }
+        if (this.status == AuditDifferenceStatus.RESOLVED) {
+            return;
+        }
+        this.status = AuditDifferenceStatus.RESOLVED;
+        this.resolutionNote = note;
+        this.resolvedBy = actor == null || actor.isBlank() ? "system" : actor;
+        this.resolvedAt = atIso;
+    }
+
     /** recheck 未通过：退回 SUSPENDED 继续暴露（保留累计处置金额）。 */
     public void rejectRecheck() {
         if (this.status == AuditDifferenceStatus.VERIFIED) {

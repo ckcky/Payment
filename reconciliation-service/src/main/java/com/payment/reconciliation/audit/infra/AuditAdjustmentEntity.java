@@ -12,6 +12,8 @@ public class AuditAdjustmentEntity extends BaseEntity {
     private String adjustNo;
     private Long batchId;
     private Long differenceId;
+    /** 对账差异单号（RD，032 自动处置回溯来源）。 */
+    private String diffNo;
     private String kind;
     private String debitAccountCode;
     private String creditAccountCode;
@@ -45,6 +47,14 @@ public class AuditAdjustmentEntity extends BaseEntity {
 
     public void setDifferenceId(Long differenceId) {
         this.differenceId = differenceId;
+    }
+
+    public String getDiffNo() {
+        return diffNo;
+    }
+
+    public void setDiffNo(String diffNo) {
+        this.diffNo = diffNo;
     }
 
     public String getKind() {

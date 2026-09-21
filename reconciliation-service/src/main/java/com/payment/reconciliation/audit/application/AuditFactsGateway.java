@@ -1,5 +1,7 @@
 package com.payment.reconciliation.audit.application;
 
+import com.payment.reconciliation.statement.StatementLine;
+
 import java.util.List;
 import java.util.Map;
 
@@ -21,22 +23,19 @@ public interface AuditFactsGateway {
     /** 结算批次审计事实（跨账核对用，含非 SUCCEEDED 供过滤）。 */
     List<SettlementBatchFact> settlementFacts(String period);
 
-    /** 渠道账单（沿用 006 加载器口径；REAL 核对用）。 */
-    List<com.payment.reconciliation.domain.ChannelStatement> channelStatements(String period);
-
     /**
-     * 渠道账单加载（含口径标志，spec 022 T433）：{@code officialFile=true} 表示命中周期
-     * 正式账单文件（双向比对：正向 + 反向短款 + 重复流水）；false 表示回退默认 fixture
-     * （非正式账单全集，仅正向比对）。默认实现沿用 {@link #channelStatements(String)}，
-     * 一律视为非正式账单（保守口径）。
+     * 渠道账单标准行加载（spec 032 §5 方案 B / plan §2.9，账实核对输入）：
+     * 取该周期最新 NORMALIZED 导入的标准化行。无可用导入 ⇒ 显式失败（NFR-008 / plan §2.10：
+     * 不做静默空账单核对，批次失败可安全重跑）。
      */
-    default ChannelStatementLoad channelStatementLoad(String period) {
-        return new ChannelStatementLoad(channelStatements(period), false);
-    }
+    StatementLoad channelStatementLoad(String period);
 
-    /** 渠道账单加载结果：条目 + 是否命中周期正式账单文件。 */
-    record ChannelStatementLoad(List<com.payment.reconciliation.domain.ChannelStatement> statements,
-                                boolean officialFile) {
+    /** 渠道账单加载结果：标准化行 + 来源导入单号（officialFile = 存在 NORMALIZED 导入，双向比对开启）。 */
+    record StatementLoad(List<StatementLine> lines, String importNo) {
+
+        public boolean officialFile() {
+            return importNo != null;
+        }
     }
 
     /** 平衡性快捷视图。 */

@@ -25,10 +25,10 @@ public class FeignPaymentFactsClient implements PaymentFactsClient {
     }
 
     @Override
-    public List<PlatformFact> fetchConfirmedFacts() {
+    public List<PlatformFact> fetchConfirmedFacts(String period) {
         List<PaymentFactDto> dtos;
         try {
-            dtos = feign.fetchConfirmedFacts();
+            dtos = feign.fetchConfirmedFacts(period);
         } catch (RetryableException ex) {
             throw BizException.of(ErrorCodes.INTERNAL_ERROR, "payment facts read failed after retries");
         }
@@ -37,7 +37,7 @@ public class FeignPaymentFactsClient implements PaymentFactsClient {
         }
         return dtos.stream()
                 .map(d -> new PlatformFact(d.channelReference(), "PAYMENT",
-                        d.amountMinor(), d.currencyCode(), d.status()))
+                        d.amountMinor(), d.currencyCode(), d.status(), d.merchantId()))
                 .toList();
     }
 }

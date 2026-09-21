@@ -53,6 +53,7 @@ public class AuditApplicationService {
     private final LedgerAuditor ledgerAuditor;
     private final RealAuditor realAuditor;
     private final ReportAuditor reportAuditor;
+    private final DispositionFailureRecorder dispositionFailureRecorder;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
     private final boolean writeOffEnabled;
@@ -66,6 +67,7 @@ public class AuditApplicationService {
                                    LedgerAuditor ledgerAuditor,
                                    RealAuditor realAuditor,
                                    ReportAuditor reportAuditor,
+                                   DispositionFailureRecorder dispositionFailureRecorder,
                                    BusinessMetrics metrics,
                                    StructuredAuditLogger auditLogger,
                                    @Value("${audit.adjust.write-off.enabled:false}") boolean writeOffEnabled,
@@ -78,6 +80,7 @@ public class AuditApplicationService {
         this.ledgerAuditor = ledgerAuditor;
         this.realAuditor = realAuditor;
         this.reportAuditor = reportAuditor;
+        this.dispositionFailureRecorder = dispositionFailureRecorder;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
         this.writeOffEnabled = writeOffEnabled;
@@ -114,8 +117,8 @@ public class AuditApplicationService {
             differences.addAll(ledgerAuditor.audit(facts, settlementFacts, postings, balance, unclosedSuspense));
         }
         if (scope == AuditScope.REAL || scope == AuditScope.ALL) {
-            AuditFactsGateway.ChannelStatementLoad statementLoad = factsGateway.channelStatementLoad(period);
-            differences.addAll(realAuditor.audit(facts, statementLoad.statements(), postings,
+            AuditFactsGateway.StatementLoad statementLoad = factsGateway.channelStatementLoad(period);
+            differences.addAll(realAuditor.audit(facts, statementLoad.lines(), postings,
                     statementLoad.officialFile()));
         }
         if (scope == AuditScope.REPORT || scope == AuditScope.ALL) {
@@ -155,6 +158,31 @@ public class AuditApplicationService {
         return auditRepository.findAdjustmentsByBatch(batch.getId());
     }
 
+    /**
+     * 人工确认收口（spec 032 §7.2 / plan §2.8，F7 关闭路径）：备注必填（ADR-0019 纪律）。
+     * CROSS_LEDGER_MISMATCH 等调账后 recheck 无法转绿的差异，由人工确认直达 RESOLVED 后关批。
+     * 已 RESOLVED 差异再次收口为幂等空操作。
+     */
+    @Transactional
+    public AuditDifference resolveDifference(String batchNo, Long differenceId, String resolutionNote,
+                                             String resolvedBy, String resolvedAt) {
+        AuditBatch batch = requireBatch(batchNo);
+        if (batch.getStatus() == AuditBatchStatus.CLOSED) {
+            throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION, "batch closed: " + batchNo);
+        }
+        AuditDifference difference = requireDifference(batch, differenceId);
+        String at = (resolvedAt == null || resolvedAt.isBlank()) ? Instant.now().toString() : resolvedAt;
+        String actor = (resolvedBy == null || resolvedBy.isBlank()) ? "system" : resolvedBy;
+        difference.resolve(resolutionNote, actor, at);
+        auditRepository.saveDifference(batch.getId(), difference);
+        metrics.counter("audit.difference_resolved", 1, "module", "reconciliation");
+        auditLogger.audit("audit.difference_resolved", batch.getPeriod(), 0L, difference.getCurrency(),
+                difference.getKind().name(), "RESOLVED", actor, difference.getId() == null ? "" : String.valueOf(difference.getId()));
+        log.info("audit difference resolved (manual): batchNo={} difference={} kind={}",
+                batchNo, differenceId, difference.getKind());
+        return difference;
+    }
+
     // ---------------------------------------------------------------- 挂账 / 调账
 
     /**
@@ -176,11 +204,21 @@ public class AuditApplicationService {
                 difference.getExpectedAmountMinor(), difference.getActualAmountMinor());
 
         String adjustNo = BusinessNos.of(BusinessNoType.AUDIT_ADJUSTMENT);
+        // H-032-3：处置动作（ADJUSTING，瞬时）与处置结果分态；记账失败 ⇒ ADJUST_FAILED 留痕（独立事务）
+        // + 原样上抛（NFR-008），绝不静默吞异常或回退 PENDING。
+        difference.setStatus(AuditDifferenceStatus.ADJUSTING);
         // spec 031 §9：挂账改发 ADJUSTMENT 事件（转账语义 §7.6，Dr to / Cr from 由账本推导）
         AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.SUSPEND,
                 underRecorded, amount, null, null);
-        AuditLedgerGateway.PostingResult result = ledgerGateway.postAdjustment(
-                adjustNo, difference.getCurrency(), plan);
+        AuditLedgerGateway.PostingResult result;
+        try {
+            result = ledgerGateway.postAdjustment(adjustNo, difference.getCurrency(), plan);
+        } catch (RuntimeException ex) {
+            dispositionFailureRecorder.record(batch.getId(), difference.getId(), null, adjustNo,
+                    AuditAdjustmentKind.SUSPEND, amount, difference.getCurrency(), operator, reason,
+                    ex.getMessage());
+            throw ex;
+        }
 
         AuditAdjustment adjustment = new AuditAdjustment(null, adjustNo, batch.getId(), difference.getId(),
                 AuditAdjustmentKind.SUSPEND, plan.toAccountCode(), plan.fromAccountCode(),
@@ -235,13 +273,21 @@ public class AuditApplicationService {
         String adjustNo = BusinessNos.of(BusinessNoType.AUDIT_ADJUSTMENT);
         boolean underRecorded = SuspensePolicy.isUnderRecorded(difference.getKind(),
                 difference.getExpectedAmountMinor(), difference.getActualAmountMinor());
+        // H-032-3：处置动作（ADJUSTING，瞬时）与结果分态；记账失败 ⇒ ADJUST_FAILED 留痕（独立事务）+ 上抛
+        difference.setStatus(AuditDifferenceStatus.ADJUSTING);
         // spec 031 §9 / ADR-0077：调账改发 ADJUSTMENT 事件——红冲由账本按引用读原交易取反
         // （reversesEventType/reversesSourceId），本地不再拼装方向分录（冲突 1 已裁决）。
         AdjustmentPolicy.OriginalRef original = originalRef(difference);
         AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(kind, underRecorded, amount,
                 targetAccountCode, original);
-        AuditLedgerGateway.PostingResult result = ledgerGateway.postAdjustment(
-                adjustNo, difference.getCurrency(), plan);
+        AuditLedgerGateway.PostingResult result;
+        try {
+            result = ledgerGateway.postAdjustment(adjustNo, difference.getCurrency(), plan);
+        } catch (RuntimeException ex) {
+            dispositionFailureRecorder.record(batch.getId(), difference.getId(), null, adjustNo,
+                    kind, amount, difference.getCurrency(), operator, reason, ex.getMessage());
+            throw ex;
+        }
 
         // 处置台账展示列（只读回显，非记账指令）：转账语义取 to/from；红冲镜像原交易科目
         String debitAccount;
@@ -369,7 +415,10 @@ public class AuditApplicationService {
             case BALANCE_BREAK, ACCOUNT_RECON_BREAK, CROSS_LEDGER_MISMATCH -> ledgerAuditor.audit(facts,
                     factsGateway.settlementFacts(period), postings, factsGateway.ledgerBalance(),
                     auditRepository.sumUnclosedSuspendedAmountMinor());
-            case LEDGER_VS_STATEMENT_BREAK -> realAuditor.audit(facts, factsGateway.channelStatements(period), postings);
+            case LEDGER_VS_STATEMENT_BREAK -> {
+                AuditFactsGateway.StatementLoad load = factsGateway.channelStatementLoad(period);
+                yield realAuditor.audit(facts, load.lines(), postings, load.officialFile());
+            }
             case REPORT_MISMATCH -> reportAuditor.audit(reportMatches(period), facts);
             default -> List.of();
         };

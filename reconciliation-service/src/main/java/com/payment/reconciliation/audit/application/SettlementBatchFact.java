@@ -7,7 +7,12 @@ package com.payment.reconciliation.audit.application;
  * 见 settlement FeignLedgerPostingGateway），跨账核对以此为键。</p>
  */
 public record SettlementBatchFact(Long id, String batchNo, String status,
-                                  long netMinor, String currency) {
+                                  long netMinor, String currency, String merchantId) {
+
+    /** 兼容构造（032 前的 5 字段形态）：merchantId 缺省为 null。 */
+    public SettlementBatchFact(Long id, String batchNo, String status, long netMinor, String currency) {
+        this(id, batchNo, status, netMinor, currency, null);
+    }
 
     public boolean confirmed() {
         return "SUCCEEDED".equals(status);
