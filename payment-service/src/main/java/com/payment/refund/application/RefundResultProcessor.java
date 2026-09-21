@@ -67,6 +67,14 @@ public class RefundResultProcessor {
     /** spec 029 / FR-203 / T30：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
     private final PaymentEventPublisher mq;
 
+    /**
+     * 出站失败台账登记器（spec 034 §9.2 M7）：order notify 失败 →
+     * {@code ORDER_NOTIFY_REFUND_RESULT:{refundNo}} PENDING 行（原请求重发 = 重放）。
+     * 可选注入（required=false）：手工构造（既有测试）缺省 null = 不登记，行为与 034 前一致（SC-012）。
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.payment.posting.application.PostingPendingRecorder pendingRecorder;
+
     public RefundResultProcessor(RefundRepository refundRepository,
                                  OrderGateway orderGateway,
                                  LedgerPostingGateway ledgerGateway,
@@ -172,6 +180,16 @@ public class RefundResultProcessor {
             }
         } catch (RuntimeException ex) {
             metrics.counter("refund.order_notify_failed", 1.0, "module", MODULE);
+            // 出站失败台账（spec 034 §9.2 M7）：登记原通知载荷，交由补投器退避重发；
+            // 登记自身失败不抛（R-1：退款成功事实永不因台账写入失败回滚）
+            if (pendingRecorder != null) {
+                pendingRecorder.recordFailure(
+                        com.payment.posting.application.PostingEventTypes.ORDER_NOTIFY_REFUND_RESULT,
+                        "REFUND", refund.getRefundNo(),
+                        com.payment.posting.application.PostingEventTypes.ORDER_NOTIFY_REFUND_RESULT
+                                + ":" + refund.getRefundNo(),
+                        notification, ex.getMessage());
+            }
             log.warn("退款结果通知 order 失败（事实不回滚，重试/对账兜底）refundNo={} txrf={} reason={}",
                     refund.getRefundNo(), refund.getTransactionRefundNo(), ex.getMessage());
         }

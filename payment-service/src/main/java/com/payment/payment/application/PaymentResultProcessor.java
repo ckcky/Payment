@@ -43,6 +43,14 @@ public class PaymentResultProcessor {
     /** spec 029 / FR-201 / T29：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
     private final PaymentEventPublisher mq;
 
+    /**
+     * 出站失败台账登记器（spec 034 §9.2 M7）：order notify 失败 → {@code ORDER_NOTIFY_SUCCEEDED}
+     * PENDING 行（原请求重发 = 重放）。可选注入（required=false）：手工构造（既有测试）缺省
+     * null = 不登记，行为与 034 前完全一致（SC-012）。
+     */
+    @Autowired(required = false)
+    private com.payment.posting.application.PostingPendingRecorder pendingRecorder;
+
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
     public PaymentResultProcessor(PaymentRepository paymentRepository,
@@ -157,6 +165,7 @@ public class PaymentResultProcessor {
                     log.warn("MQ 发布 payment.succeeded 失败（事实不回滚，回查补投）paymentNo={} reason={}",
                             payment.getPaymentNo(), ex.getMessage());
                     metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
+                    recordNotifyFailure(payment.getPaymentNo(), request, ex);
                 }
             } else {
                 try {
@@ -168,6 +177,7 @@ public class PaymentResultProcessor {
                     log.warn("支付成功通知 order 失败（事实不回滚，对账兜底）paymentNo={} orderNo={} reason={}",
                             payment.getPaymentNo(), payment.getOrderNo(), ex.getMessage());
                     metrics.counter("payment.order_notify_failed", 1.0, "module", "payment");
+                    recordNotifyFailure(payment.getPaymentNo(), request, ex);
                     // spec 002 / T024：「订单非法前态拒绝」是资金风险信号——钱已收、订单侧不认，
                     // 仅靠通用指标会被淹没在 RPC 抖动里，故单独审计留痕 + 专用指标，供人工介入与对账兜底。
                     if (isIllegalOrderState(ex)) {
@@ -211,5 +221,21 @@ public class PaymentResultProcessor {
         String code = biz.getCode();
         return ErrorCodes.STATE_TRANSITION_VIOLATION.equals(code)
                 || ErrorCodes.ORDER_NOT_PAYABLE.equals(code);
+    }
+
+    /**
+     * order notify 失败 → 出站失败台账登记（spec 034 §9.2 M7）：原请求载荷落
+     * {@code ORDER_NOTIFY_SUCCEEDED:{paymentNo}} PENDING 行，由补投器退避重发；
+     * 登记自身失败不抛（R-1：支付成功事实永不因台账写入失败回滚）。
+     */
+    private void recordNotifyFailure(String paymentNo, PaymentSucceededRequest request, RuntimeException ex) {
+        if (pendingRecorder == null) {
+            return; // 手工构造（既有测试）缺省不登记
+        }
+        pendingRecorder.recordFailure(
+                com.payment.posting.application.PostingEventTypes.ORDER_NOTIFY_SUCCEEDED,
+                "PAYMENT", paymentNo,
+                com.payment.posting.application.PostingEventTypes.ORDER_NOTIFY_SUCCEEDED + ":" + paymentNo,
+                request, ex.getMessage());
     }
 }
