@@ -3,8 +3,9 @@
 # ADR-0083：观测基线——SLO/错误预算落地、高基数政策、密钥与报文不入日志、保留自研 trace（Feature 035）
 
 > 承载 [spec 035-observability-slo](../specs/stage-05-channel-and-finance-deepening/035-observability-slo/spec.md) 的四条决策。
-> 状态：**🟡 Proposed（2026-09-21 提出，待负责人裁决）**——SLO 目标值属 Constitution §Governance
-> 「非功能目标」人类决策（design-review §13 **H14**），**未 Accepted 前告警只出报表、不 page**。
+> 状态：**🟢 Accepted（2026-09-21 负责人批量裁决，H-035-1~4 按 spec 推荐方案批准；随 spec 035 实现落地）**
+> ——SLO 目标值属 Constitution §Governance「非功能目标」人类决策（design-review §13 **H14**），
+> **实测数据积累满一周期前告警只出报表、不 page**（H-035-1 静默期口径，见 docs/operations/slo-report.md）。
 
 ---
 
