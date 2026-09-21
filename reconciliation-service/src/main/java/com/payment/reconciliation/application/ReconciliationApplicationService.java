@@ -289,19 +289,17 @@ public class ReconciliationApplicationService {
 
         ReconciliationBatch batch = repository.findById(row.getBatchId()).orElse(null);
         if (batch != null) {
-            List<Difference> synced = new ArrayList<>();
-            boolean changed = false;
             for (Difference d : batch.getDifferences()) {
                 if (diffNo.equals(d.getDiffNo()) && !d.isResolved()) {
                     d.resolve(resolutionNote, actor, at);
-                    changed = true;
                 }
-                synced.add(d);
             }
-            if (changed) {
-                if (batch.getStatus().name().equals("HAS_DIFFERENCE")) {
-                    batch.beginProcessing();
-                }
+            // 台账行先于批次视图更新，故不以 changed 判定：本单号已收口即推进
+            // HAS_DIFFERENCE → PROCESSING（beginProcessing 对 PROCESSING 幂等，ADR-0019）。
+            // 否则重放/末笔收口时 changed 恒假，批次停在 HAS_DIFFERENCE，关批 409。
+            String status = batch.getStatus().name();
+            if (status.equals("HAS_DIFFERENCE") || status.equals("PROCESSING")) {
+                batch.beginProcessing();
                 repository.save(batch);
             }
         }

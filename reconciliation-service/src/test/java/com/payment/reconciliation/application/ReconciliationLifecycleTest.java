@@ -3,6 +3,7 @@ package com.payment.reconciliation.application;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
+import com.payment.reconciliation.domain.Difference;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.domain.ReconciliationStatus;
@@ -128,5 +129,28 @@ class ReconciliationLifecycleTest {
                 .isNotNull()
                 .extracting(c -> c.count())
                 .isEqualTo(1.0);
+    }
+
+    /**
+     * 032 demo 实跑回归（T24b 同轮发现）：按 RD 单号收口时台账行**先于**批次视图更新，
+     * 视图里该单号已是 RESOLVED——批次推进 MUST NOT 依赖「视图发生变化」判定，
+     * 否则末笔/重放收口后批次滞留 HAS_DIFFERENCE，关批 409。
+     */
+    @Test
+    void resolveByDiffNoAdvancesBatchAndAllowsClose() {
+        ReconciliationBatch batch = batchWithTwoDifferences();
+        List<String> diffNos = batch.getDifferences().stream().map(Difference::getDiffNo).toList();
+        assertThat(diffNos).doesNotContainNull();
+
+        service.resolveDifferenceByNo(diffNos.get(0), "checked", "ops", null);
+        assertThat(repository.findById(batch.getId()).orElseThrow().getStatus())
+                .isEqualTo(ReconciliationStatus.PROCESSING);
+
+        service.resolveDifferenceByNo(diffNos.get(1), "checked", "ops", null);
+        // 重放收口（同单号再来一次）不回退批次状态
+        service.resolveDifferenceByNo(diffNos.get(1), "checked again", "ops", null);
+
+        ReconciliationBatch closed = service.closeBatch(batch.getId(), "ops");
+        assertThat(closed.getStatus()).isEqualTo(ReconciliationStatus.CLOSED);
     }
 }

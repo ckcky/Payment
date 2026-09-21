@@ -5,6 +5,9 @@ import com.payment.reconciliation.statement.StatementParseException;
 import com.payment.reconciliation.statement.StatementParser;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -31,6 +34,8 @@ public class CsvStatementParser implements StatementParser {
             "amountMinor", "feeMinor", "currencyCode", "status", "occurredAt"};
     private static final String[] LEGACY_HEADER = {"reference", "amountMinor", "currencyCode", "status"};
     private static final Set<String> REFERENCE_TYPES = Set.of("PAYMENT", "REFUND", "SETTLEMENT", "FEE");
+    private static final DateTimeFormatter OCCURRED_AT_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public List<StatementLine> parse(String channelCode, String period, String content) {
@@ -97,7 +102,35 @@ public class CsvStatementParser implements StatementParser {
         return new StatementLine(null, lineNo, channelCode, channelTxnNo.isEmpty() ? null : channelTxnNo,
                 normalizedType, reference.isEmpty() ? null : reference, referenceKind,
                 text(cols[3]).isEmpty() ? null : text(cols[3]),
-                amount, fee, currency, status, text(cols[8]).isEmpty() ? null : text(cols[8]), raw);
+                amount, fee, currency, status, normalizeOccurredAt(text(cols[8])), raw);
+    }
+
+    /**
+     * occurredAt 归一（032 实跑踩坑：任意串直插 DATETIME 列 500）：接受
+     * {@code yyyy-MM-dd HH:mm:ss} / ISO 本地日期时间（含可选毫秒与尾部 Z） / {@code yyyy-MM-dd}，
+     * 统一为 {@code yyyy-MM-dd HH:mm:ss}；空或不可解析 ⇒ null（列可空，原文恒留 raw_text）。
+     * 属归一性缺陷而非结构性错误（spec 032 §9①/§11 分工：不整批 REJECTED）。
+     */
+    private String normalizeOccurredAt(String raw) {
+        if (raw.isEmpty()) {
+            return null;
+        }
+        String v = raw.replace('T', ' ');
+        if (v.endsWith("Z")) {
+            v = v.substring(0, v.length() - 1);
+        }
+        int dot = v.indexOf('.');
+        if (dot > 0) {
+            v = v.substring(0, dot);
+        }
+        try {
+            if (v.length() == 10) {
+                return LocalDate.parse(v).atStartOfDay().format(OCCURRED_AT_FMT);
+            }
+            return LocalDateTime.parse(v, OCCURRED_AT_FMT).format(OCCURRED_AT_FMT);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private StatementLine parseLegacyLine(String channelCode, int lineNo, String[] cols, String raw) {

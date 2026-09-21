@@ -19,10 +19,10 @@ echo "==> ⓪ 导入渠道账单（period=${PERIOD}，channel=MOCK，指纹幂�
 STMT_PAYLOAD="$(python3 -c "
 import json, sys
 content = ('referenceType,reference,channelTxnNo,merchantId,amountMinor,feeMinor,currencyCode,status,occurredAt\n'
-           'PAYMENT,CH-DEMO-SURPLUS,CH-DEMO-SURPLUS,1,12345,0,CNY,SUCCEEDED,%s\n') % sys.argv[1]
+           'PAYMENT,CH-DEMO-SURPLUS,CH-DEMO-SURPLUS,1,12345,0,CNY,SUCCEEDED,%s\n') % sys.argv[2]
 print(json.dumps({'channelCode': 'MOCK', 'period': sys.argv[1], 'sourceType': 'FILE',
                   'content': content, 'importedBy': 'scenario-reconciliation'}))
-" "$PERIOD")"
+" "$PERIOD" "$(date '+%Y-%m-%d %H:%M:%S')")"
 http POST "$RECON_URL/internal/reconciliation/statement-imports" "$STMT_PAYLOAD"
 assert_status 201 "账单导入"
 jget "d['status']"

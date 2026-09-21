@@ -34,6 +34,15 @@ for f in "$SCHEMA_DIR"/[0-9][0-9]-*.sql; do
   echo "    applied $(basename "$f")"
 done
 
+# NNN-*.sql（三位数增量迁移）默认**不**重放：015~031 属旧存量演进脚本，不适用全新库。
+# 032 起按 033「迁移可重放六条」写为自带 USE + 守卫 + 全新库无害 no-op 的形态，
+# reset 用 TRUNCATE 不清表结构，存量卷旧表必须靠它们就地演进
+# （032 实跑踩坑：audit_adjustments.diff_no 缺失 → adjust 500）。新增迁移在此登记。
+for f in 032-reconciliation-statement.sql 034-pending-postings.sql; do
+  db_mysql < "$SCHEMA_DIR/$f"
+  echo "    migrated $f"
+done
+
 # 收敛退款历史列：refund_items / refund_post_process_attempts 的 refund_id(BIGINT)
 # → refund_no(VARCHAR)，ADR-0063 收口（2026-09）。reset 用 CREATE TABLE IF NOT EXISTS，
 # 不会改造已存在表，故这里对存量表显式收敛一次；全新库已是 refund_no，检测到即跳过。

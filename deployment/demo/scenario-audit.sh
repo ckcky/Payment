@@ -181,6 +181,10 @@ info "PASS: SUSPENSE 余额归零"
 
 # ---- ⑦ 处置剩余差异：全部 suspend → TRANSFER（自动 recheck 收口）----
 echo "==> ⑦ 处置剩余差异（挂账 → 转出 → 自动复核）"
+# 重拉差异列表：③ 的 DIFF_JSON 是 ④b 人工收口前的旧快照，
+# 直接复用会把已 RESOLVED 的 F7 再挂账/调账（RESOLVED→ADJUSTED 回退，关批 409）。
+http GET "$RECON_URL/internal/audit/batches/$BATCH_NO/differences"
+DIFF_JSON="$BODY"
 REMAINS="$(echo "$DIFF_JSON" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
