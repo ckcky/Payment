@@ -184,7 +184,7 @@ graph LR
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
 | ledger-service | Ledger | 复式记账（资金核心；031 起记账决策权归账本） | 已实现（`004-ledger` 前置 + `031` 重构，8090） |
-| reconciliation-service | Reconciliation | 异步对账（状态机全链路 + 周期 fixture） | 已实现（ADR-0019/0020/0021） |
+| reconciliation-service | Reconciliation | 异步对账（状态机全链路；032 起渠道账单为导入对象——SHA-256 指纹幂等 + typed 三级匹配 + 差异台账拆表 + 渠道资金事实入账 CHANNEL_SETTLEMENT/CHANNEL_FEE） | 已实现（ADR-0019/0020/0021 + 032/ADR-0080） |
 | settlement-service | Settlement | 结算批次、调整项、已确认事实闸门、收敛/关闭与结算侧记账（不真实出款） | 已实现（ADR-0022/0023 缺口补齐） |
 
 > Channel 不单独成服务：以「接口 + 模块」内聚在 payment-service（`application/channel` 接口 + `infra/channel` 实现），落实 Payment ≠ Channel。
@@ -681,10 +681,11 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 
 | 调用 | 端点 | 用途 |
 |---|---|---|
-| reconciliation → payment / refund | GET /internal/payments|refunds/confirmed-facts | 账证事实 |
-| reconciliation → settlement | GET /internal/settlements/audit-facts?period= | 账证 + 跨账事实（sourceId = 批次 id） |
+| reconciliation → payment / refund | GET /internal/payments|refunds/confirmed-facts | 账证事实（032 起支持 `period` 过滤，出参含 `merchantId`） |
+| reconciliation → settlement | GET /internal/settlements/audit-facts?period= | 账证 + 跨账事实（sourceId = 批次号，031 M1 收编） |
 | reconciliation → ledger | GET /internal/ledger/postings/all、GET /internal/ledger/balance | 分录与平衡视图 |
 | reconciliation → ledger | POST /internal/ledger/postings | 挂账/调账记账（source_type=ADJUSTMENT，幂等键 adjust:{adjustNo}） |
+| reconciliation → ledger | POST /internal/ledger/accounting-events | **032 渠道资金事实入账**（CHANNEL_SETTLEMENT/CHANNEL_FEE，`LedgerEventFeignClient`，spec 032 §10.2；已入 rpc-edges.txt 允许清单） |
 | settlement → reconciliation | GET /internal/audit/settlement-gate?period= | 结算门禁 |
 
 **数据模型 delta**：reconciliation 库 `audit_batches` / `audit_differences`（11 类差异 × 三级 severity × 5 态状态机）/ `audit_adjustments`（处置台账）；ledger `accounts` 新增 id=5 SUSPENSE seed；业务单号新增 AB（审计批）/ AD（调账）前缀（ADR-0062 扩展）。

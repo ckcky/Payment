@@ -3,9 +3,9 @@
 # ADR-0080：对账真实化——渠道账单导入对象 + 事实维度升级 + 渠道资金事实入账（Feature 032）
 
 > 承载 [spec 032-reconciliation-real-statement](../specs/stage-05-channel-and-finance-deepening/032-reconciliation-real-statement/spec.md) 的六条决策。
-> 状态：**🟡 Proposed（2026-09-21 提出，待负责人裁决）**——涉及 Constitution §Governance
-> 「人类决策边界」（跨服务 DTO 变更 = API Breaking、资金口径变更、新增关键表、差异处置语义），
-> **未 Accepted 前不得实现**。
+> 状态：**🟢 Accepted（2026-09-21 负责人裁决，按 spec 推荐方案批准）**——
+> H-032-1~H-032-6 全部按 spec §16 推荐方案批准（含 H-032-5「本轮不做渠道拉账单端口」）；
+> 裁决记录见 spec 032 §16 与本日 CHANGELOG。已随 Feature 032 实现落地（2026-09-21）。
 > 编号说明：Feature 编号 **032**（stage-design §9.2 分配）；依赖 [ADR-0077~0079](0077-ledger-accounting-foundation-decisions.md)（031 账务地基）。
 
 ---
