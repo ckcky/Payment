@@ -6,6 +6,21 @@
 
 ---
 
+## [2026-09-22] feat(035)：可观测与 SLO 收口——指标目录唯一登记处 + 高基数政策机器化 + 4 项 SLO Recording Rules + 告警 24 条五要素 + 密钥/报文不入日志（ADR-0083 Accepted）
+
+**性质**：Feature 035 实现落地（stage-05 末个 Feature，五 Feature 全部收口）。负责人 2026-09-21 批量裁决 H-035-1~4 按 spec 推荐方案批准（[ADR-0083](docs/adr/0083-observability-baseline-slo-and-cardinality.md) 🟢 Accepted）。**零新增运行时依赖、不引 APM**（G6 保留自研 X-Trace-Id，AC-5）。
+
+- **高基数政策落地（G2）**：engineering-standards §7 增补 HC-1~HC-4 + trace/日志九 ID 关联政策 + 密钥禁令；`MetricsCardinalityTest` 全仓静态扫描（标签键白名单 / `*No`/`*Id` 值禁令 / period 棘轮基线 13 / 阳性对照防空转）+ `MetricsAssert.assertTagValuesWithinAllowedSet` 运行期遍历断言。**门禁落地即捕获 032 `AutoDispositionService` 的 `outcome` 标签漂移**——按「目录登记→白名单增长」处置，HC-3 流程闭环自证。
+- **缺失指标补齐（G1/M-3）**：`ledger_unbalanced` / `trial_balance_break` / `period_close_rejected` / `balance_rebuild_applied`（ledger）、`channel_request{channelCode,result}` / `channel_timeout` / `limit_inflight_leak`（payment）、`settlement_pending_amount{state}`（settlement 净额绝对值 Gauge）+ 各域单测；redis-exporter `CHECK_STREAMS` 由 `payment:*` 修正为 `mq:stream:*`（A-17 与 PEL 面板死规则救活，真栈实测 `redis_stream_group_lag` 18 序列）。
+- **SLO 与错误预算（G3）**：`slo-recording.yml` 4 组 Recording Rules（查询 P99≤500ms / 命令 P99≤1s / 资金入口可用性 99.9% / 账务完整性双信号——SLO-4 按 §17 判据 4 用「未入账绝对条数+账龄」替代比率 SLI）+ `error_budget_remaining` + 双窗 burn rate（fast 1h>14.4 && slow 6h>6）；`slo-report.md` 目标值 `[目标]` 固化 + 调优追加表 + 月度模板（目标 ≠ 实测，§8.3 分离判据）。
+- **告警扩容（G4）**：`payment-alerts.yml` **24 条全五要素**（Trigger/Severity/Meaning/First Investigation/Owner + runbook_url/dashboard_url），既有零删改（AC-6）；runbook §5.4 二十四段处置流程（症状→影响面→第一步→判定→处置→升级，M-4 缺一不收）；promtool 两文件校验通过（24+21 rules）。
+- **日志纪律（G5/§6.2）**：`/internal/channels/**` 进 access-log 默认排除（渠道 notify 完整 form 不落日志，**不推翻 ADR-0027**）；ACCESS_LOG uri 归一化到 best-matching 路由模式（真栈实测 `/orders/{ref}/payments`，原始单号形态零计数）；测试 + 真栈双向证据。
+- **目录与看板（G1/G7）**：runbook §5 重写为**指标目录唯一登记处**（六域分表：类型/标签值域/业务意义/告警映射/Owner + 确认不存在埋点黑名单，「同步四处」纪律）；Grafana 看板新增「⑦ SLO 与错误预算」「⑧ 资金健康」两行（16 面板，目标=threshold 线/实测=曲线）。
+- **demo 套件收口（实测暴露的先于本 Feature 的三处时序/环境问题）**：`run-all.sh` 顺序对齐 CI（审计先于退款类场景，ORPHAN_POSTING 挂批问题）+ `python`→`python3` 垫片 + 退款订单侧收敛轮询（034 C-19 分事务竞态）+ payment 重启后 Nacos 注册等待（No servers available 窗口）。
+- **测试与验证**：`mvn verify` **981 tests 全绿**（18 模块，EXIT=0，较 034 基线净增 51）；demo 七场景全 PASS；spec 035 三件套（plan/tasks/acceptance）齐；specs README / roadmap stage-05 / ADR traceability 同步收口——**27 项人类裁决（D-1~7 + H-032~035 全序列）全部批准闭环**。
+
+---
+
 ## [2026-09-21] feat(032)：对账实账化——渠道账单导入对象 + typed 匹配 + 差异台账拆表 + 渠道资金事实入账 + 结算口径收口（ADR-0080 Accepted）
 
 **性质**：Feature 032 实现落地。负责人 2026-09-21 裁决 H-032-1~H-032-6 按 spec §16 推荐方案批准（[ADR-0080](docs/adr/0080-reconciliation-statement-and-fund-facts.md) 同日转 🟢 Accepted）。

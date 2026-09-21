@@ -81,8 +81,10 @@ services:
       # 与 redis 服务同网络，直连容器名 + 默认端口
       REDIS_ADDR: "redis://redis:6379"
       # 只导出 stream 相关，减少基数（本大盘只用到 streams 系列）
-      REDIS_EXPORTER_CHECK_STREAMS: "payment:*"
-      REDIS_EXPORTER_CHECK_STREAM_GROUPS: "payment:*"
+      # 键前缀对齐 common-redis-mq 的 MqKeys.STREAM = "mq:stream:{topic}"；
+      # 035 前误写 payment:* 导致导出 0 条 stream 序列（A-17 消费积压依赖此修复）。
+      REDIS_EXPORTER_CHECK_STREAMS: "mq:stream:*"
+      REDIS_EXPORTER_CHECK_STREAM_GROUPS: "mq:stream:*"
     ports:
       - "9121:9121"
     depends_on:

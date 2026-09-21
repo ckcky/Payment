@@ -70,8 +70,18 @@ public class PostingEngine {
                 .toList();
 
         // 聚合根构造期即做借贷平衡校验：不平衡直接拒绝，不落任何分录（FR-002 门禁保留）
-        Posting posting = new Posting(event.eventType(), key, event.sourceType(),
-                event.sourceId(), event.currency(), entries);
+        // spec 035 / A-10：拒绝次数进指标（构造期拦截 = 复式记账被触碰的最早信号），语义不变、上抛照旧
+        Posting posting;
+        try {
+            posting = new Posting(event.eventType(), key, event.sourceType(),
+                    event.sourceId(), event.currency(), entries);
+        } catch (BizException ex) {
+            if (ErrorCodes.LEDGER_UNBALANCED.equals(ex.getCode())) {
+                metrics.counter("ledger_unbalanced", 1.0, "module", MODULE,
+                        "currency", event.currency());
+            }
+            throw ex;
+        }
         posting.stampPostedAt(Instant.now());
 
         if (periodRepository.isClosed(posting.getPeriod(), posting.getCurrency())) {

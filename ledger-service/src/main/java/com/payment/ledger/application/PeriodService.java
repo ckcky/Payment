@@ -2,6 +2,7 @@ package com.payment.ledger.application;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.ledger.domain.LedgerPeriod;
 import com.payment.ledger.domain.LedgerPeriodRepository;
 import com.payment.ledger.domain.LedgerRepository;
@@ -16,6 +17,11 @@ import org.springframework.stereotype.Service;
  * <p>关账前置校验 = 该期间试算平衡（按币种）且无 {@code PENDING} 交易残留；
  * CLOSED 期间拒收一切新事件（含 ADJUSTMENT，门禁在 {@link PostingEngine}）。
  * 币种口径：对「该期间出现过发生额」的每个币种逐一校验。</p>
+ *
+ * <p>spec 035 / A-10 观测：关账被拒按原因计数（{@code period_close_rejected{reason}}），
+ * 试算不平同时另计 {@code trial_balance_break{currency}}（复式记账被破坏的最高优先信号，
+ * Counter 而非 spec 表格初稿的 Gauge——发生次数语义，N-4 纪律，且避开 period 标签慢性泄漏，
+ * 偏差已在 035 acceptance §3 记录）。</p>
  */
 @Service
 public class PeriodService {
@@ -23,13 +29,16 @@ public class PeriodService {
     private final LedgerRepository ledgerRepository;
     private final BalanceChecker balanceChecker;
     private final LedgerPeriodRepository periodRepository;
+    private final BusinessMetrics metrics;
 
     public PeriodService(LedgerRepository ledgerRepository,
                          BalanceChecker balanceChecker,
-                         LedgerPeriodRepository periodRepository) {
+                         LedgerPeriodRepository periodRepository,
+                         BusinessMetrics metrics) {
         this.ledgerRepository = ledgerRepository;
         this.balanceChecker = balanceChecker;
         this.periodRepository = periodRepository;
+        this.metrics = metrics;
     }
 
     /** 关账（幂等：已 CLOSED 直接回放）。 */
@@ -40,12 +49,16 @@ public class PeriodService {
             return periodRepository.find(period, "CNY").orElseThrow();
         }
         if (ledgerRepository.existsPendingPosting(period)) {
+            metrics.counter("period_close_rejected", 1.0, "module", "ledger", "reason", "pending_posting");
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
                     "period has PENDING postings, close refused: " + period);
         }
         Map<String, Long> diffs = balanceChecker.byCurrency(period);
         for (Map.Entry<String, Long> entry : diffs.entrySet()) {
             if (entry.getValue() != 0L) {
+                metrics.counter("period_close_rejected", 1.0, "module", "ledger", "reason", "unbalanced");
+                metrics.counter("trial_balance_break", 1.0, "module", "ledger",
+                        "currency", entry.getKey());
                 throw BizException.of(ErrorCodes.LEDGER_UNBALANCED,
                         "period trial balance not balanced (" + entry.getKey() + " diff=" + entry.getValue()
                                 + "), close refused: " + period);

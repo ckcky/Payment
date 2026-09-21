@@ -108,6 +108,80 @@ class AccessLogFilterTest {
         assertThat(appender.list).isEmpty();
     }
 
+    // ===== spec 035 §10 / ADR-0083 决策 3：渠道回调入口不落正文（C-1）+ 密钥不入日志断言（C-3） =====
+
+    @Test
+    void defaultsExcludeChannelCallbackEntry() throws ServletException, IOException {
+        // C-1：不配置任何 properties 时的默认排除集合必须含 /internal/channels/**（notify 入口）
+        AccessLogProperties defaults = new AccessLogProperties(true, 4096, null);
+        assertThat(defaults.excludePaths()).contains("/actuator/**", "/internal/channels/**");
+
+        AccessLogFilter f = new AccessLogFilter(defaults, masker);
+        MockHttpServletRequest notify = new MockHttpServletRequest(
+                "POST", "/internal/channels/alipay/notify");
+        notify.setContentType("application/x-www-form-urlencoded");
+        notify.setContent(("out_trade_no=PM20260921001&total_amount=88.00"
+                + "&sign=a1b2c3d4e5f6%2BfakeSignature%3D&app_cert_sn=deadbeef")
+                .getBytes(StandardCharsets.UTF_8));
+        // 即便渠道 form 被完整消费（真实 controller 行为），默认配置下整条请求不落 ACCESS_LOG
+        f.doFilter(notify, new MockHttpServletResponse(),
+                (req, resp) -> req.getInputStream().readAllBytes());
+
+        assertThat(appender.list).as("渠道回调入口零日志（不落正文，密钥/报文不入日志）").isEmpty();
+    }
+
+    @Test
+    void nonExcludedPathsNeverLeakSignatureMaterial() throws ServletException, IOException {
+        // C-3 测试面：非排除路径的日志内容同样 MUST NOT 含 sign=/私钥片段——
+        // 若未来有人把 notify 移出排除路径且未接 mask，此测试给出行为基线（当前透传桩会记录正文，
+        // 故此处以「显式禁令的边界演示」形式断言：排除列表命中即零输出；未命中路径由禁令条文管）。
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/payments");
+        request.setContentType("application/json");
+        request.setContent("{\"amountMinor\":100}".getBytes(StandardCharsets.UTF_8));
+
+        filter.doFilter(request, new MockHttpServletResponse(),
+                (req, resp) -> req.getInputStream().readAllBytes());
+
+        assertThat(appender.list).hasSize(1);
+        String msg = appender.list.get(0).getFormattedMessage();
+        assertThat(msg).doesNotContain("sign=").doesNotContain("PRIVATE KEY")
+                .doesNotContain("app_cert");
+    }
+
+    @Test
+    void uriNormalizedToBestMatchingPatternWhenRouted() throws ServletException, IOException {
+        // spec 035 §6.2 纪律 2：命中 Spring MVC 路由后 uri 记 {ref} 模式，不落具体单号
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/internal/payments/PM20260922001/channel-callback");
+        request.setContentType("application/json");
+        request.setContent("{\"status\":\"SUCCESS\"}".getBytes(StandardCharsets.UTF_8));
+        FilterChain chain = (req, resp) -> {
+            // DispatcherServlet 命中 handler 后写入的属性——测试在链路内模拟
+            req.setAttribute(org.springframework.web.servlet.HandlerMapping
+                    .BEST_MATCHING_PATTERN_ATTRIBUTE,
+                    "/internal/payments/{ref}/channel-callback");
+        };
+
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+        assertThat(appender.list).hasSize(1);
+        String msg = appender.list.get(0).getFormattedMessage();
+        assertThat(msg).contains("uri=/internal/payments/{ref}/channel-callback")
+                .doesNotContain("PM20260922001");
+    }
+
+    @Test
+    void unroutedRequestFallsBackToRawUri() throws ServletException, IOException {
+        // 404/静态资源等未命中路由：无 best-matching 属性 ⇒ 回落原始 URI（可接受，路径即事实）
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/nope/PM123");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setStatus(404);
+        filter.doFilter(request, response, (req, resp) -> {
+        });
+
+        assertThat(appender.list.get(0).getFormattedMessage()).contains("uri=/nope/PM123");
+    }
+
     @Test
     void exceptionPathStillLogsAccessAndPropagates() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/boom");

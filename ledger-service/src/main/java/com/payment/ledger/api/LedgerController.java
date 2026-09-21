@@ -49,19 +49,22 @@ public class LedgerController {
     private final AccountBalanceRepository balanceRepository;
     private final LedgerRepository ledgerRepository;
     private final AccountRepository accountRepository;
+    private final com.payment.common.core.observability.BusinessMetrics metrics;
 
     public LedgerController(PostingEngine postingEngine,
                             BalanceChecker balanceChecker,
                             PeriodService periodService,
                             AccountBalanceRepository balanceRepository,
                             LedgerRepository ledgerRepository,
-                            AccountRepository accountRepository) {
+                            AccountRepository accountRepository,
+                            com.payment.common.core.observability.BusinessMetrics metrics) {
         this.postingEngine = postingEngine;
         this.balanceChecker = balanceChecker;
         this.periodService = periodService;
         this.balanceRepository = balanceRepository;
         this.ledgerRepository = ledgerRepository;
         this.accountRepository = accountRepository;
+        this.metrics = metrics;
     }
 
     /** 记账事件入账（幂等回放；不平衡交易由 Posting 聚合根构造期拒绝，不落任何分录）。
@@ -122,10 +125,13 @@ public class LedgerController {
         return balanceChecker.balances(currency);
     }
 
-    /** 全量重建余额投影（§10 低频管理端点：以 ledger_entries 为准重算）。 */
+    /** 全量重建余额投影（§10 低频管理端点：以 ledger_entries 为准重算）。
+     *  spec 035 / A-11：每次 rebuild 计数——正常应 ≈0，出现即投影漂移过（须查根因）。 */
     @PostMapping("/balances/rebuild")
     public Map<String, Integer> rebuildBalances() {
-        return Map.of("rebuilt", balanceRepository.rebuild());
+        int rebuilt = balanceRepository.rebuild();
+        metrics.counter("balance_rebuild_applied", 1.0, "module", "ledger");
+        return Map.of("rebuilt", rebuilt);
     }
 
     /** 期间列表（缺行 = OPEN 不在列；仅显式建行/关账后出现）。 */

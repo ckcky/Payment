@@ -31,6 +31,12 @@
 | ADR-0075 | 聚合支付统一渠道契约：四组结构化字段（`Goods` / `CallbackUrls` / `Payer` / `PaymentScene`）+ `channelExtra` 扩展袋 + 类型化 `PayCredential`（6 种 Kind）+ `ChannelResult.credential` 与 `accepted(ref, reason, credential)`；金额保持扁平；保留兼容构造器与 `default` 方法保证零中断编译；凭证不落库 | payment-service.md **§3.11 已补（2026-09-19 Phase 0 收口）**：✅ 悬空锚点 `#311-渠道内部契约spec-030--adr-0075` **现已可达**（补 `### 3.11 渠道内部契约`）；✅ 两个重复的 `### 3.10` 已消除（渠道路由＝3.10、事件通道＝**3.12**）。本节当前承载**契约条款**，「实现实况」表待 spec 030 实现完成后由 T138 补齐（🟢 Accepted，2026-09-19 由 Proposed 升级，**待实现**） |
 | ADR-0076 | 全链路染色分流（mock / 沙箱）+ 渠道模态落库 + 支付宝沙箱接入：`X-Dye-Tag` 三段式透传（common-core，入站读与出站写同批）+ `payment_attempts` 模态落库与反向三路径还原（**落库载体已按 H2 修订**：~~专用列 `channel_mode`~~ → 通用 JSON 列 **`extra_json`** 的 **`channelMode`** 键，**TEXT 存 JSON**，语义不变）+ 单 Adapter 双模态（`AlipayGateway` 收口 SDK）+ `POST /internal/channels/alipay/notify`（RSA2，纯文本 `success`） | payment-service.md **§2.1 / §2.3 已同步 H2 载体**（`channelMode` 键 + fail-safe 读法 + 迁移脚本 `030-payment-attempt-extra-json.sql`，2026-09-19 Phase 0）；§3.2 / §3.11 **待实现**；technical-solution §4.4 已写入「**渠道事实 / 平台事实可合法不一致**」口径（终态吸收的解释，2026-09-19 Phase 0），§2.4 / §3.5 / §4.3 / §5.2 **待实现**；`deployment/schema/03-payment-schema.sql` + 测试 H2 schema + 增量迁移 **`030-payment-attempt-extra-json.sql`**（~~`030-payment-attempt-channel-mode.sql`~~）**待实现**（🟢 Accepted，2026-09-19 由 Proposed 升级，**待实现**；H3 SDK 依赖**已裁决引入**；H2 载体**已裁决为通用 JSON 列**） |
 
+| ADR-0077~0079 | Ledger / Accounting 地基（spec 031）：Accounting Event + Posting Rule、两级科目、余额投影/期间/待记账台账 | technical-solution §3（ledger-service 行「031 起记账决策权归账本」）、systems/ledger-service.md（§9 验收）（🟢 Accepted 2026-09-21，已实现） |
+| ADR-0080 | 对账真实化（spec 032）：账单导入/归一化、类型化匹配、差异台账、渠道资金事实唯一生产者 | systems/reconciliation-service.md §8（Feature 032 节）（🟢 Accepted 2026-09-21，已实现） |
+| ADR-0081 | 测试载体升级（spec 033）：Testcontainers 真库、迁移可重放六条、schema 双路径重放门禁 | docs/guides/engineering-standards.md §4/§11/§12 + CI `schema-replay`/`real-db` job（🟢 Accepted 2026-09-21，已实现） |
+| ADR-0082 | 失败恢复归属与补偿边界（spec 034）：同事务收口、pending_postings 台账、有界退避与 ABANDONED、DLQ 管理 | technical-solution §5.1.1（超时三档）、systems/reconciliation-service.md §9（🟢 Accepted 2026-09-21，已实现） |
+| ADR-0083 | 观测基线（spec 035）：SLO Recording Rule + 错误预算、高基数政策 HC-1~4、密钥/报文不入日志、保留自研 trace | technical-solution §5.3、docs/guides/engineering-standards.md §7、docs/operations/runbook.md §5（指标目录+24 告警处置）、docs/operations/slo-report.md、`deployment/prometheus/rules/`（🟢 Accepted 2026-09-21/22，已实现） |
+
 ## 2. P1 决策索引（集中列出，避免散落漂移）
 
 | ADR | 决策要点 | technical-solution 落点 | systems 落点 |
@@ -50,6 +56,6 @@
 
 ADR-0001（Spring Cloud 架构）、ADR-0003~0007（支付可靠性集合）、ADR-0008~0011（Ledger 设计集合）、ADR-0016~0017（退款模型/编排）、ADR-0022~0023（结算调整项/闸门）、ADR-0029~0033（分布式演进）、ADR-0034~0037（内部令牌，已不做）、ADR-0054~0058（核心资金正确性 / 入口与基础设施 / 性能基线，见 `docs/adr/0016~0018-*.md`）。
 
-**stage-05 设计轮（2026-09-21，🟡 Proposed，L0 尚无落点）**：ADR-0077~0079（spec 031）、ADR-0080（032）、ADR-0081（033）、ADR-0082（034）、ADR-0083（035）——**五条均只纪录于 ADR 文件与各自 spec**，`technical-solution.md` 与 `systems/*.md` **未体现**其任何 `【目标】`。这是刻意状态：本轮为 design-only，未裁决、未实现，故**不得**进入 L0 当前系统事实（见 [design-summary §15](../specs/stage-05-channel-and-finance-deepening/design-summary.md)）。裁决 Accepted 并实现后，再按本节惯例逐条上移到 §1 并补落点。
+**stage-05 设计轮（2026-09-21 登记 → 2026-09-22 全部收口）**：ADR-0077~0079（031）、ADR-0080（032）、ADR-0081（033）、ADR-0082（034）、ADR-0083（035）——七条均经负责人裁决 🟢 Accepted 并随对应 spec 实现落地，落点已按本节惯例上移至 §1（见 stage-05 五行）；原「design-only、未裁决、L0 不体现」状态解除。
 
 > 迁移说明：本索引原为 `technical-solution.md` §9，2026-09-14 文档治理时移出，使技术方案只描述系统现状。

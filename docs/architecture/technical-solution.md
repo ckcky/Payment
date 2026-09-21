@@ -608,9 +608,9 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 - **Metrics（Micrometer）**：请求量、延迟、错误率 + 关键业务计数（支付成功率/失败率/超时率/渠道成功率/渠道耗时；退款成功率/失败率；履约/权益失败率；对账差异数量/金额；结算成功率/失败数）。
 - **Logs**：结构化日志（logback），关联字段含 `traceId` / `orderId` / `paymentId`；**资金动作 MUST 有审计日志**（`FINANCIAL_AUDIT` logger）。**敏感数据脱敏本期不做**（ADR-0027，`StructuredAuditLogger.mask()` 保留但生产零调用）；当前无真实卡号/凭证，接入真实渠道前 MUST 重新引入。
 - **Trace 关联**：当前使用 `TraceIdFilter`、Feign 头透传和 MDC 关联 `traceId`；Micrometer Tracing / `spanId` 标准化尚未落地，当前不上独立分布式追踪基础设施。
-- **告警/SLO**：对「支付状态未知堆积」「对账差异」「退款失败」「重试耗尽」等业务异常 MUST 告警，而非只告警基础设施；核心接口定义可用性、P99、对账达成率目标。
+- **告警/SLO**：业务告警 **24 条**（`payment-alerts.yml`，每条五要素：Trigger/Severity/Meaning/First Investigation Path/Owner + runbook/dashboard 链接，处置见 [runbook §5.4](../operations/runbook.md)）；**4 项 SLO 以 Recording Rule 可计算**（`slo-recording.yml`：查询 P99≤500ms / 命令 P99≤1s / 资金入口可用性≥99.9% / 账务完整性=未入账绝对条数双信号；目标值 `[目标]` 与实测值在文档与看板⑦强制分离，H-035-1 已批准、未实测前只报表不 page）。指标目录唯一登记处 = [runbook §5.1](../operations/runbook.md)（spec 035 / ADR-0083）。
 
-- **统一访问日志**：common-core 的 `AccessLogFilter` 在请求结束时输出单条 `ACCESS_LOG`，包含 method、URI、status、duration、受限 request/response payload，并通过 MDC 关联 `traceId`；logback 追加 `service` 字段。payload 有大小上限并保留 masking hook，但当前安全策略不启用真实脱敏。
+- **统一访问日志**：common-core 的 `AccessLogFilter` 在请求结束时输出单条 `ACCESS_LOG`，包含 method、URI、status、duration、受限 request/response payload，并通过 MDC 关联 `traceId`；logback 追加 `service` 字段。payload 有大小上限并保留 masking hook，但当前安全策略不启用真实脱敏。**spec 035 §10 纠偏**：默认排除路径含 `/internal/channels/**`（渠道回调 notify 的 form 报文——含 `sign`/`out_trade_no`——不落正文），密钥/完整报文不入日志以「排除 + 显式禁令 + 测试」三层守住（ADR-0027 不推翻，见 engineering-standards §7.3）。
 
 > 各服务的**精确埋点键 / 日志键**见 [systems/](systems/) 下对应文档（要素 6）。
 

@@ -1521,9 +1521,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (topic, group) (redis_streams_pending_messages)",
+          "expr": "sum by (stream, group) (redis_stream_group_messages_pending)",
           "refId": "A",
-          "legendFormat": "{{topic}} / {{group}}"
+          "legendFormat": "{{stream}} / {{group}}"
         }
       ],
       "options": {
@@ -1563,9 +1563,9 @@
       },
       "targets": [
         {
-          "expr": "sum by (topic, group) (redis_streams_entries_processed_total)",
+          "expr": "sum by (stream, group) (redis_stream_group_entries_read)",
           "refId": "A",
-          "legendFormat": "{{topic}} / {{group}}"
+          "legendFormat": "{{stream}} / {{group}}"
         }
       ],
       "options": {
@@ -1672,6 +1672,837 @@
         "overrides": []
       },
       "description": "StructuredAuditLogger 落地的 mq.committed / mq.rolled_back / mq.consumed / mq.dead_letter 审计速率（FR-503）。业务日志字段对齐后由图替换。"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 104
+      },
+      "id": 130,
+      "panels": [],
+      "title": "⑦ SLO 与错误预算（spec 035 / ADR-0083：threshold 线=目标值[目标]，曲线=实测）",
+      "type": "row"
+    },
+    {
+      "id": 131,
+      "type": "timeseries",
+      "title": "SLO-1 查询 P99 · 实测 vs 目标 500ms",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 105
+      },
+      "targets": [
+        {
+          "expr": "slo:query_latency_p99_seconds",
+          "refId": "A",
+          "legendFormat": "P99 实测"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "SLI=slo:query_latency_p99_seconds（GET /internal/** 直方图分位）。红线为 [目标] 500ms（H-035-1 已批准，未实测前不 page 只报表）。"
+    },
+    {
+      "id": 132,
+      "type": "timeseries",
+      "title": "SLO-2 命令 P99 · 实测 vs 目标 1s",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 105
+      },
+      "targets": [
+        {
+          "expr": "slo:command_latency_p99_seconds",
+          "refId": "A",
+          "legendFormat": "P99 实测"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1.0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "非 GET 的 /internal/**（排除 /internal/channels.*，回调时延由对端决定）。目标 1s [目标]。"
+    },
+    {
+      "id": 133,
+      "type": "timeseries",
+      "title": "SLO-3 资金入口可用性 · 目标 99.9%",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 105
+      },
+      "targets": [
+        {
+          "expr": "slo:availability_ratio{group=\"payment_entry\"}",
+          "refId": "A",
+          "legendFormat": "{{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.999
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "order/payment 两进程业务 POST 的 5xx 反面；业务拒绝不计错误（正常语义）。渠道不可用另见渠道分区。"
+    },
+    {
+      "id": 134,
+      "type": "timeseries",
+      "title": "错误预算剩余（1=满额，≤0=烧完）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 113
+      },
+      "targets": [
+        {
+          "expr": "slo:error_budget_remaining",
+          "refId": "A",
+          "legendFormat": "{{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "30 天窗口语义=1-(实测错误率/目标错误率) 的实时近似（Recording Rule slo-recording.yml）。"
+    },
+    {
+      "id": 135,
+      "type": "timeseries",
+      "title": "Burn Rate 双窗（A-01/A-02：fast 1h>14.4 且 slow 6h>6 才 page）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 113
+      },
+      "targets": [
+        {
+          "expr": "slo:burn_rate_fast",
+          "refId": "A",
+          "legendFormat": "fast(1h) {{group}}"
+        },
+        {
+          "expr": "slo:burn_rate_slow",
+          "refId": "B",
+          "legendFormat": "slow(6h) {{group}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "Google SRE 多窗多速率：单窗越阈不告警（防抖动误报，spec 035 §8.2）。"
+    },
+    {
+      "id": 136,
+      "type": "stat",
+      "title": "SLO-4 未入账已确认事实（绝对条数，正常=0）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 16,
+        "y": 113
+      },
+      "targets": [
+        {
+          "expr": "sum(ledger_posting_pending)",
+          "refId": "A",
+          "legendFormat": "未入账条数"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "非比率型表达（§8.2：跨服务分母不可信 ⇒ 未入账绝对条数 + 1h 持续窗承担账龄）。三调用方同名 gauge 求和。"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 121
+      },
+      "id": 140,
+      "panels": [],
+      "title": "⑧ 资金健康 · Money Health（值班首屏：这一屏全 0 才算健康，spec 035 §13）",
+      "type": "row"
+    },
+    {
+      "id": 141,
+      "type": "stat",
+      "title": "账务积压 · 待补投台账行",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 122
+      },
+      "targets": [
+        {
+          "expr": "sum(ledger_posting_pending)",
+          "refId": "A",
+          "legendFormat": "PENDING 行"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "034 §9 台账 PENDING 行数（A-08 >10m 告警）。"
+    },
+    {
+      "id": 142,
+      "type": "stat",
+      "title": "补投耗尽 · ABANDONED（24h 新增）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 122
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(ledger_posting_abandoned_total[24h]))",
+          "refId": "A",
+          "legendFormat": "ABANDONED"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "重试耗尽退出自动补投（A-09 critical），只能人工 replay（034 §9）。"
+    },
+    {
+      "id": 143,
+      "type": "stat",
+      "title": "复式记账被破坏 · 试算不平（24h 新增）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 122
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(trial_balance_break_total[24h])) + sum(increase(ledger_unbalanced_total[24h]))",
+          "refId": "A",
+          "legendFormat": "不平次数"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "关账试算不平 + 构造期拒绝（A-10 critical = 账务不可信，最高优先）。"
+    },
+    {
+      "id": 144,
+      "type": "stat",
+      "title": "对账积压 · 未收口差异",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 122
+      },
+      "targets": [
+        {
+          "expr": "sum(reconciliation_difference_total{module=\"reconciliation\"}) - sum(reconciliation_difference_resolved_total{module=\"reconciliation\"})",
+          "refId": "A",
+          "legendFormat": "PENDING 差异"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "差值即存量（A-13 24h 未清 ⇒ 关账将被门禁挡）。"
+    },
+    {
+      "id": 145,
+      "type": "stat",
+      "title": "结算积压 · 未收口净额（minor）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 127
+      },
+      "targets": [
+        {
+          "expr": "sum by (state) (settlement_pending_amount)",
+          "refId": "A",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "金额不是条数——结算的痛是钱压着（A-15，035 §5.2 N-3 最小货币单位）。"
+    },
+    {
+      "id": 146,
+      "type": "stat",
+      "title": "MQ 死信 · 自动化出口已丢失",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 8,
+        "y": 127
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic) (mq_dlq_size)",
+          "refId": "A",
+          "legendFormat": "{{topic}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "034 §10 DLQ 长度（A-18 critical）：非空=有消息永久失去自动处理机会。"
+    },
+    {
+      "id": 147,
+      "type": "timeseries",
+      "title": "悬置资金 · UNKNOWN 账龄分布（1h 增量）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 10,
+        "x": 14,
+        "y": 127
+      },
+      "targets": [
+        {
+          "expr": "sum by (bucket) (increase(payment_unknown_age_total[1h]))",
+          "refId": "A",
+          "legendFormat": "PAY {{bucket}}"
+        },
+        {
+          "expr": "sum by (bucket) (increase(refund_unknown_age_total[1h]))",
+          "refId": "B",
+          "legendFormat": "RFD {{bucket}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "分桶 0_5m/5_30m/30m_24h/gt_24h（034 §7.2）。gt_24h 非零 ⇒ 跨期悬置（A-05/A-06 critical）。"
+    },
+    {
+      "id": 148,
+      "type": "timeseries",
+      "title": "渠道超时占比（A-03：>10% 且样本≥5 持续 10m 告警）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 133
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(channel_timeout_total[5m])) / clamp_min(sum(increase(channel_request_total[5m])), 1)",
+          "refId": "A",
+          "legendFormat": "timeout 占比"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "description": "渠道超时（不是平台错误）→ UNKNOWN 成批产生的前兆信号（035 T32 埋点）。"
+    },
+    {
+      "id": 149,
+      "type": "timeseries",
+      "title": "额度在途泄漏（A-19：>0 持续 30m 告警）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 133
+      },
+      "targets": [
+        {
+          "expr": "max by (window) (limit_inflight_leak)",
+          "refId": "A",
+          "legendFormat": "{{window}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "预占后既未 CONFIRM 也未 RELEASE 的残留数（补偿成功即回落；持续>0 用户额度被错占）。"
+    },
+    {
+      "id": 150,
+      "type": "timeseries",
+      "title": "记账失败（调用方视角，A-07 critical）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 133
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(ledger_posting_failed_total[5m]))",
+          "refId": "A",
+          "legendFormat": "payment/refund 网关"
+        },
+        {
+          "expr": "sum(increase(audit_posting_failed_total[5m]))",
+          "refId": "B",
+          "legendFormat": "审计网关"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "description": "账没记上=资金事实与账本开始背离（今天零告警的 P0 缺口，035 §1.2#8）。"
     }
   ],
   "templating": {

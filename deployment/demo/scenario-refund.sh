@@ -102,6 +102,10 @@ for i in $(seq 1 30); do
   sleep 0.2
 done
 assert_eq "$FINAL2" "SUCCEEDED" "第二笔退款收敛 SUCCEEDED（PMRF=${PMRF2}）"
+# 034 C-19 后退款状态收口与订单通知分事务（异步）：订单侧收敛必须轮询等待，
+# 单次读取会把「最终一致」做成时序抖动（2026-09-22 035 demo 实测复现）。断言本体不放宽。
+wait_until 60 1 "订单侧收敛到 PARTIALLY_REFUNDED（通知异步送达）" \
+  bash -c "curl -s --noproxy '*' '$ORDER_URL/orders/$ORDER_NO' | python -c \"import json,sys;print(json.load(sys.stdin).get('status'))\" | grep -q '^PARTIALLY_REFUNDED$'" || true
 http GET "$ORDER_URL/orders/$ORDER_NO"
 jget "d['status']"; ORDER_STATUS="$VALUE"
 assert_eq "$ORDER_STATUS" "PARTIALLY_REFUNDED" "订单状态 → PARTIALLY_REFUNDED（7000/9900 已退）"
