@@ -1,128 +1,364 @@
-# 业务告警规则（Constitution Observability / engineering-standards §7）
+# 业务告警规则（Constitution Observability / engineering-standards §7 / spec 035 §9）
 #
-# 只告业务异常，不告基础设施：支付 UNKNOWN 堆积、重试/查询耗尽、退款失败、对账差异。
-# 指标名对应 Micrometer 计数器（点号→下划线，计数器加 _total 后缀）。
+# 只告业务异常，不告基础设施：支付 UNKNOWN 堆积、重试/查询耗尽、退款失败、对账差异、
+# 账务完整性、结算积压、MQ 积压/死信、限额泄漏、染色拒绝。
+# 指标名对应 Micrometer 计数器（点号→下划线，计数器加 _total 后缀；gauge 原样）。
+#
+# 五要素（§9）：每条 alert 都带 Trigger（expr+for）/ Severity（labels.severity）/
+# Meaning（summary=业务后果）/ First Investigation Path（description）/ Owner（labels.owner），
+# 并挂 runbook_url 与 dashboard_url 注解。
 #
 # ⚠️ 指标名必须与代码里 metrics.counter/timer 的键严格对应，否则规则永远不触发（死规则）。
 #    2026-09-09 修正：原 PaymentUnknownBacklog 用 payment_unknown_total（代码中不存在）、
 #    RefundFailure 用 refund_failed_total（代码中不存在）——两条规则自上线起从未触发过。
 #    现按 payment-service 实际埋点对齐，并补上 spec 003 / US5 / T021 要求的重试耗尽告警。
-#    变更埋点时须同步本文件（对照命令见 docs/operations/runbook.md）。
+#    变更埋点时须同步本文件（对照命令见 docs/operations/runbook.md §5.1）。
+#
+# spec 035 映射说明：§9 的 A-05/A-06 合并为 UnknownAgedOver24h（同型双域），
+# A-08 = LedgerPostingPendingBacklog、A-09 = LedgerPostingAbandoned、
+# A-12 = ReconciliationDifference、A-18 = MqDlqNonEmpty（034 已有，本轮补五要素）。
+# 035 不删任何既有告警，只细化与扩容（§9 判据）。
 
 groups:
   - name: payment-arch-business
     rules:
       # UNKNOWN 堆积：payment.unknown.duration 是 timer（收敛耗时），不能用于计数存量；
       # 以超时判定计数 payment.timeout 作为「新增 UNKNOWN」的代理指标（每笔转 UNKNOWN 前必先超时）。
+      # = spec 035 §9 A-04
       - alert: PaymentUnknownBacklog
         expr: increase(payment_timeout_total{module="payment"}[5m]) > 0
         for: 5m
         labels:
           severity: warning
+          owner: payment
         annotations:
-          summary: "支付状态 UNKNOWN 堆积"
-          description: "过去 5 分钟新增 {{ $value }} 笔超时转 UNKNOWN 的支付，需查询/对账/人工收敛。"
+          summary: "支付状态 UNKNOWN 堆积（超时转 UNKNOWN）"
+          description: "过去 5 分钟新增 {{ $value }} 笔超时转 UNKNOWN 的支付。第一步：查 UNKNOWN 队列 GET /internal/payments/unknown；第二步：主动查询是否在收敛（PaymentQueryExhausted 是否同烧）。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 业务告警"
 
       # spec 003 / US5 / T021：重试耗尽（PaymentRetryService 达上限后转主动查询收敛）
+      # = spec 035 §9 既有保留条
       - alert: PaymentRetryExhausted
         expr: increase(payment_retry_exhausted_total{module="payment"}[5m]) > 0
         for: 5m
         labels:
           severity: warning
+          owner: payment
         annotations:
-          summary: "支付重试耗尽"
-          description: "过去 5 分钟有 {{ $value }} 笔支付重试达上限，已转主动查询收敛；持续出现说明渠道不稳定。"
+          summary: "支付重试耗尽（转主动查询收敛）"
+          description: "过去 5 分钟有 {{ $value }} 笔支付重试达上限，已转主动查询收敛。第一步：看渠道健康（channel_request{result=...}）——持续出现说明渠道不稳定。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 渠道与 UNKNOWN"
 
       # spec 003 / US5：主动查询也耗尽 ⇒ 只能靠对账/人工收敛兜底，风险高于重试耗尽
+      # = spec 035 §9 既有保留条
       - alert: PaymentQueryExhausted
         expr: increase(payment_query_exhausted_total{module="payment"}[5m]) > 0
         for: 5m
         labels:
           severity: critical
+          owner: payment
         annotations:
-          summary: "渠道主动查询耗尽"
-          description: "过去 5 分钟有 {{ $value }} 笔支付连主动查询也达上限，状态无法自动收敛，需人工介入。"
+          summary: "渠道主动查询耗尽（状态无法自动收敛）"
+          description: "过去 5 分钟有 {{ $value }} 笔支付连主动查询也达上限。第一步：GET /internal/payments/unknown 按单人工 resolve（034 §7.1）；此时该单将成悬置资金事实。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 渠道与 UNKNOWN"
 
       # 订单侧以「非法前态」拒收但支付已成功（spec 002 / T024）：钱已收、订单不认账，属资金风险
+      # = spec 035 §9 既有保留条
       - alert: PaymentOrderIllegalStateRejected
         expr: increase(payment_order_illegal_state_rejected_total{module="payment"}[5m]) > 0
         for: 5m
         labels:
           severity: critical
+          owner: payment
         annotations:
-          summary: "订单非法前态拒绝（支付已成功）"
-          description: "过去 5 分钟有 {{ $value }} 笔支付成功但订单侧拒收，需人工核对（已写 FINANCIAL_AUDIT）。"
+          summary: "订单非法前态拒绝（支付已成功，资金风险）"
+          description: "过去 5 分钟有 {{ $value }} 笔支付成功但订单侧拒收。第一步：查 FINANCIAL_AUDIT 审计流水定位订单号；人工核对订单状态机前态。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 业务告警"
 
       # 退款失败：代码无 refund.failed 埋点，实际失败信号为 rejected（业务拒绝）
       # + order_notify_failed / ledger_posting_failed（下游联动失败）
+      # = spec 035 §9 既有保留条
       - alert: RefundFailure
         expr: increase(refund_rejected_total{module="refund"}[5m]) > 0
         for: 5m
         labels:
           severity: warning
+          owner: payment
         annotations:
-          summary: "退款被拒"
-          description: "过去 5 分钟新增 {{ $value }} 笔退款被业务规则拒绝，需确认是否为超退/状态非法。"
+          summary: "退款被业务规则拒绝"
+          description: "过去 5 分钟新增 {{ $value }} 笔退款被拒。第一步：确认是否超退/状态非法（reason 标签）；用户侧钱该退未退需客服口径。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 业务告警"
 
+      # = spec 035 §9 既有保留条
       - alert: RefundDownstreamFailure
         expr: increase(refund_order_notify_failed_total{module="refund"}[5m]) > 0
             or increase(refund_ledger_posting_failed_total{module="refund"}[5m]) > 0
         for: 5m
         labels:
           severity: critical
+          owner: payment
         annotations:
-          summary: "退款下游联动失败"
-          description: "退款已确认但通知订单/记账失败，退款事实不回滚，需人工补单（对账兜底）。"
+          summary: "退款下游联动失败（通知订单/记账）"
+          description: "退款已确认但通知订单/记账失败，退款事实不回滚。第一步：查台账 pending-postings（034 §9）是否已自动登记待补投。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
 
+      # 对账差异存量 = spec 035 §9 A-12（细化见新增 ReconciliationDifferenceSpike）
       - alert: ReconciliationDifference
         expr: reconciliation_difference_total{module="reconciliation"} > 0
         for: 5m
         labels:
           severity: warning
+          owner: finance
         annotations:
-          summary: "对账发现差异"
-          description: "对账差异累计 {{ $value }} 条，需人工核对原始支付/退款事实。"
+          summary: "对账存在未解决差异"
+          description: "对账差异累计 {{ $value }} 条。第一步：032 差异队列按 kind 看形态（单渠道 or 全域）；差异是外部资金事实与内部不一致的信号。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 对账"
 
-      # ===== spec 034 / T15：可靠性加固四条（A-05 / A-06 / A-08 / A-09）=====
+      # ===== spec 034 / T15：可靠性加固四条 =====
 
-      # A-05 台账积压（spec 034 §9）：pending_postings PENDING 行持续 > 0，
+      # 台账积压（spec 034 §9）= spec 035 §9 A-08：PENDING 行持续 > 0，
       # 说明出站记账/通知补投不收敛（Ledger 或 order 持续不可达）
       - alert: LedgerPostingPendingBacklog
         expr: ledger_posting_pending{module="posting"} > 0
         for: 10m
         labels:
           severity: warning
+          owner: ledger
         annotations:
-          summary: "出站失败台账积压"
-          description: "{{ $value }} 行台账 PENDING 超过 10 分钟未补投成功，需检查 Ledger/order 可用性。"
+          summary: "出站失败台账积压（补偿重试未收敛）"
+          description: "{{ $value }} 行台账 PENDING 超过 10 分钟未补投成功。第一步：GET pending-postings?status=PENDING（034 §9）看明细；第二步：Ledger 服务健康。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
 
-      # A-06 DLQ 非空（spec 034 §10）：消费重试耗尽的消息落死信，> 0 即需人工查看/重放
+      # DLQ 非空（spec 034 §10）= spec 035 §9 A-18：消费重试耗尽的消息落死信
       - alert: MqDlqNonEmpty
         expr: sum(mq_dlq_size) by (topic) > 0
         for: 5m
         labels:
-          severity: warning
+          severity: critical
+          owner: oncall
         annotations:
-          summary: "MQ 死信队列非空"
-          description: "topic {{ $labels.topic }} 有 {{ $value }} 条死信消息，需排查消费失败原因并决定重放。"
+          summary: "MQ 死信队列非空（消息永久失去自动处理机会）"
+          description: "topic {{ $labels.topic }} 有 {{ $value }} 条死信。第一步：查 DLQ 条目失败原因（dlqReason）；第二步：修复后按 034 §10 重放。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › ⑥消息通道"
 
-      # A-08 UNKNOWN 超 24h（spec 034 §7.2 G7）：扫描期年龄分桶计数出现 gt_24h 桶
+      # UNKNOWN 超 24h（spec 034 §7.2 G7）= spec 035 §9 A-05 + A-06（支付/退款双域合并）
       - alert: UnknownAgedOver24h
         expr: increase(payment_unknown_age_total{module="payment",bucket="gt_24h"}[10m]) > 0
             or increase(refund_unknown_age_total{module="refund",bucket="gt_24h"}[10m]) > 0
         for: 5m
         labels:
           severity: critical
+          owner: oncall
         annotations:
-          summary: "UNKNOWN 单龄超 24 小时"
-          description: "过去 10 分钟扫描发现跨期 UNKNOWN（支付/退款），对账兜底与关账门禁受影响，需人工介入。"
+          summary: "UNKNOWN 单龄超 24 小时（跨期悬置资金事实）"
+          description: "过去 10 分钟扫描发现跨期 UNKNOWN（支付/退款）。第一步：GET /internal/payments/unknown?age= 定位；第二步：人工 resolve（034 §7.1）。影响关账门禁与对账兜底。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 渠道与 UNKNOWN"
 
-      # A-09 台账补投耗尽（spec 034 §9）：ledger_posting_abandoned 出现即有行退出自动补投
+      # 台账补投耗尽（spec 034 §9）= spec 035 §9 A-09：出现即有行退出自动补投
       - alert: LedgerPostingAbandoned
         expr: increase(ledger_posting_abandoned_total{module="posting"}[10m]) > 0
         for: 5m
         labels:
           severity: critical
+          owner: ledger
         annotations:
-          summary: "台账补投耗尽置 ABANDONED"
-          description: "过去 10 分钟 {{ $value }} 行台账重试耗尽，需人工 POST /internal/*/pending-postings/{id}/replay。"
+          summary: "台账补投耗尽置 ABANDONED（只能人工）"
+          description: "过去 10 分钟 {{ $value }} 行台账重试耗尽。第一步：台账 ABANDONED 列表人工 POST /internal/*/pending-postings/{id}/replay；第二步：核对对账 MISSING_POSTING。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
+
+      # ===== spec 035 / Phase 5：SLO 燃烧 + 资金缺口补全（§9 A-01..A-20 中缺的 13 条）=====
+
+      # A-01 资金入口错误预算超烧：Google SRE 多窗双速率（fast 1h > 14.4 且 slow 6h > 6）
+      # 目标值 99.9% 为 [目标]（H-035-1 已批准，plan §0），派生序列见 slo-recording.yml
+      - alert: SloAvailabilityBudgetBurn
+        expr: slo:burn_rate_fast{group="payment_entry"} > 14.4
+            and slo:burn_rate_slow{group="payment_entry"} > 6
+        for: 2m
+        labels:
+          severity: critical
+          owner: oncall
+        annotations:
+          summary: "资金入口正在超烧可用性错误预算"
+          description: "第一步：SLO 面板看哪个入口在掉；第二步：ACCESS_LOG 按 status=5xx 聚合定位；第三步：依赖健康（MySQL/Nacos/下游服务 up{}）。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › SLO 与错误预算"
+
+      # A-02 同步接口 P99 越阈（查询 500ms / 命令 1s，[目标]）：burn 双窗同越
+      - alert: SloLatencyP99Breached
+        expr: (slo:burn_rate_fast{group=~".*latency.*"} > 14.4
+            and slo:burn_rate_slow{group=~".*latency.*"} > 6)
+        for: 5m
+        labels:
+          severity: warning
+          owner: oncall
+        annotations:
+          summary: "同步接口 P99 越阈，用户在等"
+          description: "第一步：http_server_requests 分 uri 看哪条路径；第二步：HikariCP 活跃连接（连接池排队）；第三步：慢 SQL。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › SLO 与错误预算"
+
+      # A-03 渠道超时激增：超时代理 = channel_timeout（UNKNOWN 或调用异常，035 埋点）
+      # 渠道不健康 ⇒ UNKNOWN 成批产生。分母下限 5 防止低流量抖动误报（M-3 防死规则误配）。
+      - alert: ChannelTimeoutSpike
+        expr: increase(channel_timeout_total[5m])
+              / clamp_min(increase(channel_request_total[5m]), 1) > 0.1
+            and increase(channel_request_total[5m]) >= 5
+        for: 10m
+        labels:
+          severity: critical
+          owner: payment
+        annotations:
+          summary: "渠道超时/UNKNOWN 占比激增（渠道不健康）"
+          description: "第一步：分 channelCode 看是否单渠道；第二步：沙箱/公网可达性；第三步：超时档配置（034 §8）。UNKNOWN 将成批产生，预告 A-04。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 渠道与 UNKNOWN"
+
+      # A-07 记账失败（调用方视角）：账没记上——资金事实与账本开始背离。
+      # 覆盖 payment/refund 网关（ledger_posting_failed）与 reconciliation 审计网关（audit_posting_failed）。
+      - alert: LedgerPostingFailure
+        expr: increase(ledger_posting_failed_total[5m]) > 0
+            or increase(audit_posting_failed_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: ledger
+        annotations:
+          summary: "记账失败——资金事实与账本开始背离"
+          description: "第一步：GET pending-postings?status=PENDING（034 §9）确认台账已登记；第二步：Ledger 服务健康；第三步：试算面板。台账会补投，但连续出现必须人工。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
+
+      # A-10 复式记账被破坏（最高优先）：试算不平 或 构造期不平衡拒绝
+      - alert: TrialBalanceBreak
+        expr: increase(trial_balance_break_total{module="ledger"}[10m]) > 0
+            or increase(ledger_unbalanced_total{module="ledger"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: ledger
+        annotations:
+          summary: "复式记账被破坏 = 账务不可信"
+          description: "第一步：GET /trial-balance 定位不平科目；第二步：冻结结算出款（031 §10 门禁）；第三步：rebuild 前后分录比对。账务 owner 直接升级。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
+
+      # A-11 余额投影重建被使用：正常应 ≈ 0，出现即有绕过 PostingEngine 的写或漂移
+      - alert: BalanceRebuildUsed
+        expr: increase(balance_rebuild_applied_total[1d]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: ledger
+        annotations:
+          summary: "余额投影发生过重建（正常应≈0）"
+          description: "第一步：查漂移原因——是否有绕过 PostingEngine 的直接写入；第二步：分录→投影重放记录（GET /trial-balance 留痕）。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
+
+      # A-13 对账积压（关账将被门禁挡）：pending = 差异累计 - 已解决累计（035 plan §3，
+      # 不新增 reconciliation_pending 埋点，PromQL 差值即存量）；账龄用 for 窗承担。
+      - alert: ReconciliationPendingAging
+        expr: sum(reconciliation_difference_total{module="reconciliation"})
+              - sum(reconciliation_difference_resolved_total{module="reconciliation"}) > 0
+        for: 24h
+        labels:
+          severity: warning
+          owner: finance
+        annotations:
+          summary: "对账差异积压超 24 小时未清（关账将被门禁挡）"
+          description: "第一步：032 差异队列 PENDING 列表按 kind 分型；第二步：是否单渠道/单商户集中；第三步：处理时效——关账前必须清零或 SUSPENSE 挂账。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 对账"
+
+      # A-14 账单源降级（对账失去外部锚点）：账单不可得 或 导入被拒
+      - alert: StatementSourceDegraded
+        expr: increase(reconciliation_statement_unavailable_total[1d]) > 0
+            or increase(reconciliation_statement_import_total{result="rejected"}[1d]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: finance
+        annotations:
+          summary: "账单不可信或对不上 = 对账失去外部锚点"
+          description: "第一步：渠道账单文件/接口可用性（channel 标签定位渠道）；第二步：解析失败明细（032 §11 导入批次状态）。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 对账"
+
+      # A-15 结算积压：未收口批次净额（最小货币单位，pending+processing+unknown 三态）。
+      # 阈值 100 万元（minor 单位 1e8）为 demo 量级占位 [目标]，上线前按真实体量校准。
+      - alert: SettlementBacklog
+        expr: sum(settlement_pending_amount) > 100000000
+        for: 1h
+        labels:
+          severity: warning
+          owner: settlement
+        annotations:
+          summary: "结算积压：商户的钱压着"
+          description: "第一步：批次状态列表（state 标签分 pending/processing/unknown）；第二步：门禁拒绝原因 settlement_gate_rejected_total{reason}。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
+
+      # A-16 出款批次失败
+      - alert: SettlementBatchFailure
+        expr: increase(settlement_failed_total{module="settlement"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          owner: settlement
+        annotations:
+          summary: "出款批次失败"
+          description: "第一步：同 batchNo 是否可安全重放（034 X-14 幂等边界）；第二步：Ledger 侧是否已记出款分录（避免双记）。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 资金健康"
+
+      # A-17 MQ 消费积压：redis_exporter 已导出真实序列（035 修正 CHECK_STREAMS=mq:stream:*）。
+      # lag = 未投递条数；messages_pending = PEL 未确认条数。阈值 100 为 demo 量级占位。
+      - alert: MqConsumerLag
+        expr: redis_stream_group_lag > 100
+            or redis_stream_group_messages_pending > 100
+        for: 10m
+        labels:
+          severity: warning
+          owner: oncall
+        annotations:
+          summary: "MQ 消费积压：事件在堆，下游状态滞后"
+          description: "第一步：消费组进程是否活（对应服务 up{}）；第二步：XAUTOCLAIM（claimStale）是否触发；第三步：生产速率是否异常放大。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › ⑥消息通道"
+
+      # A-19 额度在途泄漏：预占后既未 CONFIRM 也未 RELEASE（补偿扫描器计残差 gauge）
+      - alert: LimitInflightLeak
+        expr: limit_inflight_leak{module="payment"} > 0
+        for: 30m
+        labels:
+          severity: warning
+          owner: payment
+        annotations:
+          summary: "额度预占泄漏，用户可能被误限"
+          description: "第一步：LimitCompensationScanner 是否在工作（日志）；第二步：找 RESERVE 无对应 CONFIRM/RELEASE 的悬挂预占单。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 业务告警"
+
+      # A-20 染色拒绝异常：出现即有调用方发了非法 X-Dye-Mode（配置漂移信号）
+      - alert: DyeRejectedAnomalous
+        expr: increase(dye_tag_rejected_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: info
+          owner: platform
+        annotations:
+          summary: "有调用方发送非法染色值（转工单）"
+          description: "第一步：ACCESS_LOG 定位来源服务/调用方；第二步：配置漂移比对（染色值域见 ADR-0021）。不 page，开 ticket。"
+          runbook_url: "docs/operations/runbook.md#5-告警处置"
+          dashboard_url: "Grafana › PaymentArch › 总览"

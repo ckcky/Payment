@@ -1,0 +1,112 @@
+# SLO Recording Rules — spec 035 §8.2 / ADR-0083 决策 1~2
+#
+# 4 个 SLO 的目标值（[目标]，非实测）固化在本文件的分母里：
+#   SLO-1 同步查询延迟 P99 ≤ 500ms（30 天，只读入口 /internal/**，method=GET）
+#   SLO-2 同步命令延迟 P99 ≤ 1s  （30 天，排除 /internal/channels/**——渠道回调由对端计时）
+#   SLO-3 资金入口可用性 ≥ 99.9% （30 天，order+payment 两进程的 POST 入口；不含渠道不可用）
+#   SLO-4 账务完整性 ≥ 99%       （非比率型：以「未入账事实绝对条数」Gauge 表达，见下）
+#
+# 延迟类 SLO 的「错误」口径 = 超阈请求占比（histogram bucket le 差值），
+# 不用平均值；无流量时分母为 0 → 结果 NaN → 告警表达式不成立（安全侧）。
+# 告警（payment-alerts.yml A-01/A-02）只消费这里的 burn_rate 双窗（fast 1h / slow 6h）。
+
+groups:
+  - name: slo-1-query-latency
+    interval: 30s
+    rules:
+      # 超 500ms 的请求占比（GET /internal/**），双窗
+      - record: slo:query_latency_error_ratio
+        expr: 1 - (
+          sum(rate(http_server_requests_seconds_bucket{uri=~"/internal/.*", method="GET", le="0.5"}[1h]))
+            / sum(rate(http_server_requests_seconds_count{uri=~"/internal/.*", method="GET"}[1h]))
+          or vector(0) )
+        labels: { window: "1h" }
+      - record: slo:query_latency_error_ratio
+        expr: 1 - (
+          sum(rate(http_server_requests_seconds_bucket{uri=~"/internal/.*", method="GET", le="0.5"}[6h]))
+            / sum(rate(http_server_requests_seconds_count{uri=~"/internal/.*", method="GET"}[6h]))
+          or vector(0) )
+        labels: { window: "6h" }
+      # 错误预算余量（30 天窗口）与 burn rate（目标错误率 = 0.1%）
+      - record: slo:error_budget_remaining
+        expr: 1 - (slo:query_latency_error_ratio / 0.001)
+        labels: { group: "query_latency_p99" }
+      # 注：burn_rate 仅按双窗（fast/slow）命名，与 §8.2 一一对应；不设通用别名以免窗标签混乱。
+      - record: slo:burn_rate_fast
+        expr: slo:query_latency_error_ratio{window="1h"} / 0.001
+        labels: { group: "query_latency_p99" }
+      - record: slo:burn_rate_slow
+        expr: slo:query_latency_error_ratio{window="6h"} / 0.001
+        labels: { group: "query_latency_p99" }
+      # P99 实测值本身（Grafana SLO 分区画目标线 vs 实测线用）
+      - record: slo:query_latency_p99_seconds
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri=~"/internal/.*", method="GET"}[30m])))
+
+  - name: slo-2-command-latency
+    interval: 30s
+    rules:
+      # 超 1s 的命令请求占比；排除渠道回调入口（对端计时，我方不承诺）
+      - record: slo:command_latency_error_ratio
+        expr: 1 - (
+          sum(rate(http_server_requests_seconds_bucket{uri=~"/internal/.*", method!="GET", uri!~"/internal/channels.*", le="1.0"}[1h]))
+            / sum(rate(http_server_requests_seconds_count{uri=~"/internal/.*", method!="GET", uri!~"/internal/channels.*"}[1h]))
+          or vector(0) )
+        labels: { window: "1h" }
+      - record: slo:command_latency_error_ratio
+        expr: 1 - (
+          sum(rate(http_server_requests_seconds_bucket{uri=~"/internal/.*", method!="GET", uri!~"/internal/channels.*", le="1.0"}[6h]))
+            / sum(rate(http_server_requests_seconds_count{uri=~"/internal/.*", method!="GET", uri!~"/internal/channels.*"}[6h]))
+          or vector(0) )
+        labels: { window: "6h" }
+      - record: slo:error_budget_remaining
+        expr: 1 - (slo:command_latency_error_ratio / 0.001)
+        labels: { group: "command_latency_p99" }
+      - record: slo:burn_rate_fast
+        expr: slo:command_latency_error_ratio{window="1h"} / 0.001
+        labels: { group: "command_latency_p99" }
+      - record: slo:burn_rate_slow
+        expr: slo:command_latency_error_ratio{window="6h"} / 0.001
+        labels: { group: "command_latency_p99" }
+      - record: slo:command_latency_p99_seconds
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri=~"/internal/.*", method!="GET", uri!~"/internal/channels.*"}[30m])))
+
+  - name: slo-3-fund-entry-availability
+    interval: 30s
+    rules:
+      # 资金入口 = order/payment 两进程的全部业务 POST（下单/支付受理/退款受理的超集，
+      # 排除渠道回调与 actuator）；错误 = 服务端 5xx（业务拒绝是正常语义，不计）。
+      - record: slo:availability_error_ratio
+        expr: sum(rate(http_server_requests_seconds_count{job=~"order|payment", method="POST", uri!~"/internal/channels.*|/actuator.*", status=~"5.."}[1h]))
+          / sum(rate(http_server_requests_seconds_count{job=~"order|payment", method="POST", uri!~"/internal/channels.*|/actuator.*"}[1h]))
+        labels: { group: "payment_entry", window: "1h" }
+      - record: slo:availability_error_ratio
+        expr: sum(rate(http_server_requests_seconds_count{job=~"order|payment", method="POST", uri!~"/internal/channels.*|/actuator.*", status=~"5.."}[6h]))
+          / sum(rate(http_server_requests_seconds_count{job=~"order|payment", method="POST", uri!~"/internal/channels.*|/actuator.*"}[6h]))
+        labels: { group: "payment_entry", window: "6h" }
+      - record: slo:availability_ratio
+        expr: 1 - slo:availability_error_ratio
+      - record: slo:error_budget_remaining
+        expr: 1 - (slo:availability_error_ratio / 0.001)
+        labels: { group: "payment_entry" }
+      - record: slo:burn_rate_fast
+        expr: slo:availability_error_ratio{window="1h"} / 0.001
+        labels: { group: "payment_entry" }
+      - record: slo:burn_rate_slow
+        expr: slo:availability_error_ratio{window="6h"} / 0.001
+        labels: { group: "payment_entry" }
+
+  - name: slo-4-ledger-integrity
+    interval: 30s
+    rules:
+      # SLO-4 非比率型（§8.2）：以「未入账事实绝对条数」表达。
+      # 三个调用方进程（payment/reconciliation/settlement）各注册同名 gauge，
+      # 各自统计自己的台账表 ⇒ 跨 job 求和 = 全系统未入账已确认事实数。
+      - record: slo:posting_integrity_unposted_facts
+        expr: sum(ledger_posting_pending)
+      # 「最老账龄」由持续窗承担（台账域不持有 updated_at 列，见 acceptance 偏差记录）：
+      # 积压在 1h 内始终非零 ⇒ 存在账龄 ≥ 1h 的悬置事实
+      - record: slo:posting_integrity_unposted_1h_min
+        expr: min_over_time(sum(ledger_posting_pending)[1h:30s])
+      # 已确认事实总量的近旁视图（SLO-4 分母参照；ledger 侧成功入账计数）
+      - record: slo:posting_integrity_posted_rate_1h
+        expr: sum(rate(ledger_posted_total[1h]))
