@@ -152,8 +152,18 @@ public class PaymentResultProcessor {
         boolean changed = PaymentResultApplier.applyPayment(payment, result);
         paymentRepository.save(payment);
         attemptRecorder.save(attempt);
-        if (changed && result.status() == ChannelResult.Status.SUCCESS) {
-            PaymentSucceededRequest request = PaymentResultApplier.toSucceededRequest(payment);
+        // spec 034 §6.3 / T18（C-23）：CLOSED 上的渠道迟到成功——终态吸收不变（Payment 不复活，
+        // R-3），但「渠道已收款」事实必须告知 order 追回：计数 + late=true 通知，
+        // order 既有 ORDER_NOT_PAYABLE surplus 分支自动原路退回（不改 order 判断逻辑）。
+        boolean lateSuccessOnClosed = !changed && result.status() == ChannelResult.Status.SUCCESS
+                && payment.getStatus() == com.payment.payment.domain.PaymentStatus.CLOSED;
+        if (lateSuccessOnClosed) {
+            metrics.counter("payment.late_success_on_closed", 1.0, "module", "payment", "cause", "CANCELLED");
+            log.warn("订单取消后渠道迟到成功（事实追回，Payment 不复活）paymentNo={} orderNo={}",
+                    payment.getPaymentNo(), payment.getOrderNo());
+        }
+        if ((changed || lateSuccessOnClosed) && result.status() == ChannelResult.Status.SUCCESS) {
+            PaymentSucceededRequest request = PaymentResultApplier.toSucceededRequest(payment, lateSuccessOnClosed);
             // spec 029 / T28-T30、FR-201：payment.succeeded 改事务消息（点对点 → order），
             // 替代同步 OrderGateway.notifyPaymentSucceeded。SC-1：同步通知点清零。
             // 本地事务已在上方 save 完成，此处 prepare→commit 即可（INV-3「先事务后可见」）。
@@ -198,9 +208,13 @@ public class PaymentResultProcessor {
             //
             // spec 031（FR-101 / ADR-0077）：改传**已确认财务事实**（Financial Fact）——
             // paymentNo + merchantId + 渠道码 + 金额；科目/借贷由账本按 Posting Rule 推导。
-            ledgerGateway.postPaymentCapture(new LedgerPostingGateway.PaymentCaptureFacts(
-                    payment.getPaymentNo(), payment.getMerchantId(), attempt.getChannelCode(),
-                    payment.getAmountMinor(), 0L, 0L, payment.getCurrencyCode()));
+            // spec 034 / T18：late-success 路径不记账（capture 时点已过，plan §4——order 超付
+            // 分支产生的 REFUND 冲正记账由 reconciliation 差异处置发现与处置）。
+            if (changed) {
+                ledgerGateway.postPaymentCapture(new LedgerPostingGateway.PaymentCaptureFacts(
+                        payment.getPaymentNo(), payment.getMerchantId(), attempt.getChannelCode(),
+                        payment.getAmountMinor(), 0L, 0L, payment.getCurrencyCode()));
+            }
         }
         // 额度结算（spec 027 / FR-013，ADR-0071 D4/D12）：与记账**同级**挂在 changed=true 分支，
         // 保证「支付真正发生状态迁移」才结算一次。UNKNOWN 不结算（INV-5：保守占用，不猜成败）。

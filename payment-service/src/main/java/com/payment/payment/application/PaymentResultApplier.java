@@ -37,10 +37,18 @@ final class PaymentResultApplier {
     }
 
     static PaymentSucceededRequest toSucceededRequest(Payment payment) {
+        return toSucceededRequest(payment, false);
+    }
+
+    /**
+     * 带 late 标记的构造（spec 034 / T18，C-23）：CLOSED 上的迟到成功通知 order 追回时
+     * 置 {@code late=true}，order 既有 ORDER_NOT_PAYABLE surplus 分支吸收。
+     */
+    static PaymentSucceededRequest toSucceededRequest(Payment payment, boolean late) {
         // payment 侧不持有订单明细，按约定传空 items（由 order 层富化，FR-005 / ADR-0066）
         return PaymentSucceededRequest.withoutItems(payment.getPaymentNo(), payment.getOrderNo(),
                 payment.getTransactionId(), payment.getUserId(),
-                payment.getAmountMinor(), payment.getCurrencyCode());
+                payment.getAmountMinor(), payment.getCurrencyCode()).withLate(late);
     }
 
     /** 渠道结果 → 支付终态（调用方据此记录审计与指标）。 */
