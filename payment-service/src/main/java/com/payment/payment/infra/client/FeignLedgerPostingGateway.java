@@ -6,6 +6,8 @@ import com.payment.common.dto.rpc.AccountingEventType;
 import com.payment.common.dto.rpc.AccountingEventResponse;
 import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.payment.application.LedgerPostingGateway;
+import com.payment.posting.application.PostingEventTypes;
+import com.payment.posting.application.PostingPendingRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,10 +30,14 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
 
     private final LedgerFeignClient ledgerClient;
     private final BusinessMetrics metrics;
+    /** spec 034 / T7：失败落台账（补偿辅助），成功路径零改动。 */
+    private final PostingPendingRecorder pendingRecorder;
 
-    public FeignLedgerPostingGateway(LedgerFeignClient ledgerClient, BusinessMetrics metrics) {
+    public FeignLedgerPostingGateway(LedgerFeignClient ledgerClient, BusinessMetrics metrics,
+                                     PostingPendingRecorder pendingRecorder) {
         this.ledgerClient = ledgerClient;
         this.metrics = metrics;
+        this.pendingRecorder = pendingRecorder;
     }
 
     @Override
@@ -49,8 +55,12 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
                     facts.paymentNo(), facts.merchantId(), facts.channelCode(),
                     response.postingId(), response.entries().size());
         } catch (RuntimeException ex) {
-            // 记账失败不回滚支付成功事实；记录待记账，交由重试/对账兜底（ADR-0009）
+            // 记账失败不回滚支付成功事实；登记台账（退避补投）+ 对账兜底（ADR-0009，spec 034 §9）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
+            pendingRecorder.recordFailure(PostingEventTypes.PAYMENT_CAPTURE,
+                    AccountingSourceType.PAYMENT.name(), facts.paymentNo(),
+                    AccountingEventType.PAYMENT_CAPTURE.name() + ":" + facts.paymentNo(),
+                    request, ex.getMessage());
             log.error("记账失败，进入待记账兜底：paymentNo={} reason={}",
                     facts.paymentNo(), ex.getMessage());
         }

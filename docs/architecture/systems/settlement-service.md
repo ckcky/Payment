@@ -428,3 +428,8 @@ mybatis-plus:
 单行 JSON，`action` 取值 `settlement.batch_initiated` / `settlement.unknown` / `settlement.failed` / `settlement.adjustment_registered` / `settlement.batch_closed` / `settlement.resolved`，字段键：`traceId`、`idempotencyKey`、`amountMinor`、`currencyCode`、`fromStatus`、`toStatus`、`entityType`、`entityId`。
 
 **关联字段**：`traceId` 经 `TraceContext` / `TraceIdFilter` 跨服务传播，Feign 透传。
+
+## 7. 可靠性加固（spec 034 / ADR-0082）
+
+- **posting 台账同构**（`com.payment.settlement.posting`，settlement 库 `pending_postings`）：`FeignLedgerPostingGateway`（SETTLEMENT_MERCHANT）失败落台账，`PostingRetryScheduler` 10s 扫描、1s/5s/30s/2m/10m → ABANDONED；`POST /internal/postings/{id}/replay` 管理端点 + `ledger_posting_pending` gauge。
+- **同 batchNo 重放不再重复发记账事件**（4ce4d5b / spec §13，TT-11）：批次重入吸收，幂等键派生保证账本侧唯一回放。

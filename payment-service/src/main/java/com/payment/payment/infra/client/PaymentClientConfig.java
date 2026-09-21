@@ -2,6 +2,7 @@ package com.payment.payment.infra.client;
 
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.payment.application.LedgerPostingGateway;
+import com.payment.posting.application.PostingPendingRecorder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,7 +22,8 @@ public class PaymentClientConfig {
     /** 记账出站网关：记账失败不回滚支付成功事实（ADR-0009，Saga + 幂等，禁 2PC/XA）。 */
     @Bean
     public LedgerPostingGateway ledgerPostingGateway(LedgerFeignClient ledgerClient,
-                                                     BusinessMetrics metrics) {
-        return new FeignLedgerPostingGateway(ledgerClient, metrics);
+                                                     BusinessMetrics metrics,
+                                                     PostingPendingRecorder pendingRecorder) {
+        return new FeignLedgerPostingGateway(ledgerClient, metrics, pendingRecorder);
     }
 }

@@ -15,4 +15,16 @@ public interface BusinessMetrics {
 
     /** 记录一次耗时（如 UNKNOWN 收敛时长）。 */
     void timer(String name, Duration duration, String... tags);
+
+    /**
+     * 注册一个<b>采样型</b> gauge（spec 034 / T9）：每次抓取时回调 {@code valueSupplier}
+     * 取当前值（如台账 PENDING 行数、DLQ 长度），而非累加计数。
+     *
+     * <p>回调在指标抓取线程执行，MUST 低成本（一次 COUNT / XLEN）；同名同标签重复注册
+     * 由底层实现幂等吸收（Micrometer 同 id 仪表只保留一个）。default 空实现 =
+     * {@link NoopBusinessMetrics} 等无注册表上下文静默丢弃，调用方无需判空。</p>
+     */
+    default void gauge(String name, java.util.function.Supplier<Number> valueSupplier, String... tags) {
+        // 无 MeterRegistry 上下文时不落地（no-op）。
+    }
 }

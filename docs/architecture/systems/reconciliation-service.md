@@ -404,3 +404,10 @@ mybatis-plus:
 - `AuditDifferenceStatus` 增 `ADJUSTING`（瞬时）/`ADJUST_FAILED`（可见、不计未收口）；处置 RPC 失败 ⇒ 独立事务写失败台账 + 差异 `ADJUST_FAILED`，不静默吞。
 - audit 侧人工收口端点：`POST /internal/audit/batches/{batchNo}/differences/{id}/resolve`（备注必填；跨账等调账后 recheck 无法转绿的差异由人工确认直达 RESOLVED 后关批）。
 - `AutoDispositionPolicy`（枚举 `SMALL_CHANNEL_ONLY_SUSPEND` + `enabled`/`max-amount-minor` 配置，默认双关）：run 后对满足策略门的 PENDING 渠道长款自动挂账，`audit_adjustments` 留痕 + recon 差异置 SUSPENDED/dispositionRef；指标 `reconciliation.autodisposition{policy,outcome}`。
+
+---
+
+## 9. 可靠性加固（spec 034 / ADR-0082）
+
+- **audit 记账失败上抛语义保留**：`FeignAuditLedgerGateway`（AUDIT_ADJUSTMENT）失败仍上抛调用方，但**上抛前落 `pending_postings` 台账**（reconciliation 库，`com.payment.reconciliation.posting` 同构实现）——失败留痕、补投零双记（TT-8 真库回归）。
+- **DLQ 管理**（common-redis-mq `dlq` 包）：`MqDlqAdminService` XRANGE 读/XADD+XDEL 回放/清空 + `mq_dlq_size` gauge；服务侧 `payment.mq.dlq-admin.enabled` 默认 false + admin token 守卫。

@@ -26,9 +26,8 @@ spring:
             # 出站 RPC 超时：connect/read 各 1s（ADR-0012 超时口径，全服务统一）
             connect-timeout: ${PAYMENT_FEIGN_CONNECT_TIMEOUT_MS:1000}
             read-timeout: ${PAYMENT_FEIGN_READ_TIMEOUT_MS:1000}
-      # 熔断：为所有 Feign 客户端包裹 circuit breaker（依赖 spring-cloud-starter-circuitbreaker-resilience4j）
-      circuitbreaker:
-        enabled: true
+      # spec 034-F / H-034-1：spring.cloud.openfeign.circuitbreaker.enabled 已随
+      # Resilience4j 依赖一并移除（零注解零实例配置，从未产生真实熔断行为）。
 
   lifecycle:
     # 优雅停机排水上限：SIGTERM 后在途请求最多等 30s（spec 023 / M5）
@@ -100,7 +99,7 @@ payment:
     # per-channel 可用性（Feature 028 / FR-034、FR-035）：**静态配置桩**，不做真实探测。
     # UP = 正常；DEGRADED = 保留候选但排序降级；DOWN = 排除出候选集（显式指定则 409 CHANNEL_UNAVAILABLE）。
     # 留空 = 全部按 UP 处理；演示期可用 POST /internal/channels/{code}/status 覆盖（仅 demo profile）。
-    # 注意：不复用 Resilience4j CircuitBreaker 状态（D6 / S11）。
+    # 注意：可用性不读任何熔断器状态（D6 / S11；034-F 起出站已无熔断器）。
     availability: {}
   # 用户支付限额（spec 027 / ADR-0071）
   limit:
@@ -128,6 +127,12 @@ payment:
     # /payments/{id}/resolve 收敛端点鉴权开关；启用但未配置 token 时返回 503 拒绝
     auth-enabled: true
     admin-token: ${PAYMENT_ADMIN_TOKEN:}
+  mq:
+    dlq-admin:
+      # spec 034 T21：MQ 消费方（ORDER_CANCELLED）的死信管理端点 /internal/mq/dlq。
+      # 启用但未配置 admin-token 时端点 503 锁死（同 resolve 先例：显式失败优于裸奔）。
+      enabled: true
+      admin-token: ${MQ_DLQ_ADMIN_TOKEN:}
   # Mock 收银台（ADR-0048 修订版）：enabled=true 时 createPayment 跳过渠道内联调用，
   # Payment 停留 PROCESSING 等收银台回调，响应附 payUrl。默认 true（演示优先：任何方式
   # 手动起 payment-service 都能拿到收银台，不再依赖启动时带环境变量）；e2e / CI 等

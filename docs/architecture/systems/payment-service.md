@@ -731,3 +731,13 @@ WHERE user_id = ? AND currency_code = ? AND period = ? AND period_start = ?
 
 - **默认不限额**（D8 / FR-025）：查不到配置行 = 不约束。`deployment/demo/seed.sh` **不得**为 `demo-user` 播种限额，避免 `traffic-gen.sh` 与 E2E 被 409 打断。
 - 指标：`payment_limit_total{op,result,period}`、`payment_limit_exceeded`、`payment_limit_overrun{period}`、`payment_limit_compensated`、`payment_limit_redis_error` / `payment_limit_redis_unavailable`；审计：`limit.exceeded` / `limit.overrun`。
+
+## 10. 可靠性加固（spec 034 / ADR-0082）
+
+- **pending_postings 出站失败台账**（`com.payment.posting` 包）：`FeignLedgerPostingGateway`（PAYMENT_CAPTURE）/`RefundFeignLedgerPostingGateway`（REFUND_CAPTURE）记账失败时落 `pending_postings` 表（payment 库，`uk` 幂等吸收）；`PostingRetryScheduler` 10s 扫描，退避 1s/5s/30s/2m/10m，retry_count=6 → ABANDONED；成功补投 → REPOSTED。**成功路径零改动**。
+- **管理端点** `POST /internal/postings/{id}/replay`（admin token 守卫，retry_count 重置 0）；gauge `ledger_posting_pending`。
+- **M7 通知失败入账**：order notify 失败 → `ORDER_NOTIFY_SUCCEEDED:{paymentRef}` / `ORDER_NOTIFY_REFUND_RESULT:{refundNo}` PENDING 行，重放=原请求重发。
+- **RefundUnknownQueryScheduler**：UNKNOWN 退款 75s 时间窗主动查询收敛 + 一次性 `refund.query_exhausted`；`GET /internal/payments/unknown?olderThan=` 队列视图 + `payment_unknown_age`/`refund_unknown_age` 分桶 Counter（`deployment/prometheus/rules/payment-alerts.yml` A-05/06/08/09）。
+- **late success（C-23）**：CLOSED 上收到渠道 SUCCESS → `PaymentSucceededRequest.late=true` + `payment.late_success_on_closed` 计数，order 超付分支吸收，不覆盖终态。
+- **Resilience4j 已移除**（034-F/H-034-1）：零注解零实例配置的「影子弹性」，熔断语义从未生效；弹性由台账重试 + 有界扫描承接。
+- 定时任务入口统一 `TraceContext.runWithNewTrace(...)`（诊断①），无 traceId 的后台日志已收口。

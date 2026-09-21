@@ -63,7 +63,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(resolveInterceptor)
-                .addPathPatterns("/payments/*/resolve");
+                .addPathPatterns("/payments/*/resolve")
+                // spec 034 / T9：台账人工重放端点与 resolve 同守卫（X-Admin-Token）
+                .addPathPatterns("/internal/payments/pending-postings/**");
         registry.addInterceptor(internalAuthInterceptor)
                 .addPathPatterns("/internal/**")
                 .excludePathPatterns(ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN)

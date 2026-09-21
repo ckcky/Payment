@@ -17,6 +17,9 @@ public class MicrometerBusinessMetrics implements BusinessMetrics {
 
     private final MeterRegistry registry;
 
+    /** gauge 回调强引用集：Micrometer 对注册对象仅持 WeakReference，须由本单例保活，否则回调被 GC 后 gauge 恒 NaN。 */
+    private final java.util.Set<Object> gaugeStateRefs = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public MicrometerBusinessMetrics(MeterRegistry registry) {
         this.registry = registry;
     }
@@ -29,5 +32,17 @@ public class MicrometerBusinessMetrics implements BusinessMetrics {
     @Override
     public void timer(String name, Duration duration, String... tags) {
         registry.timer(name, tags).record(duration);
+    }
+
+    @Override
+    public void gauge(String name, java.util.function.Supplier<Number> valueSupplier, String... tags) {
+        // Micrometer 同名同标签 gauge 幂等：重复注册返回既有仪表，不会堆积。
+        gaugeStateRefs.add(valueSupplier); // 保活（见字段注释），不参与业务语义
+        io.micrometer.core.instrument.Gauge.builder(name, valueSupplier, s -> {
+                    Number v = s.get();
+                    return v == null ? Double.NaN : v.doubleValue(); // null（如抓取期 DB 抖动）→ NaN，不抛
+                })
+                .tags(tags)
+                .register(registry);
     }
 }

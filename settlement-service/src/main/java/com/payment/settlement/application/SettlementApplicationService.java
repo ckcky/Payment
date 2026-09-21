@@ -261,14 +261,21 @@ public class SettlementApplicationService {
         SettlementBatch batch = requireBatch(id);
         switch (authoritativeStatus) {
             case "SUCCEEDED" -> {
-                batch.succeed();
+                // TT-11（spec 034 §13）：同 batchNo 重放（收敛回调重复投递）⇒ 状态机终态吸收
+                // 返回 false，此时 MUST NOT 再次发记账事件——账本派生键虽能兜底吸收，
+                // 出站事件本身只应发一次（幂等不靠目的地兜底，与 RefundResultProcessor 终态吸收同构）。
+                boolean firstTransition = batch.succeed();
                 // spec 031 §9 / ADR-0077：事件化 + H3（C-07）——净额**带符号**恒发（net<0 由账本
                 // §7.5 展开反向分录，替代旧「net≤0 不记账」的科目残留）；仅 net=0 空批次不发。
                 // sourceId 用 batchNo（M1 收编，数值 batchId 不出边界）。
-                if (batch.getNetMinor() != 0) {
+                if (firstTransition && batch.getNetMinor() != 0) {
                     ledgerPostingGateway.postMerchantSettlement(
                             new LedgerPostingGateway.MerchantSettlementFacts(batch.getBatchNo(),
                                     batch.getMerchantId(), batch.getNetMinor(), batch.getCurrencyCode()));
+                } else if (!firstTransition) {
+                    metrics.counter("settlement.ledger_replay_absorbed", 1, "module", "settlement");
+                    log.info("结算批次重放被终态吸收，不重复记账 batchNo={} batchId={}",
+                            batch.getBatchNo(), batch.getId());
                 } else {
                     metrics.counter("settlement.ledger_skip_zero_net", 1, "module", "settlement");
                     log.info("结算净额为 0（空批次），跳过记账 batchNo={} batchId={}",

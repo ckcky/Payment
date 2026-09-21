@@ -60,7 +60,11 @@ public class DemoProxyController {
         try {
             byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
             HttpMethod method = HttpMethod.valueOf(request.getMethod());
-            log.info("[demo] proxy {} {} -> {}", method, request.getRequestURI(), target);
+            // 诊断③（034 plan）：demo 控制台 2s 轮询全走 GET——每次代理一行 INFO 是日志洪水；
+            // GET 静默、非 GET（下单/支付等真实动作）降为 debug，保留排障能力又不刷屏
+            if (method != HttpMethod.GET) {
+                log.debug("[demo] proxy {} {} -> {}", method, request.getRequestURI(), target);
+            }
 
             // 仅在确有请求体时才调 body()：RestClient 对 null body 会抛 NPE（GET/DELETE 无体请求）
             RestClient.RequestBodySpec spec = restClient.method(method)

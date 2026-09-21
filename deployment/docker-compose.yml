@@ -246,6 +246,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # spec 034 T21：死信管理端点令牌（/internal/mq/dlq；yml 已 enabled，缺 token 时 503 锁死）
+      MQ_DLQ_ADMIN_TOKEN: demo-admin-token
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:
@@ -282,6 +284,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # spec 034 T21：死信管理端点令牌（/internal/mq/dlq；yml 已 enabled，缺 token 时 503 锁死）
+      MQ_DLQ_ADMIN_TOKEN: demo-admin-token
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:
@@ -334,6 +338,8 @@ services:
       PAYMENT_MOCK_CASHIER_ENABLED: "true"
       PAYMENT_MOCK_CASHIER_BASE_URL: http://localhost:8091
       PAYMENT_ADMIN_TOKEN: demo-admin-token
+      # spec 034 T21：死信管理端点令牌（/internal/mq/dlq；yml 已 enabled，缺 token 时 503 锁死）
+      MQ_DLQ_ADMIN_TOKEN: demo-admin-token
       PAYMENT_CHANNEL_SECRET: demo-channel-secret-2026
       PAYMENT_CHANNEL_MOCK_SCENARIO: ${PAYMENT_CHANNEL_MOCK_SCENARIO:-SUCCESS}
       #   ---- spec 030 / ADR-0076：支付宝真实渠道沙箱（双模态的另一半）----
@@ -408,6 +414,8 @@ services:
       # 消费端静默不工作（2026-09-19 实测：漏配导致履约链路断）。
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # spec 034 T21：死信管理端点令牌（/internal/mq/dlq；yml 已 enabled，缺 token 时 503 锁死）
+      MQ_DLQ_ADMIN_TOKEN: demo-admin-token
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:
@@ -446,6 +454,8 @@ services:
       # 必须指向 compose 网络内的 redis 服务名；缺此配置时消费端静默不工作。
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # spec 034 T21：死信管理端点令牌（/internal/mq/dlq；yml 已 enabled，缺 token 时 503 锁死）
+      MQ_DLQ_ADMIN_TOKEN: demo-admin-token
     volumes:
       - ./logs:/var/log/payment-arch
     depends_on:

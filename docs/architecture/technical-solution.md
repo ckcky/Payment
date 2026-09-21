@@ -51,7 +51,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 - 不接真实支付机构、不做真实出款/入账（当前仅 Mock Channel + 模拟业务事实）。
 - （注：Ledger 复式记账已按 `004-ledger` 前置实现，结算侧记账由 `007-settlement` 承接，详见 §4.3.5；本 MVP 仍不接真实出款/银行。）
-- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外一：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；**例外二：Redis 事务消息通道（ADR-0074 / spec 029，🟢 Accepted 已实现）——复用同一 Redis 实例的 Streams 承载跨服务通知，不引入任何 MQ 中间件，仍遵守「非数据源」定位；通道承载半消息/位点/DLQ，须开 AOF 且 `noeviction`（FR-501）**；熔断组件（Resilience4j）在 payment-service 已引入并保留（2026-09-04 裁决），缺独立 ADR（见 backlog #5），对账侧按 ADR-0021 明确不引入。
+- 不引入 MQ / Kafka / ES / K8s / Service Mesh / 2PC-XA（除非对应阶段有真实需要且经 ADR 论证）。**例外一：Redis 已随 `014-seckill-and-cache` 引入（ADR-0044/0045），仅用于入口幂等 / SKU 缓存 / 秒杀预扣 / 超时时间轮，非数据源**；**例外二：Redis 事务消息通道（ADR-0074 / spec 029，🟢 Accepted 已实现）——复用同一 Redis 实例的 Streams 承载跨服务通知，不引入任何 MQ 中间件，仍遵守「非数据源」定位；通道承载半消息/位点/DLQ，须开 AOF 且 `noeviction`（FR-501）**；熔断组件（Resilience4j）曾于 payment-service 引入但**已随 spec 034-F 移除**（零注解零实例配置的「影子弹性」，从未产生真实熔断行为，ADR-0082）；对账侧按 ADR-0021 明确不引入。
 - 不做多币种清分、税费、复杂分账、多级商户、复杂风控平台。
 
 **本阶段范围裁剪（2026-08-30 负责人裁决）**：以下能力**明确不做**，只保留预留挂点，落地形态与启用条件见 §2.4：
@@ -560,6 +560,20 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 | 同步命令接口 P99 延迟 | ≤ 1s | 含单次跨服务 RPC 编排（如下单含 catalog+payment 两次 RPC） |
 | 资金入口可用性 | ≥ 99.9% | 支付/退款入口 |
 | 对账达成率 | ≥ 99% | 对账周期内可解释差异占比 |
+
+### 5.1.1 超时策略（三档并存，spec 034 §8 显式文档化）
+
+| 档 | 值 | 适用 | 证据 | 关系约束 |
+|---|---|---|---|---|
+| 服务间 RPC | connect/read `1s` | 所有 Feign 出站 | `payment-service/src/main/resources/application.yml`（ADR-0012 口径全服务统一） | — |
+| 出站 HTTP（渠道/外部） | `1.5s` | 内部 mock 渠道 | 同上 `payment.channel.http-timeout-ms` | `<` RPC 预算的 2 跳 |
+| 支付超时判定 | `30s` | `TimeoutScanner` 判 UNKNOWN | `ReliabilityConfig.java` | **MUST >** 任何单次渠道调用 |
+| 沙箱渠道 HTTP | `10s`（独立） | 支付宝沙箱 | spec 030 FR-045 | **MUST <** `30s`（否则「还在等渠道已被判 UNKNOWN」） |
+| MQ 阻塞读 | `2s` | `StreamConsumer` | `MqProperties.java` | — |
+| 半消息回查 | `30s` / ≤10 次 | `HalfMessageScanner` | `MqProperties.java` | — |
+| 优雅停机 | `30s` | 排水 | `application.yml`（spec 023 / M5） | — |
+
+> 034 仅做**文档化 + WHY 注释**（`application.yml` 相应项均有注释指向本表），不改值；值调整属人类决策（H-034-4）。
 
 ### 5.2 安全
 

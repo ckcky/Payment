@@ -26,6 +26,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 交易动作编排（transaction 层，Feature 016 / ADR-0054；spec 019 / ADR-0067 退款升级）。
@@ -63,6 +65,11 @@ public class TransactionApplicationService {
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
     private final ObjectProvider<OrderEventPublisher> mqProvider;
+    /**
+     * 编程式事务（spec 034 / C-19，模式同 {@code OrderApplicationService}）：
+     * 仅包裹本地 DB 段，出站 Feign / MQ 一律在事务提交后执行。
+     */
+    private final TransactionTemplate tx;
 
     public TransactionApplicationService(OrderRepository orderRepository,
                                          TransactionRepository transactionRepository,
@@ -73,7 +80,8 @@ public class TransactionApplicationService {
                                          CatalogClient catalogClient,
                                          BusinessMetrics metrics,
                                          StructuredAuditLogger auditLogger,
-                                         ObjectProvider<OrderEventPublisher> mqProvider) {
+                                         ObjectProvider<OrderEventPublisher> mqProvider,
+                                         PlatformTransactionManager transactionManager) {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.transactionRefundRepository = transactionRefundRepository;
@@ -84,6 +92,7 @@ public class TransactionApplicationService {
         this.metrics = metrics;
         this.auditLogger = auditLogger;
         this.mqProvider = mqProvider;
+        this.tx = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -156,6 +165,25 @@ public class TransactionApplicationService {
                         || r.getStatus() == RefundOrderStatus.PROCESSING)
                 .mapToLong(RefundOrder::getAmountMinor)
                 .sum();
+    }
+
+    /**
+     * 搁浅退款单重放入口（spec 034 §7.3 F-5 / T13，供 {@code StrandedRefundOrderScanner} 调用）：
+     * 对「REQUESTED 且未获 payment 受理（pmrf=null）」的既有 TXRF，重放 {@code doCreateRefund}
+     * 的②重试分支——同号复用 + 重发 payment 命令，绝不新建第二张 TXRF。
+     *
+     * <p><b>不走 {@code createRefund} 受理入口</b>：那会重新做可退余额校验，而搁浅单本身
+     * 已计入在途占用，双算必然误拒；本入口不新增退款决策，只是重试一次已受理的命令——
+     * 资金上限仍由 payment 侧 {@code RefundPolicy} 累计校验把守（030「最后防线」口径）。
+     * 重放频次上限（≤2）与耗尽审计由扫描器负责。</p>
+     */
+    public RefundOrder retryStrandedRefund(RefundOrder stranded) {
+        Order order = orderRepository.findByOrderNo(stranded.getOrderNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                        "order not found for stranded refund: " + stranded.getOrderNo()));
+        metrics.counter("order.refund_stranded_replay", 1.0, "module", MODULE);
+        return doCreateRefund(order, stranded.getPaymentNo(), stranded.getAmountMinor(),
+                stranded.getReason(), "STRANDED_RETRY");
     }
 
     /** surplus 处置（FR-004/FR-005）：记录多收事实并生成交易层退款单驱动退款（spec 019 双层单号）。 */
@@ -276,83 +304,123 @@ public class TransactionApplicationService {
      * （PARTIALLY_REFUNDED / REFUNDED）+ 秒杀回补（普通商品 catalog 侧无配额键自然跳过）
      * + 履约终止（fulfillment 按 item 撤 PENDING，entitlement 沿 fulfillment → entitlement 链）。
      * 幂等：按 TXRF 寻址 + 终态吸收，重复通知安全。
+     *
+     * <p><b>C-19 修复（spec 034 / ADR-0082 R-1，方案 A）</b>：本地状态迁移 MUST 同事务收口——
+     * 「TXRF 终态迁移 + transactions.refunded_minor 累加 + orders.applyRefund」三者同事务，
+     * 中途崩溃 / 校验违例整体回滚，payment 重推通知即可重放收敛；修复前 TXRF 先行独立提交，
+     * 崩溃窗口会留下「TXRF 已终态 + order 未记账」的永久分叉（重放被终态吸收，无法自愈）。
+     * 事务提交后的动作（指标 / MQ 扇出 / 回落同步 Feign / 审计）保持原序执行——
+     * MQ 半消息协议自带回查补投，回落路径注释「retry by replay」语义不变。</p>
      */
     public void onRefundResult(RefundResultNotification notification) {
-        RefundOrder refundOrder = transactionRefundRepository.findByRefundNo(notification.transactionRefundNo())
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
-                        "transaction refund not found: " + notification.transactionRefundNo()));
         RefundOrderStatus terminal = RefundOrderStatus.valueOf(notification.status());
         if (!terminal.isTerminal()) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
                     "refund result must be terminal: " + notification.status());
         }
 
+        // ===== 本地状态迁移：单事务（C-19）。崩溃 / 校验违例在此整体回滚，绝不留下半套账 =====
+        RefundOutcome outcome = tx.execute(status -> applyRefundLocally(notification, terminal));
+        if (outcome == null) {
+            throw BizException.of(ErrorCodes.INTERNAL_ERROR, "refund result transaction returned no outcome");
+        }
+
+        // ===== 事务已提交：事后动作（指标 / MQ / 回落同步 / 审计），任一失败不回滚已提交事实 =====
+        switch (outcome.kind()) {
+            case REPLAY_ABSORBED -> log.info("refund result replay absorbed txrf={} status={}",
+                    outcome.refundOrder().getRefundNo(), terminal);
+            case NON_SUCCESS -> {
+                log.warn("refund terminal (non-success) txrf={} status={} reason={}",
+                        outcome.refundOrder().getRefundNo(), terminal, notification.failureReason());
+                metrics.counter("order.refund_failed", 1.0, "module", MODULE, "status", terminal.name());
+            }
+            case SUCCESS_BOOKED -> {
+                metrics.counter("order.refund_succeeded", 1.0, "module", MODULE,
+                        "orderStatus", outcome.order().getStatus().name());
+                publishRefundFanout(outcome.refundOrder(), outcome.order());
+            }
+            case SURPLUS_CLOSED -> // surplus 被退单：钱从未进订单/交易账本，只关退款单，不累加不动订单状态
+                    log.info("surplus refund closed (not booked) txrf={} paymentNo={}",
+                            outcome.refundOrder().getRefundNo(), outcome.refundOrder().getPaymentNo());
+        }
+        if (outcome.order() != null) {
+            auditLogger.audit("order.refund_result_applied", outcome.order().getOrderNo(),
+                    outcome.refundOrder().getAmountMinor(), outcome.refundOrder().getCurrencyCode(),
+                    "FINANCIAL_AUDIT", outcome.refundOrder().getTransactionNo(),
+                    "payment", outcome.refundOrder().getPaymentRefundNo());
+        }
+    }
+
+    /** 事务内动作的结果分派（kind + 事务内已加载的聚合，供提交后动作使用）。 */
+    private enum RefundOutcomeKind { REPLAY_ABSORBED, NON_SUCCESS, SUCCESS_BOOKED, SURPLUS_CLOSED }
+
+    private record RefundOutcome(RefundOutcomeKind kind, RefundOrder refundOrder, Order order) {
+    }
+
+    /** 本地状态迁移（事务内）：TXRF 终态迁移 + 生效支付单的账本累加与订单推进，全部读写在同一事务。 */
+    private RefundOutcome applyRefundLocally(RefundResultNotification notification, RefundOrderStatus terminal) {
+        RefundOrder refundOrder = transactionRefundRepository.findByRefundNo(notification.transactionRefundNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                        "transaction refund not found: " + notification.transactionRefundNo()));
+
         boolean firstTerminal = refundOrder.complete(terminal, notification.paymentRefundNo(),
                 notification.failureReason());
         transactionRefundRepository.save(refundOrder);
         if (!firstTerminal) {
-            log.info("refund result replay absorbed txrf={} status={}", refundOrder.getRefundNo(), terminal);
-            return;
+            return new RefundOutcome(RefundOutcomeKind.REPLAY_ABSORBED, refundOrder, null);
         }
         if (terminal != RefundOrderStatus.SUCCEEDED) {
-            log.warn("refund terminal (non-success) txrf={} status={} reason={}",
-                    refundOrder.getRefundNo(), terminal, notification.failureReason());
-            metrics.counter("order.refund_failed", 1.0, "module", MODULE, "status", terminal.name());
-            return;
+            return new RefundOutcome(RefundOutcomeKind.NON_SUCCESS, refundOrder, null);
         }
 
         Order order = orderRepository.findByOrderNo(refundOrder.getOrderNo())
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
                         "order not found: " + refundOrder.getOrderNo()));
-        boolean effectivePaymentRefund = refundOrder.refundsEffectivePayment(order);
-
-        if (effectivePaymentRefund) {
-            // 交易层账：refunded_minor 累加（幂等由 RefundOrder 首次终态迁移保证）
-            Transaction transaction = transactionRepository.findByOrderNo(order.getOrderNo())
-                    .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
-                            "transaction not found for order: " + order.getOrderNo()));
-            transaction.accumulateRefund(refundOrder.getAmountMinor());
-            transactionRepository.save(transaction);
-
-            // 订单层：超退终局校验 + 状态推进（PARTIALLY_REFUNDED / REFUNDED）
-            order.applyRefund(refundOrder.getAmountMinor());
-            orderRepository.save(order);
-            metrics.counter("order.refund_succeeded", 1.0, "module", MODULE,
-                    "orderStatus", order.getStatus().name());
-
-            // spec 029 / T34-T35：退款成功事实经 MQ 异步扇出（catalog 回补秒杀配额 +
-            // fulfillment 终止履约，后者再沿 fulfillment → entitlement 撤权益）。
-            // 本方法已提交订单/交易状态，属 INV-3「本地事务提交后」publish 场景。
-            OrderEventPublisher mq = mqProvider.getIfAvailable();
-            if (mq != null) {
-                mq.publishRefundSucceeded(refundOrder, order);
-            } else {
-                // FR-306 回落：mq.enabled=false 时保持既有同步语义
-                for (OrderItem item : order.getItems()) {
-                    String restockKey = "refund:" + refundOrder.getRefundNo() + ":sku:" + item.getSkuId();
-                    log.debug("seckill restock key={} quantity={}", restockKey, item.getQuantity());
-                    catalogRestock(item.getSkuId(), item.getQuantity(), restockKey);
-                }
-                try {
-                    RefundFulfillmentResponse resp = fulfillmentGateway.onRefund(new RefundFulfillmentRequest(
-                            refundOrder.getRefundNo(), refundOrder.getPaymentNo(), order.getOrderNo(),
-                            order.getUserId(), refundOrder.getReason()));
-                    log.info("fulfillment terminated on refund txrf={} fulfillmentStatus={}",
-                            refundOrder.getRefundNo(), resp.status());
-                } catch (RuntimeException ex) {
-                    log.warn("fulfillment termination failed (retry by replay) txrf={}", refundOrder.getRefundNo(), ex);
-                    metrics.counter("order.refund_fulfillment_terminate_failed", 1.0, "module", MODULE);
-                }
-            }
-            // entitlement 撤销沿 fulfillment → entitlement 既定链（order 不直调 entitlement）
-        } else {
-            // surplus 被退单：钱从未进订单/交易账本，只关退款单，不累加不动订单状态
-            log.info("surplus refund closed (not booked) txrf={} paymentNo={}",
-                    refundOrder.getRefundNo(), refundOrder.getPaymentNo());
+        if (!refundOrder.refundsEffectivePayment(order)) {
+            return new RefundOutcome(RefundOutcomeKind.SURPLUS_CLOSED, refundOrder, order);
         }
-        auditLogger.audit("order.refund_result_applied", order.getOrderNo(), refundOrder.getAmountMinor(),
-                refundOrder.getCurrencyCode(), "FINANCIAL_AUDIT", refundOrder.getTransactionNo(),
-                "payment", refundOrder.getPaymentRefundNo());
+
+        // 交易层账：refunded_minor 累加（幂等由 RefundOrder 首次终态迁移保证——迁移与本累加同事务）
+        Transaction transaction = transactionRepository.findByOrderNo(order.getOrderNo())
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND,
+                        "transaction not found for order: " + order.getOrderNo()));
+        transaction.accumulateRefund(refundOrder.getAmountMinor());
+        transactionRepository.save(transaction);
+
+        // 订单层：超退终局校验 + 状态推进（PARTIALLY_REFUNDED / REFUNDED）
+        order.applyRefund(refundOrder.getAmountMinor());
+        orderRepository.save(order);
+        return new RefundOutcome(RefundOutcomeKind.SUCCESS_BOOKED, refundOrder, order);
+    }
+
+    /**
+     * 退款成功扇出（事务提交后，spec 029 / T34-T35）：退款成功事实经 MQ 异步扇出
+     * （catalog 回补秒杀配额 + fulfillment 终止履约，后者再沿 fulfillment → entitlement 撤权益）。
+     * 本地事实已提交，属 INV-3「本地事务提交后」publish 场景。
+     */
+    private void publishRefundFanout(RefundOrder refundOrder, Order order) {
+        OrderEventPublisher mq = mqProvider.getIfAvailable();
+        if (mq != null) {
+            mq.publishRefundSucceeded(refundOrder, order);
+        } else {
+            // FR-306 回落：mq.enabled=false 时保持既有同步语义
+            for (OrderItem item : order.getItems()) {
+                String restockKey = "refund:" + refundOrder.getRefundNo() + ":sku:" + item.getSkuId();
+                log.debug("seckill restock key={} quantity={}", restockKey, item.getQuantity());
+                catalogRestock(item.getSkuId(), item.getQuantity(), restockKey);
+            }
+            try {
+                RefundFulfillmentResponse resp = fulfillmentGateway.onRefund(new RefundFulfillmentRequest(
+                        refundOrder.getRefundNo(), refundOrder.getPaymentNo(), order.getOrderNo(),
+                        order.getUserId(), refundOrder.getReason()));
+                log.info("fulfillment terminated on refund txrf={} fulfillmentStatus={}",
+                        refundOrder.getRefundNo(), resp.status());
+            } catch (RuntimeException ex) {
+                log.warn("fulfillment termination failed (retry by replay) txrf={}", refundOrder.getRefundNo(), ex);
+                metrics.counter("order.refund_fulfillment_terminate_failed", 1.0, "module", MODULE);
+            }
+        }
+        // entitlement 撤销沿 fulfillment → entitlement 既定链（order 不直调 entitlement）
     }
 
     private void catalogRestock(String skuId, int quantity, String restockKey) {

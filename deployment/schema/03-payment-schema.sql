@@ -132,3 +132,24 @@ CREATE TABLE IF NOT EXISTS refund_post_process_attempts (
     UNIQUE KEY uk_rppa_refund_target (refund_no, target),
     KEY idx_rppa_refund_no (refund_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- spec 031 §12 / 034 §9：出站失败台账（调用方侧轻量台账，补偿辅助而非资金事实源，
+-- 资金事实恒以 ledger_transactions 为准）。同一事实反复失败只留一行
+-- （UNIQUE(event_type, source_id)），retry_count 递增；耗尽置 ABANDONED，
+-- 人工 replay 重置 retry_count（spec 034 §12.1）。
+CREATE TABLE IF NOT EXISTS pending_postings (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    event_type VARCHAR(64) NOT NULL COMMENT '事件类型：PAYMENT_CAPTURE/REFUND/ORDER_NOTIFY_SUCCEEDED/ORDER_NOTIFY_REFUND_RESULT',
+    source_type VARCHAR(32) NOT NULL COMMENT '来源域：PAYMENT/REFUND/ORDER',
+    source_id VARCHAR(64) NOT NULL COMMENT '来源业务单号（ADR-0063）',
+    idempotency_key VARCHAR(128) NOT NULL COMMENT '记账事件派生键 {eventType}:{sourceId}（031 原则 10）；通知类同型',
+    payload_json TEXT NOT NULL COMMENT '重放载荷（原样重发，不重算派生键）',
+    fail_reason VARCHAR(512) NULL,
+    retry_count INT NOT NULL DEFAULT 0,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/REPOSTED/ABANDONED',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_pending_postings_event_source (event_type, source_id),
+    KEY idx_pending_postings_status (status, retry_count)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

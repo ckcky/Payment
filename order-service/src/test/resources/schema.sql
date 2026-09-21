@@ -68,6 +68,7 @@ CREATE TABLE transaction_refunds (
     currency_code VARCHAR(8) NOT NULL,
     status VARCHAR(32) NOT NULL,
     reason VARCHAR(255) NOT NULL,
+    failure_reason VARCHAR(255),
     idempotency_key VARCHAR(128) NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
