@@ -34,7 +34,11 @@ public enum BusinessNoType {
     /** 审计调账单（spec 017 / ADR-0065：挂账、调账凭证号） */
     AUDIT_ADJUSTMENT("AD"),
     /** 额度操作流水（spec 027 / ADR-0071：RESERVE / CONFIRM / RELEASE / EXPIRED 的幂等流水号） */
-    LIMIT_OP("LO");
+    LIMIT_OP("LO"),
+    /** 渠道账单导入批次（spec 032 / G1：账单成为可追溯的导入对象） */
+    STATEMENT_IMPORT("SI"),
+    /** 对账差异记录（spec 032 / T12：差异从 JSON 拆表后的权威记录号） */
+    RECONCILIATION_DIFFERENCE("RD");
 
     private final String prefix;
 
