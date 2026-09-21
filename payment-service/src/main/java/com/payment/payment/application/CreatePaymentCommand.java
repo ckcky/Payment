@@ -5,5 +5,7 @@ package com.payment.payment.application;
  */
 public record CreatePaymentCommand(String transactionId, String orderNo, String userId,
                                    long amountMinor, String currencyCode, String idempotencyKey,
-                                   String channelCode) {
+                                   String channelCode,
+                                   /** spec 031 / §13：订单携带的商户号（PAYMENT_CAPTURE 事实锚，可为 null=历史口径）。 */
+                                   String merchantId) {
 }

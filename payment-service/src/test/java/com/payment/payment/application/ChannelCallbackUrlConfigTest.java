@@ -78,7 +78,7 @@ class ChannelCallbackUrlConfigTest {
         ReflectionTestUtils.setField(service, "channelReturnUrl", returnUrl);
         service.createPaymentIntentWithRouting(
                 new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY",
-                        idempotencyKey, "MOCK"),
+                        idempotencyKey, "MOCK", "M001"),
                 false);
         return channel;
     }

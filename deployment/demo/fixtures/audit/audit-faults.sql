@@ -94,29 +94,34 @@ WHERE NOT EXISTS (SELECT 1 FROM settlement.settlement_items i
 
 -- ---- F1/F3/F5：账本分录（ledger 库）----
 -- F1 支付分录（借1/贷2，无手续费拆分，与生产 feeMinor=0 口径一致）
+-- 031：postings 新增 NOT NULL event_type / period(YYYY-MM) / posted_at；追溯走 posting_id↔postings，
+--       ledger_entries 的 entry_type/source_* 已停写（此处不再依赖）。event_type↔source_type 映射：
+--       PAYMENT_CAPTURE→PAYMENT、REFUND→REFUND、MERCHANT_SETTLEMENT→SETTLEMENT。
 INSERT INTO ledger.postings
-    (posting_no, idempotency_key, source_type, source_id, status, currency,
+    (posting_no, idempotency_key, source_type, source_id, event_type, period, posted_at, status, currency,
      created_at, created_by, updated_at, updated_by, version)
 VALUES
-    ('LP-AUD-0001', 'audit-fx-lp-0001', 'PAYMENT', 'PM-AUD-0001', 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1),
-    ('LP-AUD-0002', 'audit-fx-lp-0002', 'PAYMENT', 'PM-AUD-0002', 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1),
-    ('LP-AUD-0003', 'audit-fx-lp-0003', 'REFUND',  'RF-AUD-0001', 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
+    ('LP-AUD-0001', 'audit-fx-lp-0001', 'PAYMENT', 'PM-AUD-0001', 'PAYMENT_CAPTURE', '2026-08', NOW(), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1),
+    ('LP-AUD-0002', 'audit-fx-lp-0002', 'PAYMENT', 'PM-AUD-0002', 'PAYMENT_CAPTURE', '2026-08', NOW(), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1),
+    ('LP-AUD-0003', 'audit-fx-lp-0003', 'REFUND',  'RF-AUD-0001', 'REFUND',          '2026-08', NOW(), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
 ON DUPLICATE KEY UPDATE posting_no = ledger.postings.posting_no;
 
--- F5 重复记账：PM-AUD-0002 再记一条（幂等键不同 → 幂等被击穿）
+-- F5 重复记账：PM-AUD-0002 再记一条（同 source_type|source_id → 命中 CertificateAuditor 的
+-- DUPLICATE_POSTING；event_type 取 REFUND 以躲开 031 的 uk_event_source(event_type,source_id)，
+-- 幂等键亦不同 → 演示「幂等被击穿」）
 INSERT INTO ledger.postings
-    (posting_no, idempotency_key, source_type, source_id, status, currency,
+    (posting_no, idempotency_key, source_type, source_id, event_type, period, posted_at, status, currency,
      created_at, created_by, updated_at, updated_by, version)
 VALUES
-    ('LP-AUD-0002D', 'audit-fault-f5-dup', 'PAYMENT', 'PM-AUD-0002', 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
+    ('LP-AUD-0002D', 'audit-fault-f5-dup', 'PAYMENT', 'PM-AUD-0002', 'REFUND', '2026-08', NOW(), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
 ON DUPLICATE KEY UPDATE posting_no = ledger.postings.posting_no;
 
 -- F3 孤儿分录：业务侧无 PM-AUD-GHOST1 支付
 INSERT INTO ledger.postings
-    (posting_no, idempotency_key, source_type, source_id, status, currency,
+    (posting_no, idempotency_key, source_type, source_id, event_type, period, posted_at, status, currency,
      created_at, created_by, updated_at, updated_by, version)
 VALUES
-    ('LP-AUD-GHOST1', 'audit-fault-f3-orphan', 'PAYMENT', 'PM-AUD-GHOST1', 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
+    ('LP-AUD-GHOST1', 'audit-fault-f3-orphan', 'PAYMENT', 'PM-AUD-GHOST1', 'PAYMENT_CAPTURE', '2026-08', NOW(), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
 ON DUPLICATE KEY UPDATE posting_no = ledger.postings.posting_no;
 
 -- 分录行（append-only 无唯一键 → NOT EXISTS 判存）
@@ -140,12 +145,13 @@ JOIN (
 ) e ON e.ik = p.idempotency_key
 WHERE NOT EXISTS (SELECT 1 FROM ledger.ledger_entries x WHERE x.posting_id = p.id LIMIT 1);
 
--- 结算分录：借2 32000 / 贷4 32000，source_id = 批次 id（跨账核对键）
+-- 结算分录：借2 32000 / 贷4 32000，source_id = 批次号 batchNo（031 M1 收编：数值 batchId 不出服务边界，
+-- CertificateAuditor 按 (source_type='SETTLEMENT', source_id=batch_no) 匹配 settlement 事实）
 INSERT INTO ledger.postings
-    (posting_no, idempotency_key, source_type, source_id, status, currency,
+    (posting_no, idempotency_key, source_type, source_id, event_type, period, posted_at, status, currency,
      created_at, created_by, updated_at, updated_by, version)
 VALUES
-    ('LP-AUD-0004', 'audit-fx-lp-0004', 'SETTLEMENT', CAST(@sb AS CHAR), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
+    ('LP-AUD-0004', 'audit-fx-lp-0004', 'SETTLEMENT', 'SB-AUD-0001', 'MERCHANT_SETTLEMENT', '2026-08', NOW(), 'POSTED', 'CNY', NOW(), 'audit-fixture', NOW(), 'audit-fixture', 1)
 ON DUPLICATE KEY UPDATE posting_no = ledger.postings.posting_no;
 
 INSERT INTO ledger.ledger_entries

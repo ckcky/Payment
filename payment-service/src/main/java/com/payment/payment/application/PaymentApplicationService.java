@@ -94,7 +94,7 @@ public class PaymentApplicationService {
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway,
-                (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
+                facts -> {
                 }, metrics, auditLogger, null, null, null);
     }
 
@@ -256,14 +256,12 @@ public class PaymentApplicationService {
             // 已确认的支付成功 → 账本复式记账（Feature 004 / FR-006）；
             // 记账失败不回滚支付成功事实，进入待记账由对账兜底（ADR-0009，手续费 MVP 计 0）。
             //
-            // spec 030 / B1（FR-220）：账本幂等键**只传 paymentNo**，"PAYMENT:" 前缀由
-            // FeignLedgerPostingGateway 独占拼接（T9）——此前本处传的是 payment.getIdempotencyKey()，
-            // 与回调路径（PaymentResultProcessor）的 "PAYMENT:" + paymentNo 形成**双口径**，
-            // 同一支付单两条路径产生不同 postingKey，唯一约束无法吸收 ⇒ 重复记账（两笔分录）。
-            // 修复后两条路径均得 PAYMENT:{paymentNo}（FR-221）。
-            ledgerGateway.postPaymentCapture(applied.payment().getPaymentNo(),
-                    applied.payment().getPaymentNo(), applied.payment().getAmountMinor(), 0L,
-                    applied.payment().getCurrencyCode());
+            // spec 031（FR-101 / ADR-0077）：改传**已确认财务事实**（Financial Fact）；
+            // 幂等键由账本按 {eventType}:{sourceId} 派生（原则 10），两条路径同 paymentNo 同键。
+            ledgerGateway.postPaymentCapture(new LedgerPostingGateway.PaymentCaptureFacts(
+                    applied.payment().getPaymentNo(), applied.payment().getMerchantId(),
+                    routedChannelCode, applied.payment().getAmountMinor(), 0L, 0L,
+                    applied.payment().getCurrencyCode()));
         }
         return new RoutedPayment(applied.payment(), routedChannelCode, result.credential());
     }

@@ -110,7 +110,7 @@ public class PaymentResultProcessor {
                                   ChannelAttemptRecorder attemptRecorder,
                                   OrderGateway orderGateway) {
         this(paymentRepository, attemptRecorder, orderGateway,
-                (key, paymentId, amountMinor, feeMinor, currencyCode) -> {
+                facts -> {
                 },
                 new NoopBusinessMetrics());
     }
@@ -186,12 +186,11 @@ public class PaymentResultProcessor {
             // Feature 015 / C2：幂等键用 paymentNo 维度（PAYMENT:{paymentNo}），
             // 一交易多支付单时每张支付单独立记账，不再复用支付幂等键避免撞键静默少记账。
             //
-            // spec 030 / B1（FR-220）：**只传 paymentNo，去掉手工 "PAYMENT:" 前缀**——
-            // 前缀由 FeignLedgerPostingGateway 独占拼接（T9）。此前本处再拼一次前缀，
-            // 实得 PAYMENT:PAYMENT:{paymentNo}，与同步路径的 PAYMENT:{idempotencyKey}
-            // 两个键都对不上 ⇒ 唯一约束形同虚设。修复后两条路径同键（FR-221）。
-            ledgerGateway.postPaymentCapture(payment.getPaymentNo(), payment.getPaymentNo(),
-                    payment.getAmountMinor(), 0L, payment.getCurrencyCode());
+            // spec 031（FR-101 / ADR-0077）：改传**已确认财务事实**（Financial Fact）——
+            // paymentNo + merchantId + 渠道码 + 金额；科目/借贷由账本按 Posting Rule 推导。
+            ledgerGateway.postPaymentCapture(new LedgerPostingGateway.PaymentCaptureFacts(
+                    payment.getPaymentNo(), payment.getMerchantId(), attempt.getChannelCode(),
+                    payment.getAmountMinor(), 0L, 0L, payment.getCurrencyCode()));
         }
         // 额度结算（spec 027 / FR-013，ADR-0071 D4/D12）：与记账**同级**挂在 changed=true 分支，
         // 保证「支付真正发生状态迁移」才结算一次。UNKNOWN 不结算（INV-5：保守占用，不猜成败）。

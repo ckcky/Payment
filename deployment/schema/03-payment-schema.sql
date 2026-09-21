@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS payments (
     transaction_id VARCHAR(64) NOT NULL,
     order_no VARCHAR(32) NOT NULL COMMENT '所属订单（业务单号 OR+雪花，ADR-0063）',
     user_id VARCHAR(64) NOT NULL,
+    merchant_id VARCHAR(64) NULL COMMENT '商户号（spec 031 / §13，H11 前置收编）：PAYMENT_CAPTURE 事实锚；历史行 NULL',
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     attempt_seq INT NOT NULL DEFAULT 1,

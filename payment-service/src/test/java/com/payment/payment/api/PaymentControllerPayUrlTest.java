@@ -32,18 +32,18 @@ class PaymentControllerPayUrlTest {
 
     private static Payment processingPayment(long id) {
         return Payment.rehydrate(id, "PM-test", "txn-1", "order-9", "user-1", 9900, "CNY",
-                "idem-pay-url-1", PaymentStatus.PROCESSING, 1L, null, 0, null, 0, 1);
+                "idem-pay-url-1", PaymentStatus.PROCESSING, 1L, null, 0, null, 0, 1, "M001");
     }
 
     private static CreatePaymentRequest request() {
         return new CreatePaymentRequest("order-9", "txn-1", "user-1", 9900, "CNY",
-                "idem-pay-url-1", "mock");
+                "idem-pay-url-1", "mock", "M001");
     }
 
     /** 只表达支付意图（不传渠道）的请求：路由后应得到 ALIPAY。 */
     private static CreatePaymentRequest requestWithoutChannel() {
         return new CreatePaymentRequest("order-9", "txn-1", "user-1", 9900, "CNY",
-                "idem-pay-url-1", null);
+                "idem-pay-url-1", null, "M001");
     }
 
     @Test
@@ -99,7 +99,7 @@ class PaymentControllerPayUrlTest {
                 new MockCashierProperties());
 
         CreatePaymentResponse response = controller.createPayment(
-                new CreatePaymentRequest("order-9", "txn-1", "user-1", 9900, "CNY", "k", "WECHAT"));
+                new CreatePaymentRequest("order-9", "txn-1", "user-1", 9900, "CNY", "k", "WECHAT", "M001"));
 
         assertThat(response.channelCode()).isEqualTo("WECHAT");
     }

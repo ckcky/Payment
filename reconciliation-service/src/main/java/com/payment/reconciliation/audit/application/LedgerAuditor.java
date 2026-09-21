@@ -1,5 +1,6 @@
 package com.payment.reconciliation.audit.application;
 
+import com.payment.common.dto.rpc.AccountCode;
 import com.payment.reconciliation.audit.domain.AuditDifference;
 import com.payment.reconciliation.audit.domain.AuditDifferenceKind;
 import com.payment.reconciliation.audit.domain.SuspensePolicy;
@@ -13,18 +14,20 @@ import java.util.Map;
 /**
  * A2 账账核对（spec 017 / FR-005~FR-007）：分币种借贷平衡 + 科目勾稽 + 跨账。
  *
+ * <p>031 适配：勾稽按**科目码聚合全部账户实例**（LEGACY 历史户 + 各商户/渠道户），
+ * 修复旧「数值 accountId=2 只看单一实例」的分户盲区；跨账匹配键改 batchNo（M1）。</p>
+ *
  * <p>勾稽公式（业务口径推导 vs 账本实算，容差 0）：
  * <ul>
- *   <li>{@code MERCHANT_PAYABLE ?= Σ已确认支付 − Σ已退款 − Σ已结算净额}（手续费 MVP 计 0，
- *       与 payment 侧 FeignLedgerPostingGateway 的 feeMinor=0 口径一致）</li>
+ *   <li>{@code MERCHANT_PAYABLE ?= Σ已确认支付 − Σ已退款 − Σ已结算净额}（手续费 MVP 计 0）</li>
  *   <li>{@code SUSPENSE ?= Σ 未收口差异挂账净额}（处置台账与账本互证，SC-016）</li>
  * </ul></p>
  */
 @Component
 public class LedgerAuditor {
 
-    private static final long MERCHANT_PAYABLE_ID = 2L;
-    private static final long SUSPENSE_ID = 5L;
+    private static final String MERCHANT_PAYABLE = AccountCode.MERCHANT_PAYABLE.name();
+    private static final String SUSPENSE = AccountCode.SUSPENSE.name();
 
     /**
      * @param facts              已确认业务事实（支付 / 退款）
@@ -55,8 +58,8 @@ public class LedgerAuditor {
         long payableActual = 0;
         long suspenseActual = 0;
         for (LedgerPostingView posting : postings) {
-            payableActual -= posting.signedAmountForAccount(MERCHANT_PAYABLE_ID);
-            suspenseActual -= posting.signedAmountForAccount(SUSPENSE_ID); // 贷方为正（挂账口径）
+            payableActual -= posting.signedForCodes(MERCHANT_PAYABLE);
+            suspenseActual -= posting.signedForCodes(SUSPENSE); // 贷方为正（挂账口径）
         }
         long payableExpected = 0;
         for (CertificateFact fact : facts) {
@@ -85,7 +88,8 @@ public class LedgerAuditor {
                     "SUSPENSE 勾稽不符：未收口挂账净额 " + unclosedSuspenseMinor + " / 账本实算 " + suspenseActual));
         }
 
-        // A2-3 跨账（FR-007）：结算批次净额 ↔ 该批次 ledger posting（sourceId = 批次 id）
+        // A2-3 跨账（FR-007）：结算批次净额 ↔ 该批次 ledger 事件（031/M1：sourceId = batchNo，
+        // MERCHANT_PAYABLE 腿带符号 = 批次净额，负净额反向分录同样成立）
         Map<String, List<LedgerPostingView>> settlementPostings = new HashMap<>();
         for (LedgerPostingView posting : postings) {
             if ("SETTLEMENT".equals(posting.sourceType())) {
@@ -93,19 +97,18 @@ public class LedgerAuditor {
             }
         }
         for (SettlementBatchFact settlement : settlementFacts) {
-            if (!settlement.confirmed() || settlement.netMinor() <= 0) {
+            if (!settlement.confirmed() || settlement.netMinor() == 0) {
                 continue;
             }
-            List<LedgerPostingView> matched = settlementPostings.getOrDefault(String.valueOf(settlement.id()), List.of());
+            List<LedgerPostingView> matched = settlementPostings.getOrDefault(settlement.batchNo(), List.of());
             if (matched.isEmpty()) {
                 continue; // 漏记由账证核对（MISSING_POSTING）覆盖，此处不重复报
             }
-            long posted = matched.stream().mapToLong(LedgerPostingView::debitTotal).sum();
+            long posted = matched.stream().mapToLong(p -> p.signedForCodes(MERCHANT_PAYABLE)).sum();
             if (posted != settlement.netMinor()) {
                 differences.add(AuditDifference.of(AuditDifferenceKind.CROSS_LEDGER_MISMATCH, "SETTLEMENT",
                         settlement.batchNo(), settlement.batchNo(), settlement.netMinor(), posted,
-                        settlement.currency(), "跨账不符：结算净额 " + settlement.netMinor() + " / 账本 "
-                                + posted + "（批次 id=" + settlement.id() + "）"));
+                        settlement.currency(), "跨账不符：结算净额 " + settlement.netMinor() + " / 账本 " + posted));
             }
         }
         return differences;

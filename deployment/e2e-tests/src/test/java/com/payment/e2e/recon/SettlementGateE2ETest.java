@@ -22,18 +22,19 @@ class SettlementGateE2ETest extends E2eBase {
             String uid = prefix("gate");
 
             // 1) 先建一笔有差异的审计批：注入平衡的孤儿 posting（不还原，门禁验证后再清理）
-            db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                    + " status, currency, created_at, updated_at, version) VALUES ('LPe2e-gate-" + uid + "',"
-                    + " 'e2e-gate-key-" + uid + "', 'PAYMENT', 'e2e-gate-" + uid + "',"
-                    + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
+            //    031 口径：postings 带 event_type/period/posted_at；分录只挂账户实例
+            //    （7=CHANNEL_RECEIVABLE:ALIPAY、2=MERCHANT_PAYABLE:LEGACY），entry_type/source_* 停写。
+            db.execute("ledger", "INSERT INTO postings (posting_no, event_type, idempotency_key, source_type,"
+                    + " source_id, status, currency, period, posted_at, created_at, updated_at, version)"
+                    + " VALUES ('LPe2e-gate-" + uid + "', 'PAYMENT_CAPTURE', 'PAYMENT_CAPTURE:e2e-gate-" + uid + "',"
+                    + " 'PAYMENT', 'e2e-gate-" + uid + "',"
+                    + " 'POSTED', 'CNY', DATE_FORMAT(NOW(), '%Y-%m'), NOW(), NOW(), NOW(), 1)");
             long pid = ((Number) db.scalar("ledger",
                     "SELECT id FROM postings WHERE posting_no='LPe2e-gate-" + uid + "'")).longValue();
             db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                    + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                    + ", 3, 'DEBIT', 66, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-gate-" + uid + "', NOW())");
+                    + " currency, created_at) VALUES (" + pid + ", 7, 'DEBIT', 66, 'CNY', NOW())");
             db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                    + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                    + ", 3, 'CREDIT', 66, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-gate-" + uid + "', NOW())");
+                    + " currency, created_at) VALUES (" + pid + ", 2, 'CREDIT', 66, 'CNY', NOW())");
             try {
                 String period = "e2e-gate-" + Long.toString(System.currentTimeMillis(), 36);
                 Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e");
@@ -72,8 +73,8 @@ class SettlementGateE2ETest extends E2eBase {
                                 period, settlement.status(), settlement.body())
                         .isBetween(400, 499);
             } finally {
-                // 还原注入（门禁验证完毕）
-                db.execute("ledger", "DELETE FROM ledger_entries WHERE source_id='e2e-gate-" + uid + "'");
+                // 还原注入（门禁验证完毕；031：分录追溯走 posting_id）
+                db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id = " + pid);
                 db.execute("ledger", "DELETE FROM postings WHERE posting_no='LPe2e-gate-" + uid + "'");
             }
             ctx.invariant("gate: pending difference blocks close(4xx) and settlement(4xx)");

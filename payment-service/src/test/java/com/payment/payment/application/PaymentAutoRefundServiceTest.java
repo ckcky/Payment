@@ -62,6 +62,7 @@ class PaymentAutoRefundServiceTest {
         RefundResultProcessor processor = new RefundResultProcessor(
                 refunds, refundFakes.order, refundFakes.ledger,
                 new LocalRefundAttemptSettlementGateway(new RefundAttemptSettlementService(paymentAttempts)),
+                refundFakes.payment,
                 new NoopBusinessMetrics(), new StructuredAuditLogger(),
                 com.payment.payment.mq.MqTestSupport.off());
         RefundApplicationService refundApplicationService = new RefundApplicationService(
@@ -155,6 +156,7 @@ class PaymentAutoRefundServiceTest {
         RefundResultProcessor processor = new RefundResultProcessor(
                 refunds, refundFakes.order, refundFakes.ledger,
                 new LocalRefundAttemptSettlementGateway(new RefundAttemptSettlementService(paymentAttempts)),
+                refundFakes.payment,
                 new NoopBusinessMetrics(), new StructuredAuditLogger(),
                 com.payment.payment.mq.MqTestSupport.off());
         PaymentAutoRefundService service = new PaymentAutoRefundService(payments,

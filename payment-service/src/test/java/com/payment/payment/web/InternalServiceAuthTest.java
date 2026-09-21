@@ -128,7 +128,7 @@ class InternalServiceAuthTest {
         void allowsRequestWhileAuthIsStubbed() throws Exception {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                            "idem-" + UUID.randomUUID(), "mock"));
+                            "idem-" + UUID.randomUUID(), "mock", "M001"));
 
             mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", TOKEN))
                     .andExpect(status().isOk());
@@ -164,7 +164,7 @@ class InternalServiceAuthTest {
         void acceptsPlatformSharedToken() throws Exception {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                            "idem-" + UUID.randomUUID(), "mock"));
+                            "idem-" + UUID.randomUUID(), "mock", "M001"));
 
             mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", PLATFORM_TOKEN))
                     .andExpect(status().isOk());
@@ -175,7 +175,7 @@ class InternalServiceAuthTest {
         void allowsOtherTokensWhileAuthIsStubbed() throws Exception {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                            "idem-" + UUID.randomUUID(), "mock"));
+                            "idem-" + UUID.randomUUID(), "mock", "M001"));
 
             mockMvc.perform(queryAmount(payment.getPaymentNo()).header("X-Service-Token", "some-other-token"))
                     .andExpect(status().isOk());
@@ -199,7 +199,7 @@ class InternalServiceAuthTest {
         void allowsRequestWithoutToken() throws Exception {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                            "idem-" + UUID.randomUUID(), "mock"));
+                            "idem-" + UUID.randomUUID(), "mock", "M001"));
             mockMvc.perform(queryAmount(payment.getPaymentNo())).andExpect(status().isOk());
         }
     }
@@ -213,6 +213,6 @@ class InternalServiceAuthTest {
     private Payment newPayment() {
         return applicationService.createPaymentIntent(
                 new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                        "idem-" + UUID.randomUUID(), "mock"));
+                        "idem-" + UUID.randomUUID(), "mock", "M001"));
     }
 }

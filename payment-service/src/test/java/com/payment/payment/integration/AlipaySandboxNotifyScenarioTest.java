@@ -116,7 +116,7 @@ class AlipaySandboxNotifyScenarioTest {
 
         // ① 建单：payment=PROCESSING，attempt 已 stamp SANDBOX
         payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
-                10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1));
+                10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
         attempts.save(PaymentAttempt.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
                 Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
                 null, null, 1, "PAYMENT", 10_00L, "CNY",

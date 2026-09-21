@@ -64,11 +64,11 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
             }
             Invariants.orderStatus(db, orderNo, "PAID");
             Invariants.ledgerBalanced(db, orderNo);
-            // 记账幂等：该支付单只应有一组 capture posting
+            // 记账幂等：该支付单只应有一组 capture posting（031 起事件语义在 postings.event_type）
             long postingCount = ((Number) db.scalar("ledger",
-                    "SELECT COUNT(DISTINCT posting_id) FROM ledger_entries"
+                    "SELECT COUNT(*) FROM postings"
                             + " WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'"
-                            + " AND entry_type='PAYMENT_CAPTURE'")).longValue();
+                            + " AND event_type='PAYMENT_CAPTURE'")).longValue();
             assertThat(postingCount)
                     .as("重复回调不重复记账 [payment=%s, 表=ledger.ledger_entries]，实际 capture posting=%d",
                             paymentNo, postingCount)
@@ -117,9 +117,9 @@ class IdempotencyAndCallbackE2ETest extends E2eBase {
                 return o.is2xx() && "PAID".equals(o.json().path("status").asText());
             });
             long capture = ((Number) db.scalar("ledger",
-                    "SELECT COUNT(DISTINCT posting_id) FROM ledger_entries"
+                    "SELECT COUNT(*) FROM postings"
                             + " WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'"
-                            + " AND entry_type='PAYMENT_CAPTURE'")).longValue();
+                            + " AND event_type='PAYMENT_CAPTURE'")).longValue();
             assertThat(capture)
                     .as("resolve 后记账补齐 [payment=%s, 表=ledger.ledger_entries]", paymentNo)
                     .isGreaterThanOrEqualTo(1L);

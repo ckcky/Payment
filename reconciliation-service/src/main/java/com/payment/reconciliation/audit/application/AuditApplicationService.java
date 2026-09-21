@@ -176,15 +176,14 @@ public class AuditApplicationService {
                 difference.getExpectedAmountMinor(), difference.getActualAmountMinor());
 
         String adjustNo = BusinessNos.of(BusinessNoType.AUDIT_ADJUSTMENT);
-        AdjustmentPolicy.PostingPlan plan = AdjustmentPolicy.buildPlan(adjustNo, AuditAdjustmentKind.SUSPEND,
+        // spec 031 §9：挂账改发 ADJUSTMENT 事件（转账语义 §7.6，Dr to / Cr from 由账本推导）
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.SUSPEND,
                 underRecorded, amount, null, null);
         AuditLedgerGateway.PostingResult result = ledgerGateway.postAdjustment(
-                plan.idempotencyKey(), adjustNo, difference.getCurrency(), plan.entries());
+                adjustNo, difference.getCurrency(), plan);
 
         AuditAdjustment adjustment = new AuditAdjustment(null, adjustNo, batch.getId(), difference.getId(),
-                AuditAdjustmentKind.SUSPEND,
-                underRecorded ? SuspensePolicy.CUSTOMER_CASH : SuspensePolicy.SUSPENSE,
-                underRecorded ? SuspensePolicy.SUSPENSE : SuspensePolicy.CUSTOMER_CASH,
+                AuditAdjustmentKind.SUSPEND, plan.toAccountCode(), plan.fromAccountCode(),
                 amount, difference.getCurrency(), result.postingNo(), "POSTED", operator, null, reason);
         adjustment = auditRepository.insertAdjustment(adjustment);
 
@@ -236,17 +235,25 @@ public class AuditApplicationService {
         String adjustNo = BusinessNos.of(BusinessNoType.AUDIT_ADJUSTMENT);
         boolean underRecorded = SuspensePolicy.isUnderRecorded(difference.getKind(),
                 difference.getExpectedAmountMinor(), difference.getActualAmountMinor());
-        AdjustmentPolicy.PostingPlan plan = AdjustmentPolicy.buildPlan(adjustNo, kind, underRecorded, amount,
-                targetAccountCode, originalEntries(difference));
+        // spec 031 §9 / ADR-0077：调账改发 ADJUSTMENT 事件——红冲由账本按引用读原交易取反
+        // （reversesEventType/reversesSourceId），本地不再拼装方向分录（冲突 1 已裁决）。
+        AdjustmentPolicy.OriginalRef original = originalRef(difference);
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(kind, underRecorded, amount,
+                targetAccountCode, original);
         AuditLedgerGateway.PostingResult result = ledgerGateway.postAdjustment(
-                plan.idempotencyKey(), adjustNo, difference.getCurrency(), plan.entries());
+                adjustNo, difference.getCurrency(), plan);
 
-        String debitAccount = plan.entries().stream()
-                .filter(e -> "DEBIT".equals(e.direction())).findFirst()
-                .map(e -> accountCode(e.accountId())).orElse("UNKNOWN");
-        String creditAccount = plan.entries().stream()
-                .filter(e -> "CREDIT".equals(e.direction())).findFirst()
-                .map(e -> accountCode(e.accountId())).orElse("UNKNOWN");
+        // 处置台账展示列（只读回显，非记账指令）：转账语义取 to/from；红冲镜像原交易科目
+        String debitAccount;
+        String creditAccount;
+        if (plan.toAccountCode() != null) {
+            debitAccount = plan.toAccountCode();
+            creditAccount = plan.fromAccountCode();
+        } else {
+            String[] mirror = mirrorOfOriginal(difference);
+            debitAccount = mirror[0];
+            creditAccount = mirror[1];
+        }
         AuditAdjustment adjustment = new AuditAdjustment(null, adjustNo, batch.getId(), difference.getId(),
                 kind, debitAccount, creditAccount,
                 amount, difference.getCurrency(), result.postingNo(), "POSTED", operator, reviewer, reason);
@@ -341,14 +348,14 @@ public class AuditApplicationService {
         return !stillPresent;
     }
 
-    /** 与差异关联的 ADJUSTMENT posting（经处置台账 difference_id 关联）。 */
+    /** 与差异关联的处置 posting（经处置台账 difference_id 关联；历史 ADJUSTMENT + 031 起 RECONCILIATION）。 */
     private List<LedgerPostingView> linkedAdjustmentPostings(AuditDifference difference,
                                                              List<LedgerPostingView> postings) {
         List<String> adjustNos = auditRepository.findAdjustmentsByDifference(difference.getId()).stream()
                 .map(AuditAdjustment::getAdjustNo)
                 .toList();
         return postings.stream()
-                .filter(p -> "ADJUSTMENT".equals(p.sourceType()) && adjustNos.contains(p.sourceId()))
+                .filter(p -> CertificateAuditor.isDispositionSource(p.sourceType()) && adjustNos.contains(p.sourceId()))
                 .toList();
     }
 
@@ -417,10 +424,10 @@ public class AuditApplicationService {
         return new SettlementGateResponse(decision, balanced, List.copyOf(blocking));
     }
 
-    /** SUSPENSE 余额（SC-016：账本实算口径，贷方为正——挂账记贷、转出记借）。 */
+    /** SUSPENSE 余额（SC-016：账本实算口径，贷方为正——挂账记贷、转出记借；按科目码聚合全部分户）。 */
     public long suspenseBalanceMinor() {
         return -factsGateway.ledgerPostings().stream()
-                .mapToLong(p -> p.signedAmountForAccount(5L))
+                .mapToLong(p -> p.signedForCodes(com.payment.common.dto.rpc.AccountCode.SUSPENSE.name()))
                 .sum();
     }
 
@@ -441,33 +448,44 @@ public class AuditApplicationService {
                 .toList();
     }
 
-    private List<AdjustmentPolicy.PostingEntry> originalEntries(AuditDifference difference) {
+    /**
+     * REVERSE / CORRECT 的被冲销原事件引用（017 四类可处置差异才有原分录）；
+     * 其余 kind 返回 null（政策层按 kind 强制要求）。
+     */
+    private AdjustmentPolicy.OriginalRef originalRef(AuditDifference difference) {
         if (difference.getKind() != AuditDifferenceKind.ORPHAN_POSTING
                 && difference.getKind() != AuditDifferenceKind.DUPLICATE_POSTING
                 && difference.getKind() != AuditDifferenceKind.AMOUNT_MISMATCH
                 && difference.getKind() != AuditDifferenceKind.DIRECTION_MISMATCH) {
             return null;
         }
-        return factsGateway.ledgerPostings().stream()
-                .filter(p -> !("ADJUSTMENT".equals(p.sourceType())))
-                .filter(p -> p.sourceType().equals(difference.getSourceType())
-                        && p.sourceId().equals(difference.getSourceId()))
-                .findFirst()
-                .map(p -> p.entries().stream()
-                        .map(e -> new AdjustmentPolicy.PostingEntry(e.accountId(), e.direction(), e.amountMinor()))
-                        .toList())
-                .orElse(null);
+        boolean exists = factsGateway.ledgerPostings().stream()
+                .filter(p -> !CertificateAuditor.isDispositionSource(p.sourceType()))
+                .anyMatch(p -> p.sourceType().equals(difference.getSourceType())
+                        && p.sourceId().equals(difference.getSourceId()));
+        return exists ? new AdjustmentPolicy.OriginalRef(difference.getSourceType(), difference.getSourceId())
+                : null;
     }
 
-    private String accountCode(long accountId) {
-        return switch ((int) accountId) {
-            case 1 -> SuspensePolicy.CUSTOMER_CASH;
-            case 2 -> SuspensePolicy.MERCHANT_PAYABLE;
-            case 3 -> SuspensePolicy.PLATFORM_FEE_REVENUE;
-            case 4 -> SuspensePolicy.SETTLEMENT_PAYABLE;
-            case 5 -> SuspensePolicy.SUSPENSE;
-            default -> "UNKNOWN";
-        };
+    /** 红冲处置的展示镜像科目（只读回显：借腿 = 原交易的贷科目，贷腿 = 原交易的借科目）。 */
+    private String[] mirrorOfOriginal(AuditDifference difference) {
+        LedgerPostingView original = factsGateway.ledgerPostings().stream()
+                .filter(p -> !CertificateAuditor.isDispositionSource(p.sourceType()))
+                .filter(p -> p.sourceType().equals(difference.getSourceType())
+                        && p.sourceId().equals(difference.getSourceId()))
+                .findFirst().orElse(null);
+        if (original == null) {
+            return new String[]{"UNKNOWN", "UNKNOWN"};
+        }
+        String debit = original.entries().stream()
+                .filter(e -> com.payment.common.dto.rpc.LedgerDirection.CREDIT.name().equals(e.direction()))
+                .findFirst()
+                .map(LedgerPostingView.LedgerEntryView::accountCode).orElse("UNKNOWN");
+        String credit = original.entries().stream()
+                .filter(e -> com.payment.common.dto.rpc.LedgerDirection.DEBIT.name().equals(e.direction()))
+                .findFirst()
+                .map(LedgerPostingView.LedgerEntryView::accountCode).orElse("UNKNOWN");
+        return new String[]{debit, credit};
     }
 
     private void persistDifferences(AuditBatch batch) {

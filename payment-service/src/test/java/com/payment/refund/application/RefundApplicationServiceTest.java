@@ -71,7 +71,7 @@ class RefundApplicationServiceTest {
 
     @Test
     void overRefundIsRejectedWithoutAttempt() {
-        stack.payment.amount = new PaymentAmountQueryResponse("PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
+        stack.payment.amount = new PaymentAmountQueryResponse("PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED", "M001", "ALIPAY");
 
         Refund refund = stack.appService().createRefund(
                 new CreateRefundCommand("order-1", "PM-1", "user-1", 1200L, "CNY", "customer",

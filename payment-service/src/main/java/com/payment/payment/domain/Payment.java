@@ -28,6 +28,8 @@ public class Payment {
     private final String transactionId;
     private final String orderNo;
     private final String userId;
+    /** 商户号（spec 031 / §13，H11 前置收编）：PAYMENT_CAPTURE 事件解析商户应付账户的事实锚；历史行为 NULL。 */
+    private String merchantId;
     private final long amountMinor;
     private final String currencyCode;
     private final String idempotencyKey;
@@ -61,10 +63,12 @@ public class Payment {
     public static Payment rehydrate(Long id, String paymentNo, String transactionId, String orderNo, String userId,
                                     long amountMinor, String currencyCode, String idempotencyKey,
                                     PaymentStatus status, Long currentAttemptId, String failureReason,
-                                    int queryAttempts, Instant enteredUnknownAt, Integer version, int attemptSeq) {
+                                    int queryAttempts, Instant enteredUnknownAt, Integer version, int attemptSeq,
+                                    String merchantId) {
         Payment payment = new Payment(transactionId, orderNo, userId, amountMinor, currencyCode, idempotencyKey);
         payment.id = id;
         payment.paymentNo = paymentNo;
+        payment.merchantId = merchantId;
         payment.status = status;
         payment.currentAttemptId = currentAttemptId;
         payment.failureReason = failureReason;
@@ -199,6 +203,15 @@ public class Payment {
 
     public String getUserId() {
         return userId;
+    }
+
+    public String getMerchantId() {
+        return merchantId;
+    }
+
+    /** 创建时点由命令携带写入（订单域事实）；写入后本聚合内不再变更。 */
+    public void withMerchantId(String merchantId) {
+        this.merchantId = merchantId;
     }
 
     public long getAmountMinor() {

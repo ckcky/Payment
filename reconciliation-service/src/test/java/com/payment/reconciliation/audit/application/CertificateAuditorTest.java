@@ -9,7 +9,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A1 账证核对单测（spec 017 / T028）：F1 平账 + F2~F5 故障 + 金额 / 币种 / 方向边界 + PENDING 不判差异。
+ * A1 账证核对单测（spec 017 / T028，031 科目码口径）：F1 平账 + F2~F5 故障 +
+ * 金额 / 币种 / 方向边界 + PENDING 不判差异 + recheck 处置净额。
+ *
+ * <p>posting 腿（对齐账本 §7 规则，手续费 MVP=0）：PAYMENT=Dr CHANNEL_RECEIVABLE/Cr MP；
+ * REFUND 反向；SETTLEMENT=Dr MP/Cr SETTLEMENT_PAYABLE（sourceId=batchNo）；
+ * 处置（SUSPEND 欠记）=Dr BANK_CASH/Cr SUSPENSE。</p>
  */
 class CertificateAuditorTest {
 
@@ -71,16 +76,14 @@ class CertificateAuditorTest {
                 List.of(baseFacts.get(1)), postings);
         assertThat(differences).hasSize(1);
         assertThat(differences.get(0).getKind()).isEqualTo(AuditDifferenceKind.DUPLICATE_POSTING);
+        // actual = 两条重复 posting 借方合计（差额 = 多记部分）
+        assertThat(differences.get(0).getActualAmountMinor()).isEqualTo(50000L);
     }
 
     @Test
     void currencyMismatchReported() {
         List<LedgerPostingView> postings = List.of(
-                new LedgerPostingView("LP-USD", "ik", "PAYMENT", "PM-AUD-0001", "USD", List.of(
-                        new LedgerPostingView.LedgerEntryView(1L, "DEBIT", 10000L, "PAYMENT_CAPTURE",
-                                "PAYMENT", "PM-AUD-0001"),
-                        new LedgerPostingView.LedgerEntryView(2L, "CREDIT", 10000L, "PAYMENT_CAPTURE",
-                                "PAYMENT", "PM-AUD-0001"))));
+                postingWithCurrency("LP-USD", "PAYMENT", "PM-AUD-0001", "USD", 10000L));
         List<AuditDifference> differences = auditor.audit(List.of(baseFacts.get(0)), postings);
         assertThat(differences).hasSize(1);
         assertThat(differences.get(0).getKind()).isEqualTo(AuditDifferenceKind.CURRENCY_MISMATCH);
@@ -88,11 +91,9 @@ class CertificateAuditorTest {
 
     @Test
     void directionMismatchReported() {
-        // 退款被记成了支付方向（客户资金借方为正，期望贷方为负）
-        List<LedgerPostingView> postings = List.of(
-                postingPaymentStyle("LP-3W", "RF-AUD-0001", 3000L));
-        List<AuditDifference> differences = auditor.audit(
-                List.of(baseFacts.get(2)), postings);
+        // 退款来源却记成正向资金腿（Dr CHANNEL_RECEIVABLE +3000，期望 −3000）
+        List<LedgerPostingView> wrongLeg = List.of(refundAsDebitFunds("LP-3W", "RF-AUD-0001", 3000L));
+        List<AuditDifference> differences = auditor.audit(List.of(baseFacts.get(2)), wrongLeg);
         assertThat(differences).hasSize(1);
         assertThat(differences.get(0).getKind()).isEqualTo(AuditDifferenceKind.DIRECTION_MISMATCH);
     }
@@ -107,29 +108,79 @@ class CertificateAuditorTest {
     }
 
     @Test
+    void settlementAmountJudgedByGrossDebit() {
+        // SETTLEMENT 不走资金科目方向核对，金额（借方合计 = MP 腿）核对通过
+        CertificateFact settlement = new CertificateFact("SETTLEMENT", "SB-AUD-0001", "SB-AUD-0001",
+                21750L, "CNY", "SUCCEEDED");
+        List<LedgerPostingView> postings = List.of(
+                new LedgerPostingView("LP-SB", "MERCHANT_SETTLEMENT", "MERCHANT_SETTLEMENT:SB-AUD-0001",
+                        "SETTLEMENT", "SB-AUD-0001", "CNY", List.of(
+                        entry("MERCHANT_PAYABLE", "DEBIT", 21750L),
+                        entry("SETTLEMENT_PAYABLE", "CREDIT", 21750L))));
+        assertThat(auditor.audit(List.of(settlement), postings)).isEmpty();
+    }
+
+    @Test
     void recheckBalancedAfterSuspenseAndTransfer() {
-        // F2 挂账 + 转出后：处置分录（ADJUSTMENT）资金科目净影响补足缺口 → sourceBalanced
+        // F2 挂账 + 转出后：处置（RECONCILIATION）分录资金腿净影响 = +8000 → sourceBalanced
         CertificateFact missing = new CertificateFact("PAYMENT", "PM-AUD-0003", "CH-AUD-0003",
                 8000L, "CNY", "SUCCEEDED");
         List<LedgerPostingView> adjustments = List.of(
-                posting("LP-S1", "ADJUSTMENT", "AD-1", 8000L));
+                new LedgerPostingView("LP-S1", "ADJUSTMENT", "ADJUSTMENT:AD-1", "RECONCILIATION", "AD-1",
+                        "CNY", List.of(
+                        entry("BANK_CASH", "DEBIT", 8000L),
+                        entry("SUSPENSE", "CREDIT", 8000L))));
         assertThat(auditor.sourceBalanced(missing, List.of(), adjustments)).isTrue();
+        assertThat(auditor.sourceCustomerCashNet("PAYMENT", "PM-AUD-0003", List.of(), adjustments))
+                .isEqualTo(8000L);
     }
 
-    private LedgerPostingView postingPaymentStyle(String postingNo, String sourceId, long amount) {
-        return new LedgerPostingView(postingNo, "ik-" + postingNo, "REFUND", sourceId, "CNY", List.of(
-                new LedgerPostingView.LedgerEntryView(1L, "DEBIT", amount, "REFUND", "REFUND", sourceId),
-                new LedgerPostingView.LedgerEntryView(2L, "CREDIT", amount, "REFUND", "REFUND", sourceId)));
+    @Test
+    void recheckSettlementWithDispositionCorrection() {
+        // SETTLEMENT recheck：MP 腿带符号净额 + 处置现金腿修正后对平
+        CertificateFact settlement = new CertificateFact("SETTLEMENT", "SB-AUD-0002", "SB-AUD-0002",
+                9000L, "CNY", "SUCCEEDED");
+        List<LedgerPostingView> postings = List.of(
+                new LedgerPostingView("LP-SB2", "MERCHANT_SETTLEMENT", "MERCHANT_SETTLEMENT:SB-AUD-0002",
+                        "SETTLEMENT", "SB-AUD-0002", "CNY", List.of(
+                        entry("MERCHANT_PAYABLE", "DEBIT", 10000L),
+                        entry("SETTLEMENT_PAYABLE", "CREDIT", 10000L))));
+        // 初始 10000 ≠ 9000 未对平；补一笔处置（Cr BANK_CASH 1000 → 现金腿 −1000）后对平
+        assertThat(auditor.sourceBalanced(settlement, postings, List.of())).isFalse();
+        List<LedgerPostingView> adjustments = List.of(
+                new LedgerPostingView("LP-S2", "ADJUSTMENT", "ADJUSTMENT:AD-2", "RECONCILIATION", "AD-2",
+                        "CNY", List.of(
+                        entry("SUSPENSE", "DEBIT", 1000L),
+                        entry("BANK_CASH", "CREDIT", 1000L))));
+        assertThat(auditor.sourceBalanced(settlement, postings, adjustments)).isTrue();
     }
 
-    /** 平账组 posting：支付 = 借 CUSTOMER_CASH(1) / 贷 MERCHANT_PAYABLE(2)；退款反向。 */
+    // ---- helpers ----
+
+    private static LedgerPostingView.LedgerEntryView entry(String accountCode, String direction, long amount) {
+        return new LedgerPostingView.LedgerEntryView(1L, accountCode, "PLATFORM", "LEDGER", direction, amount);
+    }
+
+    /** 平账组 posting：PAYMENT=Dr CHANNEL_RECEIVABLE/Cr MP；REFUND 反向。 */
     private LedgerPostingView posting(String postingNo, String sourceType, String sourceId, long amount) {
+        return postingWithCurrency(postingNo, sourceType, sourceId, "CNY", amount);
+    }
+
+    private LedgerPostingView postingWithCurrency(String postingNo, String sourceType, String sourceId,
+                                                  String currency, long amount) {
         boolean refund = "REFUND".equals(sourceType);
-        java.util.List<LedgerPostingView.LedgerEntryView> entries = new java.util.ArrayList<>();
-        entries.add(new LedgerPostingView.LedgerEntryView(refund ? 2L : 1L, "DEBIT", amount,
-                "PAYMENT_CAPTURE", sourceType, sourceId));
-        entries.add(new LedgerPostingView.LedgerEntryView(refund ? 1L : 2L, "CREDIT", amount,
-                refund ? "REFUND" : "PAYMENT_CAPTURE", sourceType, sourceId));
-        return new LedgerPostingView(postingNo, "ik-" + postingNo, sourceType, sourceId, "CNY", entries);
+        List<LedgerPostingView.LedgerEntryView> entries = List.of(
+                entry(refund ? "MERCHANT_PAYABLE" : "CHANNEL_RECEIVABLE", "DEBIT", amount),
+                entry(refund ? "CHANNEL_RECEIVABLE" : "MERCHANT_PAYABLE", "CREDIT", amount));
+        return new LedgerPostingView(postingNo, sourceType + "_capture", sourceType + ":" + sourceId,
+                sourceType, sourceId, currency, entries);
+    }
+
+    /** 方向错误样本：REFUND 来源却记成正向资金腿（Dr CHANNEL_RECEIVABLE）。 */
+    private LedgerPostingView refundAsDebitFunds(String postingNo, String sourceId, long amount) {
+        return new LedgerPostingView(postingNo, "REFUND", "REFUND:" + sourceId, "REFUND", sourceId, "CNY",
+                List.of(
+                        entry("CHANNEL_RECEIVABLE", "DEBIT", amount),
+                        entry("MERCHANT_PAYABLE", "CREDIT", amount)));
     }
 }

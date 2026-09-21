@@ -33,7 +33,7 @@ class SettlementMetricsTest {
                         new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY"),
                         new SettlementFact("ref-2", "REFUND", 1000L, "CNY")),
                 0);
-        LedgerPostingGateway ledgerGateway = (idempotencyKey, batchId, netMinor, currencyCode) -> {
+        LedgerPostingGateway ledgerGateway = facts -> {
         };
 
         SettlementApplicationService service = new SettlementApplicationService(
@@ -62,7 +62,7 @@ class SettlementMetricsTest {
                         new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY"),
                         new SettlementFact("ref-2", "REFUND", 2000L, "CNY")),
                 0);
-        LedgerPostingGateway ledgerGateway = (idempotencyKey, batchId, netMinor, currencyCode) -> {
+        LedgerPostingGateway ledgerGateway = facts -> {
         };
 
         SettlementApplicationService service = new SettlementApplicationService(

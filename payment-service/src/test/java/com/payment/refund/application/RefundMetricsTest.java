@@ -32,7 +32,7 @@ class RefundMetricsTest {
 
     private RefundApplicationService appService() {
         RefundResultProcessor processor = new RefundResultProcessor(refunds, order, ledger,
-                (p, r, o) -> { }, metrics, audit, com.payment.payment.mq.MqTestSupport.off());
+                (p, r, o) -> { }, payment, metrics, audit, com.payment.payment.mq.MqTestSupport.off());
         return new RefundApplicationService(refunds, payment, processor, metrics, audit);
     }
 
@@ -63,7 +63,7 @@ class RefundMetricsTest {
     @Test
     void rejectedRefundIncrementsRejectedCounter() {
         payment.amount = new com.payment.common.dto.rpc.PaymentAmountQueryResponse(
-                "PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
+                "PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED", "M001", "ALIPAY");
 
         Refund refund = appService().createRefund(new CreateRefundCommand(
                 "order-1", "PM-1", "user-1", 1200L, "CNY", "customer", "idem-1", List.of()));

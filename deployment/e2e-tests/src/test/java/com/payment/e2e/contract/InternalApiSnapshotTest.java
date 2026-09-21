@@ -86,18 +86,20 @@ class InternalApiSnapshotTest extends E2eBase {
         snapshotEndpoint("audit-difference", ctx -> {
             // ORPHAN 注入造一条差异，取第一条 schema
             String uid = prefix("snap");
-            dbHolder.get().execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type,"
-                    + " source_id, status, currency, created_at, updated_at, version) VALUES ('LPe2e-snap-" + uid + "',"
-                    + " 'e2e-snap-key-" + uid + "', 'PAYMENT', 'e2e-snap-" + uid + "',"
-                    + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
+            dbHolder.get().execute("ledger", "INSERT INTO postings (posting_no, event_type, idempotency_key,"
+                    + " source_type, source_id, status, currency, period, posted_at, created_at, updated_at, version)"
+                    + " VALUES ('LPe2e-snap-" + uid + "', 'PAYMENT_CAPTURE',"
+                    + " 'PAYMENT_CAPTURE:e2e-snap-" + uid + "', 'PAYMENT', 'e2e-snap-" + uid + "',"
+                    + " 'POSTED', 'CNY', DATE_FORMAT(NOW(),'%Y-%m'), NOW(), NOW(), NOW(), 1)");
             long pid = ((Number) dbHolder.get().scalar("ledger",
                     "SELECT id FROM postings WHERE posting_no='LPe2e-snap-" + uid + "'")).longValue();
+            // 平衡双分录挂 FEE_REVENUE 实例（id=3），不参与资金/勾稽科目 → 仅产生一条 ORPHAN 差异
             dbHolder.get().execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
-                    + " amount_minor, currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                    + ", 3, 'DEBIT', 5, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-snap-" + uid + "', NOW())");
+                    + " amount_minor, currency, created_at) VALUES (" + pid
+                    + ", 3, 'DEBIT', 5, 'CNY', NOW())");
             dbHolder.get().execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
-                    + " amount_minor, currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                    + ", 3, 'CREDIT', 5, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-snap-" + uid + "', NOW())");
+                    + " amount_minor, currency, created_at) VALUES (" + pid
+                    + ", 3, 'CREDIT', 5, 'CNY', NOW())");
             try {
                 String period = "e2e-snap-" + Long.toString(System.currentTimeMillis(), 36);
                 Api.ApiResponse batch = API.auditCreateBatch(period, "ALL", "e2e-snap");
@@ -113,7 +115,7 @@ class InternalApiSnapshotTest extends E2eBase {
                 throw new IllegalStateException("注入的 ORPHAN 差异未检出 [batch=" + batchNo + "]");
             } finally {
                 dbHolder.get().execute("ledger",
-                        "DELETE FROM ledger_entries WHERE source_id='e2e-snap-" + uid + "'");
+                        "DELETE FROM ledger_entries WHERE posting_id = " + pid);
                 dbHolder.get().execute("ledger",
                         "DELETE FROM postings WHERE posting_no='LPe2e-snap-" + uid + "'");
             }

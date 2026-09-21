@@ -35,10 +35,11 @@ class RpcContractTest {
     @Test
     void createPaymentCarriesIdempotencyKeyAndAmount() {
         CreatePaymentRequest req = new CreatePaymentRequest(
-                "order-1", "txn-1", "user-1", 1250L, "CNY", "idem-1", "mock");
+                "order-1", "txn-1", "user-1", 1250L, "CNY", "idem-1", "mock", "M001");
         assertThat(req.idempotencyKey()).isEqualTo("idem-1");
         assertThat(req.amountMinor()).isEqualTo(1250L);
         assertThat(req.currencyCode()).isEqualTo("CNY");
+        assertThat(req.merchantId()).isEqualTo("M001");
     }
 
     @Test

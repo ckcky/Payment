@@ -160,7 +160,7 @@ class ChannelCallbackSecurityTest {
         void allowsCallbackWhileSignatureVerificationIsStubbed() throws Exception {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                            "idem-" + UUID.randomUUID(), "mock"));
+                            "idem-" + UUID.randomUUID(), "mock", "M001"));
             String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
             String timestamp = now();
 
@@ -172,7 +172,7 @@ class ChannelCallbackSecurityTest {
     private Payment newPayment() {
         return applicationService.createPaymentIntent(
                 new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
-                        "idem-" + UUID.randomUUID(), "mock"));
+                        "idem-" + UUID.randomUUID(), "mock", "M001"));
     }
 
     private static String url(String paymentNo) {

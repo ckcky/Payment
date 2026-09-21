@@ -1,7 +1,6 @@
 package com.payment.reconciliation.audit.infra;
 
-import com.payment.common.dto.rpc.PostingRequest;
-import com.payment.common.dto.rpc.PostingResponse;
+import com.payment.common.dto.rpc.AccountingEventResponse;
 import com.payment.reconciliation.application.ChannelStatementLoader;
 import com.payment.reconciliation.audit.application.AuditFactsGateway;
 import com.payment.reconciliation.audit.application.CertificateFact;
@@ -53,8 +52,8 @@ public class FeignAuditFactsGateway implements AuditFactsGateway {
                     d.amountMinor(), d.currencyCode(), d.status())));
         }
         for (SettlementBatchFact settlement : settlementFacts(period)) {
-            // 结算批次事实按周期拉取后并入（账证核对覆盖 SETTLEMENT 来源，FR-001）
-            facts.add(new CertificateFact("SETTLEMENT", String.valueOf(settlement.id()), settlement.batchNo(),
+            // 账证核对覆盖 SETTLEMENT 来源（FR-001）；031/M1：账本 sourceId 是 batchNo（弃数值 id）
+            facts.add(new CertificateFact("SETTLEMENT", settlement.batchNo(), settlement.batchNo(),
                     settlement.netMinor(), settlement.currency(), settlement.status()));
         }
         return List.copyOf(facts);
@@ -62,15 +61,15 @@ public class FeignAuditFactsGateway implements AuditFactsGateway {
 
     @Override
     public List<LedgerPostingView> ledgerPostings() {
-        List<PostingResponse> postings = ledgerClient.allPostings();
+        List<AccountingEventResponse> postings = ledgerClient.allPostings();
         if (postings == null) {
             return List.of();
         }
-        return postings.stream().map(p -> new LedgerPostingView(p.postingNo(), p.idempotencyKey(),
-                p.sourceType(), p.sourceId(), p.currency(),
+        return postings.stream().map(p -> new LedgerPostingView(p.postingNo(), p.eventType(),
+                p.idempotencyKey(), p.sourceType(), p.sourceId(), p.currency(),
                 p.entries() == null ? List.of() : p.entries().stream()
-                        .map(e -> new LedgerPostingView.LedgerEntryView(e.accountId(), e.direction(),
-                                e.amountMinor(), e.entryType(), p.sourceType(), p.sourceId()))
+                        .map(e -> new LedgerPostingView.LedgerEntryView(e.accountId(), e.accountCode(),
+                                e.ownerType(), e.ownerId(), e.direction(), e.amountMinor()))
                         .toList())).toList();
     }
 

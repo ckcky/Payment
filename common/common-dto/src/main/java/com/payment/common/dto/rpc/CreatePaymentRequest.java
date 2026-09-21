@@ -30,5 +30,7 @@ public record CreatePaymentRequest(
         String idempotencyKey,
         @Pattern(regexp = "\\s*|^[A-Za-z][A-Za-z0-9_]*$",
                 message = "channelCode 若提供须为字母开头的渠道码（如 ALIPAY / WECHAT）")
-        String channelCode) {
+        String channelCode,
+        /** spec 031（§13，H11 前置收编）：订单携带商户号——PAYMENT_CAPTURE 事件解析商户应付账户之必需。 */
+        String merchantId) {
 }

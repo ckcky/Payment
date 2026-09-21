@@ -177,7 +177,7 @@ class PaymentRetryTest {
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
 
         Payment payment = appService.createPaymentIntent(
-                new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", "idem-1", "mock"));
+                new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", "idem-1", "mock", "M001"));
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(channel.chargeCalls).isEqualTo(2);
