@@ -64,6 +64,14 @@ for db in "${DATABASES[@]}"; do
   fi
 done
 
+# 重放账本「科目种子」：spec 031 把科目从应用侧固定枚举迁到 DB（account_definitions /
+# accounts），上面 TRUNCATE 把它一并清空了。PostingEngine/AccountResolver 记账时按
+# definition_code + owner 解析账户实例，缺种子会让支付记账与对账全线失败。
+# 09-ledger-schema.sql 幂等（CREATE IF NOT EXISTS + INSERT ON DUPLICATE），重放只回灌目录，
+# 已 TRUNCATE 的业务表（postings / ledger_entries / account_balances / ledger_periods）保持清空。
+echo "    reseed ledger chart-of-accounts（spec 031）"
+docker exec -i payment-mysql mysql -uroot -proot < "$SCHEMA_DIR/09-ledger-schema.sql"
+
 echo "==> [2/3] 等待服务健康"
 wait_for_services
 

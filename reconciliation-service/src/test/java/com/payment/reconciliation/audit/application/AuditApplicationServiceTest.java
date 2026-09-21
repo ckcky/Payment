@@ -28,6 +28,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 审计闭环场景测试（spec 017 / T029 + T059，内存仓储 + fake 网关，不起 Spring）：
  * F1 平账 / F2 漏记账挂账→转出→recheck→关批 全链路 + 幂等 + 门禁 + 试算平衡。
  * 覆盖 SC-004 / SC-006 / SC-008 / SC-009 / SC-010 / SC-012 / SC-015 / SC-016 / SC-018。
+ *
+ * <p>spec 031 口径：fixture posting 携带科目码（accountCode）腿——
+ * PAYMENT=Dr CHANNEL_RECEIVABLE/Cr MERCHANT_PAYABLE、REFUND 反向、
+ * SETTLEMENT=Dr MERCHANT_PAYABLE/Cr SETTLEMENT_PAYABLE（sourceId=batchNo，M1）；
+ * fake 记账网关按 AdjustPlan「Dr to / Cr from」展开（幂等键 ADJUSTMENT:{adjustNo} 由账本派生，
+ * 落账 sourceType=RECONCILIATION）。</p>
  */
 class AuditApplicationServiceTest {
 
@@ -48,7 +54,8 @@ class AuditApplicationServiceTest {
             }
             List<CertificateFact> merged = new ArrayList<>(facts);
             for (SettlementBatchFact settlement : settlements) {
-                merged.add(new CertificateFact("SETTLEMENT", String.valueOf(settlement.id()),
+                // 031/M1：SETTLEMENT 账证事实 sourceId = batchNo（账本 posting 同键）
+                merged.add(new CertificateFact("SETTLEMENT", settlement.batchNo(),
                         settlement.batchNo(), settlement.netMinor(), settlement.currency(), settlement.status()));
             }
             return merged;
@@ -83,10 +90,10 @@ class AuditApplicationServiceTest {
         }
     }
 
-    /** fake 记账网关：幂等键回放 + 分录落进共享 postings（保持借贷平衡）。 */
+    /** fake 记账网关：按 ADJUSTMENT:{adjustNo} 幂等回放 + 计划「Dr to / Cr from」落进共享 postings。 */
     private static class FakeAuditLedgerGateway implements AuditLedgerGateway {
         private final FakeAuditFactsGateway factsGateway;
-        private final Map<String, PostingResult> byKey = new LinkedHashMap<>();
+        private final Map<String, PostingResult> byAdjustNo = new LinkedHashMap<>();
         private final AtomicLong seq = new AtomicLong();
 
         FakeAuditLedgerGateway(FakeAuditFactsGateway factsGateway) {
@@ -94,20 +101,24 @@ class AuditApplicationServiceTest {
         }
 
         @Override
-        public PostingResult postAdjustment(String idempotencyKey, String adjustNo, String currency,
-                                            List<AdjustmentPolicy.PostingEntry> entries) {
-            if (byKey.containsKey(idempotencyKey)) {
-                return byKey.get(idempotencyKey); // SC-013：同幂等键回放首次结果
+        public PostingResult postAdjustment(String adjustNo, String currency, AdjustmentPolicy.AdjustPlan plan) {
+            String idempotencyKey = "ADJUSTMENT:" + adjustNo;
+            if (byAdjustNo.containsKey(idempotencyKey)) {
+                return byAdjustNo.get(idempotencyKey); // SC-013：同幂等键回放首次结果
+            }
+            if (plan.fromAccountCode() == null || plan.toAccountCode() == null) {
+                throw new UnsupportedOperationException(
+                        "REVERSE/CORRECT 红冲镜像不在本场景测试范围（见 ledger AdjustmentPostingTest）");
             }
             String postingNo = "LP-AUD-" + seq.incrementAndGet();
-            List<LedgerPostingView.LedgerEntryView> views = entries.stream()
-                    .map(e -> new LedgerPostingView.LedgerEntryView(e.accountId(), e.direction(),
-                            e.amountMinor(), "ADJUSTMENT", "ADJUSTMENT", adjustNo))
-                    .toList();
-            factsGateway.postings.add(new LedgerPostingView(postingNo, idempotencyKey, "ADJUSTMENT",
-                    adjustNo, currency, views));
+            List<LedgerPostingView.LedgerEntryView> views = List.of(
+                    entry(plan.toAccountCode(), "DEBIT", plan.amountMinor()),
+                    entry(plan.fromAccountCode(), "CREDIT", plan.amountMinor()));
+            // 031：source_type=RECONCILIATION、source_id=adjustNo、eventType=ADJUSTMENT
+            factsGateway.postings.add(new LedgerPostingView(postingNo, "ADJUSTMENT", idempotencyKey,
+                    "RECONCILIATION", adjustNo, currency, views));
             PostingResult result = new PostingResult(postingNo, postingNo);
-            byKey.put(idempotencyKey, result);
+            byAdjustNo.put(idempotencyKey, result);
             return result;
         }
     }
@@ -134,7 +145,7 @@ class AuditApplicationServiceTest {
                 paymentPosting("LP-1", "PM-AUD-0001", 10000L),
                 paymentPosting("LP-2", "PM-AUD-0002", 25000L),
                 refundPosting("LP-3", "RF-AUD-0001", 3000L),
-                settlementPosting("LP-4", "99", 21750L)));
+                settlementPosting("LP-4", "SB-AUD-0001", 21750L)));
         factsGateway.statements.addAll(List.of(
                 new ChannelStatement("CH-AUD-0001", 10000L, "CNY", "SUCCEEDED"),
                 new ChannelStatement("CH-AUD-0002", 25000L, "CNY", "SUCCEEDED"),
@@ -184,7 +195,7 @@ class AuditApplicationServiceTest {
                 .filter(d -> d.getKind() == AuditDifferenceKind.MISSING_POSTING)
                 .findFirst().orElseThrow();
         assertThat(after.getStatus()).isEqualTo(AuditDifferenceStatus.SUSPENDED);
-        // SC-016：SUSPENSE 余额 == 未收口挂账净额
+        // SC-016：SUSPENSE 余额 == 未收口挂账净额（欠记挂账 = Dr BANK_CASH / Cr SUSPENSE）
         assertThat(svc.suspenseBalanceMinor()).isEqualTo(8000L);
     }
 
@@ -204,9 +215,9 @@ class AuditApplicationServiceTest {
                 8000L, "MERCHANT_PAYABLE", "demo-op", "demo-rev", "查清归属，转出挂账");
 
         assertThat(transfer.getPostingNo()).isNotBlank();
-        // SC-009：SUSPENSE 归零
+        // SC-009：SUSPENSE 归零（TRANSFER = Dr SUSPENSE / Cr MERCHANT_PAYABLE）
         assertThat(svc.suspenseBalanceMinor()).isEqualTo(0L);
-        // SC-010：调账后自动 recheck → VERIFIED
+        // SC-010：调账后自动 recheck → VERIFIED（资金腿净影响 = +8000 = 事实金额）
         AuditDifference after = svc.listDifferences(batch.getBatchNo()).stream()
                 .filter(d -> d.getKind() == AuditDifferenceKind.MISSING_POSTING)
                 .findFirst().orElseThrow();
@@ -318,21 +329,29 @@ class AuditApplicationServiceTest {
 
     // ---- helpers ----
 
+    private static LedgerPostingView.LedgerEntryView entry(String accountCode, String direction, long amount) {
+        return new LedgerPostingView.LedgerEntryView(1L, accountCode, "PLATFORM", "LEDGER", direction, amount);
+    }
+
     private LedgerPostingView paymentPosting(String no, String sourceId, long amount) {
-        return new LedgerPostingView(no, "ik-" + no, "PAYMENT", sourceId, "CNY", List.of(
-                new LedgerPostingView.LedgerEntryView(1L, "DEBIT", amount, "PAYMENT_CAPTURE", "PAYMENT", sourceId),
-                new LedgerPostingView.LedgerEntryView(2L, "CREDIT", amount, "PAYMENT_CAPTURE", "PAYMENT", sourceId)));
+        return new LedgerPostingView(no, "PAYMENT_CAPTURE", "PAYMENT_CAPTURE:" + sourceId, "PAYMENT", sourceId,
+                "CNY", List.of(
+                entry("CHANNEL_RECEIVABLE", "DEBIT", amount),
+                entry("MERCHANT_PAYABLE", "CREDIT", amount)));
     }
 
     private LedgerPostingView refundPosting(String no, String sourceId, long amount) {
-        return new LedgerPostingView(no, "ik-" + no, "REFUND", sourceId, "CNY", List.of(
-                new LedgerPostingView.LedgerEntryView(2L, "DEBIT", amount, "REFUND", "REFUND", sourceId),
-                new LedgerPostingView.LedgerEntryView(1L, "CREDIT", amount, "REFUND", "REFUND", sourceId)));
+        return new LedgerPostingView(no, "REFUND", "REFUND:" + sourceId, "REFUND", sourceId,
+                "CNY", List.of(
+                entry("MERCHANT_PAYABLE", "DEBIT", amount),
+                entry("CHANNEL_RECEIVABLE", "CREDIT", amount)));
     }
 
-    private LedgerPostingView settlementPosting(String no, String sourceId, long amount) {
-        return new LedgerPostingView(no, "ik-" + no, "SETTLEMENT", sourceId, "CNY", List.of(
-                new LedgerPostingView.LedgerEntryView(2L, "DEBIT", amount, "SETTLEMENT", "SETTLEMENT", sourceId),
-                new LedgerPostingView.LedgerEntryView(4L, "CREDIT", amount, "SETTLEMENT", "SETTLEMENT", sourceId)));
+    /** MERCHANT_SETTLEMENT：sourceId=batchNo（M1），Dr MP / Cr SP，带符号 MP 腿 = 批次净额。 */
+    private LedgerPostingView settlementPosting(String no, String batchNo, long amount) {
+        return new LedgerPostingView(no, "MERCHANT_SETTLEMENT", "MERCHANT_SETTLEMENT:" + batchNo,
+                "SETTLEMENT", batchNo, "CNY", List.of(
+                entry("MERCHANT_PAYABLE", "DEBIT", amount),
+                entry("SETTLEMENT_PAYABLE", "CREDIT", amount)));
     }
 }

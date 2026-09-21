@@ -188,7 +188,8 @@ public class OrderApplicationService {
                 order.getTotalMinor(),
                 order.getCurrencyCode(),
                 null, // 幂等键由 payment-service 服务端生成（Feature 015）
-                channelCode);
+                channelCode,
+                order.getMerchantId()); // spec 031 / §13：商户号随下单携带，PAYMENT_CAPTURE 记账事实锚
         CreatePaymentResponse payment = paymentGateway.createPayment(request);
         // spec 022 live 实跑发现（内联同步扣款路径）：payment 的成功回调可能先于本方法返回——
         // 回调已把 order 推到 PAID、transaction 推到 SUCCEEDED（版本号已递增），本方法若用

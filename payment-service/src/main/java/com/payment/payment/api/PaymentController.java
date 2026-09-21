@@ -49,7 +49,7 @@ public class PaymentController {
     public CreatePaymentResponse createPayment(@Valid @RequestBody CreatePaymentRequest request) {
         CreatePaymentCommand command = new CreatePaymentCommand(request.transactionId(), request.orderNo(),
                 request.userId(), request.amountMinor(), request.currencyCode(),
-                request.idempotencyKey(), request.channelCode());
+                request.idempotencyKey(), request.channelCode(), request.merchantId());
         // spec 030 / FR-167（T44）：**染色唯一消费点**。
         // mock-cashier 语义收窄为「仅对 mock 模态生效」——沙箱**不延迟**：
         // 延迟就不调 charge，不调 charge 就拿不到凭证，沙箱闭环直接断掉。

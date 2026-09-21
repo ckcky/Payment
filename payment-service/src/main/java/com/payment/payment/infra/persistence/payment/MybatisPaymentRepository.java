@@ -100,7 +100,7 @@ public class MybatisPaymentRepository implements PaymentRepository {
                 entity.getCurrentAttemptId(), entity.getFailureReason(),
                 entity.getQueryAttempts() != null ? entity.getQueryAttempts() : 0,
                 entity.getEnteredUnknownAt(), entity.getVersion(),
-                entity.getAttemptSeq());
+                entity.getAttemptSeq(), entity.getMerchantId());
     }
 
     private PaymentEntity toEntity(Payment payment) {
@@ -110,6 +110,7 @@ public class MybatisPaymentRepository implements PaymentRepository {
         entity.setTransactionId(payment.getTransactionId());
         entity.setOrderNo(payment.getOrderNo());
         entity.setUserId(payment.getUserId());
+        entity.setMerchantId(payment.getMerchantId());
         entity.setAmountMinor(payment.getAmountMinor());
         entity.setCurrencyCode(payment.getCurrencyCode());
         entity.setIdempotencyKey(payment.getIdempotencyKey());

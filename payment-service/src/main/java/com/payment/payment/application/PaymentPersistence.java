@@ -84,6 +84,8 @@ public class PaymentPersistence {
         }
         Payment payment = new Payment(cmd.transactionId(), cmd.orderNo(), cmd.userId(),
                 cmd.amountMinor(), cmd.currencyCode(), idempotencyKey);
+        // spec 031 / §13：商户号是**订单带来的事实**，创建时点写入、之后不可变（记账解析商户应付账户用）
+        payment.withMerchantId(cmd.merchantId());
         // 限额闸门（spec 027 / FR-006、INV-3）：在**落库之前**预占，使超限时本事务整体回滚。
         // paymentNo 已由 Payment 构造生成（PM+雪花），可直接作为额度流水的 biz_no（ADR-0063）。
         // 注：本调用位于 @Transactional 方法体内，与随后的 insertNew 同事务——

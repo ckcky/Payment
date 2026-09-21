@@ -62,7 +62,7 @@ http() { # http METHOD URL [BODY] [HEADERS]
 # ---- JSON 取值：json_get <expr>（expr 为 python 表达式，d 为 dict / list）----
 json_get() {
   local expr="$1"
-  echo "$BODY" | python -c "
+  echo "$BODY" | "${PYTHON_BIN:-$(command -v python3 || command -v python)}" -c "
 import json,sys
 d=json.load(sys.stdin)
 try:

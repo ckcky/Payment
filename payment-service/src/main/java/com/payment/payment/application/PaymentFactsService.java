@@ -38,6 +38,6 @@ public class PaymentFactsService {
                         .map(attempt -> attempt.getChannelReference())
                         .orElse(null);
         return new PaymentFactResponse(p.getPaymentNo(), channelReference, p.getAmountMinor(),
-                p.getCurrencyCode(), p.getStatus().name());
+                p.getCurrencyCode(), p.getStatus().name(), p.getMerchantId());
     }
 }

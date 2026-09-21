@@ -82,8 +82,13 @@ public class PaymentRefundService {
     public PaymentAmountQueryResponse queryAmount(PaymentAmountQueryRequest request) {
         Payment payment = paymentRepository.findByPaymentNo(request.paymentNo())
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + request.paymentNo()));
+        // spec 031 §9：REFUND 记账事件需 merchantId + 生效渠道码——资格查询顺带带出事实；
+        // 宽松解析（无生效 attempt 不抛），拒绝路径的查询不应因记账槽位缺事实而失败。
+        PaymentAttempt effective = payment.getStatus() == PaymentStatus.SUCCEEDED
+                ? findEffectiveAttempt(payment.getPaymentNo()) : null;
         return new PaymentAmountQueryResponse(payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(),
-                payment.getAmountMinor(), payment.getCurrencyCode(), payment.getStatus().name());
+                payment.getAmountMinor(), payment.getCurrencyCode(), payment.getStatus().name(),
+                payment.getMerchantId(), effective == null ? null : effective.getChannelCode());
     }
 
     public RefundAttemptResponse refund(RefundAttemptRequest request) {
@@ -136,6 +141,17 @@ public class PaymentRefundService {
      * 避免「退到哪个渠道」取决于数据库返回顺序。</p>
      */
     private PaymentAttempt resolveEffectiveAttempt(String paymentNo) {
+        PaymentAttempt effective = findEffectiveAttempt(paymentNo);
+        if (effective == null) {
+            throw BizException.of(ErrorCodes.INTERNAL_ERROR,
+                    "no effective payment channel for payment " + paymentNo
+                            + " (refund must not guess or fall back to a default channel)");
+        }
+        return effective;
+    }
+
+    /** 生效支付 attempt 的宽松查找：找不到返回 null（是否 fail-fast 由调用方按场景决定）。 */
+    private PaymentAttempt findEffectiveAttempt(String paymentNo) {
         List<PaymentAttempt> attempts = attemptRepository.findByPaymentNo(paymentNo);
         return attempts.stream()
                 .filter(a -> PaymentAttempt.TYPE_PAYMENT.equals(a.getAttemptType()))
@@ -144,9 +160,7 @@ public class PaymentRefundService {
                 .sorted(java.util.Comparator.comparing(PaymentAttempt::getId,
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
                 .findFirst()
-                .orElseThrow(() -> BizException.of(ErrorCodes.INTERNAL_ERROR,
-                        "no effective payment channel for payment " + paymentNo
-                                + " (refund must not guess or fall back to a default channel)"));
+                .orElse(null);
     }
 
     /**

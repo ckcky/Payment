@@ -70,7 +70,7 @@ class PaymentPersistenceIdempotentRaceTest {
 
         PaymentPersistence.PendingPayment pending = persistence.insertPending(
                 new CreatePaymentCommand("txn-race", "order-race", "user-race", 100L, "CNY",
-                        IDEMPOTENCY_KEY, "MOCK"),
+                        IDEMPOTENCY_KEY, "MOCK", "M001"),
                 "MOCK");
 
         assertThat(pending.created())

@@ -15,6 +15,8 @@ public class PaymentEntity extends BaseEntity {
     private String transactionId;
     private String orderNo;
     private String userId;
+    /** 商户号（spec 031 / §13）：PAYMENT_CAPTURE 记账事实锚；历史行 NULL。 */
+    private String merchantId;
     /** 最小货币单位（BIGINT），禁止浮点。 */
     private Long amountMinor;
     private String currencyCode;
@@ -61,6 +63,14 @@ public class PaymentEntity extends BaseEntity {
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    public String getMerchantId() {
+        return merchantId;
+    }
+
+    public void setMerchantId(String merchantId) {
+        this.merchantId = merchantId;
     }
 
     public Long getAmountMinor() {

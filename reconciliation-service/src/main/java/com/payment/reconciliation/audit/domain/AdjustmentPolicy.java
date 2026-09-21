@@ -2,46 +2,49 @@ package com.payment.reconciliation.audit.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.payment.common.dto.rpc.AccountCode;
+import com.payment.common.dto.rpc.AccountingEventType;
+import com.payment.common.dto.rpc.AccountingSourceType;
 
 /**
- * 调账硬规则校验与分录编排（FR-016 七条，纯函数；逐条有单测）：
- * ① 分录借贷平衡（由 ledger 聚合根强校验 + 本类构造保证）；
- * ② source_type=ADJUSTMENT / source_id=adjustNo / 幂等键 adjust:{adjustNo}；
- * ③ 不删改既有分录（只新增反向分录）；
- * ④ 累计调账额 ≤ 差异金额；
+ * 调账硬规则校验与 ADJUSTMENT 事件编排（FR-016 七条，纯函数；逐条有单测）：
+ * ① 分录借贷平衡由账本展开期强校验（本类只声明「哪一类、多少、从哪到哪、冲销哪笔」）；
+ * ② source_type=RECONCILIATION / source_id=adjustNo，幂等键由账本按
+ *   {@code ADJUSTMENT:{adjustNo}} 派生（spec 031 §6.2 原则 10——本地不再拼 "adjust:" 前缀）；
+ * ③ 不删改既有分录（红冲由账本读原交易取反，append-only）；
+ * ④ 累计调账额 ≤ 差异金额（调用方判定）；
  * ⑤ operator + reason 必填；
  * ⑥ 双人复核（软约束，见 {@link #needsReview}）；
- * ⑦ 不动业务单据状态（调用方保证：本类只产出 ledger 记账计划）。
+ * ⑦ 不动业务单据状态（本类只产出事件计划）。
+ *
+ * <p>spec 031 §9：audit 域只声明转账语义（§7.6），**不再本地拼装方向/科目 id**——
+ * 借贷方向由账本 {@code AdjustmentRule} 按「Dr to / Cr from」恒等推导（冲突 1 已裁决），
+ * 红冲（REVERSE/CORRECT）由账本按 {@code reversesEventType:reversesSourceId} 读原交易取反。</p>
  */
 public final class AdjustmentPolicy {
 
-    /** 幂等键前缀（FR-016 ②）。 */
-    public static final String IDEMPOTENCY_PREFIX = "adjust:";
     /** 双人复核金额阈值：> ¥100（10000 分）需复核（软约束 WARN 口径）。 */
     public static final long REVIEW_THRESHOLD_MINOR = 10_000L;
 
     private AdjustmentPolicy() {
     }
 
-    /**
-     * 单条记账分录计划。
-     */
-    public record PostingEntry(long accountId, String direction, long amountMinor) {
+    /** 被冲销的原事件引用（difference 的 sourceType/sourceId，账本据此回查原交易）。 */
+    public record OriginalRef(String sourceType, String sourceId) {
     }
 
     /**
-     * 记账计划：一次调账 = 一条 ADJUSTMENT posting（内含红蓝字多分录也保持借贷平衡）。
+     * ADJUSTMENT 事件计划：转账语义三类带 from/to；REVERSE 只带红冲引用；
+     * CORRECT 红冲 + 补记正确额（同一事件）。
      */
-    public record PostingPlan(String idempotencyKey, List<PostingEntry> entries) {
+    public record AdjustPlan(String adjustmentKind, long amountMinor,
+                             String fromAccountCode, String toAccountCode,
+                             String reversesEventType, String reversesSourceId) {
     }
 
     /**
      * 双人复核软约束（plan §7.2 规则 6 / §11 ⑥）：
-     * WRITE_OFF、金额 &gt; ¥100、缺 reviewer 或 operator==reviewer 时需要复核；
-     * 调用方据配置决定 WARN 留痕（默认）或硬拒绝。
+     * WRITE_OFF、金额 &gt; ¥100、缺 reviewer 或 operator==reviewer 时需要复核。
      */
     public static boolean needsReview(AuditAdjustmentKind kind, long amountMinor,
                                       String operator, String reviewer) {
@@ -52,7 +55,7 @@ public final class AdjustmentPolicy {
     }
 
     /**
-     * 基础校验（⑤⑥⑦ + 金额合法性）；违规抛 {@code BizException}，不产生任何分录。
+     * 基础校验（⑤⑥⑦ + 金额合法性）；违规抛 {@code BizException}，不产生任何事件。
      */
     public static void validate(AuditAdjustmentKind kind, long amountMinor,
                                 String operator, String reviewer, String reason,
@@ -77,96 +80,84 @@ public final class AdjustmentPolicy {
     }
 
     /**
-     * 生成记账计划（SC-008 / SC-011 / SC-013）。
+     * 生成 ADJUSTMENT 事件计划（SC-008 / SC-011 / SC-013）。
      *
-     * @param originalEntries 原分录（REVERSE / CORRECT 必须提供，SC-011 append-only 红冲）
+     * <p>方向口径（与 017 现行模板逐行等价，现金腿按冲突 2 裁决 CUSTOMER_CASH→BANK_CASH）：
+     * 「Dr to / Cr from」——挂账账少记 = 借资金/贷 SUSPENSE ⇒ to=资金、from=SUSPENSE。</p>
+     *
+     * @param original REVERSE / CORRECT 必须提供被冲销原事件引用（SC-011 append-only 红冲）
      */
-    public static PostingPlan buildPlan(String adjustNo, AuditAdjustmentKind kind,
-                                        boolean underRecorded, long amountMinor,
-                                        String targetAccountCode,
-                                        List<PostingEntry> originalEntries) {
-        List<PostingEntry> entries = new ArrayList<>();
-        switch (kind) {
-            case SUSPEND -> {
-                if (underRecorded) {
-                    entries.add(new PostingEntry(account(SuspensePolicy.CUSTOMER_CASH), "DEBIT", amountMinor));
-                    entries.add(new PostingEntry(account(SuspensePolicy.SUSPENSE), "CREDIT", amountMinor));
-                } else {
-                    entries.add(new PostingEntry(account(SuspensePolicy.SUSPENSE), "DEBIT", amountMinor));
-                    entries.add(new PostingEntry(account(SuspensePolicy.CUSTOMER_CASH), "CREDIT", amountMinor));
-                }
-            }
-            case SUPPLEMENT -> {
-                // 补记：借客户资金 / 贷应付商户（手续费 MVP 计 0；目标科目可覆盖）
-                entries.add(new PostingEntry(account(SuspensePolicy.CUSTOMER_CASH), "DEBIT", amountMinor));
-                entries.add(new PostingEntry(account(target(targetAccountCode)), "CREDIT", amountMinor));
-            }
+    public static AdjustPlan buildPlan(AuditAdjustmentKind kind, boolean underRecorded, long amountMinor,
+                                       String targetAccountCode, OriginalRef original) {
+        String bankCash = AccountCode.BANK_CASH.name();
+        String suspense = AccountCode.SUSPENSE.name();
+        return switch (kind) {
+            case SUSPEND -> underRecorded
+                    ? transfer(kind, amountMinor, suspense, bankCash)
+                    : transfer(kind, amountMinor, bankCash, suspense);
+            case SUPPLEMENT ->
+                    // 补记：借资金 / 贷目标（手续费 MVP 计 0；目标科目可覆盖）
+                    transfer(kind, amountMinor, target(targetAccountCode), bankCash);
             case REVERSE -> {
-                requireOriginal(originalEntries, kind);
-                // 红冲：原分录完整反向（append-only，原分录不动）
-                for (PostingEntry e : originalEntries) {
-                    entries.add(new PostingEntry(e.accountId(), reverse(e.direction()), e.amountMinor()));
-                }
+                requireOriginal(original, kind);
+                yield new AdjustPlan(kind.name(), amountMinor, null, null,
+                        eventOf(original.sourceType()), original.sourceId());
             }
             case CORRECT -> {
-                requireOriginal(originalEntries, kind);
-                // 红蓝字：先反向冲原分录，再记正确金额（同一 posting 内借贷合计平衡）
-                for (PostingEntry e : originalEntries) {
-                    entries.add(new PostingEntry(e.accountId(), reverse(e.direction()), e.amountMinor()));
-                }
-                long debitTotal = originalEntries.stream()
-                        .filter(e -> "DEBIT".equals(e.direction())).mapToLong(PostingEntry::amountMinor).sum();
-                long creditTotal = originalEntries.stream()
-                        .filter(e -> "CREDIT".equals(e.direction())).mapToLong(PostingEntry::amountMinor).sum();
-                if (debitTotal > 0) {
-                    entries.add(new PostingEntry(account(SuspensePolicy.CUSTOMER_CASH), "DEBIT", debitTotal));
-                }
-                if (creditTotal > 0) {
-                    entries.add(new PostingEntry(account(target(targetAccountCode)), "CREDIT", creditTotal));
-                }
+                // 红蓝字：红冲引用 + 正确金额的转账语义（借资金/贷目标），同一事件内由账本合并
+                requireOriginal(original, kind);
+                AdjustPlan base = transfer(kind, amountMinor, target(targetAccountCode), bankCash);
+                yield new AdjustPlan(base.adjustmentKind(), base.amountMinor(), base.fromAccountCode(),
+                        base.toAccountCode(), eventOf(original.sourceType()), original.sourceId());
             }
             case TRANSFER -> {
-                // 从 SUSPENSE 转出：与挂账方向相反（挂账借资金/贷 SUSPENSE → 转出借 SUSPENSE/贷目标）
-                if (underRecorded) {
-                    entries.add(new PostingEntry(account(SuspensePolicy.SUSPENSE), "DEBIT", amountMinor));
-                    entries.add(new PostingEntry(account(target(targetAccountCode)), "CREDIT", amountMinor));
-                } else {
-                    entries.add(new PostingEntry(account(target(targetAccountCode)), "DEBIT", amountMinor));
-                    entries.add(new PostingEntry(account(SuspensePolicy.SUSPENSE), "CREDIT", amountMinor));
-                }
+                // 从 SUSPENSE 转出/转入：与挂账方向相反（挂账 to=资金/from=SUSPENSE ⇒ 转出 to=SUSPENSE…见下）
+                String tgt = target(targetAccountCode);
+                yield underRecorded
+                        ? transfer(kind, amountMinor, tgt, suspense)
+                        : transfer(kind, amountMinor, suspense, tgt);
             }
             case WRITE_OFF -> throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
                     "WRITE_OFF disabled (audit.adjust.write-off.enabled=false)");
             default -> throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "unsupported kind: " + kind);
-        }
-        return new PostingPlan(IDEMPOTENCY_PREFIX + adjustNo, List.copyOf(entries));
-    }
-
-    private static void requireOriginal(List<PostingEntry> originalEntries, AuditAdjustmentKind kind) {
-        if (originalEntries == null || originalEntries.isEmpty()) {
-            throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
-                    kind + " requires an original posting (none found)");
-        }
-    }
-
-    private static String reverse(String direction) {
-        return "DEBIT".equals(direction) ? "CREDIT" : "DEBIT";
-    }
-
-    private static String target(String targetAccountCode) {
-        return targetAccountCode == null || targetAccountCode.isBlank()
-                ? SuspensePolicy.MERCHANT_PAYABLE : targetAccountCode;
-    }
-
-    /** 科目码 → 预置科目 id（与 ledger Account 枚举 / 09-ledger-schema seed 对齐）。 */
-    public static long account(String code) {
-        return switch (code) {
-            case SuspensePolicy.CUSTOMER_CASH -> 1L;
-            case SuspensePolicy.MERCHANT_PAYABLE -> 2L;
-            case SuspensePolicy.PLATFORM_FEE_REVENUE -> 3L;
-            case SuspensePolicy.SETTLEMENT_PAYABLE -> 4L;
-            case SuspensePolicy.SUSPENSE -> 5L;
-            default -> throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "unknown account code: " + code);
         };
+    }
+
+    /** kind → 账本 adjustmentKind 字符串直通（枚举名一致）。 */
+    private static AdjustPlan transfer(AuditAdjustmentKind kind, long amount, String from, String to) {
+        return new AdjustPlan(kind.name(), amount, from, to, null, null);
+    }
+
+    /** 来源域 → 被冲销事件类型（difference.sourceType 即账本 sourceType 口径）。 */
+    private static String eventOf(String sourceType) {
+        return switch (sourceType) {
+            case "PAYMENT" -> AccountingEventType.PAYMENT_CAPTURE.name();
+            case "REFUND" -> AccountingEventType.REFUND.name();
+            case "SETTLEMENT" -> AccountingEventType.MERCHANT_SETTLEMENT.name();
+            default -> throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                    "no reversible event for sourceType: " + sourceType);
+        };
+    }
+
+    /** 目标科目码归一：缺省 = MERCHANT_PAYABLE；旧码 PLATFORM_FEE_REVENUE 就地更名 FEE_REVENUE（ADR-0078）。 */
+    private static String target(String targetAccountCode) {
+        if (targetAccountCode == null || targetAccountCode.isBlank()) {
+            return AccountCode.MERCHANT_PAYABLE.name();
+        }
+        String code = "PLATFORM_FEE_REVENUE".equals(targetAccountCode)
+                ? AccountCode.FEE_REVENUE.name() : targetAccountCode;
+        try {
+            AccountCode.valueOf(code);
+        } catch (IllegalArgumentException e) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "unknown account code: " + code);
+        }
+        return code;
+    }
+
+    private static void requireOriginal(OriginalRef original, AuditAdjustmentKind kind) {
+        if (original == null || original.sourceType() == null || original.sourceId() == null) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                    kind + " requires an original posting reference (none found)");
+        }
     }
 }

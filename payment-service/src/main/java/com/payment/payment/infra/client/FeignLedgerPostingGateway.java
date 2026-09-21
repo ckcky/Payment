@@ -1,32 +1,30 @@
 package com.payment.payment.infra.client;
 
 import com.payment.common.core.observability.BusinessMetrics;
-import com.payment.common.dto.rpc.PostingRequest;
-import com.payment.common.dto.rpc.PostingResponse;
+import com.payment.common.dto.rpc.AccountingEventRequest;
+import com.payment.common.dto.rpc.AccountingEventType;
+import com.payment.common.dto.rpc.AccountingEventResponse;
+import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.payment.application.LedgerPostingGateway;
-import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 记账出站网关实现（Feature 004 / ADR-0009 / FR-006、FR-010）：
- * 支付成功 → 经 Feign 同步 RPC 在账本留下「借贷平衡」的复式分录。
+ * 记账出站网关实现（Feature 004 / ADR-0009，031 事件化 / ADR-0077）：
+ * 支付成功事实 → 经 Feign 同步 RPC 发 {@code PAYMENT_CAPTURE} 事件，
+ * **科目、借贷方向、净额轧差全部由账本经 Posting Rule 决定**——本类不再持有
+ * 科目常量、不再算 {@code netMinor = amountMinor - feeMinor}（031 审计 P0 两项的落点）。
  *
  * <p>记账失败**不回滚**支付成功事实（禁 2PC/XA）：失败仅记录 {@code ledger.posting_failed}
- * 指标与告警日志，进入「待记账」清单，由 reconciliation 对账补齐（Saga + 幂等）。</p>
+ * 指标与告警日志，由对账 {@code MISSING_POSTING}（BLOCKER）兜底。</p>
  *
- * <p>幂等键固定为 {@code PAYMENT:<支付幂等键>}，重复调用由账本唯一约束吸收，不产生重复分录。</p>
+ * <p>幂等：不传幂等键；账本按 {@code PAYMENT_CAPTURE:{paymentNo}} 派生双唯一约束吸收重复
+ * （原则 10，spec 030 B1 双前缀缺陷就此根除——键不再可能被两条路径拼成两个样子）。</p>
  */
 public class FeignLedgerPostingGateway implements LedgerPostingGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FeignLedgerPostingGateway.class);
     private static final String MODULE = "payment";
-
-    /** 账本预置科目 ID（与 ledger-service Account 枚举一致，见 deployment/schema/09-ledger-schema.sql）。 */
-    private static final long CUSTOMER_CASH = 1L;
-    private static final long MERCHANT_PAYABLE = 2L;
-    private static final long PLATFORM_FEE_REVENUE = 3L;
 
     private final LedgerFeignClient ledgerClient;
     private final BusinessMetrics metrics;
@@ -37,35 +35,24 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
     }
 
     @Override
-    public void postPaymentCapture(String idempotencyKey, String paymentNo, long amountMinor,
-                                   long feeMinor, String currencyCode) {
-        String postingKey = "PAYMENT:" + idempotencyKey;
-        long netMinor = amountMinor - feeMinor;
-        PostingRequest request = new PostingRequest(postingKey, "PAYMENT", paymentNo,
-                currencyCode, buildEntries(amountMinor, feeMinor, netMinor));
+    public void postPaymentCapture(PaymentCaptureFacts facts) {
+        AccountingEventRequest request = new AccountingEventRequest(
+                AccountingEventType.PAYMENT_CAPTURE.name(), AccountingSourceType.PAYMENT.name(),
+                facts.paymentNo(), facts.currencyCode(),
+                facts.grossAmountMinor(), facts.merchantFeeMinor(), facts.channelFeeMinor(),
+                facts.merchantId(), facts.channelCode(),
+                null, null, null, null, null, null, null);
         try {
-            PostingResponse response = ledgerClient.post(request);
+            AccountingEventResponse response = ledgerClient.postEvent(request);
             metrics.counter("ledger.posting_succeeded", 1.0, "module", MODULE);
-            log.info("记账成功 paymentNo={} postingId={} entries={}", paymentNo,
+            log.info("PAYMENT_CAPTURE 记账成功 paymentNo={} merchantId={} channel={} postingId={} entries={}",
+                    facts.paymentNo(), facts.merchantId(), facts.channelCode(),
                     response.postingId(), response.entries().size());
         } catch (RuntimeException ex) {
             // 记账失败不回滚支付成功事实；记录待记账，交由重试/对账兜底（ADR-0009）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
-            log.error("记账失败，进入待记账兜底：paymentNo={} postingKey={} reason={}",
-                    paymentNo, postingKey, ex.getMessage());
+            log.error("记账失败，进入待记账兜底：paymentNo={} reason={}",
+                    facts.paymentNo(), ex.getMessage());
         }
-    }
-
-    /** 支付成功分录：借客户资金 A / 贷应付商户 N / 贷手续费收入 F（A = N + F，平衡）。 */
-    private List<PostingRequest.EntryRequest> buildEntries(long amountMinor, long feeMinor, long netMinor) {
-        List<PostingRequest.EntryRequest> entries = new ArrayList<>();
-        entries.add(new PostingRequest.EntryRequest(CUSTOMER_CASH, "DEBIT", amountMinor, "PAYMENT_CAPTURE"));
-        if (netMinor > 0) {
-            entries.add(new PostingRequest.EntryRequest(MERCHANT_PAYABLE, "CREDIT", netMinor, "PAYMENT_CAPTURE"));
-        }
-        if (feeMinor > 0) {
-            entries.add(new PostingRequest.EntryRequest(PLATFORM_FEE_REVENUE, "CREDIT", feeMinor, "FEE"));
-        }
-        return entries;
     }
 }

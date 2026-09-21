@@ -37,7 +37,7 @@ public final class RefundTestStack {
     public final RecordingAttemptSettlementGateway attemptSettlement = new RecordingAttemptSettlementGateway();
 
     public RefundResultProcessor resultProcessor() {
-        return new RefundResultProcessor(refunds, order, ledger, attemptSettlement,
+        return new RefundResultProcessor(refunds, order, ledger, attemptSettlement, payment,
                 new NoopBusinessMetrics(), new StructuredAuditLogger(),
                 com.payment.payment.mq.MqTestSupport.off());
     }
@@ -51,7 +51,7 @@ public final class RefundTestStack {
     public static final class RecordingPaymentRefundGateway implements PaymentRefundGateway {
 
         public PaymentAmountQueryResponse amount =
-                new PaymentAmountQueryResponse("PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED");
+                new PaymentAmountQueryResponse("PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED", "M001", "ALIPAY");
         public String attemptStatus = "SUCCEEDED";
         public final List<RefundAttemptRequest> attemptRequests = new ArrayList<>();
 
@@ -71,10 +71,12 @@ public final class RefundTestStack {
     public static final class RecordingLedgerGateway implements LedgerPostingGateway {
 
         public final List<String> postingKeys = new ArrayList<>();
+        public final List<LedgerPostingGateway.RefundCaptureFacts> capturedFacts = new ArrayList<>();
 
         @Override
-        public void postRefundCapture(String idempotencyKey, String refundNo, long amountMinor, String currencyCode) {
-            postingKeys.add(idempotencyKey + ":" + refundNo + ":" + amountMinor);
+        public void postRefundCapture(LedgerPostingGateway.RefundCaptureFacts facts) {
+            capturedFacts.add(facts);
+            postingKeys.add(facts.refundNo() + ":" + facts.refundNo() + ":" + facts.amountMinor());
         }
     }
 

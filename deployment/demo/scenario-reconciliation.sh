@@ -21,7 +21,7 @@ info "batchId=$BATCH_ID status=$BATCH_STATUS"
 echo "==> ② 列出差异"
 http GET "$RECON_URL/internal/reconciliation/batches/$BATCH_ID/differences"
 assert_status 200 "差异列表"
-DIFF_COUNT="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);print(len(d) if isinstance(d,list) else 0)")"
+DIFF_COUNT="$(echo "$BODY" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d) if isinstance(d,list) else 0)")"
 info "差异数=${DIFF_COUNT}（样例账单 vs 真实支付，不一致即演示差异收敛）"
 
 echo "==> ③ 关闭门禁反例：尚有未处理差异时关闭应被拒（400）"
@@ -31,7 +31,7 @@ assert_status 400 "未处理差异时关闭被拒（门禁生效）"
 echo "==> ④ 处理全部差异"
 if [ "${DIFF_COUNT:-0}" -gt 0 ] 2>/dev/null; then
   http GET "$RECON_URL/internal/reconciliation/batches/$BATCH_ID/differences"
-  REFS="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);print(' '.join(str(x.get('reference','')) for x in d))")"
+  REFS="$(echo "$BODY" | python3 -c "import json,sys;d=json.load(sys.stdin);print(' '.join(str(x.get('reference','')) for x in d))")"
   for ref in $REFS; do
     [ -n "$ref" ] || continue
     http POST "$RECON_URL/internal/reconciliation/batches/$BATCH_ID/differences/resolve" \

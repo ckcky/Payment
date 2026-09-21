@@ -8,6 +8,7 @@ CREATE TABLE payments (
     transaction_id VARCHAR(64) NOT NULL,
     order_no VARCHAR(32) NOT NULL,
     user_id VARCHAR(64) NOT NULL,
+    merchant_id VARCHAR(64) NULL,
     amount_minor BIGINT NOT NULL,
     currency_code VARCHAR(8) NOT NULL,
     attempt_seq INT NOT NULL DEFAULT 1,

@@ -193,7 +193,7 @@ class ReversePathDyeModeTest {
             method.setAccessible(true);
             com.payment.payment.domain.Payment payment = com.payment.payment.domain.Payment.rehydrate(
                     99L, "PM-404", "txn-404", "order-404", "u1", 100, "CNY", "idem-404",
-                    com.payment.payment.domain.PaymentStatus.UNKNOWN, 1L, null, 0, null, 0, 1);
+                    com.payment.payment.domain.PaymentStatus.UNKNOWN, 1L, null, 0, null, 0, 1, "M001");
             method.invoke(service, payment);
         } catch (java.lang.reflect.InvocationTargetException ex) {
             // 解包：被测方法抛的 BizException 被反射包了一层，断言要看真实异常

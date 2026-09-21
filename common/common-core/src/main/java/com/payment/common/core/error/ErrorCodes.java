@@ -25,6 +25,19 @@ public final class ErrorCodes {
     public static final String UNKNOWN_STATUS = "UNKNOWN_STATUS";
     /** 复式记账借贷不平衡：数据质量门禁，拒绝落任何分录（Feature 004 / FR-002）。 */
     public static final String LEDGER_UNBALANCED = "LEDGER_UNBALANCED";
+    /** 事件缺必填槽位（spec 031 §6.2）：fail fast，不猜默认值。 */
+    public static final String EVENT_FIELD_MISSING = "EVENT_FIELD_MISSING";
+    /** 未知记账事件类型（spec 031 §6.1）。 */
+    public static final String EVENT_TYPE_UNSUPPORTED = "EVENT_TYPE_UNSUPPORTED";
+    /** LEGACY 科目禁止被新事件引用（spec 031 §5.1，ADR-0078）。 */
+    public static final String LEDGER_ACCOUNT_LEGACY = "LEDGER_ACCOUNT_LEGACY";
+    /** 渠道码在账本无对应清算科目实例：fail fast，不静默走默认（spec 031 §5.4）。 */
+    public static final String LEDGER_CHANNEL_UNKNOWN = "LEDGER_CHANNEL_UNKNOWN";
+    /** 期间已关账：拒收任何新事件（含 ADJUSTMENT，spec 031 §11，G2/ADR-0079）。 */
+    public static final String PERIOD_CLOSED = "PERIOD_CLOSED";
+    /** 余额投影与分录事实不一致（spec 031 §10 第三层防护）：告警并可 rebuild 修复。 */
+    public static final String BALANCE_PROJECTION_DRIFT = "BALANCE_PROJECTION_DRIFT";
+
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
     /** 无可用渠道：全部渠道被禁用/不可用，且调用方未指定渠道（Feature 028 / FR-016，HTTP 409）。
      *  此时<b>不产生任何支付单落库</b>——不允许部分写入。 */

@@ -40,7 +40,7 @@ class PaymentMetricsTest {
     }
 
     private CreatePaymentCommand command(String idempotencyKey) {
-        return new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", idempotencyKey, "mock");
+        return new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", idempotencyKey, "mock", "M001");
     }
 
     @Test

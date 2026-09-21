@@ -1,34 +1,33 @@
 package com.payment.refund.infra.client;
 
 import com.payment.common.core.observability.BusinessMetrics;
-import com.payment.common.dto.rpc.PostingRequest;
-import com.payment.common.dto.rpc.PostingResponse;
+import com.payment.common.dto.rpc.AccountingEventRequest;
+import com.payment.common.dto.rpc.AccountingEventResponse;
+import com.payment.common.dto.rpc.AccountingEventType;
+import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.refund.application.LedgerPostingGateway;
-import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 /**
- * 退款记账出站网关实现（Feature 005 / ADR-0018）：退款成功 → 经 Feign 同步 RPC 在账本留下冲正分录。
+ * 退款记账出站网关实现（Feature 005 / ADR-0018，031 事件化 / ADR-0077）：
+ * 退款成功事实 → 经 Feign 同步 RPC 发 {@code REFUND} 事件；冲正分录（借应付商户 / 贷渠道应收）
+ * 由账本按 §7.2 规则展开——本类不再持有科目常量、不再手工拼借贷分录。
  *
- * <p>冲正分录与支付成功反向：借应付商户（MERCHANT_PAYABLE 2）/ 贷客户资金（CUSTOMER_CASH 1），
- * 金额 = 实际退款额，借贷平衡。记账失败**不回滚**退款成功事实（禁 2PC/XA），仅记录
- * {@code ledger.posting_failed} 指标与告警日志，由重试/对账兜底（同 ADR-0009 取舍）。</p>
+ * <p>记账失败**不回滚**退款成功事实（禁 2PC/XA），仅记录 {@code ledger.posting_failed}
+ * 指标与告警日志，由重试/对账兜底（语义不变，ADR-0018）。</p>
  *
- * <p>幂等键固定为 {@code REFUND:<退款幂等键>}，重复调用由账本唯一约束吸收，不产生重复分录。</p>
+ * <p>幂等：不传幂等键，账本按 {@code REFUND:{refundNo}} 派生吸收重复（原则 10；
+ * 030 前「REFUND: 前缀双口径」缺陷随契约内不再出现幂等键而根除）。
+ * 费退还槽位（merchantFeeMinor/channelFeeMinor）MVP 传 null=0：Ledger 不猜是否退，
+ * 仅当上游确认退才产生规则 2/3。</p>
  */
 @Component
 public class RefundFeignLedgerPostingGateway implements LedgerPostingGateway {
 
     private static final Logger log = LoggerFactory.getLogger(RefundFeignLedgerPostingGateway.class);
     private static final String MODULE = "refund";
-
-    /** 账本预置科目 ID（与 ledger-service Account 枚举一致，见 deployment/schema/09-ledger-schema.sql）。 */
-    private static final long CUSTOMER_CASH = 1L;
-    private static final long MERCHANT_PAYABLE = 2L;
 
     private final LedgerFeignClient ledgerClient;
     private final BusinessMetrics metrics;
@@ -39,33 +38,28 @@ public class RefundFeignLedgerPostingGateway implements LedgerPostingGateway {
     }
 
     @Override
-    public void postRefundCapture(String idempotencyKey, String refundNo, long amountMinor, String currencyCode) {
-        if (amountMinor <= 0) {
-            log.warn("跳过退款记账：金额为 0 或非正（账本要求分录金额 > 0），refundNo={}", refundNo);
+    public void postRefundCapture(RefundCaptureFacts facts) {
+        if (facts.amountMinor() <= 0) {
+            log.warn("跳过退款记账：金额为 0 或非正（账本要求分录金额 > 0），refundNo={}", facts.refundNo());
             return;
         }
-        String postingKey = "REFUND:" + idempotencyKey;
-        // ADR-0063：账本 sourceId 用业务单号 refundNo，可按 REFUND/{refundNo} 追溯分录
-        PostingRequest request = new PostingRequest(postingKey, "REFUND", refundNo,
-                currencyCode, buildEntries(amountMinor));
+        AccountingEventRequest request = new AccountingEventRequest(
+                AccountingEventType.REFUND.name(), AccountingSourceType.REFUND.name(),
+                facts.refundNo(), facts.currencyCode(),
+                facts.amountMinor(), null, null,
+                facts.merchantId(), facts.channelCode(),
+                null, null, null, null, null, null, null);
         try {
-            PostingResponse response = ledgerClient.post(request);
+            AccountingEventResponse response = ledgerClient.postEvent(request);
             metrics.counter("ledger.posting_succeeded", 1.0, "module", MODULE);
-            log.info("退款记账成功 refundNo={} postingId={} entries={}", refundNo,
+            log.info("REFUND 记账成功 refundNo={} merchantId={} channel={} postingId={} entries={}",
+                    facts.refundNo(), facts.merchantId(), facts.channelCode(),
                     response.postingId(), response.entries().size());
         } catch (RuntimeException ex) {
             // 记账失败不回滚退款成功事实；记录待记账，交由重试/对账兜底（ADR-0018）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
-            log.error("退款记账失败，进入待记账兜底：refundNo={} postingKey={} reason={}",
-                    refundNo, postingKey, ex.getMessage());
+            log.error("退款记账失败，进入待记账兜底：refundNo={} reason={}",
+                    facts.refundNo(), ex.getMessage());
         }
-    }
-
-    /** 退款冲正分录：借应付商户 2 / 贷客户资金 1（与支付成功反向，平衡）。 */
-    private List<PostingRequest.EntryRequest> buildEntries(long amountMinor) {
-        List<PostingRequest.EntryRequest> entries = new ArrayList<>();
-        entries.add(new PostingRequest.EntryRequest(MERCHANT_PAYABLE, "DEBIT", amountMinor, "REFUND"));
-        entries.add(new PostingRequest.EntryRequest(CUSTOMER_CASH, "CREDIT", amountMinor, "REFUND"));
-        return entries;
     }
 }

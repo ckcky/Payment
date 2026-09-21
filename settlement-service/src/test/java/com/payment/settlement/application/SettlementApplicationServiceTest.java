@@ -193,14 +193,29 @@ class SettlementApplicationServiceTest {
 
         svc.resolveBatch(created.getId(), "SUCCEEDED");
 
-        // 应用层把批次幂等键透传给记账网关（SETTLEMENT: 前缀由网关内部拼装）
-        assertThat(ledgerGateway.postedKeys).containsExactly("idem-1");
+        // spec 031 §9/M1：sourceId 用批次业务单号 batchNo（数值 batchId 不出边界）；幂等键由账本派生
+        assertThat(ledgerGateway.postedBatchNos).containsExactly(created.getBatchNo());
         assertThat(ledgerGateway.postedNet).containsExactly(4000L);
     }
 
     @Test
-    void resolveBatchSucceededSkipsLedgerWhenNetNonPositive() {
-        // 收入 1000 − 退款 1000 = 0 ⇒ 不发起记账
+    void resolveBatchSucceededPostsNegativeNetToLedger() {
+        // H3（C-07）：净额为负同样记账（账本 §7.5 展开反向分录），不再静默跳过
+        reconciliationClient.facts = List.of(
+                new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY"),
+                new SettlementFact("ref-2", "REFUND", 2500L, "CNY"));
+        SettlementApplicationService svc = service();
+        SettlementBatch created = svc.createBatch("1", "2026-08", "idem-neg");
+
+        svc.resolveBatch(created.getId(), "SUCCEEDED");
+
+        assertThat(ledgerGateway.postedBatchNos).containsExactly(created.getBatchNo());
+        assertThat(ledgerGateway.postedNet).containsExactly(-1500L);
+    }
+
+    @Test
+    void resolveBatchSucceededSkipsLedgerWhenNetZero() {
+        // 收入 1000 − 退款 1000 = 0 ⇒ 空批次不发事件（spec §7.5）
         reconciliationClient.facts = List.of(
                 new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY"),
                 new SettlementFact("ref-2", "REFUND", 1000L, "CNY"));
@@ -209,7 +224,7 @@ class SettlementApplicationServiceTest {
 
         svc.resolveBatch(created.getId(), "SUCCEEDED");
 
-        assertThat(ledgerGateway.postedKeys).isEmpty();
+        assertThat(ledgerGateway.postedBatchNos).isEmpty();
     }
 
     @Test
@@ -273,13 +288,13 @@ class SettlementApplicationServiceTest {
 
     private static final class FakeLedgerPostingGateway implements LedgerPostingGateway {
 
-        private final List<String> postedKeys = new ArrayList<>();
+        private final List<String> postedBatchNos = new ArrayList<>();
         private final List<Long> postedNet = new ArrayList<>();
 
         @Override
-        public void postSettlement(String idempotencyKey, Long batchId, long netMinor, String currencyCode) {
-            postedKeys.add(idempotencyKey);
-            postedNet.add(netMinor);
+        public void postMerchantSettlement(LedgerPostingGateway.MerchantSettlementFacts facts) {
+            postedBatchNos.add(facts.batchNo());
+            postedNet.add(facts.netMinor());
         }
     }
 }

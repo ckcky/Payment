@@ -1,30 +1,30 @@
 package com.payment.settlement.infra.client;
 
 import com.payment.common.core.observability.BusinessMetrics;
-import com.payment.common.dto.rpc.PostingRequest;
-import com.payment.common.dto.rpc.PostingResponse;
+import com.payment.common.dto.rpc.AccountingEventRequest;
+import com.payment.common.dto.rpc.AccountingEventResponse;
+import com.payment.common.dto.rpc.AccountingEventType;
+import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.settlement.application.LedgerPostingGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * 结算 → ledger-service 记账出站网关实现（ADR-0023）：满足 Constitution §II.3「一切资金变动 MUST 经 ledger」。
+ * 结算 → ledger-service 记账出站网关实现（ADR-0023，031 事件化 / ADR-0077）：
+ * 批次收敛为 SUCCEEDED → 发 {@code MERCHANT_SETTLEMENT} 事件；结转分录
+ * （借应付商户 / 贷结算应付，负净额反向——H3）全部由账本按 §7.5 规则展开，
+ * 本类不再持有科目常量、不再手工拼分录。
  *
- * <p>分录：借 {@code MERCHANT_PAYABLE}(2) / 贷 {@code SETTLEMENT_PAYABLE}(4)，金额 = netMinor，借贷平衡。
- * 幂等键固定 {@code SETTLEMENT:<batchIdempotencyKey>}。记账失败**不回滚**批次状态（禁 2PC/XA）：
- * 仅记录 {@code ledger.posting_failed} 指标与告警，进入「待记账」清单，由重试/对账兜底（与支付侧 ADR-0009 同口径）。</p>
+ * <p>记账失败**不回滚**批次状态（禁 2PC/XA）：仅记录 {@code ledger.posting_failed}
+ * 指标与告警，进入「待记账」清单，由重试/对账兜底（与支付侧 ADR-0009 同口径）。</p>
+ *
+ * <p>幂等：账本按 {@code MERCHANT_SETTLEMENT:{batchNo}} 派生吸收重复（原则 10）；
+ * sourceId 用 batchNo（M1 收编，数值 batchId 不再出服务边界，ADR-0063）。</p>
  */
 public class FeignLedgerPostingGateway implements LedgerPostingGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FeignLedgerPostingGateway.class);
     private static final String MODULE = "settlement";
-
-    /** 账本预置科目 ID（与 ledger-service Account 枚举一致，见 deployment/schema/09-ledger-schema.sql）。 */
-    private static final long MERCHANT_PAYABLE = 2L;
-    private static final long SETTLEMENT_PAYABLE = 4L;
 
     private final LedgerFeignClient ledgerClient;
     private final BusinessMetrics metrics;
@@ -35,27 +35,22 @@ public class FeignLedgerPostingGateway implements LedgerPostingGateway {
     }
 
     @Override
-    public void postSettlement(String idempotencyKey, Long batchId, long netMinor, String currencyCode) {
-        String postingKey = "SETTLEMENT:" + idempotencyKey;
-        PostingRequest request = new PostingRequest(postingKey, "SETTLEMENT", String.valueOf(batchId),
-                currencyCode, buildEntries(netMinor));
+    public void postMerchantSettlement(MerchantSettlementFacts facts) {
+        AccountingEventRequest request = new AccountingEventRequest(
+                AccountingEventType.MERCHANT_SETTLEMENT.name(), AccountingSourceType.SETTLEMENT.name(),
+                facts.batchNo(), facts.currencyCode(),
+                null, null, null,
+                facts.merchantId(), null,
+                facts.netMinor(), null, null, null, null, null, null);
         try {
-            PostingResponse response = ledgerClient.post(request);
+            AccountingEventResponse response = ledgerClient.postEvent(request);
             metrics.counter("ledger.posting_succeeded", 1.0, "module", MODULE);
-            log.info("记账成功 settlement batchId={} postingId={}", batchId, response.postingId());
+            log.info("MERCHANT_SETTLEMENT 记账成功 batchNo={} merchantId={} net={} postingId={}",
+                    facts.batchNo(), facts.merchantId(), facts.netMinor(), response.postingId());
         } catch (RuntimeException ex) {
             // 记账失败不回滚结算成功事实；记录待记账，交由重试/对账兜底（ADR-0023）
             metrics.counter("ledger.posting_failed", 1.0, "module", MODULE);
-            log.error("记账失败，进入待记账兜底：batchId={} postingKey={} reason={}",
-                    batchId, postingKey, ex.getMessage());
+            log.error("结算记账失败，进入待记账兜底：batchNo={} reason={}", facts.batchNo(), ex.getMessage());
         }
-    }
-
-    /** 结算成功分录：借应付商户 N / 贷结算应付 N（借贷平衡，N = netMinor）。 */
-    private List<PostingRequest.EntryRequest> buildEntries(long netMinor) {
-        List<PostingRequest.EntryRequest> entries = new ArrayList<>();
-        entries.add(new PostingRequest.EntryRequest(MERCHANT_PAYABLE, "DEBIT", netMinor, "SETTLEMENT"));
-        entries.add(new PostingRequest.EntryRequest(SETTLEMENT_PAYABLE, "CREDIT", netMinor, "SETTLEMENT"));
-        return entries;
     }
 }

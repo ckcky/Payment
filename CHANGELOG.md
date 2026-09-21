@@ -6,6 +6,26 @@
 
 ---
 
+## [2026-09-21] feat(031)：Ledger / Accounting 地基——Accounting Event 入站契约 + 两级科目 + 余额投影（ADR-0077~0079 Accepted）
+
+**性质**：Feature 031 实现落地。负责人 2026-09-21 裁决 D-1~D-7 按 spec 推荐方案批准并开工。
+
+- **契约事件化**（ADR-0077）：payment / refund / settlement / reconciliation-audit 四调用方改投 `AccountingEvent`，
+  **调用方组分录与科目硬编码删除**（ArchUnit `AccountingVocabularyBoundaryTest` 门禁）；`PostingRequest/PostingResponse` 退役；
+  幂等键由账本派生 `{eventType}:{sourceId}`，重复投递回放首笔，并发唯一赢家（`uk_postings_idempotency_key` 兜底）。
+- **两级科目**（ADR-0078）：`account_definitions`（8 科目目录）/ `accounts`（owner 维度实例）就地演进；
+  `AccountResolver` 未登记 owner 即拒绝；`payments.merchant_id` 落列。
+- **余额投影与账期**（ADR-0079）：`account_balances` 同事务累加 + `/balances/rebuild` 重建自愈；
+  `trial-balance` 试算平衡 + `ledger_periods` 关账门禁。
+- **Schema**：`09-ledger-schema.sql` 重写 + `031-ledger-accounting-foundation.sql` 增量；`demo/reset.sh` 回灌科目种子。
+- **测试**：必测 9 项 + Testcontainers 真 MySQL（管线集成 / 原子性 / 并发）；`mvn verify` **866 tests 全绿**；
+  demo happy-path / audit / reconciliation 场景实测；入账日志补 `bizNo=sourceId`（`TraceContext.runWithBizNo` 新增 Supplier 重载）。
+- **文档**：`systems/ledger-service.md` 重写、`technical-solution.md` 三处修订、spec 031 补 Plan/Tasks/Acceptance 三件套、
+  roadmap / ADR 索引同步。**遗留**：CHANNEL_SETTLEMENT / MERCHANT_SETTLEMENT / ADJUSTMENT 产生方切换归 032/034；
+  L2b 公共测试基座归 033。
+
+---
+
 ## [2026-09-21] docs：032~035 设计轮（对账真实化 / 测试基础设施 / 可靠性 / 可观测 SLO，纯文档不动代码）
 
 **性质**：Design-only（docs-only）。**未改任何 Java 业务代码、未改业务逻辑、未建 migration、未加测试、未引入运行时依赖**；

@@ -68,7 +68,7 @@ public final class PaymentTestStack {
     }
 
     public CreatePaymentCommand command(String idempotencyKey) {
-        return new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", idempotencyKey, "mock");
+        return new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", idempotencyKey, "mock", "M001");
     }
 
     /** 记录订单回写 RPC 调用，供测试断言（Feature 016：payment 业务侧仅通知 order）。 */

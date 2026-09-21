@@ -1,5 +1,6 @@
 package com.payment.reconciliation.audit.application;
 
+import com.payment.common.dto.rpc.AccountCode;
 import com.payment.reconciliation.audit.domain.AuditDifference;
 import com.payment.reconciliation.audit.domain.AuditDifferenceKind;
 import com.payment.reconciliation.domain.ChannelStatement;
@@ -14,13 +15,18 @@ import java.util.Map;
  * A3 账实核对（spec 017 / FR-008）：账本资金科目发生额 ↔ 渠道账单。
  * 与既有「业务台账 ↔ 渠道账单」链路并列（006 链路保持不动，NFR-006）。
  *
- * <p>口径：按渠道引用（channelReference）比对 CUSTOMER_CASH 带符号发生额——
- * 支付借方为正、退款贷方为负；账本无对应发生额（长款）或金额不符均报差异。</p>
+ * <p>口径：按渠道引用（channelReference）比对账本**资金腿**带符号发生额——
+ * 支付为正、退款为负；账本无对应发生额（长款）或金额不符均报差异。</p>
+ *
+ * <p>spec 031：资金腿科目集 = CUSTOMER_CASH（历史）/ BANK_CASH（新现金腿）/
+ * CHANNEL_RECEIVABLE（支付事件的应收腿，费 0 口径下净额 = gross，与账单可对）。</p>
  */
 @Component
 public class RealAuditor {
 
-    private static final long CUSTOMER_CASH_ID = 1L;
+    private static final String[] FUND_CODES = {
+            AccountCode.CUSTOMER_CASH.name(), AccountCode.BANK_CASH.name(),
+            AccountCode.CHANNEL_RECEIVABLE.name()};
 
     /**
      * @param facts      已确认业务事实（含渠道引用，用于把 posting 关联到渠道口径）
@@ -60,7 +66,7 @@ public class RealAuditor {
                 continue;
             }
             ledgerByReference.merge(fact.reference(),
-                    signedCustomerCash(posting, fact.sourceType()), Long::sum);
+                    posting.signedForCodes(FUND_CODES), Long::sum);
         }
 
         // 正向：账单逐行 ↔ 账本；同 reference 多行（重复投递形态）单独报差异
@@ -114,12 +120,5 @@ public class RealAuditor {
     private boolean isRefundReference(String reference, List<CertificateFact> facts) {
         return facts.stream().anyMatch(f -> "REFUND".equals(f.sourceType())
                 && f.confirmed() && reference.equals(f.reference()));
-    }
-
-    private long signedCustomerCash(LedgerPostingView posting, String sourceType) {
-        return posting.entries().stream()
-                .filter(e -> e.accountId() == CUSTOMER_CASH_ID)
-                .mapToLong(e -> "DEBIT".equals(e.direction()) ? e.amountMinor() : -e.amountMinor())
-                .sum();
     }
 }

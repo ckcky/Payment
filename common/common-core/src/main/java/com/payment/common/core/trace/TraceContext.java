@@ -74,12 +74,20 @@ public final class TraceContext {
      * 使 logback pattern 的 {@code %X{bizNo}} 输出可被 {@code trace-grep.sh --bizno} 检索。</p>
      */
     public static void runWithBizNo(String bizNo, Runnable action) {
+        runWithBizNo(bizNo, () -> {
+            action.run();
+            return null;
+        });
+    }
+
+    /** 带返回值的 bizNo 标注（入账/回写等需要继续处理结果的入口使用）。 */
+    public static <T> T runWithBizNo(String bizNo, java.util.function.Supplier<T> action) {
         String previous = MDC.get(BIZ_NO_KEY);
         if (bizNo != null && !bizNo.isBlank()) {
             MDC.put(BIZ_NO_KEY, bizNo);
         }
         try {
-            action.run();
+            return action.get();
         } finally {
             if (previous != null) {
                 MDC.put(BIZ_NO_KEY, previous);

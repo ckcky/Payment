@@ -1,140 +1,92 @@
 package com.payment.ledger.application;
 
+import static com.payment.ledger.LedgerTestSupport.channelFee;
+import static com.payment.ledger.LedgerTestSupport.channelSettlement;
+import static com.payment.ledger.LedgerTestSupport.entrySummary;
+import static com.payment.ledger.LedgerTestSupport.merchantSettlement;
+import static com.payment.ledger.LedgerTestSupport.paymentCapture;
+import static com.payment.ledger.LedgerTestSupport.wiring;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+
 import com.payment.common.core.error.BizException;
-import com.payment.common.core.observability.NoopBusinessMetrics;
-import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.ledger.LedgerTestSupport;
-import com.payment.ledger.domain.Account;
-import com.payment.ledger.domain.LedgerEntry;
-import com.payment.ledger.domain.LedgerSourceType;
+import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.dto.rpc.AccountCode;
+import com.payment.ledger.LedgerTestSupport.Wiring;
 import com.payment.ledger.domain.Posting;
-import com.payment.ledger.infra.InMemoryLedgerRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 /**
- * 结算记账测试（spec 004 / US3 / T015 / SC-003）：结算批次在账本生成「应付→已结」平衡 Posting。
- *
- * <p>与 {@link LedgerPostingServiceTest} 中串联场景的分工：本类聚焦结算自身的结转语义——
- * 商户应付<b>减少 S</b>、结算应付<b>增加 S</b>（负债换科目而非消失），
- * 且重复结转同一批次不得二次入账。</p>
+ * 结算两条规则（spec 031 §7.4 / §7.5 + H3）：渠道清算到账核销应收；
+ * 商户结算应付 → 已结算待出款（负净额反向、零净额拒绝）。
  */
 class SettlementPostingTest {
 
-    private final InMemoryLedgerRepository repository = new InMemoryLedgerRepository();
-    private final LedgerPostingService service = new LedgerPostingService(repository,
-            new NoopBusinessMetrics(), new StructuredAuditLogger());
-
     @Test
-    void settlementMovesPayableToSettlementPayable() {
-        // 支付 10000（手续费 300）→ 结算净额 9700
-        service.post("PAYMENT:p1", LedgerSourceType.PAYMENT, "p1", "CNY",
-                LedgerTestSupport.paymentCapture(LedgerSourceType.PAYMENT, "p1", 10_000, 300));
-        Posting settlement = service.post("SETTLEMENT:s1", LedgerSourceType.SETTLEMENT, "s1", "CNY",
-                LedgerTestSupport.settlement(LedgerSourceType.SETTLEMENT, "s1", 9_700));
+    @DisplayName("MERCHANT_SETTLEMENT net>0：Dr 应付 / Cr 已结算待出款（同商户结转）")
+    void positiveNetCarriesPayableToSettled() {
+        Wiring w = wiring();
+        w.engine().post(paymentCapture("PM-ST-1", 10000, 80, 0, "M001", "ALIPAY"));
 
-        assertThat(settlement.isBalanced()).isTrue();
-        assertThat(debitTotal(settlement)).isEqualTo(creditTotal(settlement));
-        // 借「应付商户」：负债从商户侧结转出去
-        assertThat(settlement.getEntries()).anySatisfy(e -> {
-            assertThat(e.getAccountId()).isEqualTo(Account.MERCHANT_PAYABLE.getId());
-            assertThat(e.getDirection()).isEqualTo(LedgerEntry.Direction.DEBIT);
-            assertThat(e.getAmountMinor()).isEqualTo(9_700L);
-        });
-        // 贷「结算应付」：转入待打款科目
-        assertThat(settlement.getEntries()).anySatisfy(e -> {
-            assertThat(e.getAccountId()).isEqualTo(Account.SETTLEMENT_PAYABLE.getId());
-            assertThat(e.getDirection()).isEqualTo(LedgerEntry.Direction.CREDIT);
-            assertThat(e.getAmountMinor()).isEqualTo(9_700L);
-        });
-        // 结转后：商户应付归零、结算应付 9700（负债增加 ⇒ 贷方为负）
-        assertThat(new BalanceChecker(repository).accountBalance(Account.MERCHANT_PAYABLE.getId(), "CNY"))
-                .isZero();
-        assertThat(new BalanceChecker(repository).accountBalance(Account.SETTLEMENT_PAYABLE.getId(), "CNY"))
-                .isEqualTo(-9_700);
-        assertThat(new BalanceChecker(repository).isBalanced()).isTrue();
+        Posting posting = w.engine().post(merchantSettlement("BS-ST-1", 9920, "M001"));
+
+        assertThat(entrySummary(w, posting)).containsExactly(
+                "DEBIT MERCHANT_PAYABLE:M001 9920",
+                "CREDIT SETTLEMENT_PAYABLE:M001 9920");
+        assertThat(w.signedBalance(AccountCode.MERCHANT_PAYABLE, "M001")).isZero();
+        assertThat(w.signedBalance(AccountCode.SETTLEMENT_PAYABLE, "M001")).isEqualTo(9920);
     }
 
     @Test
-    void settlementAfterPartialRefundSettlesOnlyRemainingPayable() {
-        service.post("PAYMENT:p2", LedgerSourceType.PAYMENT, "p2", "CNY",
-                LedgerTestSupport.paymentCapture(LedgerSourceType.PAYMENT, "p2", 8_000, 200));
-        service.post("REFUND:r2", LedgerSourceType.REFUND, "r2", "CNY",
-                LedgerTestSupport.refund(LedgerSourceType.REFUND, "r2", 3_000));
-        service.post("SETTLEMENT:s2", LedgerSourceType.SETTLEMENT, "s2", "CNY",
-                LedgerTestSupport.settlement(LedgerSourceType.SETTLEMENT, "s2", 4_800));
+    @DisplayName("MERCHANT_SETTLEMENT net<0（H3/C-07）：反向结转，商户倒欠进入下期")
+    void negativeNetReversesDirection() {
+        Wiring w = wiring();
+        Posting posting = w.engine().post(merchantSettlement("BS-ST-NEG", -1500, "M001"));
 
-        // 7800 应付 - 3000 退款 - 4800 结转 = 0
-        assertThat(new BalanceChecker(repository).accountBalance(Account.MERCHANT_PAYABLE.getId(), "CNY"))
-                .isZero();
-        assertThat(new BalanceChecker(repository).isBalanced()).isTrue();
+        assertThat(entrySummary(w, posting)).containsExactly(
+                "DEBIT SETTLEMENT_PAYABLE:M001 1500",
+                "CREDIT MERCHANT_PAYABLE:M001 1500");
+        // 贷余科目被借记 → 正常余额取号为负（倒欠显式可见，替代「net≤0 不记账」的科目残留）
+        assertThat(w.signedBalance(AccountCode.SETTLEMENT_PAYABLE, "M001")).isEqualTo(-1500);
+        assertThat(w.signedBalance(AccountCode.MERCHANT_PAYABLE, "M001")).isEqualTo(1500);
     }
 
     @Test
-    void duplicateSettlementIsIdempotentAndDoesNotDoubleTransfer() {
-        service.post("PAYMENT:p3", LedgerSourceType.PAYMENT, "p3", "CNY",
-                LedgerTestSupport.paymentCapture(LedgerSourceType.PAYMENT, "p3", 6_000, 0));
-        service.post("SETTLEMENT:s3", LedgerSourceType.SETTLEMENT, "s3", "CNY",
-                LedgerTestSupport.settlement(LedgerSourceType.SETTLEMENT, "s3", 6_000));
-        long settlementPayableAfterFirst = new BalanceChecker(repository)
-                .accountBalance(Account.SETTLEMENT_PAYABLE.getId(), "CNY");
-        int entriesAfterFirst = repository.findAllEntries().size();
-
-        service.post("SETTLEMENT:s3", LedgerSourceType.SETTLEMENT, "s3", "CNY",
-                LedgerTestSupport.settlement(LedgerSourceType.SETTLEMENT, "s3", 6_000));
-
-        // 幂等吸收：重复结转同一批次不产生第二组分录（否则结算应付会被重复贷记）
-        assertThat(repository.findAllEntries()).hasSize(entriesAfterFirst);
-        assertThat(new BalanceChecker(repository).accountBalance(Account.SETTLEMENT_PAYABLE.getId(), "CNY"))
-                .isEqualTo(settlementPayableAfterFirst);
-        assertThat(repository.findByIdempotencyKey("SETTLEMENT:s3")).isPresent();
+    @DisplayName("MERCHANT_SETTLEMENT net=0：拒绝（空批次不发事件；账本兜底不记空交易）")
+    void zeroNetIsRefused() {
+        Wiring w = wiring();
+        assertThatExceptionOfType(BizException.class)
+                .isThrownBy(() -> w.engine().post(merchantSettlement("BS-ST-0", 0, "M001")))
+                .matches(ex -> ErrorCodes.EVENT_FIELD_MISSING.equals(ex.getCode()));
+        assertThat(w.ledger().findAllPostings()).isEmpty();
     }
 
     @Test
-    void settlementEntriesAreTraceableToBatchSource() {
-        service.post("SETTLEMENT:s4", LedgerSourceType.SETTLEMENT, "s4", "CNY",
-                LedgerTestSupport.settlement(LedgerSourceType.SETTLEMENT, "s4", 2_500));
+    @DisplayName("CHANNEL_SETTLEMENT：钱从渠道进平台银行户，Dr BANK_CASH / Cr 渠道应收（净额）")
+    void channelSettlementLiquidatesReceivable() {
+        Wiring w = wiring();
+        w.engine().post(paymentCapture("PM-CS-1", 10000, 0, 60, "M001", "WECHAT"));
 
-        List<LedgerEntry> bySource = repository.findEntriesBySource(LedgerSourceType.SETTLEMENT, "s4");
-        assertThat(bySource).hasSize(2);
-        assertThat(bySource).allSatisfy(e -> {
-            assertThat(e.getSourceType()).isEqualTo(LedgerSourceType.SETTLEMENT);
-            assertThat(e.getSourceId()).isEqualTo("s4");
-            assertThat(e.getEntryType()).isEqualTo(LedgerEntry.Type.SETTLEMENT);
-        });
+        Posting posting = w.engine().post(channelSettlement("CST-1", 9940, "WECHAT"));
+
+        assertThat(entrySummary(w, posting)).containsExactly(
+                "DEBIT BANK_CASH:PLATFORM 9940",
+                "CREDIT CHANNEL_RECEIVABLE:WECHAT 9940");
+        assertThat(w.signedBalance(AccountCode.CHANNEL_RECEIVABLE, "WECHAT")).isZero();
+        assertThat(w.signedBalance(AccountCode.BANK_CASH, "PLATFORM")).isEqualTo(9940);
     }
 
     @Test
-    void unbalancedSettlementIsRejectedAndLeavesNoTrace() {
-        List<LedgerEntry> unbalanced = List.of(
-                LedgerTestSupport.entry(LedgerSourceType.SETTLEMENT, "s5", Account.MERCHANT_PAYABLE,
-                        LedgerEntry.Direction.DEBIT, 2_000, LedgerEntry.Type.SETTLEMENT),
-                LedgerTestSupport.entry(LedgerSourceType.SETTLEMENT, "s5", Account.SETTLEMENT_PAYABLE,
-                        LedgerEntry.Direction.CREDIT, 1_900, LedgerEntry.Type.SETTLEMENT));
+    @DisplayName("CHANNEL_FEE 独立成本事件（§7.3）：Dr 渠道费成本 / Cr 渠道应收")
+    void standaloneChannelFeeHitsReceivable() {
+        Wiring w = wiring();
+        Posting posting = w.engine().post(channelFee("FEE-DOUYIN-1", 250, "DOUYIN"));
 
-        assertThatThrownBy(() -> service.post("SETTLEMENT:s5", LedgerSourceType.SETTLEMENT, "s5", "CNY",
-                unbalanced))
-                .isInstanceOf(BizException.class);
-
-        assertThat(repository.findAllEntries()).isEmpty();
-        assertThat(new BalanceChecker(repository).isBalanced()).isTrue();
-    }
-
-    private long debitTotal(Posting posting) {
-        return posting.getEntries().stream()
-                .filter(e -> e.getDirection() == LedgerEntry.Direction.DEBIT)
-                .mapToLong(LedgerEntry::getAmountMinor)
-                .sum();
-    }
-
-    private long creditTotal(Posting posting) {
-        return posting.getEntries().stream()
-                .filter(e -> e.getDirection() == LedgerEntry.Direction.CREDIT)
-                .mapToLong(LedgerEntry::getAmountMinor)
-                .sum();
+        assertThat(entrySummary(w, posting)).containsExactly(
+                "DEBIT CHANNEL_FEE_EXPENSE:DOUYIN 250",
+                "CREDIT CHANNEL_RECEIVABLE:DOUYIN 250");
+        assertThat(w.signedBalance(AccountCode.CHANNEL_FEE_EXPENSE, "DOUYIN")).isEqualTo(250);
+        assertThat(w.signedBalance(AccountCode.CHANNEL_RECEIVABLE, "DOUYIN")).isEqualTo(-250);
     }
 }

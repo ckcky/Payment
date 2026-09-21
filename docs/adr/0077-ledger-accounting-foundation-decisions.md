@@ -1,8 +1,9 @@
 # ADR-0077 ~ ADR-0079：Ledger / Accounting 地基（Feature 031）架构决策集合
 
 > 承载 [spec 031-ledger-accounting-foundation](../specs/stage-05-channel-and-finance-deepening/031-ledger-accounting-foundation/spec.md) 的三条决策。
-> 状态：**🟡 Proposed（2026-09-21 提出，待负责人裁决）**——涉及 Constitution §Governance
-> 「人类决策边界」（账务语义、公共内部 API、资金表结构、资金路径行为变更），**未 Accepted 前不得实现**。
+> 状态：**🟢 Accepted（2026-09-21 负责人裁决：D-1~D-7 按 spec 推荐方案批准并开工实现）**——
+> 涉及 Constitution §Governance「人类决策边界」（账务语义、公共内部 API、资金表结构、资金路径行为变更），
+> 裁决记录见 spec 031 §16 与本日 CHANGELOG。
 > 编号说明：本 Feature 编号 **031**（负责人 2026-09-21 裁决；stage-design 旧名 `032-ledger-account-view` 作废并勘误）。
 
 ---
@@ -10,7 +11,7 @@
 <a id="adr-0077"></a>
 ## ADR-0077: 记账契约从「原始分录」改为「Accounting Event + Posting Rule」
 
-- **状态**：🟡 Proposed
+- **状态**：🟢 Accepted（2026-09-21，随 D-1~D-7 一并批准）
 - **日期**：2026-09-21
 - **关联 Feature**：`031-ledger-accounting-foundation`
 - **关系**：**Partially Supersedes ADR-0008**（「分录由调用方组装并传入 accountId/direction」的契约部分）；**修订 ADR-0009 / ADR-0018 / ADR-0023 的契约描述**（触发时机、同步 RPC、失败不回滚、只记已确认事实——**语义全部不变**）。ADR-0008 的复式结构（Posting+LedgerEntry）、平衡门禁、append-only、幂等范式**保留**。
@@ -44,7 +45,7 @@
 <a id="adr-0078"></a>
 ## ADR-0078: 科目模型升级为 Definition / Instance 两级，扩展渠道资金科目
 
-- **状态**：🟡 Proposed（**Constitution §Governance：科目表变更 = 人类决策边界**）
+- **状态**：🟢 Accepted（2026-09-21，**Constitution §Governance：科目表变更 = 人类决策边界**，负责人按迁移式方案批准）
 - **关联**：扩展 ADR-0008「预置科目表」；**修订 ADR-0011 边界**（当年排除的「渠道清算科目」现予引入，清算**链路**仍不做）；G4「新增科目 MUST 走 ADR」纪律不变，本 ADR 即该次履行。
 
 ### Context
@@ -75,7 +76,7 @@
 <a id="adr-0079"></a>
 ## ADR-0079: 余额为分录投影（同事务更新）+ 期间/关账 + 待记账台账
 
-- **状态**：🟡 Proposed（新增关键资金表 = 人类决策边界，正式落地 stage-design H6/H12 的裁决请求）
+- **状态**：🟢 Accepted（2026-09-21，新增关键资金表 = 人类决策边界，负责人批准）
 - **关联**：兑现 stage-design §4.2 G1/G2/G3；投影不变量并入 ADR-0065 结算门禁（试算不平 ⇒ 硬拦）。
 
 ### Decision

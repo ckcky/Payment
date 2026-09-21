@@ -82,7 +82,7 @@ class PaymentCallbackValidationTest {
         obs = new RecordingObservability();
 
         payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
-                10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1));
+                10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
         attempts.save(PaymentAttempt.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
                 Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
                 null, null, 1, "PAYMENT", 10_00L, "CNY",
@@ -191,7 +191,7 @@ class PaymentCallbackValidationTest {
         void nonCnyPlatformRejectsWhenAmountPresent() {
             // 覆盖成一张 USD 单：支付宝境内通知恒按 CNY 语义，故判币种不一致
             payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
-                    10_00L, "USD", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1));
+                    10_00L, "USD", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
 
             assertThat(controller.onNotify(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")).getBody())
                     .contains("rejected");
@@ -202,7 +202,7 @@ class PaymentCallbackValidationTest {
         @DisplayName("币种校验失败**优先于**收敛：绝不因币种问题仍落成功 [SC-B2-02]")
         void currencyRejectPreventsConvergence() {
             payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
-                    10_00L, "USD", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1));
+                    10_00L, "USD", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
 
             controller.onNotify(notifyParams("10.00", "ch-1", "TRADE_SUCCESS"));
 

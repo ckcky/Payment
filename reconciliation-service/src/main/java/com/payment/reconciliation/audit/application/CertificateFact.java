@@ -4,7 +4,7 @@ package com.payment.reconciliation.audit.application;
  * 账证核对业务事实（spec 017 / FR-001）：已确认资金事实，sourceId 一律业务单号（ADR-0063）。
  *
  * @param sourceType  PAYMENT / REFUND / SETTLEMENT
- * @param sourceId    业务单号（paymentNo / refundNo / 结算批次 id）
+ * @param sourceId    业务单号（paymentNo / refundNo / 结算批次 batchNo，031/M1）
  * @param reference   渠道引用（可为 null）
  * @param amountMinor 金额（分）
  * @param currency    币种

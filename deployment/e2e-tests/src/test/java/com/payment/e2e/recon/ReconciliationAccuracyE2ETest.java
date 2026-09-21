@@ -44,11 +44,13 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
     }
 
     private List<Fault> faultMatrix(String orderNo, String paymentNo, String uid) {
-        // 该支付单在 ledger 侧的分录行（注入前备份，还原时回插）
+        // 该支付单在 ledger 侧的分录行（注入前备份，还原时回插）。031 起 ledger_entries 的
+        // source_type/source_id 停写停读（追溯走 posting_id join），故按 posting 关联取分录。
         List<Map<String, Object>> postingBackup = db.query("ledger",
                 "SELECT * FROM postings WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'");
         List<Map<String, Object>> entryBackup = db.query("ledger",
-                "SELECT * FROM ledger_entries WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'");
+                "SELECT e.* FROM ledger_entries e JOIN postings p ON e.posting_id = p.id"
+                        + " WHERE p.source_type='PAYMENT' AND p.source_id='" + paymentNo + "'");
         String postingIds = joinIds(postingBackup, "id");
 
         List<Fault> faults = new ArrayList<>();
@@ -92,23 +94,26 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         faults.add(new Fault(
                 "ORPHAN_POSTING",
                 () -> {
-                    db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                            + " status, currency, created_at, updated_at, version) VALUES ('LPe2e-orphan-" + uid + "',"
-                            + " 'e2e-orphan-key-" + uid + "', 'PAYMENT', 'e2e-orphan-" + uid + "',"
-                            + " 'POSTED', 'CNY', NOW(), NOW(), 1)");
+                    // 031 postings NOT NULL: event_type / period / posted_at；source_id 为业务单号(禁数值)
+                    db.execute("ledger", "INSERT INTO postings (posting_no, event_type, idempotency_key,"
+                            + " source_type, source_id, status, currency, period, posted_at, created_at,"
+                            + " updated_at, version) VALUES ('LPe2e-orphan-" + uid + "', 'PAYMENT_CAPTURE',"
+                            + " 'PAYMENT_CAPTURE:e2e-orphan-" + uid + "', 'PAYMENT', 'e2e-orphan-" + uid + "',"
+                            + " 'POSTED', 'CNY', DATE_FORMAT(NOW(),'%Y-%m'), NOW(), NOW(), NOW(), 1)");
                     long pid = ((Number) db.scalar("ledger",
                             "SELECT id FROM postings WHERE posting_no='LPe2e-orphan-" + uid + "'")).longValue();
-                    // 平衡双分录挂 3 号科目（CUSTOMER_CASH=1/MERCHANT_PAYABLE=2 参与勾稽，单分录会触发
-                    // allPostings 的 domain 校验 400—— posting 级平衡在读路径强制）
-                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                            + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                            + ", 3, 'DEBIT', 100, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-orphan-" + uid + "', NOW())");
-                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                            + " currency, entry_type, source_type, source_id, created_at) VALUES (" + pid
-                            + ", 2, 'CREDIT', 100, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-orphan-" + uid + "', NOW())");
+                    // 平衡双分录（posting 级平衡在读路径强制，单分录会让 allPostings 读 400）：
+                    // 挂渠道应收(实例 7 CHANNEL_RECEIVABLE:ALIPAY) 借 / 应付商户(实例 2 MP:LEGACY) 贷
+                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
+                            + " amount_minor, currency, created_at) VALUES (" + pid
+                            + ", 7, 'DEBIT', 100, 'CNY', NOW())");
+                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
+                            + " amount_minor, currency, created_at) VALUES (" + pid
+                            + ", 2, 'CREDIT', 100, 'CNY', NOW())");
                 },
                 () -> {
-                    db.execute("ledger", "DELETE FROM ledger_entries WHERE source_id='e2e-orphan-" + uid + "'");
+                    db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN"
+                            + " (SELECT id FROM postings WHERE posting_no='LPe2e-orphan-" + uid + "')");
                     db.execute("ledger", "DELETE FROM postings WHERE posting_no='LPe2e-orphan-" + uid + "'");
                 },
                 "ORPHAN_POSTING", "e2e-orphan-" + uid));
@@ -143,33 +148,38 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
         faults.add(new Fault(
                 "DUPLICATE_POSTING",
                 () -> {
-                    // 两步式：先复制 posting 行拿到新 id，再显式回填复制分录
-                    // （子查询内层 posting_no 会解析到自身，永远匹配不上，不能一步 SELECT 回填）
-                    db.execute("ledger", "INSERT INTO postings (posting_no, idempotency_key, source_type, source_id,"
-                            + " status, currency, created_at, updated_at, version) SELECT CONCAT(posting_no, '-dup-" + uid + "'),"
-                            + " CONCAT(idempotency_key, '-dup-" + uid + "'), source_type, source_id, status, currency,"
-                            + " NOW(), NOW(), 1 FROM postings WHERE id IN (" + postingIds + ")");
+                    // 031 uk_event_source(event_type, source_id) 禁止同事件双分录（幂等由 DB 兜底），
+                    // 故「重复」注入改为：复制 posting 但换 event_type 标记（REFUND），保持
+                    // source_type/source_id 与原支付一致——CertificateAuditor 按 (sourceType, sourceId)
+                    // 匹配 → 同一来源 2 条 posting → DUPLICATE 检出。单 posting 场景用固定单号定位。
+                    db.execute("ledger", "INSERT INTO postings (posting_no, event_type, idempotency_key,"
+                            + " source_type, source_id, status, currency, period, posted_at, created_at,"
+                            + " updated_at, version) SELECT 'LPe2edup-" + uid + "', 'REFUND',"
+                            + " 'e2e-dup-" + uid + "', source_type, source_id, status, currency,"
+                            + " DATE_FORMAT(NOW(),'%Y-%m'), NOW(), NOW(), NOW(), 1"
+                            + " FROM postings WHERE id IN (" + postingIds + ")");
                     long dupPid = ((Number) db.scalar("ledger",
-                            "SELECT id FROM postings WHERE posting_no LIKE '%-dup-" + uid + "' LIMIT 1")).longValue();
-                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                            + " currency, entry_type, source_type, source_id, created_at)"
-                            + " SELECT " + dupPid + ", account_id, direction, amount_minor, currency, entry_type,"
-                            + " source_type, source_id, NOW() FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
+                            "SELECT id FROM postings WHERE posting_no='LPe2edup-" + uid + "'")).longValue();
+                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
+                            + " amount_minor, currency, created_at)"
+                            + " SELECT " + dupPid + ", account_id, direction, amount_minor, currency, NOW()"
+                            + " FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
                 },
                 () -> {
                     db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN"
-                            + " (SELECT id FROM (SELECT id FROM postings WHERE posting_no LIKE '%-dup-" + uid + "') x)");
-                    db.execute("ledger", "DELETE FROM postings WHERE posting_no LIKE '%-dup-" + uid + "'");
+                            + " (SELECT id FROM (SELECT id FROM postings WHERE posting_no='LPe2edup-" + uid + "') x)");
+                    db.execute("ledger", "DELETE FROM postings WHERE posting_no='LPe2edup-" + uid + "'");
                 },
                 "DUPLICATE_POSTING", paymentNo));
         faults.add(new Fault(
                 "BALANCE_BREAK",
                 () -> {
-                    // posting 级平衡在读路径强制（Posting.rehydrate），不可读的失衡分录会让 facts read 400。
-                    // 全局失衡用「游离分录」（挂不存在的 posting_id）：allPostings 可读，balance() 按币种差额非 0
-                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction, amount_minor,"
-                            + " currency, entry_type, source_type, source_id, created_at) VALUES (999999999,"
-                            + " 1, 'DEBIT', 77, 'CNY', 'PAYMENT_CAPTURE', 'PAYMENT', 'e2e-unbal-" + uid + "', NOW())");
+                    // posting 级平衡在读路径强制（Posting.rehydrate），不可读的失衡分录会让 allPostings 400。
+                    // 全局失衡用「游离分录」（挂不存在的 posting_id）：allPostings 逐条读仍平衡；
+                    // trialBalance 经 LEFT JOIN 会计入游离分录 → balance() 按币种差额非 0（分录=SoT）
+                    db.execute("ledger", "INSERT INTO ledger_entries (posting_id, account_id, direction,"
+                            + " amount_minor, currency, source_id, created_at) VALUES (999999999,"
+                            + " 1, 'DEBIT', 77, 'CNY', 'e2e-unbal-" + uid + "', NOW())");
                 },
                 () -> {
                     db.execute("ledger", "DELETE FROM ledger_entries WHERE source_id='e2e-unbal-" + uid + "'");
@@ -273,11 +283,12 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
             String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
-            // 注入 ORPHAN_POSTING（BLOCKER）→ 检出 → 挂账 → close 放行（挂账即收口）
+            // 注入 MISSING_POSTING（DELETE 原支付分录）→ 检出 → 挂账 → 转出 → recheck → close 放行
             List<Map<String, Object>> postingBackup = db.query("ledger",
                     "SELECT * FROM postings WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'");
             List<Map<String, Object>> entryBackup = db.query("ledger",
-                    "SELECT * FROM ledger_entries WHERE source_type='PAYMENT' AND source_id='" + paymentNo + "'");
+                    "SELECT e.* FROM ledger_entries e JOIN postings p ON e.posting_id = p.id"
+                            + " WHERE p.source_type='PAYMENT' AND p.source_id='" + paymentNo + "'");
             String postingIds = joinIds(postingBackup, "id");
             List<String> adjustNos = new ArrayList<>();   // 收集挂账/转出的 ADJUSTMENT 单号（还原用）
             db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN (" + postingIds + ")");
@@ -313,6 +324,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                                 "e2e-operator", "e2e suspend");
                         ctx.response("suspend-" + diffId, susp);
                         assertThat(susp.is2xx()).as("挂账 [diff=%s]", diffId).isTrue();
+                        adjustNos.add(susp.json().path("adjustNo").asText());   // 挂账 RECONCILIATION posting（还原用）
                         Api.ApiResponse transfer = API.auditAdjust(batchNo, diffId, "TRANSFER", amount,
                                 "MERCHANT_PAYABLE", "e2e-operator", "e2e-reviewer", "e2e transfer to payable");
                         ctx.response("transfer-" + diffId, transfer);
@@ -349,7 +361,7 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                                 batchNo, closed.status(), closed.body())
                         .isTrue();
             }
-            // 彻底还原：删除挂账+转出生成的 ADJUSTMENT 分录并回插原 posting。
+            // 彻底还原：删除挂账+转出生成的 RECONCILIATION(ADJUSTMENT 事件) 分录并回插原 posting。
             // 挂账/转出只是记账替代（勾稽平衡），不消除「fact-vs-posting」的账证差异——
             // 若不还原，之后每个新批次都会对该支付报 MISSING，永久污染 CLEAN 基线
             // 与后续运行（v9k→v9m 实证：PM222891546675204096 残留跨运行存在）
@@ -357,8 +369,9 @@ class ReconciliationAccuracyE2ETest extends E2eBase {
                 String in = adjustNos.stream().map(s -> "'" + s + "'")
                         .reduce((a, b) -> a + "," + b).orElse("''");
                 db.execute("ledger", "DELETE FROM ledger_entries WHERE posting_id IN"
-                        + " (SELECT id FROM postings WHERE source_type='ADJUSTMENT' AND source_id IN (" + in + "))");
-                db.execute("ledger", "DELETE FROM postings WHERE source_type='ADJUSTMENT' AND source_id IN (" + in + ")");
+                        + " (SELECT id FROM (SELECT id FROM postings WHERE source_type='RECONCILIATION'"
+                        + " AND source_id IN (" + in + ")) x)");
+                db.execute("ledger", "DELETE FROM postings WHERE source_type='RECONCILIATION' AND source_id IN (" + in + ")");
                 insertRows("ledger", "postings", postingBackup);
                 insertRows("ledger", "ledger_entries", entryBackup);
             }

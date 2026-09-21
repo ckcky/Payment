@@ -95,64 +95,85 @@ class AdjustmentPolicyTest {
                 .isInstanceOf(BizException.class);
     }
 
-    // ---- 分录编排（SC-008 / SC-011 / SC-013）----
+    // ---- ADJUSTMENT 事件计划编排（SC-008 / SC-011 / SC-013，spec 031 §7.6/§9：方向由账本推导）----
 
     @Test
-    void suspendEntriesBalancedUnderRecorded() {
-        AdjustmentPolicy.PostingPlan plan = AdjustmentPolicy.buildPlan("AD-1",
-                AuditAdjustmentKind.SUSPEND, true, 8000L, null, null);
-        assertThat(plan.idempotencyKey()).isEqualTo("adjust:AD-1");
-        long debits = plan.entries().stream().filter(e -> "DEBIT".equals(e.direction())).mapToLong(AdjustmentPolicy.PostingEntry::amountMinor).sum();
-        long credits = plan.entries().stream().filter(e -> "CREDIT".equals(e.direction())).mapToLong(AdjustmentPolicy.PostingEntry::amountMinor).sum();
-        assertThat(debits).isEqualTo(credits).isEqualTo(8000L);
-        // 账少记：借 CUSTOMER_CASH(1) / 贷 SUSPENSE(5)
-        assertThat(plan.entries()).anySatisfy(e -> {
-            assertThat(e.accountId()).isEqualTo(1L);
-            assertThat(e.direction()).isEqualTo("DEBIT");
-        });
-        assertThat(plan.entries()).anySatisfy(e -> {
-            assertThat(e.accountId()).isEqualTo(5L);
-            assertThat(e.direction()).isEqualTo("CREDIT");
-        });
+    void suspendUnderRecordedPlansBankCashToSuspense() {
+        // 账少记：借资金 / 贷 SUSPENSE ⇒ to=BANK_CASH、from=SUSPENSE（账本展开 Dr to / Cr from）
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.SUSPEND,
+                true, 8000L, null, null);
+        assertThat(plan.adjustmentKind()).isEqualTo("SUSPEND");
+        assertThat(plan.amountMinor()).isEqualTo(8000L);
+        assertThat(plan.fromAccountCode()).isEqualTo("SUSPENSE");
+        assertThat(plan.toAccountCode()).isEqualTo("BANK_CASH");
+        assertThat(plan.reversesEventType()).isNull();
     }
 
     @Test
-    void suspendEntriesReversedWhenOverRecorded() {
-        AdjustmentPolicy.PostingPlan plan = AdjustmentPolicy.buildPlan("AD-2",
-                AuditAdjustmentKind.SUSPEND, false, 5000L, null, null);
-        // 账多记：借 SUSPENSE(5) / 贷 CUSTOMER_CASH(1)
-        assertThat(plan.entries().get(0).accountId()).isEqualTo(5L);
-        assertThat(plan.entries().get(0).direction()).isEqualTo("DEBIT");
-        assertThat(plan.entries().get(1).accountId()).isEqualTo(1L);
-        assertThat(plan.entries().get(1).direction()).isEqualTo("CREDIT");
+    void suspendOverRecordedReversesTransferDirection() {
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.SUSPEND,
+                false, 5000L, null, null);
+        assertThat(plan.fromAccountCode()).isEqualTo("BANK_CASH");
+        assertThat(plan.toAccountCode()).isEqualTo("SUSPENSE");
     }
 
     @Test
     void reverseRequiresOriginalPosting() {
-        assertThatThrownBy(() -> AdjustmentPolicy.buildPlan("AD-3", AuditAdjustmentKind.REVERSE,
+        assertThatThrownBy(() -> AdjustmentPolicy.buildPlan(AuditAdjustmentKind.REVERSE,
                 false, 5000L, null, null))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("requires an original posting");
     }
 
     @Test
-    void reversePreservesAppendOnlyAndReversesDirections() {
-        List<AdjustmentPolicy.PostingEntry> original = List.of(
-                new AdjustmentPolicy.PostingEntry(1L, "DEBIT", 5000L),
-                new AdjustmentPolicy.PostingEntry(2L, "CREDIT", 5000L));
-        AdjustmentPolicy.PostingPlan plan = AdjustmentPolicy.buildPlan("AD-3",
-                AuditAdjustmentKind.REVERSE, false, 5000L, null, original);
-        assertThat(plan.idempotencyKey()).isEqualTo("adjust:AD-3");
-        assertThat(plan.entries().get(0).direction()).isEqualTo("CREDIT");
-        assertThat(plan.entries().get(1).direction()).isEqualTo("DEBIT");
+    void reverseCarriesOnlyRedFlushRefNoLocalEntries() {
+        // 红冲不再本地拼分录：只声明冲销引用，取反由账本 AdjustmentRule 读原交易完成（append-only）
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.REVERSE,
+                false, 5000L, null, new AdjustmentPolicy.OriginalRef("PAYMENT", "PM-AUD-0011"));
+        assertThat(plan.adjustmentKind()).isEqualTo("REVERSE");
+        assertThat(plan.fromAccountCode()).isNull();
+        assertThat(plan.toAccountCode()).isNull();
+        assertThat(plan.reversesEventType()).isEqualTo("PAYMENT_CAPTURE");
+        assertThat(plan.reversesSourceId()).isEqualTo("PM-AUD-0011");
     }
 
     @Test
-    void transferMovesOutOfSuspense() {
-        AdjustmentPolicy.PostingPlan plan = AdjustmentPolicy.buildPlan("AD-4",
-                AuditAdjustmentKind.TRANSFER, true, 8000L, "MERCHANT_PAYABLE", null);
-        // 账少记挂账后转出：借 SUSPENSE(5) / 贷 MERCHANT_PAYABLE(2)
-        assertThat(plan.entries().get(0).accountId()).isEqualTo(5L);
-        assertThat(plan.entries().get(1).accountId()).isEqualTo(2L);
+    void correctCombinesRedFlushRefAndTransferLeg() {
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.CORRECT,
+                false, 6000L, "MERCHANT_PAYABLE",
+                new AdjustmentPolicy.OriginalRef("REFUND", "RF-AUD-0007"));
+        assertThat(plan.reversesEventType()).isEqualTo("REFUND");
+        assertThat(plan.reversesSourceId()).isEqualTo("RF-AUD-0007");
+        assertThat(plan.fromAccountCode()).isEqualTo("MERCHANT_PAYABLE");
+        assertThat(plan.toAccountCode()).isEqualTo("BANK_CASH");
+    }
+
+    @Test
+    void transferMovesOutOfSuspenseOppositeToSuspend() {
+        // 账少记挂账后转出：借 SUSPENSE / 贷目标 ⇒ from=目标、to=SUSPENSE
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.TRANSFER,
+                true, 8000L, null, null);
+        assertThat(plan.fromAccountCode()).isEqualTo("MERCHANT_PAYABLE");
+        assertThat(plan.toAccountCode()).isEqualTo("SUSPENSE");
+    }
+
+    @Test
+    void supplementMapsLegacyFeeCodeAndRejectsUnknownCode() {
+        AdjustmentPolicy.AdjustPlan plan = AdjustmentPolicy.buildPlan(AuditAdjustmentKind.SUPPLEMENT,
+                false, 300L, "PLATFORM_FEE_REVENUE", null);
+        // 旧码 PLATFORM_FEE_REVENUE 就地更名 FEE_REVENUE（ADR-0078）
+        assertThat(plan.fromAccountCode()).isEqualTo("FEE_REVENUE");
+        assertThatThrownBy(() -> AdjustmentPolicy.buildPlan(AuditAdjustmentKind.SUPPLEMENT,
+                false, 300L, "NOT_AN_ACCOUNT", null))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("unknown account code");
+    }
+
+    @Test
+    void reverseRefusesSourceTypesWithoutReversibleEvent() {
+        assertThatThrownBy(() -> AdjustmentPolicy.buildPlan(AuditAdjustmentKind.REVERSE,
+                false, 100L, null, new AdjustmentPolicy.OriginalRef("FOO", "X-1")))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("no reversible event");
     }
 }

@@ -31,8 +31,8 @@ import java.util.Optional;
  * 交由 {@link #resolveBatch} 依据权威结果收敛，绝不臆断成败。</p>
  *
  * <p>ADR-0023 纵深防御：建批前经 {@link ConfirmedFactGate} 逐条强制校验（未确认事实不得结算）；
- * 幂等键命中后校验商户/周期一致性（N5）；收敛为 SUCCEEDED 且净额 > 0 时经 {@link LedgerPostingGateway}
- * 记账（满足 Constitution §II.3「一切资金变动 MUST 经 ledger」）。</p>
+ * 幂等键命中后校验商户/周期一致性（N5）；收敛为 SUCCEEDED 且净额非 0 时经 {@link LedgerPostingGateway}
+ * 发 {@code MERCHANT_SETTLEMENT} 事件（spec 031；满足 Constitution §II.3「一切资金变动 MUST 经 ledger」）。</p>
  */
 @Service
 public class SettlementApplicationService {
@@ -221,7 +221,7 @@ public class SettlementApplicationService {
 
     /**
      * 审计事实只读视图（spec 017 / FR-001）：reconciliation 的账证 / 跨账 / 账表核对消费。
-     * 只读，绝不修改批次。注意 ledger 侧 SETTLEMENT posting 的 sourceId 是批次 {@code id}。
+     * 只读，绝不修改批次。spec 031 / M1：ledger 侧 MERCHANT_SETTLEMENT 事件的 sourceId 是批次 {@code batchNo}。
      */
     public List<SettlementAuditFactView> auditFacts(String period) {
         return settlementRepository.listBatches(null, period).stream()
@@ -243,13 +243,17 @@ public class SettlementApplicationService {
         switch (authoritativeStatus) {
             case "SUCCEEDED" -> {
                 batch.succeed();
-                // ADR-0023：收敛为成功且净额 > 0 时记账；net <= 0 不发起（账本要求分录金额 > 0）。
-                if (batch.getNetMinor() > 0) {
-                    ledgerPostingGateway.postSettlement(batch.getIdempotencyKey(), batch.getId(),
-                            batch.getNetMinor(), batch.getCurrencyCode());
+                // spec 031 §9 / ADR-0077：事件化 + H3（C-07）——净额**带符号**恒发（net<0 由账本
+                // §7.5 展开反向分录，替代旧「net≤0 不记账」的科目残留）；仅 net=0 空批次不发。
+                // sourceId 用 batchNo（M1 收编，数值 batchId 不出边界）。
+                if (batch.getNetMinor() != 0) {
+                    ledgerPostingGateway.postMerchantSettlement(
+                            new LedgerPostingGateway.MerchantSettlementFacts(batch.getBatchNo(),
+                                    batch.getMerchantId(), batch.getNetMinor(), batch.getCurrencyCode()));
                 } else {
-                    metrics.counter("settlement.ledger_skip_nonpositive_net", 1, "module", "settlement");
-                    log.info("结算净额非正，跳过记账 batchId={} net={}", batch.getId(), batch.getNetMinor());
+                    metrics.counter("settlement.ledger_skip_zero_net", 1, "module", "settlement");
+                    log.info("结算净额为 0（空批次），跳过记账 batchNo={} batchId={}",
+                            batch.getBatchNo(), batch.getId());
                 }
             }
             case "FAILED" -> {

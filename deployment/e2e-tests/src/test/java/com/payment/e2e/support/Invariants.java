@@ -106,13 +106,15 @@ public final class Invariants {
         long c = credit == null ? 0L : ((Number) credit).longValue();
         assertThat(d).as("全局试算平衡 [ledger=ledger.ledger_entries]，期望借=贷=%d，实际借 %d / 贷 %d", d, d, c).isEqualTo(c);
 
-        // 按来源（支付单）平衡：该订单生效支付单的分录借贷相等
+        // 按来源（支付单）平衡：该订单生效支付单的分录借贷相等。
+        // 031 起 ledger_entries.source_* 停写停读，追溯走 posting_id → JOIN postings 取来源。
         Object paymentNo = db.scalar("order",
                 "SELECT payment_no FROM transactions WHERE order_no='" + orderNo + "'");
         if (paymentNo != null) {
             List<Map<String, Object>> rows = db.query("ledger",
-                    "SELECT direction, SUM(amount_minor) s FROM ledger_entries WHERE source_type='PAYMENT'"
-                            + " AND source_id='" + paymentNo + "' GROUP BY direction");
+                    "SELECT e.direction AS direction, SUM(e.amount_minor) AS s FROM ledger_entries e"
+                            + " JOIN postings p ON e.posting_id = p.id"
+                            + " WHERE p.source_type='PAYMENT' AND p.source_id='" + paymentNo + "' GROUP BY e.direction");
             long dr = rows.stream().filter(r -> "DEBIT".equals(r.get("direction")))
                     .mapToLong(r -> ((Number) r.get("s")).longValue()).sum();
             long cr = rows.stream().filter(r -> "CREDIT".equals(r.get("direction")))

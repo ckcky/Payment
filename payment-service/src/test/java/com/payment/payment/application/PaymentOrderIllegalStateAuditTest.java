@@ -62,7 +62,7 @@ class PaymentOrderIllegalStateAuditTest {
 
     private PaymentResultProcessor processor(OrderGateway orderGateway) {
         return new PaymentResultProcessor(stack.payments, stack.attempts, orderGateway,
-                (key, paymentNo, amountMinor, feeMinor, currencyCode) -> {
+                facts -> {
                 },
                 new MicrometerBusinessMetrics(registry),
                 new StructuredAuditLogger());
