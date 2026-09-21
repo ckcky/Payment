@@ -6,6 +6,27 @@
 
 ---
 
+## [2026-09-21] feat(034)：可靠性加固——失败恢复归位调用方（ADR-0082 Accepted）
+
+**性质**：Feature 034 实现落地。负责人 2026-09-21 裁决 H-034-1~H-034-5 按 spec 推荐方案批准。恢复三不变式
+R-1（不丢）/R-2（不重）/R-3（不猜成败），失败分类 X-1~X-17 逐条给政策。
+
+- **C-19 退款收口同事务化**（方案 A）：TXRF complete + 累加 + order 回写 + 两表 save 收进同一事务，MQ 通知/审计
+  保持事务外；TT-1 真库崩溃窗口验证（FaultHooks killConnection 注入）。
+- **pending_postings 调用方台账**（031 §12 设计首次落地，三库各表各包同构）：记账失败落台账、`PostingRetryScheduler`
+  10s 扫描、1s/5s/30s/2m/10m 退避、retry_count=6 → ABANDONED；`POST /internal/postings/{id}/replay` 管理端点
+  （admin token 守卫）+ `ledger_posting_pending` gauge；TT-2/3/4/8 真库性质测试（唯一键兜底/重放零双记/复活）。
+- **M7 通知失败入账**：order notify 失败 → PENDING 行，重放=原请求重发。
+- **refund 侧对称有界收敛**：RefundUnknownQueryScheduler（75s 窗）+ StrandedRefundOrderScanner（≤2 次红线 +
+  FINANCIAL_AUDIT）+ UNKNOWN 队列视图与分桶 Counter + 告警规则 A-05/06/08/09；诊断②毒丸隔离（per-payment try/catch）。
+- **late success（C-23）**：CLOSED 上渠道迟到成功 `late=true` + 计数，不覆盖终态。
+- **MQ DLQ 可读可 replay**（common-redis-mq `dlq` 包 + `mq_dlq_size` gauge，默认关闭 + admin token）；诊断③代理轮询日志降级。
+- **移除 Resilience4j**（H-034-1）：零注解零实例的「影子弹性」从未生效，弹性由台账重试+有界扫描承接；超时三档政策表
+  进 `technical-solution.md` §5.1.1（T25）；四服务 L0 文档同步（T27）。
+- 定时任务入口统一 `TraceContext.runWithNewTrace`（诊断①）。
+
+---
+
 ## [2026-09-21] feat(033)：测试基础设施——真库共享基座（仅测试作用域）+ schema 双路径重放门禁 + RPC 边允许清单（ADR-0081 Accepted）
 
 **性质**：Feature 033 实现落地。负责人 2026-09-21 裁决 H-033-1~H-033-5 按 spec 推荐方案批准（Testcontainers

@@ -392,3 +392,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 - **机制**：`StockReservation` 的超时释放由 **Redis ZSet 时间轮**驱动（`SeckillStockService`/定时扫描 `releaseAt` 快照），到点调用 `StockApplicationService.release(reservationId)`。
 - **归属**：库存聚合与预占/确认/释放三段式归 **catalog-service**（ADR-0041 / ADR-0042）；order-service 仅发起预占、在支付成功时确认、在取消/超时未支付时触发释放。
 - **不变量**：`total = available + reserved + sold` 始终成立；释放为幂等操作（同 reservationId 重复释放幂等吸收）。
+
+## 9. 搁浅退款重放（spec 034 / ADR-0082）
+
+`StrandedRefundOrderScanner`：`order.refund.stranded-threshold=30s` 扫描退款请求已受理但交易未推进的订单，经 `doCreateRefund` unaccepted-retry 分支重放；**单订单 ≤2 次红线**，耗尽记 `FINANCIAL_AUDIT` 不自动判成败（R-3：重放语义只做「再问一次」，不做资金裁决）。扫描入口 `TraceContext.runWithNewTrace`（诊断①）。

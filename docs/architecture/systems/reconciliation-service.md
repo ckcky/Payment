@@ -368,3 +368,8 @@ mybatis-plus:
 ### 7.4 演示
 
 `deployment/demo/scenario-audit.sh`（fixture F1~F7 幂等注入 + 渠道账单 CSV）与控制台 `http://localhost:8091/audit`（MOCK / LIVE 双模式）覆盖「触发 → 差异 → 挂账 → 调账 → 复核 → 关批 → 试算平衡」全流程。
+
+## 8. 可靠性加固（spec 034 / ADR-0082）
+
+- **audit 记账失败上抛语义保留**：`FeignAuditLedgerGateway`（AUDIT_ADJUSTMENT）失败仍上抛调用方，但**上抛前落 `pending_postings` 台账**（reconciliation 库，`com.payment.reconciliation.posting` 同构实现）——失败留痕、补投零双记（TT-8 真库回归）。
+- **DLQ 管理**（common-redis-mq `dlq` 包）：`MqDlqAdminService` XRANGE 读/XADD+XDEL 回放/清空 + `mq_dlq_size` gauge；服务侧 `payment.mq.dlq-admin.enabled` 默认 false + admin token 守卫。
