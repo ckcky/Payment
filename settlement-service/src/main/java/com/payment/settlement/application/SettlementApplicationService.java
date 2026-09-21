@@ -90,7 +90,8 @@ public class SettlementApplicationService {
         ReconciliationSummary summary = reconciliationClient.getSettlementSummary(period);
 
         // ADR-0023 闸门：本地逐条强制校验未确认事实，不通过则抛异常、不落任何批次。
-        ConfirmedFactGate.gate(summary, CURRENCY, period, metrics);
+        // 032/G4 + AC-3：返回本商户可结算事实（缺 merchantId 拒绝、他商户滤除）。
+        List<SettlementFact> settleableFacts = ConfirmedFactGate.gate(summary, CURRENCY, period, merchantId, metrics);
 
         // spec 017 分级审计门禁（plan §6.1）：BLOCKER 且未挂账拦截，已挂账/已调账放行留痕；
         // 门禁不可达 fail-closed（实现侧已归一化异常）。
@@ -113,14 +114,32 @@ public class SettlementApplicationService {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION, decision.reason());
         }
 
-        long income = summary.facts().stream()
+        // 032/G4：净额口径 = 全部已确认事实 − 未收口差异净影响。excludedFacts 是对账侧显式扣减
+        // （PLATFORM_ONLY/STATUS_MISMATCH=事实全额，AMOUNT_MISMATCH=|期望−实际|）：PAYMENT 扣 income、
+        // REFUND 扣 refund；事实仍留在批次快照 items 中（TC-032-11）。
+        long excludedPayment = summary.excludedFacts().stream()
+                .filter(e -> "PAYMENT".equals(e.type()))
+                .mapToLong(ExcludedSettlementFact::amountMinor)
+                .sum();
+        long excludedRefund = summary.excludedFacts().stream()
+                .filter(e -> "REFUND".equals(e.type()))
+                .mapToLong(ExcludedSettlementFact::amountMinor)
+                .sum();
+
+        long income = settleableFacts.stream()
                 .filter(f -> "PAYMENT".equals(f.type()))
                 .mapToLong(SettlementFact::amountMinor)
-                .sum();
-        long refund = summary.facts().stream()
+                .sum() - excludedPayment;
+        long refund = settleableFacts.stream()
                 .filter(f -> "REFUND".equals(f.type()))
                 .mapToLong(SettlementFact::amountMinor)
-                .sum();
+                .sum() - excludedRefund;
+        if (excludedPayment > 0 || excludedRefund > 0) {
+            metrics.counter("settlement.excluded_amount_minor", excludedPayment + excludedRefund,
+                    "module", "settlement", "reason", "unclosed_difference");
+            log.info("settlement net withheld for unclosed differences: period={} merchant={} excludedPayment={} "
+                            + "excludedRefund={}", period, merchantId, excludedPayment, excludedRefund);
+        }
 
         // ADR-0022：先于批次登记的 ACTIVE 调整项，带符号合计进入净额公式。
         List<SettlementAdjustment> activeAdjustments =
@@ -135,14 +154,14 @@ public class SettlementApplicationService {
             metrics.counter("settlement.negative_net", 1, "module", "settlement");
         }
         batch.markReady();
-        for (SettlementFact fact : summary.facts()) {
+        for (SettlementFact fact : settleableFacts) {
             batch.addItem(new SettlementItem(fact.reference(), fact.type(), fact.amountMinor(), fact.currencyCode()));
         }
         for (SettlementAdjustment adjustment : activeAdjustments) {
             batch.addItem(new SettlementItem(adjustment.getIdempotencyKey(), "ADJUSTMENT",
                     adjustment.signedAmountMinor(), adjustment.getCurrencyCode()));
         }
-        batch.recordSource(summary.facts().size(), period);
+        batch.recordSource(settleableFacts.size(), period);
 
         batch = insertNew(batch);
 
