@@ -79,6 +79,21 @@ public class MybatisRefundRepository implements RefundRepository {
                 .toList();
     }
 
+    /** spec 032 / H-032-1：confirmed-facts 期间过滤（半开时间窗，H2/MySQL 均可移植）。 */
+    @Override
+    public List<Refund> findByStatusAndCreatedAtBetween(RefundStatus status,
+                                                        java.time.LocalDateTime startInclusive,
+                                                        java.time.LocalDateTime endExclusive) {
+        return refundMapper.selectList(
+                        Wrappers.<RefundEntity>lambdaQuery()
+                                .eq(RefundEntity::getStatus, status.name())
+                                .ge(RefundEntity::getCreatedAt, startInclusive)
+                                .lt(RefundEntity::getCreatedAt, endExclusive))
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     @Override
     public void lockForIntake(String paymentNo) {
         intakeLockMapper.lockForIntake(paymentNo);

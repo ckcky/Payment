@@ -64,6 +64,17 @@ public class InMemoryPaymentRepository implements PaymentRepository {
                 .toList();
     }
 
+    /**
+     * spec 032 / H-032-1 期间过滤：内存实现不建模 createdAt（测试用仓储），
+     * 退化为仅按状态过滤——期间过滤的真实语义由 Mybatis/H2 集成测试承接。
+     */
+    @Override
+    public List<Payment> findByStatusAndCreatedAtBetween(PaymentStatus status,
+                                                         java.time.LocalDateTime startInclusive,
+                                                         java.time.LocalDateTime endExclusive) {
+        return findByStatus(status);
+    }
+
     @Override
     public Payment save(Payment payment) {
         if (payment.getId() == null) {

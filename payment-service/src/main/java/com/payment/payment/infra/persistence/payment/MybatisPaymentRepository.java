@@ -6,6 +6,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
@@ -65,6 +66,21 @@ public class MybatisPaymentRepository implements PaymentRepository {
     public List<Payment> findByStatus(PaymentStatus status) {
         return paymentMapper.selectList(
                         Wrappers.<PaymentEntity>lambdaQuery().eq(PaymentEntity::getStatus, status.name()))
+                .stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    /** spec 032 / H-032-1：confirmed-facts 期间过滤（半开时间窗，H2/MySQL 均可移植）。 */
+    @Override
+    public List<Payment> findByStatusAndCreatedAtBetween(PaymentStatus status,
+                                                         LocalDateTime startInclusive,
+                                                         LocalDateTime endExclusive) {
+        return paymentMapper.selectList(
+                        Wrappers.<PaymentEntity>lambdaQuery()
+                                .eq(PaymentEntity::getStatus, status.name())
+                                .ge(PaymentEntity::getCreatedAt, startInclusive)
+                                .lt(PaymentEntity::getCreatedAt, endExclusive))
                 .stream()
                 .map(this::toDomain)
                 .toList();
