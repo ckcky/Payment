@@ -9,6 +9,8 @@ import com.payment.common.dto.rpc.AccountingEventType;
 import com.payment.common.dto.rpc.AccountingSourceType;
 import com.payment.reconciliation.audit.application.AuditLedgerGateway;
 import com.payment.reconciliation.audit.domain.AdjustmentPolicy;
+import com.payment.reconciliation.posting.application.PostingEventTypes;
+import com.payment.reconciliation.posting.application.PostingPendingRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -25,10 +27,13 @@ public class FeignAuditLedgerGateway implements AuditLedgerGateway {
 
     private final LedgerAuditFeignClient ledgerClient;
     private final BusinessMetrics metrics;
+    private final PostingPendingRecorder pendingRecorder;
 
-    public FeignAuditLedgerGateway(LedgerAuditFeignClient ledgerClient, BusinessMetrics metrics) {
+    public FeignAuditLedgerGateway(LedgerAuditFeignClient ledgerClient, BusinessMetrics metrics,
+                                   PostingPendingRecorder pendingRecorder) {
         this.ledgerClient = ledgerClient;
         this.metrics = metrics;
+        this.pendingRecorder = pendingRecorder;
     }
 
     @Override
@@ -47,6 +52,12 @@ public class FeignAuditLedgerGateway implements AuditLedgerGateway {
             return new PostingResult(response.postingNo(), String.valueOf(response.postingId()));
         } catch (RuntimeException ex) {
             metrics.counter("audit.posting_failed", 1, "module", "reconciliation");
+            // 出站失败台账（spec 034 §9.1）：上抛前先登记（NFR-008 失败上抛语义保留——
+            // 登记动作绝不抛：即便台账写入失败，原异常仍原样上抛，处置留痕语义不变）
+            pendingRecorder.recordFailure(PostingEventTypes.ADJUSTMENT,
+                    AccountingSourceType.RECONCILIATION.name(), adjustNo,
+                    AccountingEventType.ADJUSTMENT.name() + ":" + adjustNo,
+                    request, ex.getMessage());
             log.error("audit adjustment posting failed: adjustNo={} reason={}", adjustNo, ex.getMessage());
             throw ex instanceof BizException biz ? biz
                     : BizException.of(ErrorCodes.INTERNAL_ERROR, "audit posting failed: " + ex.getMessage());
