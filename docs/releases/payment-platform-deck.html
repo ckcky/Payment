@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>聚合支付平台 · Apple 风格演示文稿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #e5e5e7;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 24px; padding: 24px 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .slide {
+    position: relative; flex: none;
+    width: 1280px; height: 720px;
+    background: #ffffff; color: #1d1d1f; overflow: hidden;
+  }
+  .slide.dark { background: #1d1d1f; }
+
+  svg text { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif; }
+
+  /* ---------- 通用件 ---------- */
+  .pnum {
+    position: absolute; top: 16px; left: 24px; z-index: 6;
+    font-size: 14px; color: #8e8e93; font-variant-numeric: tabular-nums;
+  }
+  .h2 {
+    position: absolute; left: 64px; top: 38px; z-index: 4;
+    font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; color: #1d1d1f;
+  }
+  .sub {
+    position: absolute; left: 64px; top: 74px; z-index: 4;
+    font-size: 15px; font-weight: 400; line-height: 1.4; color: #6e6e73;
+  }
+  .note {
+    position: absolute; left: 0; right: 0; bottom: 24px; z-index: 4;
+    text-align: center; font-size: 13px; line-height: 1.4; color: #8e8e93;
+  }
+  .overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tag {
+    display: inline-flex; align-items: center;
+    background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 8px;
+    padding: 6px 12px; font-size: 13px; line-height: 1.4; color: #1d1d1f;
+  }
+
+  /* ---------- 01 封面 ---------- */
+  .s1-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .s1-grid { display: grid; grid-template-columns: repeat(2, 64px); grid-template-rows: repeat(2, 64px); gap: 8px; }
+  .s1-grid i { display: block; border-radius: 18px; }
+  .s1-title { margin-top: 40px; font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; color: #ffffff; }
+  .s1-sub { margin-top: 16px; font-size: 21px; font-weight: 400; line-height: 1.2; color: #8e8e93; }
+  .s1-line { margin-top: 32px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73; }
+  .s1-name { position: absolute; left: 0; right: 0; bottom: 40px; text-align: center; font-size: 13px; line-height: 1.4; color: #6e6e73; }
+
+  /* ---------- 02 系统定位 ---------- */
+  .s2-lead {
+    position: absolute; left: 0; right: 0; top: 80px; text-align: center;
+    font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; color: #1d1d1f;
+  }
+  .s2-sub {
+    position: absolute; left: 0; right: 0; top: 148px; text-align: center;
+    font-size: 21px; font-weight: 400; line-height: 1.2; color: #6e6e73;
+  }
+  .s2-tiles { position: absolute; left: 64px; top: 260px; width: 1152px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .s2-tile { height: 200px; background: #f5f5f7; border-radius: 18px; padding: 32px; }
+  .s2-tile h3 { font-size: 21px; font-weight: 600; line-height: 1.2; color: #1d1d1f; }
+  .s2-tile p { margin-top: 12px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73; }
+  .s2-foot { position: absolute; left: 0; right: 0; bottom: 64px; text-align: center; font-size: 13px; line-height: 1.4; color: #8e8e93; }
+
+  /* ---------- 03 四个核心难题 ---------- */
+  .s3-grid {
+    position: absolute; left: 64px; top: 160px; width: 1152px;
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 240px 240px; gap: 24px;
+  }
+  .s3-card { background: #f5f5f7; border-radius: 18px; padding: 32px; }
+  .s3-card h3 { font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
+  .s3-card ul { margin-top: 16px; list-style: none; }
+  .s3-card li { font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73; }
+  .s3-card li + li { margin-top: 8px; }
+
+  /* ---------- 04 架构全景 ---------- */
+  .s4-band {
+    position: absolute; left: 64px; width: 1152px; height: 56px;
+    background: #f5f5f7; border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 21px; font-weight: 600; line-height: 1.2; color: #1d1d1f;
+  }
+  .s4-band.top { top: 100px; }
+  .s4-grid {
+    position: absolute; left: 64px; top: 172px; width: 1152px;
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 126px 126px; gap: 24px;
+  }
+  .s4-card { background: #ffffff; border: 2px solid #0066cc; border-radius: 18px; padding: 32px; display: flex; flex-direction: column; }
+  .s4-card h3 { flex: 1; display: flex; align-items: center; font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em; }
+  .s4-tags { flex: none; display: flex; flex-wrap: wrap; gap: 8px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73; }
+  .s4-stack { position: absolute; left: 64px; top: 472px; width: 1152px; display: flex; flex-direction: column; gap: 8px; }
+  .s4-bar {
+    height: 40px; background: #f5f5f7; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73;
+  }
+
+  /* ---------- 05 技术架构 ---------- */
+  .arch-wrap { position: absolute; left: 64px; top: 108px; width: 1152px; }
+  .arch-layer { background: #f5f5f7; border-radius: 18px; padding: 10px 16px 14px; margin-bottom: 12px; }
+  .arch-lbl { font-size: 12px; color: #8e8e93; margin-bottom: 8px; padding-left: 4px; }
+  .arch-row { display: flex; gap: 12px; }
+  .arch-svc {
+    flex: 1; background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 8px;
+    padding: 9px 14px; font-size: 14px; font-weight: 600; color: #1d1d1f; line-height: 1.25;
+  }
+  .arch-svc span { display: block; font-size: 11px; font-weight: 400; color: #8e8e93; margin-top: 2px; }
+  .arch-svc.dashed { border-style: dashed; color: #6e6e73; font-weight: 400; }
+  .arch-svc.b-blue { border-color: #0066cc; }
+  .arch-svc.b-orange { border-color: #c93400; }
+  .arch-svc.b-green { border-color: #248a3d; }
+  .arch-storage { background: #1d1d1f; border-radius: 18px; padding: 12px 16px 16px; }
+  .arch-storage .arch-lbl { color: #8e8e93; }
+  .arch-store {
+    flex: 1; background: #2c2c2e; border-radius: 8px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; color: #ffffff; line-height: 1.25;
+  }
+  .arch-store span { display: block; font-size: 11px; font-weight: 400; color: #8e8e93; margin-top: 3px; }
+
+  /* ---------- 06 渠道插件化接入 ---------- */
+  .s5-inner {
+    position: absolute; left: 156px; top: 246px; width: 250px; height: 130px;
+    background: #ffffff; border: 2px solid #c93400; border-radius: 18px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .s5-inner b { font-size: 16px; font-weight: 600; line-height: 1.2; color: #c93400; }
+  .s5-inner span { margin-top: 8px; font-size: 12px; line-height: 1.4; color: #8e8e93; text-align: center; }
+  .s5-mid {
+    position: absolute; left: 524px; top: 231px; width: 240px; height: 160px;
+    background: #ffffff; border: 2px dashed #c93400; border-radius: 18px;
+    padding: 12px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .s5-mid h3 { font-size: 17px; font-weight: 600; line-height: 20px; color: #c93400; }
+  .s5-spi { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .s5-spi span { font-size: 13px; line-height: 1.3; color: #6e6e73; }
+  .s5-chan {
+    position: absolute; left: 900px; top: 236px; width: 200px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .s5-chan div {
+    height: 34px; background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 400; line-height: 1.4; color: #1d1d1f;
+  }
+
+  /* ---------- 06 多商户与路由 ---------- */
+  .s6-left {
+    position: absolute; left: 130px; top: 300px; width: 220px; height: 150px;
+    background: #ffffff; border: 2px solid #0066cc; border-radius: 18px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .s6-left b { font-size: 21px; font-weight: 600; line-height: 1.2; color: #0066cc; }
+  .s6-left span { margin-top: 8px; font-size: 13px; line-height: 1.4; color: #6e6e73; text-align: center; }
+  .s6-mid {
+    position: absolute; left: 500px; top: 276px; width: 290px; height: 198px;
+    background: #ffffff; border: 2px solid #0066cc; border-radius: 18px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .s6-mid b { font-size: 18px; font-weight: 600; line-height: 1.2; color: #1d1d1f; }
+  .s6-factors { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+  .s6-factors span {
+    background: #f5f5f7; border-radius: 8px; padding: 4px 12px;
+    font-size: 13px; font-weight: 400; line-height: 1.4; color: #1d1d1f; text-align: center;
+  }
+  .s6-right {
+    position: absolute; left: 940px; width: 220px; height: 64px;
+    background: #ffffff; border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 600; line-height: 1.2;
+  }
+  .s6-right.hit { top: 288px; border: 2px solid #248a3d; color: #248a3d; }
+  .s6-right.miss { top: 398px; border: 2px solid #d70015; color: #d70015; }
+
+  /* ---------- 07 账本 ---------- */
+  .s7-box {
+    position: absolute; top: 176px; height: 72px; background: #ffffff;
+    border: 2px solid #248a3d; border-radius: 18px; padding: 8px 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .s7-box b { font-size: 16px; font-weight: 600; line-height: 1.2; color: #1d1d1f; }
+  .s7-box i { margin-top: 4px; font-size: 12px; font-style: normal; line-height: 1.35; color: #8e8e93; text-align: center; }
+  .s7-entry {
+    position: absolute; left: 64px; top: 270px; width: 620px; height: 330px;
+    background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 18px;
+    padding: 12px 18px; display: flex; flex-direction: column;
+  }
+  .s7-entry .scene { font-size: 12px; line-height: 1.4; color: #8e8e93; margin-bottom: 6px; }
+  .s7-group { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 5px 0; }
+  .s7-group + .s7-group { border-top: 1px dashed rgba(0,0,0,.12); }
+  .s7-group .gh { font-size: 12px; font-weight: 600; color: #1d1d1f; margin-bottom: 3px; }
+  .s7-group .gh span { font-weight: 400; color: #8e8e93; }
+  .s7-entry .row { display: flex; align-items: center; gap: 7px; font-size: 12px; line-height: 1.5; color: #1d1d1f; }
+  .s7-entry .row .amt { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 500; color: #1d1d1f; }
+  .s7-entry .row .acc { color: #1d1d1f; }
+  .s7-entry .dr-tag, .s7-entry .cr-tag {
+    width: 22px; flex: none; text-align: center; font-size: 11px; font-weight: 600; line-height: 17px;
+    border-radius: 5px; color: #ffffff;
+  }
+  .s7-entry .dr-tag { background: #248a3d; }
+  .s7-entry .cr-tag { background: #c93400; }
+  .s7-entry .spread { margin-top: 6px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.08); font-size: 12px; line-height: 1.4; color: #248a3d; font-weight: 600; }
+  .s7-level {
+    position: absolute; left: 708px; top: 270px; width: 508px; height: 158px;
+    background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 18px;
+    padding: 14px 18px; display: flex; flex-direction: column; justify-content: center;
+  }
+  .s7-level .l1 { font-size: 13px; line-height: 1.5; color: #1d1d1f; }
+  .s7-level .l1 b { color: #248a3d; font-weight: 600; }
+  .s7-level .l2 { margin-top: 5px; font-size: 12px; line-height: 1.5; color: #6e6e73; }
+  .s7-sum {
+    position: absolute; left: 708px; top: 442px; width: 508px; height: 158px;
+    background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 18px;
+    padding: 14px 18px; display: flex; flex-direction: column; justify-content: center;
+  }
+  .s7-sum b { font-size: 13px; font-weight: 600; line-height: 1.5; color: #1d1d1f; }
+  .s7-sum span { margin-top: 5px; font-size: 12px; line-height: 1.55; color: #6e6e73; }
+  .s7-compare {
+    position: absolute; left: 64px; top: 620px; width: 1152px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+  }
+  .s7-card { border-radius: 18px; padding: 14px 22px; display: flex; align-items: center; }
+  .s7-card .row { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 1.5; }
+  .s7-card .row b { font-weight: 600; }
+  .s7-card.bad { background: #f5f5f7; border: 1px solid rgba(0,0,0,.08); color: #6e6e73; }
+  .s7-card.good { background: #e8f5ec; border: 1px solid #248a3d; color: #248a3d; }
+  .mark { position: relative; width: 13px; height: 13px; flex: none; display: block; }
+  .mark.x::before, .mark.x::after {
+    content: ""; position: absolute; left: 0; top: 6px; width: 13px; height: 1.5px;
+    background: #d70015; border-radius: 1px;
+  }
+  .mark.x::before { transform: rotate(45deg); }
+  .mark.x::after { transform: rotate(-45deg); }
+  .mark.v::after {
+    content: ""; position: absolute; left: 1px; top: 2px; width: 10px; height: 5px;
+    border-left: 2px solid #248a3d; border-bottom: 2px solid #248a3d; transform: rotate(-45deg);
+  }
+
+  /* ---------- 08 状态机 ---------- */
+  .s8-cards {
+    position: absolute; left: 64px; top: 512px; width: 1152px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 24px;
+  }
+  .s8-card { height: 118px; background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 18px; padding: 18px 20px; }
+  .s8-card h3 { font-size: 15px; font-weight: 600; line-height: 1.3; color: #1d1d1f; }
+  .s8-card p { margin-top: 6px; font-size: 12px; font-weight: 400; line-height: 1.4; color: #6e6e73; }
+
+  /* ---------- 09 可观测 ---------- */
+  .obs-grafana {
+    position: absolute; left: 64px; top: 150px; width: 1152px;
+    background: #ffffff; border: 2px solid #248a3d; border-radius: 18px;
+    padding: 20px 24px;
+  }
+  .obs-grafana h4 { font-size: 15px; font-weight: 600; color: #248a3d; margin-bottom: 14px; }
+  .obs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .obs-cell { background: #f5f5f7; border-radius: 8px; padding: 14px 16px; min-height: 130px; }
+  .obs-cell h5 { font-size: 14px; font-weight: 600; color: #1d1d1f; margin-bottom: 2px; }
+  .obs-cell .en { font-size: 11px; color: #8e8e93; margin-bottom: 10px; letter-spacing: 0.02em; }
+  .obs-cell ul { list-style: none; }
+  .obs-cell li { font-size: 12px; color: #6e6e73; line-height: 1.8; padding-left: 10px; position: relative; }
+  .obs-cell li::before {
+    content: ""; position: absolute; left: 0; top: 8px;
+    width: 4px; height: 4px; border-radius: 50%; background: #8e8e93;
+  }
+
+  .obs-bottom {
+    position: absolute; left: 64px; top: 420px; width: 1152px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  .obs-trace { background: #1d1d1f; border-radius: 18px; padding: 20px 24px; color: #fff; }
+  .obs-trace h4 { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+  .obs-trace p { font-size: 13px; color: #8e8e93; line-height: 1.8; }
+  .obs-alert { background: #ffffff; border: 2px solid #c93400; border-radius: 18px; padding: 20px 24px; }
+  .obs-alert h4 { font-size: 16px; font-weight: 600; color: #c93400; margin-bottom: 10px; }
+  .obs-alert p { font-size: 13px; color: #6e6e73; line-height: 1.8; }
+
+  /* ---------- 10 飞轮 ---------- */
+  .s10-notes { position: absolute; left: 0; right: 0; bottom: 24px; text-align: center; font-size: 13px; line-height: 1.4; color: #6e6e73; }
+  .s10-notes span { display: block; margin-top: 6px; }
+  .s10-notes span:first-child { margin-top: 0; }
+
+  /* ---------- 11 成果对照 ---------- */
+  .s11-rows { position: absolute; left: 64px; top: 254px; width: 1152px; display: flex; flex-direction: column; gap: 24px; }
+  .s11-row { display: flex; align-items: center; gap: 32px; }
+  .s11-blk {
+    width: 200px; height: 60px; flex: none; border-radius: 8px; border: 2px solid #0066cc;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600; line-height: 1.2;
+  }
+  .s11-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* ---------- 12 数字 ---------- */
+  .s12-grid {
+    position: absolute; left: 64px; top: 240px; width: 1152px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 160px 160px; gap: 24px;
+  }
+  .s12-cell {
+    background: #ffffff; border: 1px solid rgba(0,0,0,.08); border-radius: 18px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .s12-num { font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .s12-lbl { margin-top: 8px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73; }
+
+  /* ---------- 13 复盘 ---------- */
+  .s13-cols { position: absolute; left: 64px; top: 290px; width: 1152px; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .s13-col h3 { font-size: 21px; font-weight: 600; line-height: 1.2; }
+  .s13-col p { margin-top: 24px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6e6e73; }
+  .s13-col p + p { margin-top: 20px; }
+</style>
+</head>
+<body>
+<!-- ============ 01 封面 ============ -->
+<section class="slide dark" id="slide-1">
+  <div class="pnum">01 / 14</div>
+  <div class="s1-wrap">
+    <div class="s1-grid">
+      <i style="background:#0066cc"></i><i style="background:#c93400"></i>
+      <i style="background:#248a3d"></i><i style="background:#6e6e73"></i>
+    </div>
+    <div class="s1-title">聚合支付平台</div>
+    <div class="s1-sub">Payment &amp; Commerce Platform</div>
+    <div class="s1-line">多商户 · 多渠道 · 资金一致性</div>
+  </div>
+  <div class="s1-name">ckcky</div>
+</section>
+
+<!-- ============ 02 系统定位 ============ -->
+<section class="slide" id="slide-2">
+  <div class="pnum">02 / 14</div>
+
+  <div class="s2-lead">让每一笔交易，都有迹可循。</div>
+  <div class="s2-sub">聚合支付与商户管理平台 —— 连接商户与支付渠道的金融底座</div>
+
+  <div class="s2-tiles">
+    <div class="s2-tile">
+      <h3>聚合支付</h3>
+      <p>一个接口，对接多渠道</p>
+    </div>
+    <div class="s2-tile">
+      <h3>多商户平台</h3>
+      <p>N 个商户独立管理</p>
+    </div>
+    <div class="s2-tile">
+      <h3>资金一致性</h3>
+      <p>复式记账，不丢不错</p>
+    </div>
+    <div class="s2-tile">
+      <h3>可观测</h3>
+      <p>全链路 Trace，可追溯</p>
+    </div>
+  </div>
+
+  <div class="s2-foot">支付宝 · Stripe · 抖音支付 · 微信支付</div>
+</section>
+
+<!-- ============ 03 四个核心难题 ============ -->
+<section class="slide" id="slide-3">
+  <div class="pnum">03 / 14</div>
+  <div class="h2">四个核心难题</div>
+
+  <div class="s3-grid">
+    <div class="s3-card">
+      <h3 style="color:#0066cc">渠道治理与扩展性</h3>
+      <ul>
+        <li>渠道字段/流程/回调不统一</li>
+        <li>渠道故障级联影响</li>
+        <li>费率差异与动态路由</li>
+        <li>沙箱联调成本高</li>
+      </ul>
+    </div>
+    <div class="s3-card">
+      <h3 style="color:#c93400">资金正确性</h3>
+      <ul>
+        <li>网络超时与重复扣款</li>
+        <li>回调丢失导致订单悬挂</li>
+        <li>跨渠道对账格式不统一</li>
+        <li>退款多系统漏记错记</li>
+      </ul>
+    </div>
+    <div class="s3-card">
+      <h3 style="color:#248a3d">可观测与稳定性</h3>
+      <ul>
+        <li>跨服务链路难以定位</li>
+        <li>回调处理超时影响体验</li>
+        <li>高并发需限流熔断降级</li>
+        <li>缺少统一 SLO 指标</li>
+      </ul>
+    </div>
+    <div class="s3-card">
+      <h3 style="color:#6e6e73">工程能力</h3>
+      <ul>
+        <li>需求到代码缺少约束</li>
+        <li>测试未嵌入开发流程</li>
+        <li>架构决策没有沉淀</li>
+        <li>评审依赖个人经验</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 架构全景 ============ -->
+<section class="slide" id="slide-4">
+  <div class="pnum">04 / 14</div>
+  <div class="h2">架构全景</div>
+  <div class="sub">四个领域中心</div>
+
+  <div class="s4-band top">多商户 / 平台运营</div>
+
+  <div class="s4-grid">
+    <div class="s4-card" style="border-color:#0066cc">
+      <h3 style="color:#0066cc">订单中心</h3>
+      <div class="s4-tags"><span>状态机</span><span>交易单</span><span>幂等</span></div>
+    </div>
+    <div class="s4-card" style="border-color:#248a3d">
+      <h3 style="color:#248a3d">账本中心</h3>
+      <div class="s4-tags"><span>复式记账</span><span>分录规则</span><span>余额</span></div>
+    </div>
+    <div class="s4-card" style="border-color:#c93400">
+      <h3 style="color:#c93400">支付中心</h3>
+      <div class="s4-tags"><span>渠道路由</span><span>渠道适配</span><span>回调处理</span></div>
+    </div>
+    <div class="s4-card" style="border-color:#6e6e73">
+      <h3 style="color:#6e6e73">对账清算</h3>
+      <div class="s4-tags"><span>对账</span><span>差异</span><span>调账</span></div>
+    </div>
+  </div>
+
+  <div class="s4-stack">
+    <div class="s4-bar">商户管理</div>
+    <div class="s4-bar">渠道管理</div>
+    <div class="s4-bar">配置中心</div>
+    <div class="s4-bar">可观测</div>
+  </div>
+</section>
+
+<!-- ============ 05 技术架构 ============ -->
+<section class="slide" id="slide-5">
+  <div class="pnum">05 / 14</div>
+  <div class="h2">技术架构</div>
+  <div class="sub">四层微服务 + 基础设施</div>
+
+  <div class="arch-wrap">
+    <div class="arch-layer">
+      <div class="arch-lbl">接入层 · 调用方与统一入口</div>
+      <div class="arch-row">
+        <div class="arch-svc">调用方：用户 / 商户 / 运营</div>
+        <div class="arch-svc dashed">gateway：统一入口（MVP 延后）</div>
+      </div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-lbl">编排层 · 承接业务意图，编排跨域流程</div>
+      <div class="arch-row">
+        <div class="arch-svc b-blue">order-service<span>8083 · order</span></div>
+        <div class="arch-svc b-orange">payment-service<span>8084 · payment（含 refund）</span></div>
+      </div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-lbl">执行层 · 商品、交付与消费权利</div>
+      <div class="arch-row">
+        <div class="arch-svc b-green">catalog-service<span>8082 · catalog</span></div>
+        <div class="arch-svc b-green">fulfillment-service<span>8086 · fulfillment</span></div>
+        <div class="arch-svc b-green">entitlement-service<span>8087 · entitlement</span></div>
+      </div>
+    </div>
+
+    <div class="arch-layer">
+      <div class="arch-lbl">资金层 · 账务事实、核对与结算</div>
+      <div class="arch-row">
+        <div class="arch-svc b-green">ledger-service<span>8090 · ledger</span></div>
+        <div class="arch-svc b-green">reconciliation<span>8088 · recon</span></div>
+        <div class="arch-svc b-green">settlement<span>8089 · settlement</span></div>
+        <div class="arch-svc b-green">merchant<span>8081 · 无独立库</span></div>
+      </div>
+    </div>
+
+    <div class="arch-storage">
+      <div class="arch-lbl">存储层 · 基础设施</div>
+      <div class="arch-row">
+        <div class="arch-store">MySQL 8.0<span>Database-per-Service · 9 独立 Schema</span></div>
+        <div class="arch-store">Redis<span>缓存 / 幂等 / 在途预占</span></div>
+        <div class="arch-store">MQ<span>Redis Streams 事务消息 · ADR-0074</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">Database-per-Service：9 个独立 Schema · 跨 Schema 读写一律走对方 API，禁止直连</div>
+</section>
+
+<!-- ============ 06 渠道治理（一）：插件化接入 ============ -->
+<section class="slide" id="slide-6">
+  <div class="pnum">06 / 14</div>
+  <div class="h2">渠道治理（一）：插件化接入</div>
+  <div class="sub">新增一个渠道，核心链路零改动</div>
+
+  <div class="s5-inner">
+    <b>支付指令编排</b>
+    <span>下单 / 支付 / 退款 / 查询<br>指令的统一编排（内部流程）</span>
+  </div>
+
+  <div class="s5-mid">
+    <h3>Channel SPI</h3>
+    <div class="s5-spi">
+      <span>支付</span><span>退款</span><span>查询</span><span>回调</span><span>对账文件</span>
+    </div>
+  </div>
+
+  <div class="s5-chan">
+    <div>支付宝</div>
+    <div>Stripe</div>
+    <div>抖音</div>
+    <div>微信</div>
+  </div>
+
+  <svg class="overlay" viewBox="0 0 1280 720">
+    <defs>
+      <marker id="s5-end" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#c93400"/>
+      </marker>
+      <marker id="s5-dash" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#8e8e93"/>
+      </marker>
+    </defs>
+    <path d="M406,311 L518,311" fill="none" stroke="#c93400" stroke-width="2" marker-end="url(#s5-end)"/>
+    <g fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-dasharray="6 6" marker-end="url(#s5-dash)">
+      <path d="M764,253 L894,253"/>
+      <path d="M764,287 L894,287"/>
+      <path d="M764,321 L894,321"/>
+      <path d="M764,355 L894,355"/>
+    </g>
+  </svg>
+
+  <div class="note">内部：支付指令编排　|　对外：Channel SPI 统一接口，每个渠道一个插件</div>
+</section>
+
+<!-- ============ 06 渠道治理（二）：多商户与路由 ============ -->
+<section class="slide" id="slide-7">
+  <div class="pnum">07 / 14</div>
+  <div class="h2">渠道治理（二）：多商户与路由</div>
+  <div class="sub">N 个商户 × M 个渠道</div>
+
+  <div class="s6-left">
+    <b>商户</b>
+    <span>N 个商户<br>独立接入</span>
+  </div>
+
+  <div class="s6-mid">
+    <b>路由决策</b>
+    <div class="s6-factors">
+      <span>商户能力</span>
+      <span>交易场景</span>
+      <span>渠道可用性</span>
+      <span>费率</span>
+    </div>
+  </div>
+
+  <div class="s6-right hit">命中渠道</div>
+  <div class="s6-right miss">过滤渠道</div>
+
+  <svg class="overlay" viewBox="0 0 1280 720">
+    <defs>
+      <marker id="s6-blue" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,4.5 L0,9 Z" fill="#0066cc"/>
+      </marker>
+      <marker id="s6-ok" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,4.5 L0,9 Z" fill="#248a3d"/>
+      </marker>
+      <marker id="s6-bad" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,4.5 L0,9 Z" fill="#d70015"/>
+      </marker>
+    </defs>
+
+    <path d="M350,375 L494,375" fill="none" stroke="#0066cc" stroke-width="2" marker-end="url(#s6-blue)"/>
+    <path d="M790,320 L934,320" fill="none" stroke="#248a3d" stroke-width="2" marker-end="url(#s6-ok)"/>
+    <path d="M790,430 L934,430" fill="none" stroke="#d70015" stroke-width="1.5" stroke-dasharray="6 6" marker-end="url(#s6-bad)"/>
+
+    <text x="862" y="308" text-anchor="middle" font-size="12" fill="#248a3d">命中</text>
+    <text x="862" y="452" text-anchor="middle" font-size="12" fill="#d70015">过滤</text>
+  </svg>
+
+  <div class="note">配置自动下发 · 密钥隔离 · 账单隔离</div>
+</section>
+
+<!-- ============ 07 资金正确性（一）：账本 ============ -->
+<section class="slide" id="slide-8">
+  <div class="pnum">08 / 14</div>
+  <div class="h2">资金正确性（一）：账本</div>
+  <div class="sub">调用方报事实，账本定科目</div>
+
+  <div class="s7-box" style="left:64px;width:320px">
+    <b>Accounting Event</b><i>账务核心订阅（MQ）<br>或支付核心 RPC 触发</i>
+  </div>
+  <div class="s7-box" style="left:480px;width:320px">
+    <b>Posting Rule</b><i>账本按商户配置<br>决定科目与借贷方向</i>
+  </div>
+  <div class="s7-box" style="left:896px;width:320px">
+    <b>会计分录（Posting）</b><i>一次事件展开多组平衡分录<br>每组借贷必须平衡</i>
+  </div>
+
+  <div class="s7-entry">
+    <div class="scene">场景：用户支付 100 元　·　支付宝费率 0.6%　·　商户费率 0.8%　·　一次 capture 事件 = 三组平衡分录</div>
+    <div class="s7-group">
+      <div class="gh">资金事实 <span>毛额 100</span></div>
+      <div class="row"><span class="dr-tag">借</span><span class="acc">CHANNEL_RECEIVABLE : 支付宝</span><span class="amt">+100.00</span></div>
+      <div class="row"><span class="cr-tag">贷</span><span class="acc">MERCHANT_PAYABLE : M001</span><span class="amt">+100.00</span></div>
+    </div>
+    <div class="s7-group">
+      <div class="gh">商户手续费 <span>平台收入 0.80</span></div>
+      <div class="row"><span class="dr-tag">借</span><span class="acc">MERCHANT_PAYABLE : M001</span><span class="amt">0.80</span></div>
+      <div class="row"><span class="cr-tag">贷</span><span class="acc">FEE_REVENUE : PLATFORM</span><span class="amt">0.80</span></div>
+    </div>
+    <div class="s7-group">
+      <div class="gh">渠道手续费 <span>平台成本 0.60</span></div>
+      <div class="row"><span class="dr-tag">借</span><span class="acc">CHANNEL_FEE_EXPENSE : 支付宝</span><span class="amt">0.60</span></div>
+      <div class="row"><span class="cr-tag">贷</span><span class="acc">CHANNEL_RECEIVABLE : 支付宝</span><span class="amt">0.60</span></div>
+    </div>
+    <div class="spread">平台利润 = 收入 0.80 − 成本 0.60 = 0.20（损益轧差，非独立科目）</div>
+  </div>
+
+  <div class="s7-level">
+    <div class="l1"><b>两级科目</b></div>
+    <div class="l2">一级：科目定义 Definition<br>（资产 / 负债 / 收入 / 费用）</div>
+    <div class="l2">二级：科目实例 Instance<br>（按商户 / 渠道分户）</div>
+  </div>
+
+  <div class="s7-sum">
+    <b>分录汇总 · 净额口径</b>
+    <span>商户应付净额 = 100 − 0.80 = 99.20<br>渠道应收净额 = 100 − 0.60 = 99.40<br>三组各自借贷平衡 · 按期间勾稽</span>
+  </div>
+
+  <div class="s7-compare">
+    <div class="s7-card bad">
+      <div class="row"><span class="mark x"></span><span><b>领域边界：</b>调用方不需关心借贷科目，只需上报账务事件</span></div>
+    </div>
+    <div class="s7-card good">
+      <div class="row"><span class="mark v"></span><span><b>账本职责：</b>科目与借贷方向由账本内部决定</span></div>
+    </div>
+  </div>
+
+  <svg class="overlay" viewBox="0 0 1280 720">
+    <defs>
+      <marker id="s7-ok" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,4.5 L0,9 Z" fill="#248a3d"/>
+      </marker>
+    </defs>
+    <g fill="none" stroke="#248a3d" stroke-width="2" marker-end="url(#s7-ok)">
+      <path d="M384,212 L474,212"/>
+      <path d="M800,212 L890,212"/>
+    </g>
+    <g fill="none" stroke="#8e8e93" stroke-width="1.5" stroke-dasharray="6 6">
+      <path d="M224,248 L224,264"/>
+      <path d="M640,248 L640,264"/>
+      <path d="M1056,248 L1056,264"/>
+    </g>
+  </svg>
+
+  <div class="note">复式记账 · 借贷必须平衡 · 金额一律整数分</div>
+</section>
+
+<!-- ============ 08 资金正确性（二）：状态机与自愈 ============ -->
+<section class="slide" id="slide-9">
+  <div class="pnum">09 / 14</div>
+  <div class="h2">资金正确性（二）：状态机与自愈</div>
+  <div class="sub">状态机守住边界，任务兜住异常</div>
+
+  <div class="s8-cards">
+    <div class="s8-card">
+      <h3>重复支付</h3>
+      <p>同一订单多笔成功，自动退款</p>
+    </div>
+    <div class="s8-card">
+      <h3>重复回调</h3>
+      <p>幂等吸收，终态只回放一次</p>
+    </div>
+    <div class="s8-card">
+      <h3>重复下单</h3>
+      <p>Idempotency-Key 防重</p>
+    </div>
+    <div class="s8-card">
+      <h3>状态未知</h3>
+      <p>不猜成败，查单任务推进到终态</p>
+    </div>
+  </div>
+
+  <svg class="overlay" viewBox="0 0 1280 720">
+    <defs>
+      <marker id="s8-a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#6e6e73"/>
+      </marker>
+      <marker id="s8-unk" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#c93400"/>
+      </marker>
+      <marker id="s8-g" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#248a3d"/>
+      </marker>
+    </defs>
+
+    <!-- 主链：待支付 → 支付中 → 支付成功 → 履约 -->
+    <g fill="#ffffff" stroke="rgba(0,0,0,.08)" stroke-width="1">
+      <rect x="110" y="128" width="110" height="46" rx="18"/>
+      <rect x="310" y="128" width="110" height="46" rx="18"/>
+      <rect x="510" y="128" width="110" height="46" rx="18"/>
+      <rect x="710" y="128" width="110" height="46" rx="18"/>
+    </g>
+    <g fill="none" stroke="#6e6e73" stroke-width="2" marker-end="url(#s8-a)">
+      <path d="M220,151 L304,151"/>
+      <path d="M420,151 L504,151"/>
+      <path d="M620,151 L704,151"/>
+    </g>
+
+    <!-- 支付中 向下分出：关单 / UNKNOWN -->
+    <rect x="310" y="256" width="110" height="46" rx="18" fill="#ffffff" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+    <rect x="440" y="256" width="110" height="46" rx="18" fill="#fdeee7" stroke="#c93400" stroke-width="2"/>
+    <g fill="none" stroke="#6e6e73" stroke-width="2" marker-end="url(#s8-a)">
+      <path d="M365,174 L365,250"/>
+      <path d="M375,174 L375,210 L485,210 L485,250"/>
+    </g>
+
+    <!-- UNKNOWN 查单收敛回 支付成功 -->
+    <path d="M505,256 L505,220 L540,220 L540,178" fill="none" stroke="#c93400" stroke-width="1.5" stroke-dasharray="6 6" marker-end="url(#s8-unk)"/>
+
+    <!-- 退款链路：支付成功 → 退款中 → 退款成功 / 退款失败 -->
+    <rect x="510" y="360" width="110" height="46" rx="18" fill="#ffffff" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+    <rect x="710" y="360" width="110" height="46" rx="18" fill="#ffffff" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+    <rect x="510" y="440" width="110" height="46" rx="18" fill="#ffffff" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+    <g fill="none" stroke="#6e6e73" stroke-width="2" marker-end="url(#s8-a)">
+      <path d="M565,174 L565,354"/>
+      <path d="M620,383 L704,383"/>
+      <path d="M565,406 L565,434"/>
+    </g>
+
+    <!-- 重复支付自动退款：支付成功节点自环（上方） -->
+    <path d="M570,125 C 570,88 620,88 620,124" fill="none" stroke="#248a3d" stroke-width="2" marker-end="url(#s8-g)"/>
+
+    <g text-anchor="middle" font-size="15" fill="#1d1d1f">
+      <text x="165" y="157">待支付</text>
+      <text x="365" y="157">支付中</text>
+      <text x="565" y="157">支付成功</text>
+      <text x="765" y="157">履约</text>
+      <text x="365" y="285">关单</text>
+      <text x="495" y="285" fill="#c93400">UNKNOWN</text>
+      <text x="565" y="389">退款中</text>
+      <text x="765" y="389">退款成功</text>
+      <text x="565" y="469">退款失败</text>
+    </g>
+
+    <text x="595" y="80" text-anchor="middle" font-size="12" fill="#248a3d">重复支付自动退款</text>
+    <text x="522" y="212" text-anchor="middle" font-size="12" fill="#c93400">查单收敛</text>
+    <text x="600" y="300" text-anchor="middle" font-size="12" fill="#6e6e73">发起退款</text>
+  </svg>
+
+  <div class="note">状态由事件触发，不直接改状态：资金变更前守卫校验（门禁 Loop）</div>
+</section>
+
+<!-- ============ 09 可观测与稳定性 ============ -->
+<section class="slide" id="slide-10">
+  <div class="pnum">10 / 14</div>
+  <div class="h2">可观测与稳定性</div>
+  <div class="sub">基于 Google SRE 四黄金指标的监控体系</div>
+
+  <div class="obs-grafana">
+    <h4>Grafana 监控大盘 · Four Golden Signals</h4>
+    <div class="obs-grid">
+      <div class="obs-cell">
+        <h5>延迟</h5>
+        <div class="en">Latency</div>
+        <ul>
+          <li>P50 / P90</li>
+          <li>P95 / P99</li>
+        </ul>
+      </div>
+      <div class="obs-cell">
+        <h5>流量</h5>
+        <div class="en">Traffic</div>
+        <ul>
+          <li>QPS</li>
+          <li>渠道分布</li>
+        </ul>
+      </div>
+      <div class="obs-cell">
+        <h5>错误</h5>
+        <div class="en">Errors</div>
+        <ul>
+          <li>失败率</li>
+          <li>错误类型</li>
+        </ul>
+      </div>
+      <div class="obs-cell">
+        <h5>饱和度</h5>
+        <div class="en">Saturation</div>
+        <ul>
+          <li>线程池 / 连接池</li>
+          <li>队列深度</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="obs-bottom">
+    <div class="obs-trace">
+      <h4>SkyWalking 全链路 Trace</h4>
+      <p>支付 → 渠道 → 回调 → 账本<br>跨服务调用链一条 Trace 看到底</p>
+    </div>
+    <div class="obs-alert">
+      <h4>告警规则</h4>
+      <p>P99 &gt; 500ms<br>错误率 &gt; 1%<br>限流 · 熔断 · 降级</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 工程能力飞轮 ============ -->
+<section class="slide" id="slide-11">
+  <div class="pnum">11 / 14</div>
+  <div class="h2">工程能力</div>
+  <div class="sub">测试在环里，不在末尾</div>
+
+  <svg class="overlay" viewBox="0 0 1280 720">
+    <defs>
+      <marker id="s10-a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#0066cc"/>
+      </marker>
+      <marker id="s10-bad" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,4.5 L0,9 Z" fill="#d70015"/>
+      </marker>
+      <marker id="s10-ok" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,4.5 L0,9 Z" fill="#248a3d"/>
+      </marker>
+    </defs>
+
+    <g fill="none" stroke="#0066cc" stroke-width="2" marker-end="url(#s10-a)">
+      <path d="M701.8,169.8 A200,200 0 0 1 750.1,193.0"/>
+      <path d="M827.2,289.7 A200,200 0 0 1 839.2,342.1"/>
+      <path d="M811.7,462.6 A200,200 0 0 1 778.3,504.5"/>
+      <path d="M666.8,558.2 A200,200 0 0 1 613.1,558.2"/>
+      <path d="M501.8,504.5 A200,200 0 0 1 468.3,462.6"/>
+      <path d="M440.8,342.1 A200,200 0 0 1 452.8,289.7"/>
+      <path d="M529.9,193.0 A200,200 0 0 1 578.2,169.8"/>
+    </g>
+
+    <path d="M548,262 C 600,240 636,242 638,268" fill="none" stroke="#248a3d" stroke-width="2"
+          marker-end="url(#s10-ok)"/>
+
+    <circle cx="640" cy="360" r="90" fill="#1d1d1f"/>
+    <g text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">
+      <text x="640" y="353">Constitution</text>
+      <text x="640" y="379">+ ADR</text>
+    </g>
+
+    <g fill="#ffffff" stroke="#0066cc" stroke-width="2">
+      <rect x="575" y="134" width="130" height="52" rx="18"/>
+      <rect x="731.4" y="209.3" width="130" height="52" rx="18"/>
+      <rect x="770" y="378.5" width="130" height="52" rx="18"/>
+      <rect x="661.8" y="514.2" width="130" height="52" rx="18"/>
+      <rect x="380" y="378.5" width="130" height="52" rx="18"/>
+      <rect x="418.6" y="209.3" width="130" height="52" rx="18"/>
+    </g>
+    <rect x="488.2" y="514.2" width="130" height="52" rx="18" fill="#ffffff" stroke="#248a3d" stroke-width="3"/>
+
+    <g text-anchor="middle" font-size="13" font-weight="600" fill="#1d1d1f">
+      <text x="640" y="165">1 Spec 规格</text>
+      <text x="796.4" y="240.3">2 Plan 计划</text>
+      <text x="835" y="409.5">3 Task 任务</text>
+      <text x="726.8" y="545.2">4 Implement 实现</text>
+      <text x="553.2" y="545.2">5 Test 测试</text>
+      <text x="445" y="409.5">6 Review 评审</text>
+      <text x="483.6" y="240.3">7 Gate 门禁</text>
+    </g>
+
+    <text x="610" y="220" text-anchor="middle" font-size="12" fill="#248a3d">通过 → 沉淀为约束</text>
+  </svg>
+
+  <div class="s10-notes">
+    <span>通过 → 合并并更新 Constitution / ADR</span>
+    <span>每转一圈，约束更强</span>
+  </div>
+</section>
+
+<!-- ============ 11 成果对照 ============ -->
+<section class="slide" id="slide-12">
+  <div class="pnum">12 / 14</div>
+  <div class="h2">成果对照</div>
+  <div class="sub">回到开头四个难题</div>
+
+  <div class="s11-rows">
+    <div class="s11-row">
+      <div class="s11-blk" style="border-color:#0066cc;background:#e8f2fd;color:#0066cc">渠道治理</div>
+      <div class="s11-tags">
+        <span class="tag">支付宝</span><span class="tag">Stripe</span><span class="tag">抖音沙箱</span>
+        <span class="tag">微信接入中</span><span class="tag">路由自动配置</span>
+      </div>
+    </div>
+    <div class="s11-row">
+      <div class="s11-blk" style="border-color:#c93400;background:#fdeee7;color:#c93400">资金正确性</div>
+      <div class="s11-tags">
+        <span class="tag">复式记账</span><span class="tag">对账</span><span class="tag">调账</span>
+        <span class="tag">门禁 Loop</span><span class="tag">严格状态机</span>
+        <span class="tag">重复支付自动退款</span><span class="tag">查单补齐</span>
+      </div>
+    </div>
+    <div class="s11-row">
+      <div class="s11-blk" style="border-color:#248a3d;background:#e8f5ec;color:#248a3d">可观测与稳定性</div>
+      <div class="s11-tags">
+        <span class="tag">SkyWalking 全链路</span><span class="tag">SLO 指标</span><span class="tag">告警</span>
+      </div>
+    </div>
+    <div class="s11-row">
+      <div class="s11-blk" style="border-color:#6e6e73;background:#f5f5f7;color:#6e6e73">工程能力</div>
+      <div class="s11-tags">
+        <span class="tag">Workflow Loop</span><span class="tag">Spec 驱动</span><span class="tag">测试闭环</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12 数字 ============ -->
+<section class="slide" id="slide-13">
+  <div class="pnum">13 / 14</div>
+  <div class="h2">数字</div>
+
+  <div class="s12-grid">
+    <div class="s12-cell"><div class="s12-num" style="color:#c93400">10</div><div class="s12-lbl">服务模块</div></div>
+    <div class="s12-cell"><div class="s12-num" style="color:#0066cc">3</div><div class="s12-lbl">共享库</div></div>
+    <div class="s12-cell"><div class="s12-num" style="color:#c93400">4+</div><div class="s12-lbl">已接入渠道</div></div>
+    <div class="s12-cell"><div class="s12-num" style="color:#248a3d">9</div><div class="s12-lbl">ADR 条数</div></div>
+    <div class="s12-cell"><div class="s12-num" style="color:#0066cc">29</div><div class="s12-lbl">Spec 数量</div></div>
+    <div class="s12-cell"><div class="s12-num" style="color:#248a3d">4</div><div class="s12-lbl">记账场景数</div></div>
+  </div>
+</section>
+
+<!-- ============ 13 复盘与下一步 ============ -->
+<section class="slide" id="slide-14">
+  <div class="pnum">14 / 14</div>
+  <div class="h2">复盘与下一步</div>
+
+  <div class="s13-cols">
+    <div class="s13-col">
+      <h3 style="color:#d70015">踩过的坑</h3>
+      <p>退款编排与支付编排耦合过高，服务从 10 合并回 9</p>
+      <p>可观测接入偏晚，调试跨服务回调成本高</p>
+    </div>
+    <div class="s13-col">
+      <h3 style="color:#248a3d">下一步</h3>
+      <p>微信渠道接入</p>
+      <p>渠道差异的进一步抽象</p>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
