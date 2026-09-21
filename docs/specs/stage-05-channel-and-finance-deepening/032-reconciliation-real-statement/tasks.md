@@ -37,7 +37,7 @@
 - [x] T22 audit 侧人工收口端点 `POST /internal/audit/batches/{batchNo}/differences/{id}/resolve`（F7 关闭路径）；处置 RPC 失败 ⇒ 独立事务写 FAILED 台账 + 差异 ADJUST_FAILED，不静默吞
 - [x] T23 `AutoDispositionPolicy`（枚举 SMALL_CHANNEL_ONLY_SUSPEND + enabled/max-amount-minor 配置，默认双关）；run 后自动挂账：ADJUSTMENT 事件 + `audit_adjustments` 留痕（diff_no 回溯）+ recon 差异置 SUSPENDED/dispositionRef；指标 `reconciliation.autodisposition{policy,outcome}` + 日志 `difference_autodispose`
 - [x] T24 测试：策略门（超限/关闭/非 CHANNEL_ONLY 不动）、成功留痕、失败 ADJUST_FAILED 可见（TC 对应 AC-6）
-- [x] T24b 依赖 034 C-19（ledger 记账同事务优先）的回归重测：自动处置与 audit suspend/adjust 在 034 合入后的记账行为 —— **待 rebase 后验证**
+- [x] T24b 依赖 034 C-19（ledger 记账同事务优先）的回归重测：自动处置与 audit suspend/adjust 在 034 合入后的记账行为 —— **已验证（2026-09-21 合并 master(034) 后全量回归 + demo audit/reconciliation 场景实测，见 acceptance §2/§3）**
 
 ## 验收与收口
 
