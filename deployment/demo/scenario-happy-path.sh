@@ -12,7 +12,7 @@ wait_for_services
 echo "==> ① 解析种子 SKU（DEMO-SKU-101）真实 id"
 http GET "$CATALOG_URL/skus"
 assert_status 200 "SKU 列表"
-SKU_ID="$(echo "$BODY" | python -c "import json,sys;d=json.load(sys.stdin);m=[x for x in d if x.get('skuCode')=='DEMO-SKU-101'];print(m[0]['id'] if m else '')")"
+SKU_ID="$(echo "$BODY" | python3 -c "import json,sys;d=json.load(sys.stdin);m=[x for x in d if x.get('skuCode')=='DEMO-SKU-101'];print(m[0]['id'] if m else '')")"
 [ -n "$SKU_ID" ] || fail "未找到种子 SKU DEMO-SKU-101（请先 bash demo/reset.sh）"
 info "SKU_ID=$SKU_ID"
 
@@ -39,7 +39,7 @@ http POST "$DEMO_URL/mock-channel/callback" \
   "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"demo-ref-$ORDER_NO\",\"amountMinor\":9900,\"signMode\":\"VALID\"}"
 assert_status 200 "渠道回调受理"
 # 上游响应体在 body 字段内：{"upstreamStatus":200,"body":"{...payment json...}"}
-PAY_STATUS="$(echo "$BODY" | python -c "
+PAY_STATUS="$(echo "$BODY" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 p=json.loads(d['body'])
@@ -51,7 +51,7 @@ echo "==> ③ 重复回调被幂等吸收（ADR-0025 占位：验签不拦截；
 http POST "$DEMO_URL/mock-channel/callback" \
   "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"dup-$ORDER_NO\",\"amountMinor\":9900,\"signMode\":\"VALID\"}"
 assert_status 200 "重复成功回调仍受理"
-PAY_STATUS2="$(echo "$BODY" | python -c "
+PAY_STATUS2="$(echo "$BODY" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 p=json.loads(d['body'])

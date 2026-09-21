@@ -27,7 +27,7 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 ### 1.2 当前现状（Phase 0 — Foundation）
 
 - 架构基线已确认：**Spring Cloud 微服务**，按限界上下文划分（ADR-0001），技术栈 Java 21 + Spring Boot 3.x + MyBatis-Plus + Nacos + OpenFeign（ADR-0002）。
-- 已建 **10 个服务模块 + 3 个共享库**（见 §3），`gateway` 不在本 MVP 范围；`ledger-service`（8090）已按 `004-ledger` 实现并接入 payment/refund/settlement 三处复式记账（ADR-0008~0011 已于 2026-08-29 Accepted）。
+- 已建 **10 个服务模块 + 3 个共享库**（见 §3），`gateway` 不在本 MVP 范围；`ledger-service`（8090）已按 `004-ledger` 实现并接入 payment/refund/settlement 三处复式记账（ADR-0008~0011 已于 2026-08-29 Accepted）；2026-09-21 起（Feature 031，ADR-0077~0079）入站契约升级为 Accounting Event——调用方只报财务事实，科目与分录由账本 Posting Rule 决定（详见 `systems/ledger-service.md`）。
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
 - 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**均已落地**，Ledger 复式记账已接入，形成完整业务闭环（roadmap 主链走至 `014-seckill-and-cache`）。
 - **尚未引入**：真实支付渠道（当前 Mock Channel）、独立 MQ 中间件、API 网关、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现；熔断组件 Resilience4j 已在 payment-service 引入并保留）。
@@ -143,7 +143,7 @@ graph LR
 | Refund | Refund、Refund Item、Refund Decision | payment-service（退款域，见 [§8](systems/payment-service.md)） |
 | Fulfillment | Fulfillment（按 `order_item_no` 明细粒度） | fulfillment-service |
 | Entitlement | Entitlement、Grant、Consumption | entitlement-service |
-| Ledger | Posting、Entry（复式，借贷平衡 `A = N + F`） | ledger-service |
+| Ledger | AccountingEvent（入站契约）→ PostingRule → 两级科目（Definition/Instance）→ Posting、Entry（复式，借贷平衡）→ 余额投影/账期（ADR-0077~0079） | ledger-service |
 | Reconciliation | Batch、Match、Difference | reconciliation-service |
 | Settlement | Batch、Item、Adjustment | settlement-service |
 
@@ -183,7 +183,7 @@ graph LR
 | ~~refund-service~~ | Refund | **Feature 015 已并入 `payment-service`**（`com.payment.refund` 包，端口 8085 退役）；退款编排（渠道退款 + 权益撤销 + 对账）由 payment-service 提供 | 已并入（ADR-0016/0017/0018，[ADR-0064](../adr/0064-multi-payment-per-transaction.md)） |
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
-| ledger-service | Ledger | 复式记账（资金核心） | 已实现（`004-ledger` 前置，8090） |
+| ledger-service | Ledger | 复式记账（资金核心；031 起记账决策权归账本） | 已实现（`004-ledger` 前置 + `031` 重构，8090） |
 | reconciliation-service | Reconciliation | 异步对账（状态机全链路 + 周期 fixture） | 已实现（ADR-0019/0020/0021） |
 | settlement-service | Settlement | 结算批次、调整项、已确认事实闸门、收敛/关闭与结算侧记账（不真实出款） | 已实现（ADR-0022/0023 缺口补齐） |
 
