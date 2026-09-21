@@ -65,3 +65,11 @@ catalog:
   # 秒杀配额预扣（014，Redis Lua 原子）：只有 seed 过的 SKU 才走秒杀快速准入；未播种视为普通 SKU 直接放行。
   seckill:
     enabled: true
+
+# spec 034 T21：MQ 消费方的死信管理端点 /internal/mq/dlq（读/回放/清空）。
+# 启用但未配置 admin-token 时端点 503 锁死（同 payment resolve 先例：显式失败优于裸奔）。
+payment:
+  mq:
+    dlq-admin:
+      enabled: true
+      admin-token: ${MQ_DLQ_ADMIN_TOKEN:}

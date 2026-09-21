@@ -73,3 +73,11 @@ order:
     capacity: 50
     window-millis: 1000
     bucket: /orders
+
+# spec 034 T21：MQ 消费方的死信管理端点 /internal/mq/dlq（读/回放/清空）。
+# 启用但未配置 admin-token 时端点 503 锁死（同 payment resolve 先例：显式失败优于裸奔）。
+payment:
+  mq:
+    dlq-admin:
+      enabled: true
+      admin-token: ${MQ_DLQ_ADMIN_TOKEN:}
