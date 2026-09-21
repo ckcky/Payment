@@ -31,7 +31,8 @@ import org.springframework.web.util.ContentCachingResponseWrapper;
  *
  * <p>报文口径（D4）：GET 无 body 记 {@code req=-}；multipart / 非文本 content-type 只记
  * {@code <binary>} 占位；正文经 {@link SensitiveBodyMasker} 桩后按 {@code maxBodyBytes}
- * 截断并带省略标记；排除路径（默认 {@code /actuator/**}）在 {@link #shouldNotFilter} 直接放行。</p>
+ * 截断并带省略标记；排除路径（默认 {@code /actuator/**} 与 {@code /internal/channels/**}，
+ * spec 035 §10 C-1——渠道回调入口不落正文，密钥/完整报文不入日志）在 {@link #shouldNotFilter} 直接放行。</p>
  */
 public class AccessLogFilter extends OncePerRequestFilter {
 
