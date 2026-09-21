@@ -3,8 +3,9 @@
 # ADR-0082：失败恢复归属与补偿边界——出站失败台账 + 后置动作事务化 + Resilience4j 移除（Feature 034）
 
 > 承载 [spec 034-reliability-hardening](../specs/stage-05-channel-and-finance-deepening/034-reliability-hardening/spec.md) 的四条决策。
-> 状态：**🟡 Proposed（2026-09-21 提出，待负责人裁决）**——涉及 Constitution §Governance
-> 「人类决策边界」（资金路径行为变更、依赖增删、跨服务通知语义），**未 Accepted 前不得实现**。
+> 状态：**🟢 Accepted（2026-09-21 负责人裁决，按 spec 推荐方案批准）**——涉及 Constitution §Governance
+> 「人类决策边界」（资金路径行为变更、依赖增删、跨服务通知语义），
+> 裁决记录见 spec 034 §16 与本日 CHANGELOG。
 
 ---
 
