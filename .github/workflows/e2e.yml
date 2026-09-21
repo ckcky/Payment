@@ -173,6 +173,33 @@ jobs:
       - name: Run E2E (-De2e.env=ci)
         run: ./mvnw -B -pl deployment/e2e-tests test -De2e.env=ci
 
+      # ── spec 033 §13.1 / 033-E：demo 场景挂载 nightly（不重写为 Java，复用演示脚本权威）────
+      # 只挂离线可跑的五个场景（spec 033 §16 R6：涉沙箱的 routing 排除；limit/unknown
+      # 需要专用环境开关，维持手工口径）。demo/reset.sh 经 MYSQL_CONTAINER / REDIS_CONTAINER
+      # 适配 service container（033 改造，本地 compose 默认名不变）。
+      - name: Discover service containers for demo scripts
+        run: |
+          MYSQL_ID=$(docker ps --filter ancestor=mysql:8.0 --format '{{.ID}}' | head -n1)
+          REDIS_ID=$(docker ps --filter ancestor=redis:7 --format '{{.ID}}' | head -n1)
+          [ -n "$MYSQL_ID" ] || { echo "未发现 MySQL service container"; exit 1; }
+          [ -n "$REDIS_ID" ] || { echo "未发现 Redis service container"; exit 1; }
+          echo "MYSQL_CONTAINER=$MYSQL_ID" >> "$GITHUB_ENV"
+          echo "REDIS_CONTAINER=$REDIS_ID" >> "$GITHUB_ENV"
+
+      - name: Reset demo data & run offline demo scenarios
+        run: |
+          bash deployment/demo/reset.sh
+          for s in scenario-happy-path.sh scenario-audit.sh scenario-mq.sh scenario-reconciliation.sh scenario-refund.sh; do
+            echo "== demo scenario: $s =="
+            bash "deployment/demo/$s"
+          done
+
+      - name: Assert ACCESS_LOG presence (spec 033 §13.1)
+        run: |
+          hits=$(grep -l "ACCESS_LOG" logs/*.log | wc -l)
+          echo "含 ACCESS_LOG 记录的日志文件数：$hits"
+          [ "$hits" -ge 5 ] || { echo "ACCESS_LOG 缺失——请求日志链路异常"; exit 1; }
+
       - name: Upload surefire reports & failure dumps
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,3 +210,37 @@ jobs:
             deployment/e2e-tests/target/e2e-dump/
             logs/
           retention-days: 14
+
+  # ── spec 033 §12#4：顺序无关（可乱序）──────────────────────────────────
+  # 全量单元层以随机顺序重跑，检测测试间隐式依赖（共享静态状态 / 文件残留）。
+  # 只在 nightly 跑（比 alphabetical 慢、且失败复现依赖 surefire 打印的 runOrder）。
+  # 排除 real-db 组：该层由 verify.yml 的 real-db job（skip 即红）单独门禁，
+  # 这里不重复起容器，保持随机序 job 聚焦单元层顺序独立性。
+  # 失败时 surefire 会输出当次随机 runOrder，可据此本地复现。
+  verify-random-order:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify with random test order
+        run: >
+          ./mvnw -B verify -fae
+          -Dsurefire.runOrder=random
+          -DexcludedGroups=real-db
+          -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-random-order
+          path: '**/target/surefire-reports/'
+          retention-days: 7

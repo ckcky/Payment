@@ -3,8 +3,9 @@
 # ADR-0081：测试载体升级——真库 Testcontainers（仅测试作用域）+ schema 双路径可重放门禁 + RPC 边允许清单（Feature 033）
 
 > 承载 [spec 033-test-infrastructure](../specs/stage-05-channel-and-finance-deepening/033-test-infrastructure/spec.md) 的三条决策。
-> 状态：**🟡 Proposed（2026-09-21 提出，待负责人裁决）**——涉及 Constitution
-> §Engineering.3「不引入 Testcontainers」的**现行约束变更**（design-review §13 **H16**），**未 Accepted 前不得实现**。
+> 状态：**🟢 Accepted（2026-09-21 负责人裁决，按 spec 推荐方案批准）**——
+> 涉及 Constitution §Engineering.3「不引入 Testcontainers」的**现行约束变更**（design-review §13 **H16**），
+> H-033-1~H-033-5 全部按 spec 推荐方案批准；裁决记录见 spec 033 §16 与本日 CHANGELOG。
 
 ---
 

@@ -170,3 +170,34 @@ jobs:
             deployment/e2e-tests/target/surefire-reports/
             deployment/e2e-tests/target/e2e-dump/
           retention-days: 7
+
+  # spec 033 §13.1（ADR-0081 决策 1 + H-033-5 裁决：强制）：PR 真库层——
+  # 只跑 @Tag("real-db") 的 L2b 用例（当前 = test-infra 基座自证 + ledger 并发记账），
+  # 容器跨类复用（基座单例），GitHub runner 自带 Docker；**skip 即红**
+  #（-Drealdb.required=true：真库测试被跳过 = 假绿 = 门禁红，spec §13.3 禁假绿①）。
+  # 其余 L1/L2a 用例不在本 job（与上方 verify job 各司其职；既有 job 零改动，AC-4）。
+  real-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run @Tag("real-db") tests (skip = red)
+        run: |
+          ./mvnw -B -pl deployment/test-infra,ledger-service -am verify \
+            -Dgroups=real-db \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            -Drealdb.required=true
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-db-reports
+          path: |
+            **/target/surefire-reports/
+          retention-days: 7

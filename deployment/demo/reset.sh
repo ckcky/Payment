@@ -12,6 +12,14 @@ ROOT_DIR="$(cd "$HERE/../.." && pwd)"
 # shellcheck source=lib.sh
 source "$HERE/lib.sh"
 
+# 033-E（spec 033 / ADR-0081：nightly 挂载 demo 场景进 CI）CI 适配：
+# service container 没有 compose 固定容器名，workflow 探测后经环境变量注入；
+# 本地 compose 行为不变（默认名 payment-mysql / payment-redis）。
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-payment-mysql}"
+REDIS_CONTAINER="${REDIS_CONTAINER:-payment-redis}"
+db_mysql() { docker exec -i "$MYSQL_CONTAINER" mysql -uroot -proot "$@"; }
+redis_cli() { docker exec "$REDIS_CONTAINER" redis-cli "$@"; }
+
 SCHEMA_DIR="$ROOT_DIR/deployment/schema"
 # Feature 015（ADR-0064）后 refund 库已退役，退款表在 payment 库内，随 payment 一起清
 DATABASES=(catalog "order" payment fulfillment entitlement reconciliation settlement ledger)
@@ -22,7 +30,7 @@ echo "==> [1/3] 重建业务 Schema（重放 deployment/schema/*.sql + 清空业
 # 不属于全新初始化流程——reset 环境由 03-payment-schema.sql 直接建出最终表结构，
 # 误放进来会因 mysql 客户端未选库报 ERROR 1046 No database selected。
 for f in "$SCHEMA_DIR"/[0-9][0-9]-*.sql; do
-  docker exec -i payment-mysql mysql -uroot -proot < "$f"
+  db_mysql < "$f"
   echo "    applied $(basename "$f")"
 done
 
@@ -30,15 +38,15 @@ done
 # → refund_no(VARCHAR)，ADR-0063 收口（2026-09）。reset 用 CREATE TABLE IF NOT EXISTS，
 # 不会改造已存在表，故这里对存量表显式收敛一次；全新库已是 refund_no，检测到即跳过。
 for t in refund_items refund_post_process_attempts; do
-  old=$(docker exec -i payment-mysql mysql -uroot -proot -N -B -e \
+  old=$(db_mysql -N -B -e \
     "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='payment' AND table_name='$t' AND column_name='refund_id';" 2>/dev/null)
   [ "${old:-0}" = "1" ] || continue
   case "$t" in
     refund_items)
-      docker exec -i payment-mysql mysql -uroot -proot -e \
+      db_mysql -e \
         "USE \`payment\`; ALTER TABLE \`refund_items\` DROP INDEX idx_refund_items_refund_id, CHANGE COLUMN refund_id refund_no VARCHAR(32) NOT NULL, ADD INDEX idx_refund_items_refund_no (refund_no);" ;;
     refund_post_process_attempts)
-      docker exec -i payment-mysql mysql -uroot -proot -e \
+      db_mysql -e \
         "USE \`payment\`; ALTER TABLE \`refund_post_process_attempts\` DROP INDEX uk_rppa_refund_target, DROP INDEX idx_rppa_refund_id, CHANGE COLUMN refund_id refund_no VARCHAR(32) NOT NULL, ADD UNIQUE KEY uk_rppa_refund_target (refund_no, target), ADD INDEX idx_rppa_refund_no (refund_no);" ;;
   esac
   echo "    migrated $t: refund_id -> refund_no"
@@ -52,12 +60,12 @@ TRUNC_DIR="${TMPDIR:-/tmp}/paymentarch-reset.$$"
 mkdir -p "$TRUNC_DIR"
 for db in "${DATABASES[@]}"; do
   SQL="SELECT CONCAT('TRUNCATE TABLE \`', table_name, '\`;') FROM information_schema.tables WHERE table_schema='$db';"
-  if ! docker exec -i payment-mysql mysql -uroot -proot -N -B -e "$SQL" > "$TRUNC_DIR/$db.sql" 2>/dev/null; then
-    fail "无法连接 MySQL 容器 payment-mysql（先跑 deployment/start-all.sh）"
+  if ! db_mysql -N -B -e "$SQL" > "$TRUNC_DIR/$db.sql" 2>/dev/null; then
+    fail "无法连接 MySQL 容器 ${MYSQL_CONTAINER}（先跑 deployment/start-all.sh；CI 场景确认已注入 MYSQL_CONTAINER）"
   fi
   if [ -s "$TRUNC_DIR/$db.sql" ]; then
     { echo "SET FOREIGN_KEY_CHECKS=0;"; echo "USE \`$db\`;"; cat "$TRUNC_DIR/$db.sql"; } \
-      | docker exec -i payment-mysql mysql -uroot -proot
+      | db_mysql
     echo "    truncated $db"
   else
     echo "    truncated $db (无表，跳过)"
@@ -70,7 +78,7 @@ done
 # 09-ledger-schema.sql 幂等（CREATE IF NOT EXISTS + INSERT ON DUPLICATE），重放只回灌目录，
 # 已 TRUNCATE 的业务表（postings / ledger_entries / account_balances / ledger_periods）保持清空。
 echo "    reseed ledger chart-of-accounts（spec 031）"
-docker exec -i payment-mysql mysql -uroot -proot < "$SCHEMA_DIR/09-ledger-schema.sql"
+db_mysql < "$SCHEMA_DIR/09-ledger-schema.sql"
 
 echo "==> [2/3] 等待服务健康"
 wait_for_services
@@ -125,7 +133,7 @@ create_sku() {
 # --- 清理 Redis 陈旧秒杀配额键（必须在播种前）---
 # 秒杀准入按「键存在=秒杀品」判断：历史残留的 seckill:sku:1=0 会让普通 SKU 被误判
 # 秒杀配额耗尽（409 seckill stock insufficient）。复位时先清空再重播种 103。
-docker exec payment-redis redis-cli EVAL "for _,k in ipairs(redis.call('keys','seckill:sku:*')) do redis.call('del',k) end" 0 >/dev/null 2>&1 || true
+redis_cli EVAL "for _,k in ipairs(redis.call('keys','seckill:sku:*')) do redis.call('del',k) end" 0 >/dev/null 2>&1 || true
 
 create_sku "DEMO-SKU-101" "monthly-membership"   9900     100
 create_sku "DEMO-SKU-102" "annual-membership" 129000     100

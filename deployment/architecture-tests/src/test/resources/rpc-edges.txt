@@ -1,0 +1,30 @@
+# rpc-edges.txt —— 运行时 RPC 边允许清单（契约资产，spec 033 §7 / ADR-0081 决策 3）
+#
+# 来源：deployment/architecture-tests RpcEdgeAllowListTest 静态抽取各服务 target/classes 中
+# 带 @FeignClient 的接口，产出三元组 `caller -> target [clientFqcn]`，与本文件**逐行全等**。
+# 格式：每行一条边；`#` 开头为注释；空行忽略；比对前排序（顺序不敏感、内容敏感）。
+#
+# 变更纪律（spec 033 §16 R5）：新增/删除任何一行（= 新增/移除一条运行时调用边或客户端类）
+# MUST 在 PR 描述中说明「为何需要这条边」，并同步 technical-solution.md 调用图。
+# 已知环：order -> payment 与 payment -> order 并存（backlog #4 / design-review M10 在案，
+# 编排者模式的显式接受成本——它出现在清单里即「可见、可评审」，由本文件守增量）。
+#
+# 口径：caller = 物理拥有客户端的部署单元（com.payment.refund.. 记 payment，015/P3 合并）；
+# target = 注解 name 去 -service 后缀；同一 (caller,target) 下新增**方法**不改本文件
+#（接口形状由 L3 InternalApiSnapshotTest 守卫），新增**客户端类/边**必改本文件。
+
+fulfillment -> entitlement [com.payment.fulfillment.infra.client.EntitlementFeignClient]
+order -> catalog [com.payment.order.infra.client.CatalogFeignClient]
+order -> fulfillment [com.payment.order.infra.client.FulfillmentFeignClient]
+order -> payment [com.payment.order.infra.client.PaymentFeignClient]
+payment -> ledger [com.payment.payment.infra.client.LedgerFeignClient]
+payment -> ledger [com.payment.refund.infra.client.LedgerFeignClient]
+payment -> order [com.payment.payment.infra.client.OrderFeignClient]
+reconciliation -> ledger [com.payment.reconciliation.audit.infra.LedgerAuditFeignClient]
+reconciliation -> payment [com.payment.reconciliation.infra.client.PaymentFactsFeignClient]
+reconciliation -> payment [com.payment.reconciliation.infra.client.RefundFactsFeignClient]
+reconciliation -> settlement [com.payment.reconciliation.audit.infra.SettlementAuditFeignClient]
+settlement -> ledger [com.payment.settlement.infra.client.LedgerFeignClient]
+settlement -> merchant [com.payment.settlement.infra.client.MerchantFeignClient]
+settlement -> reconciliation [com.payment.settlement.infra.client.AuditGateFeignClient]
+settlement -> reconciliation [com.payment.settlement.infra.client.ReconciliationFeignClient]

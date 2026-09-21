@@ -1,0 +1,47 @@
+name: schema
+
+# spec 033 §13.1（ADR-0081 决策 2 / H-033-2）：schema 门禁进 PR 快层——
+#   schema-lint   构建期静态断言（L-1 方言 / L-2 库集合 / L-3 守卫），秒级；
+#   schema-replay 双路径可重放（A 空库全量 ×2 幂等自检 + B 存量基线→增量演进，快照 diff 为空）。
+# 只起 MySQL、不起服务（廉价）；本地跑法见脚本头注释（schema-replay.sh / schema-lint.sh）。
+on:
+  push:
+  pull_request:
+
+jobs:
+  schema-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: L-1/L-2/L-3 静态断言（违规则逐条打印并 exit 1）
+        run: bash deployment/schema-lint.sh
+
+  schema-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # 空实例前置：service container 保证路径 A 从真正的空库起步（本地自证用 docker run 临时实例）
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 60); do
+            mysqladmin ping -h 127.0.0.1 -uroot -proot --silent && break || sleep 2
+          done
+          mysqladmin ping -h 127.0.0.1 -uroot -proot --silent || { echo "MySQL 未就绪"; exit 1; }
+
+      - name: 双路径重放（A 幂等自检 + B 基线演进，快照 diff 必须为空）
+        run: bash deployment/schema-replay.sh 127.0.0.1 3306 root root

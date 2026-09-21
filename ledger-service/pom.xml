@@ -67,7 +67,16 @@
         </dependency>
         <!-- spec 030 / T11：并发记账「唯一约束吸收」的**真库**验证（Testcontainers-MySQL）。
              版本由根 pom 的 testcontainers-bom 统一管理。
-             本机无 Docker 守护进程时该测试类整体 skip（不 fail），门禁不假红。 -->
+             本机无 Docker 守护进程时该测试类整体 skip（不 fail），门禁不假红。
+             spec 033 / ADR-0081：真库载体已泛化为共享基座 test-infra（容器生命周期 /
+             SchemaBootstrap 单一来源装配 / Docker 降级契约均由基座承接），本模块只留用例本体；
+             testcontainers 直依赖保留（基座经 test scope 传递亦可，显式声明便于 IDE 导航）。 -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>test-infra</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>mysql</artifactId>
