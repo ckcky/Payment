@@ -63,7 +63,7 @@ class MetricsCardinalityTest {
             "module", "reason", "op", "result", "topic", "group", "source", "phase",
             "kind", "cause", "target", "status", "state", "scope", "bucket", "period",
             "periods", "routed", "eventType", "channel", "channelCode", "caller",
-            "currency", "window", "policy", "orderStatus", "severity");
+            "currency", "window", "policy", "orderStatus", "severity", "outcome");
 
     /**
      * 基线棘轮：counter/timer 上带 {@code period} 标签的既有站点数（限额子域窗口枚举 10 处

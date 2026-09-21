@@ -149,6 +149,40 @@ class AccessLogFilterTest {
     }
 
     @Test
+    void uriNormalizedToBestMatchingPatternWhenRouted() throws ServletException, IOException {
+        // spec 035 §6.2 纪律 2：命中 Spring MVC 路由后 uri 记 {ref} 模式，不落具体单号
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/internal/payments/PM20260922001/channel-callback");
+        request.setContentType("application/json");
+        request.setContent("{\"status\":\"SUCCESS\"}".getBytes(StandardCharsets.UTF_8));
+        FilterChain chain = (req, resp) -> {
+            // DispatcherServlet 命中 handler 后写入的属性——测试在链路内模拟
+            req.setAttribute(org.springframework.web.servlet.HandlerMapping
+                    .BEST_MATCHING_PATTERN_ATTRIBUTE,
+                    "/internal/payments/{ref}/channel-callback");
+        };
+
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+        assertThat(appender.list).hasSize(1);
+        String msg = appender.list.get(0).getFormattedMessage();
+        assertThat(msg).contains("uri=/internal/payments/{ref}/channel-callback")
+                .doesNotContain("PM20260922001");
+    }
+
+    @Test
+    void unroutedRequestFallsBackToRawUri() throws ServletException, IOException {
+        // 404/静态资源等未命中路由：无 best-matching 属性 ⇒ 回落原始 URI（可接受，路径即事实）
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/nope/PM123");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setStatus(404);
+        filter.doFilter(request, response, (req, resp) -> {
+        });
+
+        assertThat(appender.list.get(0).getFormattedMessage()).contains("uri=/nope/PM123");
+    }
+
+    @Test
     void exceptionPathStillLogsAccessAndPropagates() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/boom");
         request.setContentType("application/json");

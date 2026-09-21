@@ -254,6 +254,7 @@ RSA2 验签（spec 030）。因此：
 | （无独立 gauge）**对账积压** | PromQL 差值 | — | `Σdifference − Σdifference_resolved` = 未收口存量（035 plan §3 裁决：不新增 `reconciliation_pending` 埋点，**偏差记录**） | **A-13 ReconciliationPendingAging** |
 | `reconciliation_statement_import_total` | Counter | `channel`, `result`(`accepted`/`rejected`/`duplicate`) | 账单导入健康度（032） | **A-14 StatementSourceDegraded** |
 | `reconciliation_statement_unavailable_total` | Counter | `channel` | 无可用 NORMALIZED 导入（**取代已退役的 sample.csv 静默回退**，`statement_fallback` 不再存在） | **A-14**（>0 即告警） |
+| `reconciliation_autodisposition_total` | Counter | `policy`(默认仅 `amount-equal-auto`), `outcome`(`succeeded`/`failed`) | 自动处置引擎执行结果（032，默认 OFF） | 观测（启用后 failed 突增=规则误伤信号） |
 | `reconciliation_difference_amount_minor_total` | Counter | 金额（minor 整数） | 差异金额累积 | 观测（看板 对账 行） |
 
 **Settlement 结算（Owner: settlement）**
