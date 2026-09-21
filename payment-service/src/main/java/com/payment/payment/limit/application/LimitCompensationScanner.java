@@ -48,6 +48,12 @@ public class LimitCompensationScanner {
     private final LimitSettlementService settlementService;
     private final LimitProperties properties;
     private final BusinessMetrics metrics;
+    /**
+     * spec 035 §5.2 / A-19：在途泄漏 Gauge——最近一轮「payment 已终态但缺终态流水」的<b>残留</b>数
+     * （补偿成功即回落）。正常应趋 0；持续 >0 = 补偿不收敛，用户额度被错账占用。
+     */
+    private final java.util.concurrent.atomic.AtomicLong inflightLeak =
+            new java.util.concurrent.atomic.AtomicLong();
 
     public LimitCompensationScanner(PaymentRepository paymentRepository,
                                     LimitOperationRepository operationRepository,
@@ -59,6 +65,8 @@ public class LimitCompensationScanner {
         this.settlementService = settlementService;
         this.properties = properties;
         this.metrics = metrics;
+        metrics.gauge("limit_inflight_leak", () -> inflightLeak.get(),
+                "module", "payment", "window", "settle_missing");
     }
 
     /**
@@ -72,6 +80,7 @@ public class LimitCompensationScanner {
         }
         List<Payment> candidates = findCandidates();
         if (candidates.isEmpty()) {
+            inflightLeak.set(0);
             return 0;
         }
         int compensated = 0;
@@ -95,6 +104,7 @@ public class LimitCompensationScanner {
                 metrics.counter("payment.limit_compensation_failed", 1.0);
             }
         }
+        inflightLeak.set(Math.max(0, candidates.size() - compensated));
         return compensated;
     }
 
