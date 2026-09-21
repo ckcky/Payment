@@ -6,6 +6,35 @@
 
 ---
 
+## [2026-09-21] docs：031 Ledger / Accounting 地基收敛（审计 → Spec → ADR-0077~0079，纯文档不动代码）
+
+**性质**：架构审计与设计收敛（docs-only）。**未改任何业务代码、未建 migration、未实现功能**。
+
+- **审计**：以代码为事实来源走查 ledger-service 与四个记账调用方，确认核心越界——
+  **记账决策权在上游**（调用方组分录、传 accountId/direction、`netMinor = amountMinor - feeMinor` 在上游算，
+  `FeignLedgerPostingGateway` 等硬编码科目常量），违反「上游告诉账务发生了什么，账务系统决定应该怎么记」。
+- **新 Spec**：[`031-ledger-accounting-foundation/spec.md`](docs/specs/stage-05-channel-and-finance-deepening/031-ledger-accounting-foundation/spec.md)
+  （编号勘误：stage-design §9.2 原写 `032-ledger-account-view` 有误，账务地基 = **031**）。
+  固化十项架构原则与 `Accounting Event → Posting Rule → Posting Line → Account Resolver → Account →
+  LedgerTransaction → LedgerEntry` 管线；六类事件的正式记账规则表（PAYMENT_CAPTURE / REFUND /
+  CHANNEL_SETTLEMENT / MERCHANT_SETTLEMENT / CHANNEL_FEE / ADJUSTMENT）；费用口径
+  Gross / MerchantFee / ChannelFee / MerchantNet / ChannelNet（费率计算**不属于** Ledger）；
+  科目 Definition+Instance 两级模型与**迁移式改造**（`accounts` 表就地演进，id=3 就地更名 FEE_REVENUE，
+  不留两套并存的冲突模型）；余额 Projection（方案②同事务累加）、期间/关账、调用方侧 pending 台账。
+- **新 ADR**：`docs/adr/0077-ledger-accounting-foundation-decisions.md`（ADR-0077 契约事件化 /
+  ADR-0078 两级科目迁移 / ADR-0079 余额投影与期间），均 🟡 Proposed。
+- **旧 ADR 标注**：ADR-0008 **Partially Superseded by 0077/0078**（被取代的仅「分录由调用方组装」与
+  「固定 5 科目枚举」两条）；ADR-0009/0011 契约与边界描述标注待修订（语义不变）；
+  索引与编号水位同步（下一可用编号 ADR-0080）。
+- **stage-design 收口**：§4.2 缺口重写为「已收敛为 031 Spec + ADR-0077~0079」（新增 G0），
+  §4.4 登记 L-0（记账决策权在上游，🔴），§9.2/§9.3 Feature 矩阵与决策表同步。
+
+**下一步**：负责人裁决 D-1~D-7（契约一刀切换 / 科目表变更 / schema 变更含 `payments.merchant_id` /
+负净额反向分录 / 存量数据口径）→ ADR 转 Accepted → `/speckit-plan 031`
+（031-A 边界地基 / 031-B 余额·期间·台账，两批交付）。
+
+---
+
 ## [2026-09-20] fix：Payment / Channel 边界复审的 4 项实现级修复（FIX-1~FIX-4）
 
 **性质**：架构边界修复（非 spec 变更、非模型重设计）。来源是当天对 030 的

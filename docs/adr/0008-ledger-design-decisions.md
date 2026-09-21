@@ -12,7 +12,7 @@
 <a id="adr-0008"></a>
 ## ADR-0008: Ledger 数据模型（复式记账 + 科目/分录结构）
 
-- **状态**：**Accepted**（2026-08-29 负责人确认）
+- **状态**：**Accepted**（2026-08-29 负责人确认）；⚠️ **Partially Superseded by [ADR-0077 / ADR-0078](0077-ledger-accounting-foundation-decisions.md)（🟡 Proposed，2026-09-21 提出，待裁决）**——被取代的仅是「分录由调用方组装传入」与「固定 5 科目枚举」两条；复式结构、平衡门禁、append-only、幂等范式**继续有效**。裁决落地前本条仍为现行事实。
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec FR-001~FR-003、data-model.md）
@@ -53,7 +53,7 @@ Constitution §II.3 规定「任何资金变动 MUST 经 ledger-service 复式�
 <a id="adr-0009"></a>
 ## ADR-0009: 记账触发与一致性（同步 RPC 幂等记账 + 失败兜底）
 
-- **状态**：**Accepted**（2026-08-29 负责人确认）
+- **状态**：**Accepted**（2026-08-29 负责人确认）；⚠️ **契约描述待 [ADR-0077](0077-ledger-accounting-foundation-decisions.md)（Proposed）修订**——「RPC 携带调用方组装的 entries + 幂等键」将改为「携带 Accounting Event、幂等键由 Ledger 派生」；触发时机 / 同步 RPC / 失败不回滚 / UNKNOWN 不记账**四条语义不变**。
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec FR-006、FR-010；data-model.md §6）
@@ -137,7 +137,7 @@ Constitution §II.2 要求「封装 `Money` 值对象（金额+币种），禁�
 <a id="adr-0011"></a>
 ## ADR-0011: MVP 记账范围（支付 / 退款 / 结算哪些首批）
 
-- **状态**：**Accepted**（2026-08-29 负责人确认）
+- **状态**：**Accepted**（2026-08-29 负责人确认）；⚠️ **边界待 [ADR-0078](0077-ledger-accounting-foundation-decisions.md)（Proposed）修订**：本条排除的「渠道清算**科目**」（CHANNEL_RECEIVABLE / BANK_CASH / CHANNEL_FEE_EXPENSE）随 031 引入（含事件契约与规则，无真实产生链路）；渠道清算**链路**（真实账单驱动 CHANNEL_SETTLEMENT 记账）仍延后至 032+。
 - **日期**：2026-08-28
 - **决策者**：人类（项目 Owner）
 - **关联 Feature**：`004-ledger`（spec US1~US3；data-model.md §5）

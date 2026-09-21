@@ -73,7 +73,8 @@
 > 结论：**stage-design 方向通过，需修订后生效**；进入实现前须先完成「文档收口 + 前置一致性收口（B1~B7）」两个门。
 
 - [030-channel-contract-sandbox-callback](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/) —— 🟢 **Spec v1.1 + Plan 三件已就绪，待开工**；ADR-0075 / ADR-0076 已转 Accepted。⚠️ 本编号占用 `030`（原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 已于 2026-09-19 删除，设计被本 Feature 全量吸收，见 [spec §0.3](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)）。
+- [031-ledger-accounting-foundation](stage-05-channel-and-finance-deepening/031-ledger-accounting-foundation/) —— 🟡 **Spec v1.0（2026-09-21，Ledger/Accounting 审计收敛产物）**：Accounting Event + Posting Rule + 两级科目 + 余额投影/期间/待记账台账；载体决策 [ADR-0077~0079](../adr/0077-ledger-accounting-foundation-decisions.md)（**Proposed，待负责人裁决 D-1~D-7 后方可 plan/implement**）。⚠️ 编号勘误：stage-design §9.2 旧名 `032-ledger-account-view` 作废，后续 Feature 顺移（032=对账、033=测试、034=可靠性、035=可观测，与 design-review §12 对齐），已随本条回写。
 
-> ⚠️ **状态说明**：该阶段**其余 Feature 仍为提案**，尚未分配 Feature 编号、未同步 `roadmap.md`；阶段命名与
-> **后续 Feature 编号重排**（是否顺移一位）属宪法 §Governance 人类决策边界，须负责人确认后本索引与 roadmap 才视为生效。
-> `stage-design.md` / `design-review.md` 均为 **Draft / 提案**，**不是** L0 当前系统事实源，**不产生**任何已生效决策。
+> ⚠️ **状态说明**：`031` 编号与范围已由负责人 2026-09-21 裁决（见 spec 031 §0.2）；**其余 Feature 仍为提案**。
+> `stage-design.md` / `design-review.md` 均为 **Draft / 提案**，**不是** L0 当前系统事实源，**不产生**任何已生效决策；
+> `roadmap.md` 的阶段切换与 Current Status 回写在 031 ADR 转 Accepted 时进行。

@@ -182,7 +182,7 @@
 | 渠道模态 | ✅ 新增 | `X-Dye-Tag` 全链路染色 + `payment_attempts.channel_mode` 落库 | ADR-0076 |
 | 渠道实现 | ✅ 新增 | `ALIPAY` 升级双模态；`AlipayGateway` 端口收口 SDK | ADR-0076 R5/R6 |
 | 回调入站 | ✅ 新增 | 支付宝 RSA2 专用端点，不复用 HMAC 过滤器 | ADR-0076 R7 |
-| 账务 | ✅ 加深 | 科目余额视图 / 期间与试算平衡 / 待记账清单 | 本文件 §4（**待确认**） |
+| 账务 | ✅ 加深 | **记账决策权收口（Event + Rule + 两级科目，§4.2 G0）**/ 科目余额视图 / 期间与试算平衡 / 待记账清单 | 本文件 §4.2（**已收敛 031 Spec；ADR-0077~0079 Proposed 待裁决**） |
 | 对账 | ✅ 加深 | 真实账单接入 / 商户维度 / 差异处置策略化 | 本文件 §5（**待确认**） |
 | 结算 | ✅ 加深 | 出款边界显式化（仍不真实出款）/ 结算报表 | 本文件 §5（**待确认**） |
 | 部署 | ❌ 不变 | 继续 Compose 双模式，**不做 K8s** | ADR-0070 |
@@ -340,37 +340,44 @@ AlipayChannelAdapter.charge(req):
 | 币种 | **仅 CNY**；`currency` 维度已建模（按币种隔离借贷） |
 | 测试 | 6 个测试类覆盖 SC-001~005 + FR-004；**无 Testcontainers 集成测试**（领域/应用层走 `InMemoryLedgerRepository`，真库并发未覆盖） |
 
-### 4.2 目标态【待确认】
+### 4.2 目标态【已收敛为 031 Spec + ADR-0077~0079（Proposed），2026-09-21】
 
-> 以下四项均为**新增能力**，不改变任何既有分录模板与不变量。是否立项、优先级、范围由负责人裁决。
+> **收敛记录（2026-09-21）**：本节原 G1~G4 提案已随负责人锁定业务模型（**平台代商户收款**：支付成功形成「对渠道的应收 + 对商户的应付」，而非平台现金）与编号裁决（Feature = **031**，旧名 `032-ledger-account-view` 作废），收敛为
+> [spec 031-ledger-accounting-foundation](031-ledger-accounting-foundation/spec.md) 与 [ADR-0077~0079](../../adr/0077-ledger-accounting-foundation-decisions.md)（🟡 Proposed）。
+> **新增前置地基 G0**：原 G1~G3 建立在「调用方组装原始分录」的现状契约上，会把边界缺陷固化——收敛后先立事件与规则地基，余额/期间/台账在其上。ADR 未全部 Accepted 前以下仍为【待确认】。
 
-**G1. 科目余额视图（从「分录」到「账」）**
+**G0. 记账决策权收口：Accounting Event + Posting Rule + 两级科目（新增，031-A）**
 
-- 新增**读模型**（不改分录表）：按 `account_id + currency` 聚合 `sum(DEBIT) − sum(CREDIT)`，
-  暴露 `GET /internal/ledger/accounts/{id}/balance?currency=` 与 `GET /internal/ledger/trial-balance`；
-- **实现取舍待确认**：① 实时聚合 `ledger_entries`（简单、慢）；② 余额表 + 记账时同步更新（快、需保证与分录同事务）。
-  **推荐 ②**，因为同事务可保证「余额 = 分录累计」永不漂移，且试算平衡可直接查余额表；
-- **不变量**：`trial_balance` 全科目借贷合计 MUST 恒等（各币种独立校验），不等即 `BALANCE_BREAK`。
+- **管道**：`AccountingEvent → PostingRule(代码 Strategy) → PostingLine → AccountResolver → Account Instance → LedgerTransaction + LedgerEntry`；
+- **边界十原则**（全文见 spec 031 §3）：上游只陈述已确认财务事实（gross / merchantFee / channelFee / merchantId / channelCode，金额均已算好）；**不感知科目、不创建分录、不定借贷**；Ledger **不算费率、不查费率**；方向与分录结构由规则推导；
+- **事件六类**：`PAYMENT_CAPTURE / REFUND / CHANNEL_FEE / CHANNEL_SETTLEMENT / MERCHANT_SETTLEMENT / ADJUSTMENT`；**Payment ≠ LedgerTransaction**（1:N，禁 1:1 假设）；
+- **科目两级**：Definition（类型目录，表化 + seed 受 ADR 纪律）≠ Instance（`definition + owner_type/owner_id/channel + currency`）；新增 `CHANNEL_RECEIVABLE`（按渠道分户）/ `BANK_CASH` / `CHANNEL_FEE_EXPENSE`，`MERCHANT_PAYABLE` 按商户分户，`CUSTOMER_CASH` 判 LEGACY——**迁移式改造，`accounts` 表就地演进，不与旧枚举模型并存**；
+- **幂等升级**：键由 Ledger 派生 `{eventType}:{sourceId}` + 新增 `uk(event_type, source_id)`，根治双前缀类缺陷（design-review Q2 的结构化收口）；
+- **不做**：Rule DSL、规则配置平台、科目管理界面、费率计算链路（上游后续 Feature）、多币种/税务/FX/ERP/多法人。
+- 案例锚点（验收断言）：gross 100.00 / mFee 0.80 / cFee 0.60 ⇒ 渠道应收 99.40、商户应付 99.20、费收入 0.80、渠道费支出 0.60（spec 031 §2/§7.1）。
 
-**G2. 期间与试算平衡**
+**G1. 科目余额视图（从「分录」到「账」，031-B）**
 
-- 引入**会计期间**概念（`period` = `YYYY-MM` 或 `YYYY-MM-DD`），`postings` 加 `period` 列（可空，落库时按 `created_at` 派生）；
-- 提供「期间试算平衡表」：期初余额 + 本期借贷发生额 + 期末余额，跨期勾稽；
-- **期末关账**：关账后该期间 MUST NOT 接受新分录（`POST /postings` 校验 `period` 是否已关），
-  更正只能通过**下期反向分录**（与「分录不可变」一致）。
+- **裁决请求（ADR-0079）**：取原推荐方案②——新增 `account_balances` **投影表**，与 postings/entries **同一本地事务**原子累加；`ledger_entries` 恒为 Source of Truth，投影可校验（试算平衡 + 「投影 = Σentries」对账）、可 rebuild（管理端全量重算）；
+- 端点：`GET /accounts/{id}/balance`、`GET /balances`（商户/渠道分户）、`GET /trial-balance`；`BalanceChecker.accountBalance` 已存在但未暴露的现状成本缺口一并收口；
+- **不变量**：试算平衡全科目借贷合计恒等（各币种独立），不等即 `BALANCE_BREAK` 并联动结算硬拦（ADR-0065 分级门禁）。
 
-**G3. 待记账清单（记账失败的可追踪载体）**
+**G2. 期间与试算平衡（031-B）**
 
-- **现状缺口**：记账 RPC 失败只记指标 + 告警，「哪一笔没记上」没有落地载体，靠 T+1 对账事后发现；
-- **目标**：新增 `pending_postings` 表（来源类型 / 来源单号 / 幂等键 / 失败原因 / 重试次数 / 状态），
-  由**业务侧**在记账失败时写入，提供 `GET /internal/ledger/pending` 查询与补偿重试入口；
-- **红线**：清单是**补偿辅助**，不是资金事实源——账务事实**恒以 `postings` 为准**。
+- `postings` 加 `period`（按 postedAt 派生，NOT NULL）+ `posted_at`；`ledger_periods` 关账表；
+- 期间试算平衡表：期初 + 本期发生 = 期末，跨期勾稽（账表核对数据源；032 的事实期间过滤建立在此口径上）；
+- **期末关账**：CLOSED 期间拒收**一切**新事件（含 ADJUSTMENT），更正走下期反向分录。
 
-**G4. 多币种与科目扩展**
+**G3. 待记账清单（031-B，吸收 design-review C-09/H2）**
 
-- 多币种：`currency` 维度已建模，但当前无跨币种折算需求。**触发条件**：出现第一笔非 CNY 业务；
-  届时 MUST 另立 ADR（跨币种折算涉及汇率来源、折算时点、汇兑损益科目——属人类决策边界）；
-- 科目扩展：新增科目 MUST 走 ADR（科目表是账务语义的一部分）。
+- 记账失败落**调用方侧** `pending_postings` 台账（事件载荷快照 + 退避重试 + 人工兜底）；Ledger 提供 `(eventType, sourceId)` 回查供补偿核对；
+- **红线不变**：清单是补偿辅助，账务事实恒以 postings 为准；`MISSING_POSTING` 审计仍为最后防线。
+- 顺带收编：M1（settlement sourceId 数值 batchId → `batchNo`）、H3/C-07（负净额批次改反向分录，行为变更需裁决）。
+
+**G4. 多币种与科目扩展（触发条件不变）**
+
+- 多币种触发条件与另立 ADR 要求不变；
+- 科目扩展纪律由本收敛**首次履行**：新增 3 科目 + 更名 1 科目即 ADR-0078 的裁决内容。
 
 ### 4.3 记账边界与一致性（保持不变）
 
@@ -383,6 +390,7 @@ AlipayChannelAdapter.charge(req):
 
 | # | 缺口 | 严重度 | 归属 |
 |---|---|---|---|
+| L-0 | **记账决策权在上游**：四方网关硬编码科目 ID 与借贷方向、毛/净轧差在调用方（2026-09-21 审计 P0） | 🔴 | **G0**（031-A） |
 | L-1 | 无科目余额视图（只有全局借贷差额 `/balance`） | 🟠 | G1 |
 | L-2 | 无期间、无试算平衡表、无关账 | 🟠 | G2 |
 | L-3 | 记账失败无「待记账清单」载体 | 🟠 | G3 |
@@ -656,16 +664,18 @@ AlipayChannelAdapter.charge(req):
 
 > 水位复核方法见 `.workbuddy/memory/MEMORY.md`：`git fetch origin` + `git ls-tree origin/master -- docs/adr docs/specs`
 > + 查全部远端分支 / worktree。当前 `030` 已占用，ADR 内部号 `0075` / `0076` 已占用（Proposed）。
+> **✅ 编号裁决（2026-09-21 负责人）**：账务 Feature = **031**（本表原写 `032-ledger-account-view` 为编号误，已勘误；
+> 后续 Feature 相应顺移，与 `design-review.md` §12 拆分表对齐）。
 
 | 序 | Feature（建议名） | 范围 | 依赖 | 类型 |
 |---|---|---|---|---|
 | 0 | **文档收口**（非 Feature，先做） | 修 §1.4 的 D-1~D-6 六项漂移；ADR-0075/0076 登记进 README 两张表 + traceability | — | docs-only，可直推 master |
 | 1 | `030-channel-contract-sandbox-callback` | **渠道契约实现轮**：统一契约 + 类型化凭证 + 染色 + 模态落库 + 支付宝沙箱适配器 + notify 端点 + demo 开关 | ADR-0075/0076 ✅ **已转 Accepted** | 代码（**Spec + Plan 已就绪**） |
-| 2 | `032-ledger-account-view` | §4 G1（科目余额视图）+ G2（期间与试算平衡）+ G3（待记账清单） | 031 无强依赖，可并行 | 代码 + **Schema 变更** |
-| 3 | `033-reconciliation-real-statement` | §5 R1（真实账单来源）+ R2（**N1 商户维度**）+ R4（差异处置策略化） | 涉及 `common-dto` 变更 | 代码 + **跨服务 API 变更** |
-| 4 | `034-test-infrastructure` | §8 T1（Testcontainers 渐进）+ T2（迁移可重放门禁）+ T3（ArchUnit RPC 环） | 无 | 工程 |
-| 5 | `035-reliability-hardening` | §6 B1（熔断裁决）+ B2（UNKNOWN 分级）+ B3（幂等键治理）+ B4（后置失败台账） | B1 须先裁决 | 代码 + **行为变更** |
-| 6 | `036-observability-slo` | §7 O1（SLO 落地）+ O2（告警补齐）+ O3（密钥不入日志约束） | 依赖 O1 目标值确认 | 配置 + 少量代码 |
+| 2 | `031-ledger-accounting-foundation` | §4.2 **G0（Event + Rule + 两级科目）**+ G1（余额投影）+ G2（期间与试算平衡）+ G3（待记账台账，含 M1/H3 收编） | 030 完成；**ADR-0077~0079 待裁决**（H6/H12/D-1~D-7） | 代码 + **Schema 变更**（**Spec v1.0 已就绪**，[spec](031-ledger-accounting-foundation/spec.md)） |
+| 3 | `032-reconciliation-real-statement` | §5 R1（真实账单来源）+ R2（**N1 商户维度**，其中 `merchantId` 事实链前置已随 031 D-4 落）+ R4（差异处置策略化） | 涉及 `common-dto` 变更 | 代码 + **跨服务 API 变更** |
+| 4 | `033-test-infrastructure` | §8 T1（Testcontainers 渐进）+ T2（迁移可重放门禁）+ T3（ArchUnit RPC 环） | 无（**应与 031/032 并行**——其真库并发断言依赖本项） | 工程 |
+| 5 | `034-reliability-hardening` | §6 B1（熔断裁决）+ B2（UNKNOWN 分级）+ B3（幂等键治理）+ B4（后置失败台账，复用 031 G3 模式） | B1 须先裁决 | 代码 + **行为变更** |
+| 6 | `035-observability-slo` | §7 O1（SLO 落地）+ O2（告警补齐）+ O3（密钥不入日志约束） | 依赖 O1 目标值确认 | 配置 + 少量代码 |
 
 **顺序理由**：0 是「把账先对平」；1 是唯一「不做就永远只是 mock」的方向，且设计已定稿；
 2/3 在资金纵深上互为支撑；4 是 2/3 的**质量前置**（不做 Testcontainers，2/3 的真库并发就测不到）；
@@ -682,7 +692,7 @@ AlipayChannelAdapter.charge(req):
 | H3 | 引入 `alipay-sdk-java`（34.3 MB + ≥9 CVE） | 新增依赖 / 重大架构变化 | ADR-0076 R6 |
 | H4 | 退款幂等键口径变更（B3，行为变更） | 资金路径行为变更 | 本文件 §6.2 |
 | H5 | 对账事实补 `merchantId`（R2，跨服务 DTO 变更） | API Breaking Change | 本文件 §5.2 |
-| H6 | ledger 新增余额表 / `period` 列（G1/G2） | 新增关键资金表 | 本文件 §4.2 |
+| H6 | ledger 契约与表变更：Accounting Event 契约切换 / 两级科目 / 余额表 / `period` 列 / 待记账台账（§4.2 G0~G3） | 公共（内部）API + 领域模型 + **新增关键资金表** | [ADR-0077~0079](../../adr/0077-ledger-accounting-foundation-decisions.md)（Proposed）+ spec 031 §17 D-1~D-7 |
 | H7 | Resilience4j 去留（B1） | 架构取舍 | backlog #5 |
 | H8 | SLO 目标值确认（O1） | 非功能目标 | technical-solution §5.1 |
 | H9 | 阶段（stage-05）命名与 Feature 编号分配 | 计划权威 | roadmap.md / specs README |
