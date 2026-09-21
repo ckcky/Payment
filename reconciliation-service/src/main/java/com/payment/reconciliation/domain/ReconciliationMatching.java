@@ -130,9 +130,11 @@ public final class ReconciliationMatching {
             }
         }
 
-        // 平台事实索引：强键 (merchantId, type, reference) 与回退键 (type, reference)。
+        // 平台事实索引：强键 (merchantId, type, reference)、回退键 (type, reference)
+        // 与 legacy 键 (reference)——legacy 4 列账单（referenceType 空）走单键通道（plan §2.5）。
         Map<String, PlatformFact> strongByPlatform = new LinkedHashMap<>();
         Map<String, PlatformFact> fallbackByPlatform = new LinkedHashMap<>();
+        Map<String, PlatformFact> legacyByPlatform = new LinkedHashMap<>();
         int noReferenceFacts = 0;
         for (PlatformFact fact : facts) {
             if (fact.reference() == null || fact.reference().isBlank()) {
@@ -145,6 +147,7 @@ public final class ReconciliationMatching {
                 strongByPlatform.putIfAbsent(strongKey(fact.merchantId(), fact.type(), fact.reference()), fact);
             }
             fallbackByPlatform.putIfAbsent(fallbackKey(fact.type(), fact.reference()), fact);
+            legacyByPlatform.putIfAbsent(fact.reference(), fact);
         }
         warnSkipped("platform", noReferenceFacts);
 
@@ -161,10 +164,13 @@ public final class ReconciliationMatching {
             }
             boolean strong = fact != null;
             if (!strong) {
-                // 回退：一方缺商户。legacy 行（referenceType 空）退化为 reference 单键。
+                // 回退：一方缺商户（line 侧缺 ⇒ 用 (type, reference) 回退；双方商户齐备而不一致
+                // ⇒ 不猜归属，各出单侧差异）。legacy 行（referenceType 空）退化为 reference 单键。
                 fact = line.referenceType() == null
-                        ? fallbackByPlatform.get(legacyKey(line.reference()))
-                        : fallbackByPlatform.get(fallbackKey(line.referenceType(), line.reference()));
+                        ? legacyByPlatform.get(line.reference())
+                        : (line.merchantId() == null || line.merchantId().isBlank()
+                                ? fallbackByPlatform.get(fallbackKey(line.referenceType(), line.reference()))
+                                : null);
             }
             if (fact == null || matchedFacts.contains(fact)) {
                 continue;
@@ -187,6 +193,9 @@ public final class ReconciliationMatching {
                 continue;
             }
             unmatchedLineIds.remove(line.lineId());
+            if ("FEE".equals(line.referenceType()) || "SETTLEMENT".equals(line.referenceType())) {
+                continue; // FEE/SETTLEMENT 行由 G3 渠道资金事实聚合消费，不进业务匹配差异（双计防线）
+            }
             differences.add(Difference.typed(line.differenceReference(), DifferenceType.CHANNEL_ONLY,
                     null, line.amountMinor(), null, line.status(), line.merchantId(),
                     line.referenceType(), null));
@@ -245,10 +254,6 @@ public final class ReconciliationMatching {
 
     private static String fallbackKey(String type, String reference) {
         return type + "|" + reference;
-    }
-
-    private static String legacyKey(String reference) {
-        return "LEGACY|" + reference;
     }
 
     private static Map<String, PlatformFact> indexPlatform(List<PlatformFact> facts) {

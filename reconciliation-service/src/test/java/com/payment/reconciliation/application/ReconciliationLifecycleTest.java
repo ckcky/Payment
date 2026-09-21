@@ -3,17 +3,20 @@ package com.payment.reconciliation.application;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.domain.ReconciliationStatus;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -26,18 +29,21 @@ class ReconciliationLifecycleTest {
     private static final String PERIOD = "2026-08";
 
     private final InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
+    private final InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    private final ReconciliationApplicationService service = new ReconciliationApplicationService(
-            repository,
-            () -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-            () -> List.of(),
-            period -> new ChannelStatementLoadResult(
-                    List.of(new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED"),
-                            new ChannelStatement("channel-extra-1", 900L, "CNY", "SUCCEEDED"),
-                            new ChannelStatement("channel-extra-2", 800L, "CNY", "SUCCEEDED")),
-                    ChannelStatementSource.fixture("inline", 3, false)),
-            new MicrometerBusinessMetrics(registry),
-            new StructuredAuditLogger());
+    private ReconciliationApplicationService service;
+
+    @BeforeEach
+    void setUp() {
+        seedImport(imports, "MOCK", PERIOD, List.of(
+                legacyLine(1, "pay-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "channel-extra-1", 900L, "SUCCEEDED"),
+                legacyLine(3, "channel-extra-2", 800L, "SUCCEEDED")));
+        service = service(repository, imports,
+                period -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1")),
+                period -> List.of(),
+                new MicrometerBusinessMetrics(registry), new StructuredAuditLogger());
+    }
 
     /** 一个含 2 条渠道单边差异的批次（pay-1 与账单一致）。 */
     private ReconciliationBatch batchWithTwoDifferences() {

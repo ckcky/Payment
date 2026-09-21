@@ -5,11 +5,11 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.Difference;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
+import com.payment.reconciliation.testsupport.ReconciliationTestSupport;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -28,6 +30,7 @@ class ReconciliationAuditTest {
 
     private ListAppender<ILoggingEvent> appender;
     private Logger auditLogger;
+    private InMemoryStatementImportRepository imports;
 
     @BeforeEach
     void attachAppender() {
@@ -44,16 +47,14 @@ class ReconciliationAuditTest {
     }
 
     private ReconciliationApplicationService service() {
-        return new ReconciliationApplicationService(
-                new InMemoryReconciliationRepository(),
-                () -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-                List::of,
-                period -> new ChannelStatementLoadResult(
-                        List.of(new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED"),
-                                new ChannelStatement("channel-extra-1", 900L, "CNY", "SUCCEEDED")),
-                        ChannelStatementSource.fixture("inline", 2, false)),
-                new MicrometerBusinessMetrics(new SimpleMeterRegistry()),
-                new StructuredAuditLogger());
+        imports = new InMemoryStatementImportRepository();
+        seedImport(imports, "MOCK", "2026-08-31", List.of(
+                legacyLine(1, "pay-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "channel-extra-1", 900L, "SUCCEEDED")));
+        return ReconciliationTestSupport.service(new InMemoryReconciliationRepository(), imports,
+                period -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
+                period -> List.of(),
+                new MicrometerBusinessMetrics(new SimpleMeterRegistry()), new StructuredAuditLogger());
     }
 
     @Test

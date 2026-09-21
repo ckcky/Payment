@@ -2,43 +2,45 @@ package com.payment.reconciliation.application;
 
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.application.ChannelStatementLoadResult;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.domain.ReconciliationStatus;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
+import com.payment.reconciliation.statement.StatementImport;
+import com.payment.reconciliation.testsupport.ReconciliationTestSupport;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 对账编排测试（US3）：一次执行产出正确状态与匹配/差异计数；同周期重复执行幂等返回同一批次。
+ * 对账编排测试（US3 + spec 032 §10.1）：以导入账单为外部事实来源，一次执行产出正确
+ * 状态与匹配/差异计数；同导入重复执行幂等返回同一批次；无可用导入 ⇒ 400 STATEMENT_UNAVAILABLE。
  */
 class ReconciliationApplicationServiceTest {
 
     private final InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
+    private final InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
 
-    private final PaymentFactsClient payments = () -> List.of(
-            new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"),
-            new PlatformFact("mock-ref-2", "PAYMENT", 2000L, "CNY", "SUCCEEDED"));
+    private final PaymentFactsClient payments = period -> List.of(
+            new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1"),
+            new PlatformFact("mock-ref-2", "PAYMENT", 2000L, "CNY", "SUCCEEDED", "1"));
 
-    private final RefundFactsClient refunds = () -> List.of(
-            new PlatformFact("refund-1", "REFUND", 500L, "CNY", "SUCCEEDED"));
-
-    private final ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(List.of(
-            new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("mock-ref-2", 2000L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("refund-1", 500L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED")),
-            new ChannelStatementSource("FIXTURE", "inline", 4, false));
+    private final RefundFactsClient refunds = period -> List.of(
+            new PlatformFact("refund-1", "REFUND", 500L, "CNY", "SUCCEEDED", "1"));
 
     private ReconciliationApplicationService service() {
-        return new ReconciliationApplicationService(repository, payments, refunds, loader,
+        seedImport(imports, "MOCK", "2026-08", List.of(
+                legacyLine(1, "mock-ref-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "mock-ref-2", 2000L, "SUCCEEDED"),
+                legacyLine(3, "refund-1", 500L, "SUCCEEDED"),
+                legacyLine(4, "channel-extra-1", 999L, "SUCCEEDED")));
+        return ReconciliationTestSupport.service(repository, imports, payments, refunds,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 
@@ -64,13 +66,12 @@ class ReconciliationApplicationServiceTest {
 
     @Test
     void consistentBatchWhenNoDifferences() {
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository,
-                () -> List.of(new PlatformFact("ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-                () -> List.of(),
-                period -> new ChannelStatementLoadResult(
-                        List.of(new ChannelStatement("ref-1", 1000L, "CNY", "SUCCEEDED")),
-                        new ChannelStatementSource("FIXTURE", "inline", 1, false)),
+        seedImport(imports, "MOCK", "2026-09",
+                List.of(legacyLine(1, "ref-1", 1000L, "SUCCEEDED")));
+        ReconciliationApplicationService service = ReconciliationTestSupport.service(
+                repository, imports,
+                period -> List.of(new PlatformFact("ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1")),
+                period -> List.of(),
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
 
         ReconciliationBatch batch = service.runReconciliation("2026-09");
@@ -78,6 +79,18 @@ class ReconciliationApplicationServiceTest {
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CONSISTENT);
         assertThat(batch.getMatches()).hasSize(1);
         assertThat(batch.getDifferences()).isEmpty();
+    }
+
+    @Test
+    void runWithoutNormalizedImportIsRejectedWithStatementUnavailable() {
+        ReconciliationApplicationService service = ReconciliationTestSupport.service(
+                repository, imports, payments, refunds,
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.runReconciliation("2026-07"))
+                .isInstanceOfSatisfying(com.payment.common.core.error.BizException.class,
+                        ex -> org.assertj.core.api.Assertions.assertThat(ex.getCode())
+                                .isEqualTo(com.payment.common.core.error.ErrorCodes.STATEMENT_UNAVAILABLE));
     }
 
     @Test
@@ -110,41 +123,56 @@ class ReconciliationApplicationServiceTest {
         ReconciliationBatch batch = service.runReconciliation("2026-08");
 
         assertThat(batch.getStatementSource()).isNotNull();
+        assertThat(batch.getStatementSource().sourceType()).isEqualTo("IMPORT");
         assertThat(batch.getStatementSource().fallbackUsed()).isFalse();
     }
 
     /**
-     * 按周期区分（spec 006 T012 / FR-001）：不同周期读到不同账单 ⇒ 产出不同差异集合；
-     * 这是「周期 fixture 真生效」的编排层证据（loader 层见 {@code CsvChannelStatementLoaderTest}）。
+     * 按周期区分（spec 006 T012 / FR-001）：不同周期导入不同账单 ⇒ 产出不同差异集合与不同批次
+     * （周期幂等键 (period, channel, importId) 互不相交）。
      */
     @Test
     void differentPeriodsProduceDifferentDifferenceSets() {
         InMemoryReconciliationRepository repo = new InMemoryReconciliationRepository();
-        ChannelStatementLoader byPeriod = period -> {
-            if ("2026-08-31".equals(period)) {
-                return new ChannelStatementLoadResult(List.of(
-                        new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
-                        new ChannelStatement("ch-aug-extra", 700L, "CNY", "SUCCEEDED")),
-                        ChannelStatementSource.fixture("fixtures/channel-statements/2026-08-31.csv", 2, false));
-            }
-            return new ChannelStatementLoadResult(List.of(
-                    new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
-                    new ChannelStatement("ch-sep-extra", 1500L, "CNY", "SUCCEEDED")),
-                    ChannelStatementSource.fixture("fixtures/channel-statements/2026-09-30.csv", 2, false));
-        };
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repo,
-                () -> List.of(new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-                () -> List.of(),
-                byPeriod,
+        InMemoryStatementImportRepository importsRepo = new InMemoryStatementImportRepository();
+        seedImport(importsRepo, "MOCK", "2026-08", List.of(
+                legacyLine(1, "mock-ref-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "ch-aug-extra", 700L, "SUCCEEDED")));
+        seedImport(importsRepo, "MOCK", "2026-09", List.of(
+                legacyLine(1, "mock-ref-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "ch-sep-extra", 1500L, "SUCCEEDED")));
+        ReconciliationApplicationService service = ReconciliationTestSupport.service(
+                repo, importsRepo,
+                period -> List.of(new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1")),
+                period -> List.of(),
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
 
-        ReconciliationBatch aug = service.runReconciliation("2026-08-31");
-        ReconciliationBatch sep = service.runReconciliation("2026-09-30");
+        ReconciliationBatch aug = service.runReconciliation("2026-08");
+        ReconciliationBatch sep = service.runReconciliation("2026-09");
 
         assertThat(aug.getDifferences()).extracting("reference").containsExactly("ch-aug-extra");
         assertThat(sep.getDifferences()).extracting("reference").containsExactly("ch-sep-extra");
         assertThat(aug.getId()).isNotEqualTo(sep.getId());
         assertThat(aug.getStatementSource().locator()).isNotEqualTo(sep.getStatementSource().locator());
+    }
+
+    /** 显式指定 importNo（更正账单重对入口）：以该导入为准执行核对。 */
+    @Test
+    void runWithExplicitImportUsesThatImport() {
+        InMemoryReconciliationRepository repo = new InMemoryReconciliationRepository();
+        InMemoryStatementImportRepository importsRepo = new InMemoryStatementImportRepository();
+        StatementImport correction = seedImport(importsRepo, "MOCK", "2026-08", List.of(
+                legacyLine(1, "mock-ref-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "ch-corrected-extra", 300L, "SUCCEEDED")));
+        ReconciliationApplicationService service = ReconciliationTestSupport.service(
+                repo, importsRepo,
+                period -> List.of(new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1")),
+                period -> List.of(),
+                new NoopBusinessMetrics(), new StructuredAuditLogger());
+
+        ReconciliationBatch batch = service.runReconciliation("2026-08", "MOCK", correction.getImportNo());
+
+        assertThat(batch.getImportId()).isEqualTo(correction.getId());
+        assertThat(batch.getDifferences()).extracting("reference").containsExactly("ch-corrected-extra");
     }
 }

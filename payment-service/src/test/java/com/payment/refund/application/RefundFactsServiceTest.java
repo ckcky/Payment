@@ -2,8 +2,10 @@ package com.payment.refund.application;
 
 import com.payment.common.core.id.BusinessNoType;
 import com.payment.common.core.id.BusinessNos;
+import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.refund.api.dto.RefundFactResponse;
 import com.payment.refund.domain.Refund;
 import com.payment.refund.infra.InMemoryRefundRepository;
@@ -15,11 +17,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 退款事实抽取测试（US3 对账）：仅返回已确认成功的退款事实，外部引用为 {@code refund-{id}}。
+ *
+ * <p>spec 032：补 merchantId 反查 + C-22 修复（渠道引用取成功尝试，不取首条）。</p>
  */
 class RefundFactsServiceTest {
 
     private final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
     private final InMemoryPaymentAttemptRepository paymentAttempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
+
+    private RefundFactsService service() {
+        return new RefundFactsService(refunds, paymentAttempts, payments);
+    }
+
+    private Payment payment(String paymentNo, String merchantId) {
+        Payment p = Payment.rehydrate(1L, paymentNo, "tx-1", "order-1", "user-1", 1000L, "CNY",
+                "idem-" + paymentNo, com.payment.payment.domain.PaymentStatus.SUCCEEDED,
+                null, null, 0, null, 1, 1, merchantId);
+        payments.save(p);
+        return p;
+    }
 
     @Test
     void confirmedFactsReturnsOnlySucceededRefunds() {
@@ -35,8 +52,7 @@ class RefundFactsServiceTest {
         failed.fail("declined");
         refunds.save(failed);
 
-        RefundFactsService service = new RefundFactsService(refunds, paymentAttempts);
-        List<RefundFactResponse> facts = service.confirmedFacts();
+        List<RefundFactResponse> facts = service().confirmedFacts();
 
         assertThat(facts).hasSize(1);
         RefundFactResponse fact = facts.get(0);
@@ -63,10 +79,57 @@ class RefundFactsServiceTest {
         refundAttempt.succeed();
         paymentAttempts.save(refundAttempt);
 
-        RefundFactsService service = new RefundFactsService(refunds, paymentAttempts);
-        List<RefundFactResponse> facts = service.confirmedFacts();
+        List<RefundFactResponse> facts = service().confirmedFacts();
 
         assertThat(facts).hasSize(1);
         assertThat(facts.get(0).channelReference()).isEqualTo("mock-refund-ref-real");
+    }
+
+    /** spec 032 / C-22（H19）：先失败后成功的双尝试 ⇒ reference 指向成功尝试流水。 */
+    @Test
+    void channelReferenceSkipsFailedAttemptsAndPicksSucceededOne() {
+        Refund succeeded = new Refund("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
+                "idem-1", List.of());
+        succeeded.process();
+        succeeded.succeed();
+        refunds.save(succeeded);
+
+        PaymentAttempt failedAttempt = PaymentAttempt.refundAttempt("PM-1", "mock", 1000L, "CNY");
+        failedAttempt.accept("mock-refund-ref-FAILED");
+        failedAttempt.fail("channel declined");
+        paymentAttempts.save(failedAttempt);
+
+        PaymentAttempt okAttempt = PaymentAttempt.refundAttempt("PM-1", "mock", 1000L, "CNY");
+        okAttempt.accept("mock-refund-ref-OK");
+        okAttempt.succeed();
+        paymentAttempts.save(okAttempt);
+
+        List<RefundFactResponse> facts = service().confirmedFacts();
+
+        assertThat(facts).hasSize(1);
+        assertThat(facts.get(0).channelReference()).isEqualTo("mock-refund-ref-OK");
+    }
+
+    /** spec 032 / H-032-1：merchantId 经 payment 反查；反查不到为 null（不猜）。 */
+    @Test
+    void merchantIdResolvedFromPayment() {
+        payment("PM-1", "42");
+        Refund succeeded = new Refund("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
+                "idem-1", List.of());
+        succeeded.process();
+        succeeded.succeed();
+        refunds.save(succeeded);
+
+        Refund orphan = new Refund("order-2", "PM-MISSING", "user-1", 500L, "CNY", "customer",
+                "idem-2", List.of());
+        orphan.process();
+        orphan.succeed();
+        refunds.save(orphan);
+
+        List<RefundFactResponse> facts = service().confirmedFacts();
+
+        assertThat(facts).hasSize(2);
+        assertThat(facts).extracting(RefundFactResponse::merchantId)
+                .containsExactlyInAnyOrder("42", null);
     }
 }

@@ -2,23 +2,24 @@ package com.payment.reconciliation.api;
 
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.application.ChannelStatementLoadResult;
-import com.payment.reconciliation.application.ChannelStatementLoader;
 import com.payment.reconciliation.application.PaymentFactsClient;
 import com.payment.reconciliation.application.ReconciliationApplicationService;
 import com.payment.reconciliation.application.RefundFactsClient;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.Difference;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.domain.ReconciliationStatus;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
+import com.payment.reconciliation.testsupport.ReconciliationTestSupport;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -31,17 +32,20 @@ class ReconciliationBatchResponseTest {
     private static final String PERIOD = "2026-08";
 
     private final InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
-    private final ReconciliationApplicationService service = new ReconciliationApplicationService(
-            repository,
-            (PaymentFactsClient) () -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-            (RefundFactsClient) List::of,
-            (ChannelStatementLoader) period -> new ChannelStatementLoadResult(
-                    List.of(new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED"),
-                            new ChannelStatement("channel-extra-1", 900L, "CNY", "SUCCEEDED"),
-                            new ChannelStatement("channel-extra-2", 800L, "CNY", "SUCCEEDED")),
-                    ChannelStatementSource.fixture("inline", 3, false)),
-            new MicrometerBusinessMetrics(new SimpleMeterRegistry()),
-            new StructuredAuditLogger());
+    private final InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
+    private ReconciliationApplicationService service;
+
+    @BeforeEach
+    void setUp() {
+        seedImport(imports, "MOCK", PERIOD, List.of(
+                legacyLine(1, "pay-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "channel-extra-1", 900L, "SUCCEEDED"),
+                legacyLine(3, "channel-extra-2", 800L, "SUCCEEDED")));
+        service = ReconciliationTestSupport.service(repository, imports,
+                (PaymentFactsClient) period -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
+                (RefundFactsClient) period -> List.of(),
+                new MicrometerBusinessMetrics(new SimpleMeterRegistry()), new StructuredAuditLogger());
+    }
 
     @Test
     void unresolvedCountMatchesBatchStateBeforeAnyResolve() {
@@ -92,7 +96,7 @@ class ReconciliationBatchResponseTest {
 
         ReconciliationBatchResponse response = ReconciliationBatchResponse.from(closed);
 
-        assertThat(response.statementSource()).contains("FIXTURE");
+        assertThat(response.statementSource()).contains("IMPORT");
         assertThat(response.closedBy()).isEqualTo("ops-closer");
         assertThat(response.closedAt()).isNotBlank();
     }

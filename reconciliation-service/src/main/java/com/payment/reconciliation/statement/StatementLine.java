@@ -28,6 +28,16 @@ public record StatementLine(Long importId, int lineNo, String channelCode, Strin
 
     /** 归一缺陷原因（spec 032 §8.2 UNKNOWN_MAPPING 的判定输入；null = 无缺陷）。 */
     public String normalizeDefect() {
+        boolean legacyRow = referenceType == null && "PLATFORM_NO".equals(referenceKind);
+        if (legacyRow) {
+            // legacy 4 列格式：无商户/无类型是格式语义而非归一缺陷（plan §2.5：匹配走 reference
+            // 单键通道）；仅缺键（reference/channelTxnNo 双空）才不可归一。
+            if ((reference == null || reference.isBlank())
+                    && (channelTxnNo == null || channelTxnNo.isBlank())) {
+                return "MISSING_KEY";
+            }
+            return null;
+        }
         if (merchantId == null || merchantId.isBlank()) {
             return "MISSING_MERCHANT";
         }

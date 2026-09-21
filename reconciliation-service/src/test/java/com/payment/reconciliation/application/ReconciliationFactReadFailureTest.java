@@ -3,16 +3,18 @@ package com.payment.reconciliation.application;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -27,23 +29,20 @@ class ReconciliationFactReadFailureTest {
 
     private static final String PERIOD = "2026-08-31";
 
-    private ChannelStatementLoader loader() {
-        return period -> new ChannelStatementLoadResult(
-                List.of(new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED")),
-                ChannelStatementSource.fixture("inline", 1, false));
+    private InMemoryStatementImportRepository seedStatement() {
+        InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
+        seedImport(imports, "MOCK", PERIOD, List.of(legacyLine(1, "pay-1", 1000L, "SUCCEEDED")));
+        return imports;
     }
 
     @Test
     void paymentFactFailureLeavesNoBatchBehind() {
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository,
-                () -> { throw new BizException("DOWNSTREAM_ERROR", "payment facts unavailable"); },
-                List::of,
-                loader(),
-                new MicrometerBusinessMetrics(registry),
-                new StructuredAuditLogger());
+        ReconciliationApplicationService service = service(repository, seedStatement(),
+                period -> { throw new BizException("DOWNSTREAM_ERROR", "payment facts unavailable"); },
+                period -> List.of(),
+                new MicrometerBusinessMetrics(registry), new StructuredAuditLogger());
 
         assertThatThrownBy(() -> service.runReconciliation(PERIOD)).isInstanceOf(BizException.class);
 
@@ -56,13 +55,10 @@ class ReconciliationFactReadFailureTest {
     void refundFactFailureLeavesNoBatchBehind() {
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository,
-                () -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-                () -> { throw new BizException("DOWNSTREAM_ERROR", "refund facts unavailable"); },
-                loader(),
-                new MicrometerBusinessMetrics(registry),
-                new StructuredAuditLogger());
+        ReconciliationApplicationService service = service(repository, seedStatement(),
+                period -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
+                period -> { throw new BizException("DOWNSTREAM_ERROR", "refund facts unavailable"); },
+                new MicrometerBusinessMetrics(registry), new StructuredAuditLogger());
 
         assertThatThrownBy(() -> service.runReconciliation(PERIOD)).isInstanceOf(BizException.class);
 
@@ -75,18 +71,15 @@ class ReconciliationFactReadFailureTest {
     void periodCanBeSafelyRetriedAfterTransientFailure() {
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
         AtomicInteger attempts = new AtomicInteger();
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository,
-                () -> {
+        ReconciliationApplicationService service = service(repository, seedStatement(),
+                period -> {
                     if (attempts.incrementAndGet() == 1) {
                         throw new BizException("DOWNSTREAM_ERROR", "transient");
                     }
                     return List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
                 },
-                List::of,
-                loader(),
-                new MicrometerBusinessMetrics(new SimpleMeterRegistry()),
-                new StructuredAuditLogger());
+                period -> List.of(),
+                new MicrometerBusinessMetrics(new SimpleMeterRegistry()), new StructuredAuditLogger());
 
         assertThatThrownBy(() -> service.runReconciliation(PERIOD)).isInstanceOf(BizException.class);
 
