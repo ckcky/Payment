@@ -48,4 +48,35 @@ class MetricsAssertTest {
         assertThatThrownBy(() -> MetricsAssert.counterValue(registry, "probe.x", "lonely"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("高基数遍历断言：合规 registry 全绿（spec 035 §7.1 机制自证·阳性）")
+    void allowedTagsPass() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        registry.counter("probe.events.total", "module", "payment", "result", "ok").increment();
+        MetricsAssert.assertTagValuesWithinAllowedSet(registry, java.util.Set.of("module", "result"));
+    }
+
+    @Test
+    @DisplayName("高基数遍历断言：越白名单键 / 单号形态值 / 超预算序列各拦一次（阴性对照）")
+    void highCardinalityRejected() {
+        java.util.Set<String> allowed = java.util.Set.of("module");
+        SimpleMeterRegistry keyViolator = new SimpleMeterRegistry();
+        keyViolator.counter("probe.x", "paymentNo", "PM0001").increment();
+        assertThatThrownBy(() -> MetricsAssert.assertTagValuesWithinAllowedSet(keyViolator, allowed))
+                .as("键不在白名单即红").isInstanceOf(AssertionError.class);
+
+        SimpleMeterRegistry valueViolator = new SimpleMeterRegistry();
+        valueViolator.counter("probe.y", "module", "PM20260921123456789").increment();
+        assertThatThrownBy(() -> MetricsAssert.assertTagValuesWithinAllowedSet(valueViolator, allowed))
+                .as("值呈长数字单号形态即红").isInstanceOf(AssertionError.class);
+
+        SimpleMeterRegistry seriesViolator = new SimpleMeterRegistry();
+        for (int i = 0; i < 201; i++) {
+            seriesViolator.counter("probe.z", "module", "m" + i).increment();
+        }
+        assertThatThrownBy(() -> MetricsAssert.assertTagValuesWithinAllowedSet(seriesViolator,
+                java.util.Set.of("module")))
+                .as("单指标序列数超 HC-4 预算 200 即红").isInstanceOf(AssertionError.class);
+    }
 }
