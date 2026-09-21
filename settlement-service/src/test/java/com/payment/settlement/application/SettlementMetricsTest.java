@@ -30,8 +30,8 @@ class SettlementMetricsTest {
         MerchantClient merchantClient = id -> new MerchantView(id, "ACTIVE", true);
         ReconciliationClient reconciliationClient = period -> new ReconciliationSummary(period,
                 List.of(
-                        new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY"),
-                        new SettlementFact("ref-2", "REFUND", 1000L, "CNY")),
+                        new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY", "1"),
+                        new SettlementFact("ref-2", "REFUND", 1000L, "CNY", "1")),
                 0);
         LedgerPostingGateway ledgerGateway = facts -> {
         };
@@ -59,8 +59,8 @@ class SettlementMetricsTest {
         // 收入 1000 − 退款 2000 = −1000（负净额）
         ReconciliationClient reconciliationClient = period -> new ReconciliationSummary(period,
                 List.of(
-                        new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY"),
-                        new SettlementFact("ref-2", "REFUND", 2000L, "CNY")),
+                        new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY", "1"),
+                        new SettlementFact("ref-2", "REFUND", 2000L, "CNY", "1")),
                 0);
         LedgerPostingGateway ledgerGateway = facts -> {
         };

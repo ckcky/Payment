@@ -106,8 +106,8 @@ class SettlementApplicationServiceTest {
     @Test
     void unknownFactTypeIsRejectedByGate() {
         reconciliationClient.facts = List.of(
-                new SettlementFact("ref-1", "FEE", 5000L, "CNY"),
-                new SettlementFact("ref-2", "REFUND", 1000L, "CNY"));
+                new SettlementFact("ref-1", "FEE", 5000L, "CNY", "1"),
+                new SettlementFact("ref-2", "REFUND", 1000L, "CNY", "1"));
 
         assertThatThrownBy(() -> service().createBatch("1", "2026-08", "idem-4"))
                 .isInstanceOfSatisfying(BizException.class,
@@ -121,6 +121,50 @@ class SettlementApplicationServiceTest {
         assertThatThrownBy(() -> service().createBatch("1", "2026-08", "idem-5"))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.NOT_FOUND));
+    }
+
+    @Test
+    void merchantMissingFactIsRejectedByGate() {
+        // 032/AC-3：事实缺 merchantId（归属未知）⇒ 拒绝结算，不落批次
+        reconciliationClient.facts = List.of(new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY"));
+
+        assertThatThrownBy(() -> service().createBatch("1", "2026-08", "idem-6"))
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.INVALID_ARGUMENT));
+        assertThat(repository.findByIdempotencyKey("idem-6")).isEmpty();
+    }
+
+    @Test
+    void otherMerchantFactsAreFilteredFromSettlementScope() {
+        // 032/AC-3：归属他商户的事实滤出本商户结算口径（不进净额、不进 items），留痕不静默
+        reconciliationClient.facts = List.of(
+                new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY", "1"),
+                new SettlementFact("ref-other", "PAYMENT", 9000L, "CNY", "2"));
+
+        SettlementBatch batch = service().createBatch("1", "2026-08", "idem-7");
+
+        assertThat(batch.getIncomeMinor()).isEqualTo(5000L);
+        assertThat(batch.getFactCount()).isEqualTo(1);
+        assertThat(batch.getItems()).noneMatch(i -> "ref-other".equals(i.reference()));
+    }
+
+    @Test
+    void unclosedDifferenceNetImpactIsWithheldFromSettlement() {
+        // 032/G4 / TC-032-11：口径 = 全部已确认事实 − 未收口差异净影响；事实仍留在批次快照
+        reconciliationClient.facts = List.of(
+                new SettlementFact("ref-1", "PAYMENT", 10000L, "CNY", "1"),
+                new SettlementFact("ref-2", "REFUND", 1000L, "CNY", "1"));
+        reconciliationClient.excludedFacts = List.of(
+                new ExcludedSettlementFact("ref-1", "PAYMENT", 8000L, "AMOUNT_MISMATCH"));
+
+        SettlementBatch batch = service().createBatch("1", "2026-08", "idem-8");
+
+        // income = 10000 − 8000 = 2000，refund = 1000，net = 1000
+        assertThat(batch.getIncomeMinor()).isEqualTo(2000L);
+        assertThat(batch.getRefundMinor()).isEqualTo(1000L);
+        assertThat(batch.getNetMinor()).isEqualTo(1000L);
+        // 快照仍含全部已确认事实（差异扣减仅影响结算口径，不篡改事实记录）
+        assertThat(batch.getFactCount()).isEqualTo(2);
     }
 
     @Test
@@ -202,8 +246,8 @@ class SettlementApplicationServiceTest {
     void resolveBatchSucceededPostsNegativeNetToLedger() {
         // H3（C-07）：净额为负同样记账（账本 §7.5 展开反向分录），不再静默跳过
         reconciliationClient.facts = List.of(
-                new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY"),
-                new SettlementFact("ref-2", "REFUND", 2500L, "CNY"));
+                new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY", "1"),
+                new SettlementFact("ref-2", "REFUND", 2500L, "CNY", "1"));
         SettlementApplicationService svc = service();
         SettlementBatch created = svc.createBatch("1", "2026-08", "idem-neg");
 
@@ -217,8 +261,8 @@ class SettlementApplicationServiceTest {
     void resolveBatchSucceededSkipsLedgerWhenNetZero() {
         // 收入 1000 − 退款 1000 = 0 ⇒ 空批次不发事件（spec §7.5）
         reconciliationClient.facts = List.of(
-                new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY"),
-                new SettlementFact("ref-2", "REFUND", 1000L, "CNY"));
+                new SettlementFact("ref-1", "PAYMENT", 1000L, "CNY", "1"),
+                new SettlementFact("ref-2", "REFUND", 1000L, "CNY", "1"));
         SettlementApplicationService svc = service();
         SettlementBatch created = svc.createBatch("1", "2026-08", "idem-1");
 
@@ -272,17 +316,18 @@ class SettlementApplicationServiceTest {
     private static final class FakeReconciliationClient implements ReconciliationClient {
 
         private List<SettlementFact> facts = List.of(
-                new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY"),
-                new SettlementFact("ref-2", "REFUND", 1000L, "CNY"));
+                new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY", "1"),
+                new SettlementFact("ref-2", "REFUND", 1000L, "CNY", "1"));
         private int unresolvedDifferenceCount = 0;
         private boolean notFound = false;
+        private List<ExcludedSettlementFact> excludedFacts = List.of();
 
         @Override
         public ReconciliationSummary getSettlementSummary(String period) {
             if (notFound) {
                 throw BizException.of(ErrorCodes.NOT_FOUND, "reconciliation not found for period: " + period);
             }
-            return new ReconciliationSummary(period, facts, unresolvedDifferenceCount);
+            return new ReconciliationSummary(period, facts, excludedFacts, unresolvedDifferenceCount);
         }
     }
 
