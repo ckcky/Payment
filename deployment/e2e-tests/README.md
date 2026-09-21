@@ -51,8 +51,8 @@ bash deployment/e2e-tests/run.sh -Dtest=RefundChainE2ETest#partialRefundChainKee
   `15`=业务拒绝；基线 `PAYMENT_MOCK_SCENARIO` 保留。E2E 经
   `POST /products`+`/skus`+`/internal/stock/seed` 造指定价格 SKU 控制金额。
 - **对账差异**：审计 FAULT 走 DB 直改（备份→注入→检出→还原，闭环可验证）；
-  渠道账单差异经 `reconciliation.statement-dir-override`（`/tmp/e2e-channel-statements`）
-  运行时落盘 `{period}.csv` 注入。
+  渠道账单差异经 `POST /internal/reconciliation/statement-imports` 导入接口注入
+  （032 实账化：内容 SHA-256 幂等；文件目录回退已删除，ADR-0080）。
 - **回调重复/乱序**：E2E 直发 `channel-callback` 端点（ADR-0025 验签占位放行）。
 
 ## 快照基线更新（契约有意变更时）

@@ -6,23 +6,18 @@ import com.payment.e2e.support.Db;
 import com.payment.e2e.support.Dump;
 import com.payment.e2e.support.E2eBase;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * P0 / AC3.4（T421）：渠道对账差异注入——E2E 运行时向
- * {@code reconciliation.statement-dir-override}（默认 {@code /tmp/e2e-channel-statements}，
- * 部署侧已在 reconciliation-service application.yml 配置）落盘 {@code {period}.csv}，
- * 确定性注入 4 类账实差异，验证 LEDGER_VS_STATEMENT_BREAK 检出率 100% 且分类正确：
+ * P0 / AC3.4（T421）：渠道对账差异注入——032 实账化后账单经导入接口注入
+ * （{@code POST /internal/reconciliation/statement-imports}，内容 SHA-256 幂等，
+ * 文件目录回退已删除（ADR-0080）），确定性注入 4 类账实差异，
+ * 验证 LEDGER_VS_STATEMENT_BREAK 检出率 100% 且分类正确：
  *
  * <ul>
  *   <li><b>长款</b>：账单含幻影渠道流水（账本无）→ 检出；</li>
@@ -31,25 +26,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>重复流水</b>：同 reference 两行 → 检出。</li>
  * </ul>
  *
- * <p>覆盖目录不可写（未配置 / 权限缺失）时按 Assumptions 跳过——不产生假红（NFR-005）。</p>
+ * <p>账单行使用 legacy 4 列格式（{@code reference,amountMinor,currencyCode,status}，
+ * 解析器历史语义保留）——审计比对按渠道引用单键进行，与 032 typed 匹配互不影响。</p>
  */
 class ChannelStatementDiffE2ETest extends E2eBase {
-
-    /** 与 reconciliation-service application.yml 的 statement-dir-override 保持一致。 */
-    private static final Path OVERRIDE_DIR = Path.of(
-            System.getProperty("e2e.statement-dir-override", "/tmp/e2e-channel-statements"));
 
     private final Db db = new Db();
 
     @Test
     void phantomStatementRowIsDetectedAsLong() {
         runCase("csv-diff-long", ctx -> {
-            requireOverrideDir();
             String uid = prefix("csvl");
             paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
 
             String period = "e2e-long-" + Long.toString(System.currentTimeMillis(), 36);
-            writeStatement(period, "reference,amountMinor,currencyCode,status\n"
+            importStatement(ctx, period, "reference,amountMinor,currencyCode,status\n"
                     + "e2e-phantom-" + uid + ",999,CNY,SUCCEEDED\n");
 
             JsonNode diffs = runAudit(ctx, period);
@@ -61,13 +52,12 @@ class ChannelStatementDiffE2ETest extends E2eBase {
     @Test
     void missingStatementRowsAreDetectedAsShort() {
         runCase("csv-diff-short", ctx -> {
-            requireOverrideDir();
             String uid = prefix("csvs");
             String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
 
             String period = "e2e-short-" + Long.toString(System.currentTimeMillis(), 36);
-            writeStatement(period, "reference,amountMinor,currencyCode,status\n"); // 仅表头
+            importStatement(ctx, period, "reference,amountMinor,currencyCode,status\n"); // 仅表头
 
             JsonNode diffs = runAudit(ctx, period);
             assertThat(hasKind(diffs, "LEDGER_VS_STATEMENT_BREAK"))
@@ -79,7 +69,6 @@ class ChannelStatementDiffE2ETest extends E2eBase {
     @Test
     void amountMismatchedStatementRowIsDetected() {
         runCase("csv-diff-amount", ctx -> {
-            requireOverrideDir();
             String uid = prefix("csva");
             String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
@@ -87,7 +76,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
 
             // 同 reference、金额减 1 分 → 金额不符
             String period = "e2e-amt-" + Long.toString(System.currentTimeMillis(), 36);
-            writeStatement(period, "reference,amountMinor,currencyCode,status\n"
+            importStatement(ctx, period, "reference,amountMinor,currencyCode,status\n"
                     + channelRef + ",2499,CNY,SUCCEEDED\n");
 
             JsonNode diffs = runAudit(ctx, period);
@@ -99,7 +88,6 @@ class ChannelStatementDiffE2ETest extends E2eBase {
     @Test
     void duplicatedStatementRowsAreDetected() {
         runCase("csv-diff-duplicate", ctx -> {
-            requireOverrideDir();
             String uid = prefix("csvd");
             String orderNo = paidOrder(ctx, db, uid, uid, skuWithPrice(ctx, 2500L), 1);
             String paymentNo = paymentNoOf(db, orderNo);
@@ -107,7 +95,7 @@ class ChannelStatementDiffE2ETest extends E2eBase {
 
             // 同 reference 两行（重复投递形态）
             String period = "e2e-dup-" + Long.toString(System.currentTimeMillis(), 36);
-            writeStatement(period, "reference,amountMinor,currencyCode,status\n"
+            importStatement(ctx, period, "reference,amountMinor,currencyCode,status\n"
                     + channelRef + ",2500,CNY,SUCCEEDED\n"
                     + channelRef + ",2500,CNY,SUCCEEDED\n");
 
@@ -119,24 +107,14 @@ class ChannelStatementDiffE2ETest extends E2eBase {
 
     // ---- 帮助方法 ----
 
-    private void requireOverrideDir() {
-        boolean ready;
-        try {
-            Files.createDirectories(OVERRIDE_DIR);
-            ready = Files.isWritable(OVERRIDE_DIR);
-        } catch (IOException e) {
-            ready = false;
-        }
-        Assumptions.assumeTrue(ready,
-                "statement-dir-override 不可写（未配置 / 权限缺失），跳过 CSV 差异注入用例: " + OVERRIDE_DIR);
-    }
-
-    private void writeStatement(String period, String content) {
-        try {
-            Files.writeString(OVERRIDE_DIR.resolve(period + ".csv"), content, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new IllegalStateException("failed to write statement csv for period " + period, e);
-        }
+    /** 经导入接口注入账单（032 实账化契约）；必须 NORMALIZED 才能进入审计比对。 */
+    private void importStatement(Dump.Context ctx, String period, String content) {
+        Api.ApiResponse resp = API.statementImport("ALIPAY", period, content);
+        ctx.response("statementImport", resp);
+        assertThat(resp.is2xx()).as("账单导入 [period=%s]", period).isTrue();
+        assertThat(resp.json().path("status").asText())
+                .as("账单导入必须 NORMALIZED [period=%s, body=%s]", period, resp.body())
+                .isEqualTo("NORMALIZED");
     }
 
     private JsonNode runAudit(Dump.Context ctx, String period) {
