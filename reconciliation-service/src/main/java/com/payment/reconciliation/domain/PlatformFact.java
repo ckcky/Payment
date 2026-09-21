@@ -9,6 +9,13 @@ package com.payment.reconciliation.domain;
  * @param amountMinor  金额（最小货币单位，long，禁止浮点）
  * @param currencyCode 币种
  * @param status       平台侧状态（枚举名 String）
+ * @param merchantId   商户号（032/G2：匹配键升级为 (merchantId, referenceType, reference)）
  */
-public record PlatformFact(String reference, String type, long amountMinor, String currencyCode, String status) {
+public record PlatformFact(String reference, String type, long amountMinor, String currencyCode,
+                           String status, String merchantId) {
+
+    /** 兼容构造（032 前的 5 字段形态）：merchantId 缺省为 null。 */
+    public PlatformFact(String reference, String type, long amountMinor, String currencyCode, String status) {
+        this(reference, type, amountMinor, currencyCode, status, null);
+    }
 }

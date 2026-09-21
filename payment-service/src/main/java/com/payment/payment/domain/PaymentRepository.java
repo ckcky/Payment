@@ -1,5 +1,6 @@
 package com.payment.payment.domain;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,6 +26,14 @@ public interface PaymentRepository {
 
     /** 按平台状态查询支付（对账事实抽取用）。 */
     List<Payment> findByStatus(PaymentStatus status);
+
+    /**
+     * 按状态 + 创建时间窗查询支付（spec 032 / H-032-1：confirmed-facts 期间过滤）。
+     * 窗口为 {@code [startInclusive, endExclusive)}，半开区间保证跨库（H2/MySQL）可移植。
+     */
+    List<Payment> findByStatusAndCreatedAtBetween(PaymentStatus status,
+                                                  LocalDateTime startInclusive,
+                                                  LocalDateTime endExclusive);
 
     /** 统计同一交易下的支付单数量（一交易多支付单时计算 attemptSeq 用，Feature 015）。 */
     long countByTransactionId(String transactionId);

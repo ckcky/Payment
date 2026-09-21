@@ -49,4 +49,7 @@ public final class ErrorCodes {
      *  语义是「支付单<b>未创建</b>」而非「创建了再拒」——建单事务整体回滚，`payments` 表无新增行（INV-3）。
      *  错误消息 MUST 说明<b>哪个周期</b>超限与当前额度（对齐 ADR-0049「给出合法取值清单」）。 */
     public static final String LIMIT_EXCEEDED = "LIMIT_EXCEEDED";
+    /** 渠道账单不可用：该周期无可用（NORMALIZED）账单导入，对账显式失败（spec 032 §11 #1，HTTP 400）。
+     *  替代旧 sample.csv 静默回退——「拿别的周期的账单当真账单对」即假对账。 */
+    public static final String STATEMENT_UNAVAILABLE = "STATEMENT_UNAVAILABLE";
 }

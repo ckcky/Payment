@@ -2,22 +2,24 @@ package com.payment.reconciliation.integration;
 
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.application.ChannelStatementLoadResult;
-import com.payment.reconciliation.application.ChannelStatementLoader;
 import com.payment.reconciliation.application.PaymentFactsClient;
 import com.payment.reconciliation.application.ReconciliationApplicationService;
 import com.payment.reconciliation.application.RefundFactsClient;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.Difference;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
+import com.payment.reconciliation.statement.StatementLine;
+import com.payment.reconciliation.testsupport.ReconciliationTestSupport;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -26,26 +28,32 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ReconciliationNoFactMutationTest {
 
+    private static final String PERIOD = "2026-08-31";
+
     private final List<PlatformFact> paymentFacts = List.of(
             new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"),
             new PlatformFact("pay-2", "PAYMENT", 2000L, "CNY", "SUCCEEDED"));
     private final List<PlatformFact> refundFacts = List.of(
             new PlatformFact("refund-1", "REFUND", 500L, "CNY", "SUCCEEDED"));
-    private final List<ChannelStatement> statements = List.of(
-            new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("pay-2", 2000L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("channel-extra-1", 900L, "CNY", "SUCCEEDED"));
+    private List<StatementLine> statements;
+
+    private final InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
+    private final InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
+
+    @BeforeEach
+    void seedStatement() {
+        statements = List.of(
+                legacyLine(1, "pay-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "pay-2", 2000L, "SUCCEEDED"),
+                legacyLine(3, "channel-extra-1", 900L, "SUCCEEDED"));
+        seedImport(imports, "MOCK", PERIOD, statements);
+    }
 
     private ReconciliationApplicationService service() {
-        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(
-                statements, ChannelStatementSource.fixture("inline", statements.size(), false));
-        return new ReconciliationApplicationService(
-                new InMemoryReconciliationRepository(),
-                (PaymentFactsClient) () -> paymentFacts,
-                (RefundFactsClient) () -> refundFacts,
-                loader,
-                new MicrometerBusinessMetrics(new SimpleMeterRegistry()),
-                new StructuredAuditLogger());
+        return ReconciliationTestSupport.service(repository, imports,
+                (PaymentFactsClient) period -> paymentFacts,
+                (RefundFactsClient) period -> refundFacts,
+                new MicrometerBusinessMetrics(new SimpleMeterRegistry()), new StructuredAuditLogger());
     }
 
     @Test
@@ -55,7 +63,7 @@ class ReconciliationNoFactMutationTest {
         List<PlatformFact> refundBefore = List.copyOf(refundFacts);
         ReconciliationApplicationService service = service();
 
-        ReconciliationBatch batch = service.runReconciliation("2026-08-31");
+        ReconciliationBatch batch = service.runReconciliation(PERIOD);
         for (Difference difference : List.copyOf(batch.getDifferences())) {
             service.resolveDifference(batch.getId(), difference.getReference(), "checked", "ops", null);
         }
@@ -77,7 +85,7 @@ class ReconciliationNoFactMutationTest {
     void differenceRecordsCarryBothSideSnapshotWithoutMutation() {
         ReconciliationApplicationService service = service();
 
-        ReconciliationBatch batch = service.runReconciliation("2026-08-31");
+        ReconciliationBatch batch = service.runReconciliation(PERIOD);
 
         Difference channelOnly = batch.getDifferences().stream()
                 .filter(d -> "channel-extra-1".equals(d.getReference()))

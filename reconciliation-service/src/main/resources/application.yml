@@ -47,13 +47,10 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 reconciliation:
+  # 渠道账单 fixture 目录（demo 场景经 POST /internal/reconciliation/statement-imports 导入其内容）。
+  # 032 实账化（ADR-0080）：sample.csv 回退与 statement-dir-override 目录注入已删除，
+  # 账单唯一入口 = 导入接口（内容 SHA-256 幂等）；无可用 NORMALIZED 导入 ⇒ 400 STATEMENT_UNAVAILABLE。
   statement-dir: fixtures/channel-statements
-  # 周期 fixture 未命中时的回退默认账单（spec 006 T018）
-  statement:
-    default-file: sample.csv
-  # E2E 差异注入覆盖目录（spec 022 / T421）：存在 {dir}/{period}.csv 时优先于 classpath fixture。
-  # 目录缺省不存在 → 行为零变化；E2E 运行时向此目录落盘 {period}.csv 注入账实差异。
-  statement-dir-override: /tmp/e2e-channel-statements
 
 # 事实读取 RPC（payment / refund facts）显式超时（spec 006 T035 / ADR-0021）：
 # 由 FactsClientConfig 局部绑定到两个 facts 客户端，不影响其他 Feign 客户端。

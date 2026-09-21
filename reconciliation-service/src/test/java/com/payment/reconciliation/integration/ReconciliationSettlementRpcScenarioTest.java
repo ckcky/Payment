@@ -4,47 +4,50 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.reconciliation.api.ReconciliationSettlementFact;
 import com.payment.reconciliation.api.ReconciliationSettlementSummaryResponse;
-import com.payment.reconciliation.application.ChannelStatementLoadResult;
-import com.payment.reconciliation.application.ChannelStatementLoader;
 import com.payment.reconciliation.application.PaymentFactsClient;
 import com.payment.reconciliation.application.ReconciliationApplicationService;
 import com.payment.reconciliation.application.RefundFactsClient;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.domain.ReconciliationStatus;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
+import com.payment.reconciliation.statement.StatementLine;
+import com.payment.reconciliation.testsupport.ReconciliationTestSupport;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 对账→结算 RPC 场景集成测试（T061/T069）：用内存仓储 + 记录式 payment/refund/渠道账单 fake
- * 验证对账编排、差异处理与 settlement-summary 契约，供 settlement-service 消费。
+ * 对账→结算 RPC 场景集成测试（T061/T069）：用内存仓储 + 记录式 payment/refund fake +
+ * 导入账单验证对账编排、差异处理与 settlement-summary 契约，供 settlement-service 消费。
  *
  * <p>reconciliation-service 只读平台事实，跨服务边界用 fake 替身，不连接真实服务。</p>
  */
 class ReconciliationSettlementRpcScenarioTest {
+
+    private static final String PERIOD = "2026-08";
 
     private final List<PlatformFact> consistentPayments = List.of(
             new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"),
             new PlatformFact("pay-2", "PAYMENT", 2000L, "CNY", "SUCCEEDED"));
     private final List<PlatformFact> consistentRefunds = List.of(
             new PlatformFact("refund-1", "REFUND", 500L, "CNY", "SUCCEEDED"));
-    private final List<ChannelStatement> consistentStatements = List.of(
-            new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("pay-2", 2000L, "CNY", "SUCCEEDED"),
-            new ChannelStatement("refund-1", 500L, "CNY", "SUCCEEDED"));
+    private final List<StatementLine> consistentStatements = List.of(
+            legacyLine(1, "pay-1", 1000L, "SUCCEEDED"),
+            legacyLine(2, "pay-2", 2000L, "SUCCEEDED"),
+            legacyLine(3, "refund-1", 500L, "SUCCEEDED"));
 
     @Test
     void runReconciliationProducesConsistentBatch() {
         ReconciliationApplicationService service = service(consistentPayments, consistentRefunds, consistentStatements);
 
-        ReconciliationBatch batch = service.runReconciliation("2026-08");
+        ReconciliationBatch batch = service.runReconciliation(PERIOD);
 
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.CONSISTENT);
         assertThat(batch.getMatches()).hasSize(3);
@@ -57,15 +60,15 @@ class ReconciliationSettlementRpcScenarioTest {
                 new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"),
                 new PlatformFact("pay-2", "PAYMENT", 2000L, "CNY", "SUCCEEDED"),
                 new PlatformFact("refund-1", "REFUND", 500L, "CNY", "SUCCEEDED"));
-        List<ChannelStatement> statements = List.of(
-                new ChannelStatement("pay-1", 900L, "CNY", "SUCCEEDED"),   // AMOUNT_MISMATCH
-                new ChannelStatement("pay-2", 2000L, "CNY", "FAILED"),      // STATUS_MISMATCH
-                new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED")); // CHANNEL_ONLY
+        List<StatementLine> statements = List.of(
+                legacyLine(1, "pay-1", 900L, "SUCCEEDED"),     // AMOUNT_MISMATCH
+                legacyLine(2, "pay-2", 2000L, "FAILED"),       // STATUS_MISMATCH
+                legacyLine(3, "channel-extra-1", 999L, "SUCCEEDED")); // CHANNEL_ONLY
         // refund-1 无渠道账单 → PLATFORM_ONLY
 
         ReconciliationApplicationService service = service(payments, List.of(), statements);
 
-        ReconciliationBatch batch = service.runReconciliation("2026-08");
+        ReconciliationBatch batch = service.runReconciliation(PERIOD);
 
         assertThat(batch.getStatus()).isEqualTo(ReconciliationStatus.HAS_DIFFERENCE);
         assertThat(batch.getMatches()).isEmpty();
@@ -79,20 +82,19 @@ class ReconciliationSettlementRpcScenarioTest {
 
     @Test
     void resolveDifferenceMarksResolvedAndDropsUnresolvedCount() {
-        List<PlatformFact> payments = List.of(
-                new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
-        List<ChannelStatement> statements = List.of(
-                new ChannelStatement("pay-1", 900L, "CNY", "SUCCEEDED")); // AMOUNT_MISMATCH
-        ReconciliationApplicationService service = service(payments, List.of(), statements);
+        List<StatementLine> statements = List.of(legacyLine(1, "pay-1", 900L, "SUCCEEDED")); // AMOUNT_MISMATCH
+        ReconciliationApplicationService service = service(
+                List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
+                List.of(), statements);
 
-        ReconciliationBatch batch = service.runReconciliation("2026-08");
+        ReconciliationBatch batch = service.runReconciliation(PERIOD);
 
-        ReconciliationSettlementSummaryResponse before = service.settlementSummary("2026-08");
+        ReconciliationSettlementSummaryResponse before = service.settlementSummary(PERIOD);
         assertThat(before.unresolvedDifferenceCount()).isEqualTo(1);
 
         service.resolveDifference(batch.getId(), "pay-1", "渠道金额修正", "ops-1", null);
 
-        ReconciliationSettlementSummaryResponse after = service.settlementSummary("2026-08");
+        ReconciliationSettlementSummaryResponse after = service.settlementSummary(PERIOD);
         assertThat(after.unresolvedDifferenceCount()).isZero();
     }
 
@@ -100,11 +102,11 @@ class ReconciliationSettlementRpcScenarioTest {
     void settlementSummaryExposesMatchedFactsForSettlement() {
         ReconciliationApplicationService service = service(consistentPayments, consistentRefunds, consistentStatements);
 
-        service.runReconciliation("2026-08");
+        service.runReconciliation(PERIOD);
 
-        ReconciliationSettlementSummaryResponse summary = service.settlementSummary("2026-08");
+        ReconciliationSettlementSummaryResponse summary = service.settlementSummary(PERIOD);
 
-        assertThat(summary.period()).isEqualTo("2026-08");
+        assertThat(summary.period()).isEqualTo(PERIOD);
         assertThat(summary.unresolvedDifferenceCount()).isZero();
         assertThat(summary.facts()).extracting(ReconciliationSettlementFact::type)
                 .containsExactlyInAnyOrder("PAYMENT", "PAYMENT", "REFUND");
@@ -116,21 +118,21 @@ class ReconciliationSettlementRpcScenarioTest {
     void duplicateRunForSamePeriodReturnsSameBatch() {
         ReconciliationApplicationService service = service(consistentPayments, consistentRefunds, consistentStatements);
 
-        ReconciliationBatch first = service.runReconciliation("2026-08");
-        ReconciliationBatch second = service.runReconciliation("2026-08");
+        ReconciliationBatch first = service.runReconciliation(PERIOD);
+        ReconciliationBatch second = service.runReconciliation(PERIOD);
 
         assertThat(second.getId()).isEqualTo(first.getId());
     }
 
     private ReconciliationApplicationService service(List<PlatformFact> payments,
-                                                    List<PlatformFact> refunds,
-                                                    List<ChannelStatement> statements) {
+                                                     List<PlatformFact> refunds,
+                                                     List<StatementLine> statements) {
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
-        PaymentFactsClient paymentClient = () -> payments;
-        RefundFactsClient refundClient = () -> refunds;
-        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(statements,
-                new ChannelStatementSource("FIXTURE", "inline", statements.size(), false));
-        return new ReconciliationApplicationService(repository, paymentClient, refundClient, loader,
+        InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
+        PaymentFactsClient paymentClient = period -> payments;
+        RefundFactsClient refundClient = period -> refunds;
+        seedImport(imports, "MOCK", PERIOD, statements);
+        return ReconciliationTestSupport.service(repository, imports, paymentClient, refundClient,
                 new NoopBusinessMetrics(), new StructuredAuditLogger());
     }
 }

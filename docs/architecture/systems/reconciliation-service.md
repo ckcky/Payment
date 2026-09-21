@@ -106,13 +106,15 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 
 ### 3.1 执行对账（供调度/运维）
 
-`POST /internal/reconciliation/batches` → `200`
+`POST /internal/reconciliation/run` → `200`（032 主入口，spec §10.1）
 
-**请求** `RunReconciliationRequest`：`{ period: String }`。
+**请求** `RunReconciliationRequest`：`{ period: String, channelCode?: String, importNo?: String }`。
 
-**响应** `ReconciliationBatchResponse`：`{ id, period, source, status, matchCount, differenceCount }`。
+**响应** `ReconciliationBatchResponse`：`{ id, batchNo, period, source, status, matchCount, differenceCount }`。
 
-**规则**：按 `period` 幂等（见 §5.2）；同周期重复请求返回首次批次。下游 `confirmed-facts` 失败或 CSV 缺失会抛错（INTERNAL_ERROR / NOT_FOUND）。
+**规则**：执行键 = `(channelCode, period, importId)`——缺省取该渠道该周期最新 `NORMALIZED` 导入，`importNo` 显式指定（更正账单重对入口）；同一导入重跑返回首次批次。**无可用导入 ⇒ 400 `STATEMENT_UNAVAILABLE`**（`sample.csv` 静默回退已于 032 删除）。兼容入口 `POST /internal/reconciliation/batches`（仅 `period`，缺省 LEGACY 渠道）语义不变。
+
+**错误**：`STATEMENT_UNAVAILABLE`（无 NORMALIZED 导入）、`NOT_FOUND`（importNo 不存在）。
 
 ### 3.2 查询批次
 
@@ -142,7 +144,9 @@ PENDING --start--> RECONCILING --finish(无差异)--> CONSISTENT --close--> CLOS
 
 `GET /internal/reconciliation/settlement-summary?period=...` → `200`
 
-**响应** `ReconciliationSettlementSummaryResponse`：`{ period, facts: List<ReconciliationSettlementFact>, unresolvedDifferenceCount }`；`facts` 由一致匹配映射（`reference/type/amountMinor/currencyCode`），结算侧据此算净额，**无需回查原始事实**（ReconciliationApplicationService.java:117）。
+**响应**（032/G4 口径，决策 5）`ReconciliationSettlementSummaryResponse`：`{ period, facts: List<ReconciliationSettlementFact{reference,type,amountMinor,currencyCode,merchantId}>, excludedFacts: List<ReconciliationExcludedFact{reference,side,impactMinor,kind}>, unresolvedDifferenceCount }`。
+
+**规则**：`facts` = 该周期**全部已确认事实**（按期间拉取，不再只取匹配成功的 matches，关闭 C-13）；`excludedFacts` = 未收口差异（PENDING/SUSPENDED/ADJUSTING/ADJUSTED）对结算口径的显式净影响扣减（PLATFORM_ONLY/STATUS_MISMATCH=事实全额、AMOUNT_MISMATCH=|平台−渠道|，其余类型不进商户口径）；已 RESOLVED 差异不再扣减。批次取「最新批」语义（同周期可并存多份导入批次）。
 
 **错误**：`NOT_FOUND`（周期无批次）。
 
@@ -369,7 +373,41 @@ mybatis-plus:
 
 `deployment/demo/scenario-audit.sh`（fixture F1~F7 幂等注入 + 渠道账单 CSV）与控制台 `http://localhost:8091/audit`（MOCK / LIVE 双模式）覆盖「触发 → 差异 → 挂账 → 调账 → 复核 → 关批 → 试算平衡」全流程。
 
-## 8. 可靠性加固（spec 034 / ADR-0082）
+---
+
+## 8. 账单实账化与差异台账（Feature 032 / ADR-0080，2026-09-21 落地）
+
+> 本节为 032 增量事实源；与 §2/§3 冲突处以本节为准（§2.3 的 `matches_json`/`differences_json` 内嵌与 `uk(period)` 已被本节取代）。
+
+### 8.1 账单导入（G1）
+
+- 聚合 `StatementImport` + 实体 `StatementLine`（`statement/` 包）；`StatementParser` 端口 + `CsvStatementParser`（v2 表头 `referenceType,reference,channelTxnNo,merchantId,amountMinor,feeMinor,currencyCode,status,occurredAt`；legacy 4 列走 reference 单键通道）。
+- 幂等三层之导入层：内容 SHA-256 指纹，`uk_import_identity(channel_code, period, fingerprint)` 回查重放返回首次导入；同周期更正账单 = 新指纹 = 新导入并存，旧批次不可变。
+- 解析：结构性错误（表头/列数/金额/币种/状态）⇒ 整批 `REJECTED`（`errorReason` 行号+原因），不产半套差异；归一缺陷行（缺商户/缺键/类型不可识别）留档，由匹配层产 `UNKNOWN_MAPPING`。
+- 端点：`POST /internal/reconciliation/statement-imports`（201）/ `GET .../statement-imports?period=&channelCode=` / `GET .../{id}`；指标 `reconciliation.statement_import{channel,result}`。
+
+### 8.2 匹配与差异台账（G2）
+
+- 匹配键升级 `(merchantId, referenceType, reference)` 三级降级（强键 → 回退键 → legacy 单键），弱匹配 `(merchantId, amountMinor)` 只出候选不改判；差异八类（+`FEE_MISMATCH`/`DUPLICATE_CHANNEL`/`UNKNOWN_MAPPING`）。
+- 差异拆独立行表 `reconciliation_differences`（RD 单号，`uk_diff_identity(period,channel_code,reference_type,reference,kind)` 幂等吸收）；`differences_json` **停写不停读**（历史批次快照仍可查）。
+- 批次唯一键 `uk_reconciliation_batches_period` → `uk(channel_code, period, import_id)`（更正账单可重对）；批次增 `channel_code`/`import_id` 列。
+- 端点：`GET /internal/reconciliation/differences?period=&status=&merchantId=&kind=&page=&size=`（分页）、`GET .../differences/{diffNo}`、`POST .../differences/{diffNo}/resolve`（备注必填，同步批次内视图）。
+
+### 8.3 渠道资金事实入账（G3）
+
+- `ChannelFundPostingService`：以最新 NORMALIZED 账单聚合 `netReceived=ΣPAYMENT−ΣREFUND(+ΣSETTLEMENT)`、`channelFee=ΣFEE 行`（费用唯一合法来源），发 `CHANNEL_SETTLEMENT` / `CHANNEL_FEE` 事件入 ledger（spec 031 契约）。
+- 幂等/双计防线：`sourceId` 周期级确定性派生 `CS-{channel}-{period}` / `CF-{channel}-{period}`（ledger 幂等键 `{eventType}:{sourceId}` 吸收重放）；零净额/零费用跳过不发空事件；`PERIOD_CLOSED` 原样上抛（更正走下一期间 ADJUSTMENT）。
+- 端点：`POST /internal/reconciliation/channels/{channelCode}/fund-facts/{period}/post`；响应 `FundPostingResponse{netReceivedMinor, channelFeeMinor, postedEvents}`。
+
+### 8.4 处置策略化与人工收口（G5）
+
+- `AuditDifferenceStatus` 增 `ADJUSTING`（瞬时）/`ADJUST_FAILED`（可见、不计未收口）；处置 RPC 失败 ⇒ 独立事务写失败台账 + 差异 `ADJUST_FAILED`，不静默吞。
+- audit 侧人工收口端点：`POST /internal/audit/batches/{batchNo}/differences/{id}/resolve`（备注必填；跨账等调账后 recheck 无法转绿的差异由人工确认直达 RESOLVED 后关批）。
+- `AutoDispositionPolicy`（枚举 `SMALL_CHANNEL_ONLY_SUSPEND` + `enabled`/`max-amount-minor` 配置，默认双关）：run 后对满足策略门的 PENDING 渠道长款自动挂账，`audit_adjustments` 留痕 + recon 差异置 SUSPENDED/dispositionRef；指标 `reconciliation.autodisposition{policy,outcome}`。
+
+---
+
+## 9. 可靠性加固（spec 034 / ADR-0082）
 
 - **audit 记账失败上抛语义保留**：`FeignAuditLedgerGateway`（AUDIT_ADJUSTMENT）失败仍上抛调用方，但**上抛前落 `pending_postings` 台账**（reconciliation 库，`com.payment.reconciliation.posting` 同构实现）——失败留痕、补投零双记（TT-8 真库回归）。
 - **DLQ 管理**（common-redis-mq `dlq` 包）：`MqDlqAdminService` XRANGE 读/XADD+XDEL 回放/清空 + `mq_dlq_size` gauge；服务侧 `payment.mq.dlq-admin.enabled` 默认 false + admin token 守卫。

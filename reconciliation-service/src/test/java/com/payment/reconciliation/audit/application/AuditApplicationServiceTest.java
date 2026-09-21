@@ -11,8 +11,8 @@ import com.payment.reconciliation.audit.domain.AuditDifferenceKind;
 import com.payment.reconciliation.audit.domain.AuditDifferenceStatus;
 import com.payment.reconciliation.audit.domain.AuditRepository;
 import com.payment.reconciliation.audit.infra.InMemoryAuditRepository;
-import com.payment.reconciliation.domain.ChannelStatement;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.statement.StatementLine;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -43,7 +43,8 @@ class AuditApplicationServiceTest {
     private static class FakeAuditFactsGateway implements AuditFactsGateway {
         List<CertificateFact> facts = new ArrayList<>();
         List<LedgerPostingView> postings = new ArrayList<>();
-        List<ChannelStatement> statements = new ArrayList<>();
+        List<StatementLine> statementLines = new ArrayList<>();
+        String statementImportNo;
         List<SettlementBatchFact> settlements = new ArrayList<>();
         boolean failFacts = false;
 
@@ -85,8 +86,8 @@ class AuditApplicationServiceTest {
         }
 
         @Override
-        public List<ChannelStatement> channelStatements(String period) {
-            return statements;
+        public StatementLoad channelStatementLoad(String period) {
+            return new StatementLoad(List.copyOf(statementLines), statementImportNo);
         }
     }
 
@@ -131,7 +132,8 @@ class AuditApplicationServiceTest {
     private AuditApplicationService service() {
         return new AuditApplicationService(auditRepository, reconciliationRepository, factsGateway,
                 ledgerGateway, new CertificateAuditor(), new LedgerAuditor(), new RealAuditor(),
-                new ReportAuditor(), new NoopBusinessMetrics(), new StructuredAuditLogger(), false, false);
+                new ReportAuditor(), new DispositionFailureRecorder(auditRepository),
+                new NoopBusinessMetrics(), new StructuredAuditLogger(), false, false);
     }
 
     /** 平账组 F1：3 笔业务事实 + 对应分录 + 1 结算批次（fee=0 口径）。 */
@@ -146,10 +148,11 @@ class AuditApplicationServiceTest {
                 paymentPosting("LP-2", "PM-AUD-0002", 25000L),
                 refundPosting("LP-3", "RF-AUD-0001", 3000L),
                 settlementPosting("LP-4", "SB-AUD-0001", 21750L)));
-        factsGateway.statements.addAll(List.of(
-                new ChannelStatement("CH-AUD-0001", 10000L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("CH-AUD-0002", 25000L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("CH-RF-0001", 3000L, "CNY", "SUCCEEDED")));
+        factsGateway.statementImportNo = "SI-AUD-TEST";
+        factsGateway.statementLines.addAll(List.of(
+                typedLine(1, "PAYMENT", "CH-AUD-0001", 10000L),
+                typedLine(2, "PAYMENT", "CH-AUD-0002", 25000L),
+                typedLine(3, "REFUND", "CH-RF-0001", 3000L)));
     }
 
     @Test
@@ -328,6 +331,13 @@ class AuditApplicationServiceTest {
     }
 
     // ---- helpers ----
+
+    /** typed 标准账单行（032 导入台账口径：referenceType 显式、渠道流水号 + 商户齐备）。 */
+    private static StatementLine typedLine(int lineNo, String referenceType, String reference, long amountMinor) {
+        return new StatementLine(null, lineNo, "MOCK", "TXN-" + reference, referenceType, reference,
+                "CHANNEL_TXN", "M-1", amountMinor, 0L, "CNY", "SUCCEEDED", null,
+                referenceType + "," + reference + ",TXN-" + reference + ",M-1," + amountMinor);
+    }
 
     private static LedgerPostingView.LedgerEntryView entry(String accountCode, String direction, long amount) {
         return new LedgerPostingView.LedgerEntryView(1L, accountCode, "PLATFORM", "LEDGER", direction, amount);

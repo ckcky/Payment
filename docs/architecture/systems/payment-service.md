@@ -267,9 +267,11 @@ PENDING --accept--> ACCEPTED --succeed--> SUCCEEDED
 
 ### 3.7 对账事实查询（供 reconciliation-service）
 
-`GET /internal/payments/confirmed-facts` → `200`
+`GET /internal/payments/confirmed-facts?period=...` → `200`
 
-**响应**：`List<PaymentFactResponse>`，每项 `{ paymentId, channelReference, amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 支付。
+**响应**：`List<PaymentFactResponse>`，每项 `{ paymentId, channelReference, merchantId, amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 支付。
+
+**规则（spec 032 / H-032-1）**：`period` 可解析为日期（`YYYY-MM-DD`）时按 `DATE(created_at) = period` 过滤（跨期不重复结算的事实侧锚点）；缺省或不可解析（demo 周期串）返回全量并 WARN 留痕。`merchantId` 为 032 匹配键（G2）与结算商户校验（G4）的事实锚，缺商户的事实会被 settlement `ConfirmedFactGate` 拒绝。退款侧 `GET /internal/refunds/confirmed-facts` 同周期过滤语义，`RefundFactResponse.merchantId` 经 payment 反查。
 
 ### 3.8 出站 RPC（payment → order / ledger；Feign 服务名寻址，ADR-0059）
 

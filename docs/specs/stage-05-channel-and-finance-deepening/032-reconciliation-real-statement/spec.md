@@ -449,6 +449,8 @@ POST /internal/ledger/accounting-events        （spec 031 §6.2 契约，不改
 | **H-032-5** | 是否引入「经 payment 渠道端口拉账单」（新增跨服务 RPC，可能新增 SFTP/HTTP 依赖） | 新增依赖 / 服务边界 | **本轮不做**，032-D 单独评估 |
 | **H-032-6** | 自动处置适用范围（推荐仅「小额 `CHANNEL_ONLY` → 挂账」；`AMOUNT_MISMATCH` / `FEE_MISMATCH` 一律人工） | 资金路径行为 | 保守起步，策略每加一条须同时加测试与指标 |
 
+> **裁决记录（2026-09-21）**：负责人裁决 **H-032-1~H-032-6 全部按本表推荐方案批准**；[ADR-0080](../../../adr/0080-reconciliation-statement-and-fund-facts.md) 同日转 🟢 Accepted，Feature 032 随即实现落地（见 roadmap 与 CHANGELOG）。相邻项收口口径：C-22 退款渠道引用以**查询侧精确化**落地（仅取 SUCCEEDED 退款渠道尝试、id 降序确定性排序），`payment_attempts` **未**加 `refund_no` 列；结算口径改造（决策 5）先于差异策略化同 Feature 交付。
+
 ---
 
 ## 17. 与其它 Feature 的关系（禁止项写死）

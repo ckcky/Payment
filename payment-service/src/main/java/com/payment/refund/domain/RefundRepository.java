@@ -26,6 +26,14 @@ public interface RefundRepository {
     /** 按退款状态查询（对账事实抽取用）。 */
     List<Refund> findByStatus(RefundStatus status);
 
+    /**
+     * 按状态 + 创建时间窗查询退款（spec 032 / H-032-1：confirmed-facts 期间过滤）。
+     * 窗口为 {@code [startInclusive, endExclusive)}，半开区间保证跨库（H2/MySQL）可移植。
+     */
+    List<Refund> findByStatusAndCreatedAtBetween(RefundStatus status,
+                                                 java.time.LocalDateTime startInclusive,
+                                                 java.time.LocalDateTime endExclusive);
+
     /** 持有 {@code paymentNo} 的退款受理排他锁（H1：串行化累计退款金额读改写）。 */
     void lockForIntake(String paymentNo);
 

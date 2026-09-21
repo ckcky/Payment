@@ -27,7 +27,7 @@ class AuditSettlementGateTest {
     private SettlementApplicationService service(AuditGateClient gateClient) {
         MerchantClient merchantClient = id -> new MerchantView(id, "ACTIVE", true);
         ReconciliationClient reconciliationClient = period -> new ReconciliationSummary(period,
-                List.of(new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY")), 0);
+                List.of(new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY", "1")), 0);
         LedgerPostingGateway ledgerGateway = facts -> { };
         return new SettlementApplicationService(repository, merchantClient, reconciliationClient,
                 adjustmentRepository, ledgerGateway, gateClient,

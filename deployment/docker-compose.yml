@@ -492,11 +492,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: root
     volumes:
       - ./logs:/var/log/payment-arch
-      # 渠道账单 CSV 注入目录（reconciliation.statement-dir-override，见 application.yml:56）。
-      # e2e 的 ChannelStatementDiffE2ETest 由**测试 JVM（宿主）**写 /tmp/e2e-channel-statements，
-      # 容器侧必须挂载同一路径才能读到——否则 4 个 CSV 差异用例全部「差异为空」而失败
-      # （2026-09-15 实测：容器模式 23 测试中这 4 例必挂，宿主模式全过）。
-      - /tmp/e2e-channel-statements:/tmp/e2e-channel-statements
     depends_on:
       nacos:
         condition: service_healthy

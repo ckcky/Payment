@@ -10,10 +10,21 @@ import java.util.List;
  *
  * <p>分录携带账本侧解析出的**账户语义**（accountCode / owner 维度）——entry_type 停写后，
  * 审计器按科目语义聚合而非数值 accountId 判定（只读回显，非记账指令）。</p>
+ *
+ * <p>032/G2：补齐 {@code period} / {@code postedAt} / {@code status}（031 出参已有，
+ * 此前映射被丢弃）——审计按期间与时点比对、PERIOD_CLOSED 结果可回显。</p>
  */
 public record LedgerPostingView(String postingNo, String eventType, String idempotencyKey,
-                                String sourceType, String sourceId,
-                                String currency, List<LedgerEntryView> entries) {
+                                String sourceType, String sourceId, String period, String postedAt,
+                                String status, String currency, List<LedgerEntryView> entries) {
+
+    /** 兼容构造（032 前的 9 字段形态）：period/postedAt/status 缺省为 null。 */
+    public LedgerPostingView(String postingNo, String eventType, String idempotencyKey,
+                             String sourceType, String sourceId, String currency,
+                             List<LedgerEntryView> entries) {
+        this(postingNo, eventType, idempotencyKey, sourceType, sourceId, null, null, null,
+                currency, entries);
+    }
 
     /** 单条分录视图（accountCode 为账本实例的科目定义码）。 */
     public record LedgerEntryView(long accountId, String accountCode, String ownerType, String ownerId,

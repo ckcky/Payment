@@ -2,23 +2,24 @@ package com.payment.reconciliation.application;
 
 import com.payment.common.core.observability.MicrometerBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.reconciliation.application.ChannelStatementLoadResult;
-import com.payment.reconciliation.domain.ChannelStatement;
-import com.payment.reconciliation.domain.ChannelStatementSource;
 import com.payment.reconciliation.domain.DifferenceType;
 import com.payment.reconciliation.domain.PlatformFact;
 import com.payment.reconciliation.domain.ReconciliationBatch;
 import com.payment.reconciliation.infra.InMemoryReconciliationRepository;
+import com.payment.reconciliation.infra.InMemoryStatementImportRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.legacyLine;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.seedImport;
+import static com.payment.reconciliation.testsupport.ReconciliationTestSupport.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 对账业务指标（T072）：一次执行记一次 {@code reconciliation.run}，每个差异记一次
- * {@code reconciliation.difference}（按差异类型打 type 标签）。
+ * {@code reconciliation.difference}（按差异类型打标签）。
  */
 class ReconciliationMetricsTest {
 
@@ -28,18 +29,18 @@ class ReconciliationMetricsTest {
         MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
 
         InMemoryReconciliationRepository repository = new InMemoryReconciliationRepository();
+        InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
 
-        PaymentFactsClient payments = () -> List.of(
-                new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
-        RefundFactsClient refunds = () -> List.of();
-        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(List.of(
-                new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("channel-extra-2", 998L, "CNY", "SUCCEEDED")),
-                new ChannelStatementSource("FIXTURE", "inline", 3, false));
+        PaymentFactsClient payments = period -> List.of(
+                new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1"));
+        RefundFactsClient refunds = period -> List.of();
+        seedImport(imports, "MOCK", "2026-08", List.of(
+                legacyLine(1, "mock-ref-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "channel-extra-1", 999L, "SUCCEEDED"),
+                legacyLine(3, "channel-extra-2", 998L, "SUCCEEDED")));
 
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                repository, payments, refunds, loader, metrics, new StructuredAuditLogger());
+        ReconciliationApplicationService service = service(repository, imports, payments, refunds,
+                metrics, new StructuredAuditLogger());
 
         ReconciliationBatch batch = service.runReconciliation("2026-08");
 
@@ -49,7 +50,7 @@ class ReconciliationMetricsTest {
 
         assertThat(registry.get("reconciliation.run").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("reconciliation.difference").counter().count()).isEqualTo(2.0);
-        assertThat(registry.get("reconciliation.difference").tag("type", DifferenceType.CHANNEL_ONLY.name())
+        assertThat(registry.get("reconciliation.difference").tag("kind", DifferenceType.CHANNEL_ONLY.name())
                 .counter().count()).isEqualTo(2.0);
     }
 
@@ -62,18 +63,16 @@ class ReconciliationMetricsTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
 
-        PaymentFactsClient payments = () -> List.of(
-                new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED"));
-        RefundFactsClient refunds = () -> List.of();
-        ChannelStatementLoader loader = period -> new ChannelStatementLoadResult(List.of(
-                new ChannelStatement("mock-ref-1", 1000L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("channel-extra-1", 999L, "CNY", "SUCCEEDED"),
-                new ChannelStatement("channel-extra-2", 998L, "CNY", "SUCCEEDED")),
-                new ChannelStatementSource("FIXTURE", "inline", 3, false));
+        InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
+        seedImport(imports, "MOCK", "2026-08", List.of(
+                legacyLine(1, "mock-ref-1", 1000L, "SUCCEEDED"),
+                legacyLine(2, "channel-extra-1", 999L, "SUCCEEDED"),
+                legacyLine(3, "channel-extra-2", 998L, "SUCCEEDED")));
 
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                new InMemoryReconciliationRepository(), payments, refunds, loader, metrics,
-                new StructuredAuditLogger());
+        ReconciliationApplicationService service = service(
+                new InMemoryReconciliationRepository(), imports,
+                period -> List.of(new PlatformFact("mock-ref-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1")),
+                period -> List.of(), metrics, new StructuredAuditLogger());
 
         ReconciliationBatch batch = service.runReconciliation("2026-08");
 
@@ -89,15 +88,14 @@ class ReconciliationMetricsTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MicrometerBusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
 
-        ReconciliationApplicationService service = new ReconciliationApplicationService(
-                new InMemoryReconciliationRepository(),
-                () -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED")),
-                () -> List.of(),
-                period -> new ChannelStatementLoadResult(
-                        List.of(new ChannelStatement("pay-1", 1000L, "CNY", "SUCCEEDED")),
-                        ChannelStatementSource.fixture("inline", 1, false)),
-                metrics,
-                new StructuredAuditLogger());
+        InMemoryStatementImportRepository imports = new InMemoryStatementImportRepository();
+        seedImport(imports, "MOCK", "2026-08",
+                List.of(legacyLine(1, "pay-1", 1000L, "SUCCEEDED")));
+
+        ReconciliationApplicationService service = service(
+                new InMemoryReconciliationRepository(), imports,
+                period -> List.of(new PlatformFact("pay-1", "PAYMENT", 1000L, "CNY", "SUCCEEDED", "1")),
+                period -> List.of(), metrics, new StructuredAuditLogger());
 
         ReconciliationBatch batch = service.runReconciliation("2026-08");
 

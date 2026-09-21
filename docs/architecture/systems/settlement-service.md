@@ -39,6 +39,8 @@
 
 创建结算批次前，settlement-service 通过 `GET /internal/audit/settlement-gate?period=` 查询 reconciliation-service。`BLOCK` 时拒绝建批；`ALLOW` 表示不存在未隔离的阻塞差异，已挂账的差异可在留痕条件下继续。随后仍由 `ConfirmedFactGate` 逐条校验事实类型、币种、金额和周期。
 
+**结算事实口径（spec 032 / G4，决策 5）**：批次事实来源为 reconciliation `GET /internal/reconciliation/settlement-summary` 的 `facts` = **该周期全部已确认事实**（不再只取匹配成功的 matches，关闭 C-13 静默漏结算）；未收口差异（PENDING/SUSPENDED/ADJUSTING/ADJUSTED）以 `excludedFacts` 显式扣减净影响（PLATFORM_ONLY/STATUS_MISMATCH=事实全额、AMOUNT_MISMATCH=|平台−渠道|），事实本身仍保留在 `facts` 中（挂账后放行仍含事实、只扣净影响）。`ConfirmedFactGate` 另行强制商户校验：事实缺 `merchantId`（归属未知）⇒ 拒绝落批；归属他商户的事实过滤出本商户结算口径。
+
 Audit 的挂账/调账只通过 ledger 标准记账通道产生平衡、append-only 调整分录；不修改 Payment、Refund 或 Settlement 原始事实。`SUSPENSE` 是 reconciliation audit 使用的待处理差错款过渡科目，结算只消费审计门禁允许的已确认事实。
 
 ### 1.3 技术指标（`[目标]`，待确认）

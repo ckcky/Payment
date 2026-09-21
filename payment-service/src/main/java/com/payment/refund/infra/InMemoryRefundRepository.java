@@ -58,6 +58,17 @@ public class InMemoryRefundRepository implements RefundRepository {
                 .toList();
     }
 
+    /**
+     * spec 032 / H-032-1 期间过滤：内存实现不建模 createdAt（测试用仓储），
+     * 退化为仅按状态过滤——期间过滤的真实语义由 Mybatis/H2 集成测试承接。
+     */
+    @Override
+    public List<Refund> findByStatusAndCreatedAtBetween(RefundStatus status,
+                                                        java.time.LocalDateTime startInclusive,
+                                                        java.time.LocalDateTime endExclusive) {
+        return findByStatus(status);
+    }
+
     @Override
     public void lockForIntake(String paymentNo) {
         // 内存实现无并发串行化需求（单测为单线程），生产由 MyBatis 排他锁承接。

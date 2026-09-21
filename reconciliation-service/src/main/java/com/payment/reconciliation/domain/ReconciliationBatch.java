@@ -8,17 +8,21 @@ import com.payment.common.core.id.BusinessNos;
 import java.util.List;
 import java.util.Objects;
 
-import java.util.List;
-import java.util.Objects;
-
 /**
  * 对账批次聚合根：某个周期内平台事实与渠道账单的比对结果（匹配 + 差异）。
  *
  * <p>状态机：PENDING → RECONCILING → CONSISTENT / HAS_DIFFERENCE；
  * HAS_DIFFERENCE → PROCESSING → CLOSED；CONSISTENT → CLOSED。
- * 状态迁移只经领域方法，金额由事实（PlatformFact/ChannelStatement）携带，禁止浮点。</p>
+ * 状态迁移只经领域方法，金额由事实（StatementLine/PlatformFact）携带，禁止浮点。</p>
+ *
+ * <p>032 起：批次绑定渠道与账单导入（{@code channelCode} + {@code importId}），唯一约束
+ * {@code uk(channel_code, period, import_id)}——CLOSED 批次允许「同周期新导入批次」并存，
+ * 更正账单可重对（spec §7.3）。legacy 批次（032 前）channelCode=MOCK、importId=null。</p>
  */
 public class ReconciliationBatch {
+
+    /** 032 前历史批次的缺省渠道码（uk(channel_code, period, import_id) 兼容口径）。 */
+    public static final String LEGACY_CHANNEL = "MOCK";
 
     private Long id;
     /** 业务单号（RB + 雪花，ADR-0062）。 */
@@ -26,6 +30,9 @@ public class ReconciliationBatch {
     private Integer version;
     private final String period;
     private final String source;
+    private final String channelCode;
+    /** 账单导入批次 id（null = 032 前历史批次 / 无导入的 legacy 批次）。 */
+    private final Long importId;
     private ReconciliationStatus status = ReconciliationStatus.PENDING;
     private List<Match> matches = List.of();
     private List<Difference> differences = List.of();
@@ -36,20 +43,27 @@ public class ReconciliationBatch {
     private String closedAt;
 
     public ReconciliationBatch(String period, String source) {
+        this(period, source, LEGACY_CHANNEL, null);
+    }
+
+    public ReconciliationBatch(String period, String source, String channelCode, Long importId) {
         this.period = Objects.requireNonNull(period, "period");
         if (period.isBlank()) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "period must not be blank");
         }
         this.source = Objects.requireNonNull(source, "source");
+        this.channelCode = channelCode == null || channelCode.isBlank() ? LEGACY_CHANNEL : channelCode;
+        this.importId = importId;
         this.batchNo = BusinessNos.of(BusinessNoType.RECONCILIATION_BATCH);
     }
 
     /** 持久化重建：还原聚合与历史状态，绕过创建期校验（不改变业务规则）。 */
     public static ReconciliationBatch rehydrate(Long id, String batchNo, Integer version, String period, String source,
-                                                ReconciliationStatus status, List<Match> matches,
-                                                List<Difference> differences, ChannelStatementSource statementSource,
+                                                String channelCode, Long importId, ReconciliationStatus status,
+                                                List<Match> matches, List<Difference> differences,
+                                                ChannelStatementSource statementSource,
                                                 String closedBy, String closedAt) {
-        ReconciliationBatch batch = new ReconciliationBatch(period, source);
+        ReconciliationBatch batch = new ReconciliationBatch(period, source, channelCode, importId);
         batch.id = id;
         batch.batchNo = batchNo;
         batch.version = version;
@@ -139,6 +153,29 @@ public class ReconciliationBatch {
         return total;
     }
 
+    /**
+     * 未收口差异金额合计（分，spec 032 §12 指标 {@code reconciliation.unmatched_amount_minor} 口径）：
+     * 只累计未 RESOLVED 的差异，与 {@link #differenceAmountMinor()} 同一套单边/双边规则。
+     */
+    public long unmatchedAmountMinor() {
+        long total = 0L;
+        for (Difference difference : differences) {
+            if (difference.isResolved()) {
+                continue;
+            }
+            Long platform = difference.getPlatformAmountMinor();
+            Long channel = difference.getChannelAmountMinor();
+            if (platform != null && channel != null) {
+                total += Math.abs(platform - channel);
+            } else if (platform != null) {
+                total += platform;
+            } else if (channel != null) {
+                total += channel;
+            }
+        }
+        return total;
+    }
+
     private void requireStatus(ReconciliationStatus expected, String op) {
         if (this.status != expected) {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
@@ -177,6 +214,14 @@ public class ReconciliationBatch {
 
     public String getSource() {
         return source;
+    }
+
+    public String getChannelCode() {
+        return channelCode;
+    }
+
+    public Long getImportId() {
+        return importId;
     }
 
     public ReconciliationStatus getStatus() {

@@ -2,6 +2,7 @@ package com.payment.settlement.infra.client;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.settlement.application.ExcludedSettlementFact;
 import com.payment.settlement.application.ReconciliationClient;
 import com.payment.settlement.application.ReconciliationSummary;
 import com.payment.settlement.application.SettlementFact;
@@ -29,9 +30,14 @@ public class FeignReconciliationClient implements ReconciliationClient {
         try {
             ReconciliationSummaryDto dto = feign.getSettlementSummary(period);
             List<SettlementFact> facts = dto.facts() == null ? List.of() : dto.facts().stream()
-                    .map(f -> new SettlementFact(f.reference(), f.type(), f.amountMinor(), f.currencyCode()))
+                    .map(f -> new SettlementFact(f.reference(), f.type(), f.amountMinor(), f.currencyCode(),
+                            f.merchantId()))
                     .toList();
-            return new ReconciliationSummary(dto.period(), facts, dto.unresolvedDifferenceCount());
+            List<ExcludedSettlementFact> excluded = dto.excludedFacts() == null ? List.of()
+                    : dto.excludedFacts().stream()
+                    .map(e -> new ExcludedSettlementFact(e.reference(), e.type(), e.amountMinor(), e.reason()))
+                    .toList();
+            return new ReconciliationSummary(dto.period(), facts, excluded, dto.unresolvedDifferenceCount());
         } catch (FeignException.NotFound e) {
             throw BizException.of(ErrorCodes.NOT_FOUND, "reconciliation not found for period: " + period);
         } catch (RetryableException e) {

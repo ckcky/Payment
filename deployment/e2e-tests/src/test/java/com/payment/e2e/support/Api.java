@@ -128,6 +128,17 @@ public final class Api {
         return post("reconciliation", "/internal/audit/batches", Map.of(), body);
     }
 
+    /** POST /internal/reconciliation/statement-imports：导入渠道账单（032 实账化，SHA-256 内容幂等）。 */
+    public ApiResponse statementImport(String channelCode, String period, String content) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("channelCode", channelCode);
+        body.put("period", period);
+        body.put("sourceType", "FILE");
+        body.put("content", content);
+        body.put("importedBy", "e2e-csv");
+        return post("reconciliation", "/internal/reconciliation/statement-imports", Map.of(), body);
+    }
+
     public ApiResponse auditDifferences(String batchNo) {
         return get("reconciliation", "/internal/audit/batches/" + batchNo + "/differences");
     }

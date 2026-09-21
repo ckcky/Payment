@@ -6,6 +6,21 @@
 
 ---
 
+## [2026-09-21] feat(032)：对账实账化——渠道账单导入对象 + typed 匹配 + 差异台账拆表 + 渠道资金事实入账 + 结算口径收口（ADR-0080 Accepted）
+
+**性质**：Feature 032 实现落地。负责人 2026-09-21 裁决 H-032-1~H-032-6 按 spec §16 推荐方案批准（[ADR-0080](docs/adr/0080-reconciliation-statement-and-fund-facts.md) 同日转 🟢 Accepted）。
+关闭 design-review **C-13**（静默漏结算）/ **C-20**（跨商户串账 + 跨期重复结算）/ **C-22**（退款渠道引用不精确）；031 §16 挂起的渠道清算链路在此收口。
+
+- **账单真实化（G1）**：三新表 `statement_imports`/`statement_lines`/`reconciliation_differences` + 守卫式增量迁移（`032-reconciliation-statement.sql`，过 schema-lint L-3 与双路径重放）；`StatementImport` 聚合 + `StatementLine` 实体（业务单号类型 `SI`/`RD`）；`CsvStatementParser` v2/legacy 双表头（结构性错误整批 REJECTED、归一缺陷行留档）；导入幂等 = 内容 SHA-256 指纹 `uk_import_identity` 回查重放；**删除 `sample.csv` 静默回退与 `statement_fallback` 指标**——run 无可用 NORMALIZED 导入 ⇒ 400 `STATEMENT_UNAVAILABLE` + 指标。
+- **匹配与差异台账（G2）**：`ReconciliationMatching.matchTyped` 三级降级强键 `(merchantId, referenceType, reference)`（弱匹配只出候选不改判）+ 差异八类（新增 `FEE_MISMATCH`/`DUPLICATE_CHANNEL`/`UNKNOWN_MAPPING`）；差异拆独立行表（RD 单号、`uk_diff_identity` 幂等吸收、`differences_json` 停写不停读）；批次唯一键 `uk(period)` → `uk(channel_code, period, import_id)`（更正账单可重对）。
+- **事实维度（G4）**：`confirmed-facts` 增可选 `period` 过滤（`DATE(created_at)`，不可解析周期串回退全量 + WARN）+ 出参 `merchantId` 全链透传（退款事实经 payment 反查）；退款渠道引用精确化（仅 SUCCEEDED 尝试、id 降序确定性排序）；结算口径改「全部已确认事实 − `excludedFacts` 未收口差异净影响」，settlement `ConfirmedFactGate` 商户校验（归属未知拒绝、他商户滤除）。
+- **渠道资金事实入账（G3）**：032 为 `CHANNEL_SETTLEMENT`/`CHANNEL_FEE` **唯一产生方**（`ChannelFundPostingService`；`CS-`/`CF-{channel}-{period}` 周期级确定性 sourceId，ledger 幂等键吸收重放；净额/费用为 0 跳过；`PERIOD_CLOSED` 原样上抛）；渠道费唯一合法来源 = FEE 账单行（双计三防线）；ArchUnit 词汇门禁扩展（`CHANNEL_FEE`/`CHANNEL_SETTLEMENT` 字面量仅 reconciliation/ledger/契约可引用）。
+- **处置策略化（G5）**：差异处置分态 `ADJUSTING`（瞬时）/`ADJUST_FAILED`（可见、不计未收口，独立事务失败台账不静默吞）；audit 侧人工收口端点 `POST /internal/audit/batches/{batchNo}/differences/{id}/resolve`（F7 跨账差异关闭路径）；`AutoDispositionPolicy`（`SMALL_CHANNEL_ONLY_SUSPEND`，enabled/金额上限默认双关）；reconciliation 侧差异查询/按单号收口/渠道资金入账/run 端点补齐 API 暴露层。
+- **demo 与测试**：`scenario-audit.sh` 增账单导入（v2 CSV）与 F7 人工收口步骤（⑧ 关批可过）；`scenario-reconciliation.sh` 切导入前置 + run + 差异分页 + 按单号收口；audit-faults 注入行补 `merchant_id` 与期间内 `created_at`；对账/结算测试按实账化契约重写（TC-032-1~14 落点），schema 新表过 test-infra 真库唯一键断言。
+- **文档同步**：systems/reconciliation-service.md（§3.1/§3.5 契约更新 + §8 实账化增量）、systems/settlement-service.md（§1.4 结算口径）、systems/payment-service.md（§3.7 事实契约）、technical-solution.md 服务表、specs/README 与 roadmap 032 → 🟢 已实现。
+- **遗留**：T24b（自动处置/audit 处置在 034 C-19「ledger 记账同事务优先」合入后的回归重测）待 rebase 后由编排者安排。
+---
+
 ## [2026-09-21] feat(034)：可靠性加固——失败恢复归位调用方（ADR-0082 Accepted）
 
 **性质**：Feature 034 实现落地。负责人 2026-09-21 裁决 H-034-1~H-034-5 按 spec 推荐方案批准。恢复三不变式

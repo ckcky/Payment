@@ -85,9 +85,10 @@ class SettlementBatchReplayIdempotencyTest {
 
     private static final class FakeReconciliationClient implements ReconciliationClient {
 
+        // 032/G4：已确认事实必须带商户归属（未知归属不得结算）；此处与 createBatch("1", …) 同商户
         private List<SettlementFact> facts = List.of(
-                new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY"),
-                new SettlementFact("ref-2", "REFUND", 1000L, "CNY"));
+                new SettlementFact("ref-1", "PAYMENT", 5000L, "CNY", "1"),
+                new SettlementFact("ref-2", "REFUND", 1000L, "CNY", "1"));
 
         @Override
         public ReconciliationSummary getSettlementSummary(String period) {

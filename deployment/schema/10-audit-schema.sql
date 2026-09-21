@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS audit_batches (
 CREATE TABLE IF NOT EXISTS audit_differences (
     id BIGINT NOT NULL AUTO_INCREMENT,
     batch_id BIGINT NOT NULL,
+    import_id BIGINT NULL COMMENT '账单导入批次 id（spec 032 §9 ④：账实核对可回溯到账单行）',
     kind VARCHAR(32) NOT NULL,
     severity VARCHAR(8) NOT NULL COMMENT 'BLOCKER|MAJOR|MINOR',
     source_type VARCHAR(16) NOT NULL,
@@ -61,8 +62,9 @@ CREATE TABLE IF NOT EXISTS audit_differences (
 CREATE TABLE IF NOT EXISTS audit_adjustments (
     id BIGINT NOT NULL AUTO_INCREMENT,
     adjust_no VARCHAR(32) NOT NULL COMMENT '业务单号 AD+雪花（ADR-0062）',
-    batch_id BIGINT NOT NULL,
-    difference_id BIGINT NOT NULL,
+    batch_id BIGINT NULL COMMENT 'NULL = 非批次内处置（spec 032 自动挂账，经 diff_no 回溯对账差异）',
+    difference_id BIGINT NULL COMMENT 'NULL = 审计差异外处置（spec 032 自动挂账）',
+    diff_no VARCHAR(32) NULL COMMENT '对账差异记录号 RD+雪花（spec 032 T23：自动处置回溯 recon diffNo）',
     kind VARCHAR(16) NOT NULL,
     debit_account_code VARCHAR(32) NOT NULL,
     credit_account_code VARCHAR(32) NOT NULL,
