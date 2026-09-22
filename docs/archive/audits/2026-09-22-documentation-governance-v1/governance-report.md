@@ -291,23 +291,24 @@ Constitution → Standards → Templates → 实际文档 → Review → AI Agen
 
 ## 6. 变更文件清单（按区域）
 
-工作区统计：**146 项已跟踪文件变更（140 修改 + 6 删除）/ 34 个新增文件**，累计 `+2057 / -1238` 行（不含新增文件）。
+以 PR 视角统计（`git diff origin/master...HEAD`，即合并远端后本次治理的实际增量）：**180 个文件变更 = 140 修改 + 6 删除 + 34 新增**，累计 `+5851 / -1695` 行。
 
 | 区域 | 文件数 | 说明 |
 |---|---|---|
 | `docs/specs/` | 100 | Spec 状态归位 / 四件套声明 / 路径与深度修正 / 历史标记 |
-| `docs/architecture/` | 17 | technical-solution（5 处引用修正 + 双图） + systems/ 9 份重构 + diagrams 删旧 6（3 组 puml+svg） |
+| `docs/architecture/` | 33 | technical-solution（引用与图修正）+ systems/ 9 份重构 + diagrams 删旧 6 / 新增 16 |
 | `docs/adr/` | 10 | 状态统一 / 死链与**标签编号**修正 / README 索引 42 文件 + 0054 消歧 / traceability 章号换算 |
+| `docs/standards/` | 7（新增） | 治理母规范 + 6 份类型规范 |
+| `docs/templates/` | 5（新增） | 空模板（中文标题 + 逐节指引） |
+| `.claude/skills/` | 5 | 3 个重写为导航层 + speckit-specify 修正 + （新增）documentation-review |
+| `.claude/commands/` | 4 | review / payment-review / test 判据重写 + （新增）doc-review |
+| `.specify/` | 5 | constitution 版本与路径 / create-new-feature.sh 覆盖 / 3 份模板 / repo-config.json |
 | `docs/guides/` `docs/operations/` | 3 | 口径校正（含 §5.4.1 的 Redis 模拟 MQ 口径） |
-| `docs/`（根） | 1 | `README.md`（挂载治理层与三处口径） |
-| `.claude/skills/` | 4 | 3 个重写为导航层 + speckit-specify 修正 |
-| `.claude/commands/` | 3 | review / payment-review / test 判据重写 |
-| `.specify/` | 5 | constitution 版本+路径 / create-new-feature.sh 覆盖 / 3 份模板 |
-| 根 | 2 | `AGENTS.md`、`README.md` |
-| `deployment/` | 1 | `README.md` |
-| **新增文件（34）** | 34 | `docs/standards/`(7) · `docs/templates/`(5) · `docs/architecture/diagrams/`(16) · `.claude/skills/documentation-review/SKILL.md` · `.claude/commands/doc-review.md` · `.specify/repo-config.json` · `deployment/docs-lint.py` · `docs/archive/audits/2026-09-22-documentation-governance-v1/governance-report.md` · `docs/archive/audits/2026-09-22-doc-governance-audit/audit-report.md` |
+| `docs/archive/` | 2（新增） | 上一轮审计报告 + 本报告 |
+| `docs/README.md` · 根 `AGENTS.md` · 根 `README.md` · `deployment/README.md` | 4 | 挂载治理层与口径 |
+| `deployment/docs-lint.py` | 1（新增） | 16 组只读检查脚本 |
 
-**业务代码改动：0。** 全部变更中，非 Markdown 的只有 3 项：`.specify/scripts/bash/create-new-feature.sh`（Spec Kit 仓库级覆盖，用户明确许可）、`.specify/repo-config.json`（新配置）、`deployment/docs-lint.py`（文档校验脚本，纯标准库、无新依赖）。**无任何 `.java` / `.sql` / `.xml` / `.yml` / 前端文件被修改**。
+**业务代码改动：0。** 非 Markdown 的只有 **3 项**：`.specify/scripts/bash/create-new-feature.sh`（Spec Kit 仓库级覆盖，用户明确许可）、`.specify/repo-config.json`（新配置）、`deployment/docs-lint.py`（文档校验脚本，纯标准库、零依赖）。其余 26 个非 Markdown 文件全部是**架构图** `.puml` / `.svg`。**无任何 `.java` / `.sql` / `.xml` / `.yml` / 前端文件被修改**。
 
 ---
 
