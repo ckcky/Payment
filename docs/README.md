@@ -8,9 +8,12 @@
 |---|---|---|
 | [architecture/](architecture/) | 总体技术方案、每服务系统设计（[systems/](architecture/systems/)）、模块结构、Roadmap | Explanation（是什么/为什么） |
 | [adr/](adr/) | 架构决策记录（ADR）及索引 | Reference + 生命周期 |
+| [standards/](standards/) | **文档治理标准**（类型/职责/骨架/图规范/Review）——新增或修改任何文档前先读 | Reference（约束层） |
+| [templates/](templates/) | **空模板**（可直接复制：technical-solution / system-design / spec / adr / runbook） | Template |
 | [guides/](guides/) | 三规范：AI 流程规范 / 技术流程规范 / 业务流程规范 | Reference + How-to（怎么做） |
 | [deployment/](../deployment/) | 本地/Compose 运行说明 | How-to |
-| [operations/](operations/) | 运维手册（[runbook.md](operations/runbook.md)：启停/巡检/故障处理） | How-to |
+| [operations/](operations/) | 运维手册（[runbook.md](operations/runbook.md)：启停/巡检/故障处理）、技术债 backlog、拆分提案模板 | How-to |
+| [design/](design/) | 演示 / UI 设计系统（[DESIGN.md](design/DESIGN.md)） | Reference |
 | [archive/audits/](archive/audits/) | 历史审计报告（已归档，标注 Status，不再作为权威事实源） | 历史留档 |
 | [archive/design/](archive/design/) | 已完成阶段的「阶段总目标设计书」（stage-design）归档 | 历史留档 |
 | [specs/](specs/) | Feature 文档（Spec/Plan/Tasks，唯一目录）：**按阶段（Stage）分组**，顶层 `README.md` 为「阶段→spec」索引 | Feature 生命周期产物（阶段层） |
@@ -19,9 +22,11 @@
 
 | 文档 | 位置 | 职责 | 维护时机 |
 |---|---|---|---|
-| **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.3.0） | 架构级变化时（走宪法修订流程） |
+| **Constitution** | `.specify/memory/constitution.md` | 最高工程与架构约束（spec-kit 权威位置，v2.4.0） | 架构级变化时（走宪法修订流程） |
 | **AGENTS.md** | 根目录 | AI 编码代理的项目地图与硬规则摘要（跨工具标准；`CLAUDE.md` 为兼容 Claude Code 的指针） | 架构 / 文档路径变化时 |
 | **ADR** | `docs/adr/NNNN-*.md`（索引见 [docs/adr/README.md](adr/README.md)，落点见 [traceability.md](adr/traceability.md)） | 记录不可逆/重要架构决策 | 每次重要决策时 |
+| **文档治理标准** | `docs/standards/*.md`（7 份） | 文档类型 / 职责矩阵 / 骨架 / 图规范 / Review 清单 | 治理规则变化时 |
+| **文档模板** | `docs/templates/*.md`（5 份空模板） | 新文档的起点，与 Standard 一致 | 治理规则变化时 |
 | **总体技术方案** | `docs/architecture/technical-solution.md` | 全局技术方案（**只描述系统现状**：背景 / 目标 / 架构 / 流程 / 非功能 / 部署 / 风险） | 架构基线变化时 |
 | **系统设计文档** | `docs/architecture/systems/<service>-service.md`（9 篇） | 每服务系统设计：DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑 | 服务实现细节变化时 |
 | **Roadmap** | `docs/architecture/roadmap.md` | 项目阶段、当前状态、计划与 Feature 依赖（计划类内容的唯一权威） | 阶段或里程碑变化时 |
@@ -42,6 +47,7 @@ Constitution（.specify/memory/constitution.md，最高约束）
    │     ├── 总体技术方案（docs/architecture/technical-solution.md，当前有效基线）
    │     └── 每服务系统设计（docs/architecture/systems/<service>-service.md）
    ├── L1 Current Constraints & Engineering Rules
+   │     ├── docs/standards/*.md（文档治理标准：类型 / 骨架 / Review）
    │     └── docs/guides/*.md（按任务读取相关规范）
    ├── L2 Active Feature Work
    │     └── Stage（docs/specs/<stage>/，按阶段分组，索引见 docs/specs/README.md）
@@ -49,6 +55,7 @@ Constitution（.specify/memory/constitution.md，最高约束）
    │                 ├── spec.md（要什么）
    │                 ├── plan.md（怎么设计）
    │                 ├── tasks.md（怎么执行）
+   │                 ├── acceptance.md（怎么判定完成）
    │                 └── 代码 / 测试（实现结果）
    └── L3 Historical / On-Demand
          └── ADR（docs/adr/）与 archive（按需读取；含已完成阶段的 stage-design 归档 docs/archive/design/）
@@ -69,7 +76,8 @@ Constitution（.specify/memory/constitution.md，最高约束）
 
 1. **单一事实源**：一个需求只在 Spec 定义，不在代码注释里另起炉灶；代码与 Spec 不一致时，先判断是需求变更还是实现缺陷，再同步修订。
 2. **ADR 编号**：顺序递增 `0001`、`0002`…，用英文短横线命名；状态机见 [docs/adr/README.md](adr/README.md)。
-3. **Spec 布局**：Spec Kit 的 `docs/specs/<feature>/`（spec.md + plan.md + tasks.md），特性目录由 `/speckit-specify` 生成；路径统一为 `docs/specs/<feature>/`。
+3. **Spec 布局**：唯一合法路径为 `docs/specs/<stage>/<feature>/`（`spec.md` + `plan.md` + `tasks.md` + `acceptance.md`，即 Spec Kit 四件套），特性目录由 `/speckit-specify` 生成。**禁止**使用不带 stage 的 `docs/specs/<feature>/`。细则见 [standards/spec-standard.md](standards/spec-standard.md)。
 4. **写文档的时机**：决策当场写 ADR，需求澄清当场写 Spec，不事后补记。
-5. **文档也走 Review**：ADR / Spec 变更同样需要人类确认（涉及宪法「人类决策边界」时 MUST）。
+5. **文档也走 Review**：ADR / Spec / 任何新文档变更同样需要人类确认（涉及宪法「人类决策边界」时 MUST）；交付前 MUST 过 [standards/documentation-review.md](standards/documentation-review.md)（命令：`/doc-review <file>`）。
 6. **一次性报告**：审计/调研等临时报告放 `docs/archive/audits/`，文件名带日期，并标注 `Status`（archived / superseded），不再作为权威事实源。
+7. **新增文档 MUST 先读治理层**：[standards/documentation-governance.md](standards/documentation-governance.md)（类型与职责）→ 对应 Standard → [templates/](templates/) 空模板。

@@ -9,6 +9,8 @@ SHORT_NAME=""
 BRANCH_NUMBER=""
 USE_TIMESTAMP=false
 NUMBER_EXPLICIT=false
+# ── PaymentArch repo-local override: 阶段参数（见文件末尾 OVERRIDE 说明） ──
+STAGE_ARG=""
 ARGS=()
 i=1
 while [ $i -le $# ]; do
@@ -56,8 +58,21 @@ while [ $i -le $# ]; do
         --timestamp)
             USE_TIMESTAMP=true
             ;;
+        --stage)
+            if [ $((i + 1)) -gt $# ]; then
+                echo 'Error: --stage requires a value' >&2
+                exit 1
+            fi
+            i=$((i + 1))
+            next_arg="${!i}"
+            if [[ "$next_arg" == --* ]]; then
+                echo 'Error: --stage requires a value' >&2
+                exit 1
+            fi
+            STAGE_ARG="$next_arg"
+            ;;
         --help|-h)
-            echo "Usage: $0 [--json] [--dry-run] [--allow-existing-branch] [--short-name <name>] [--number N] [--timestamp] <feature_description>"
+            echo "Usage: $0 [--json] [--dry-run] [--allow-existing-branch] [--short-name <name>] [--number N] [--stage <stage>] [--timestamp] <feature_description>"
             echo ""
             echo "Options:"
             echo "  --json              Output in JSON format"
@@ -65,12 +80,14 @@ while [ $i -le $# ]; do
             echo "  --allow-existing-branch  Reuse an existing feature directory if it already exists"
             echo "  --short-name <name> Provide a custom short name (2-4 words) for the feature"
             echo "  --number N          Prefer a feature number (auto-corrected if its specs prefix exists)"
+            echo "  --stage <stage>     (PaymentArch) 目标阶段目录，如 stage-05-channel-and-finance-deepening"
             echo "  --timestamp         Use timestamp prefix (YYYYMMDD-HHMMSS) instead of sequential numbering"
             echo "  --help, -h          Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0 'Add user authentication system' --short-name 'user-auth'"
             echo "  $0 'Implement OAuth2 integration for API' --number 5"
+            echo "  $0 'Ledger accounting foundation' --stage stage-05-channel-and-finance-deepening --short-name 'ledger-accounting'"
             echo "  $0 --timestamp --short-name 'user-auth' 'Add user authentication'"
             exit 0
             ;;
@@ -108,13 +125,16 @@ is_feature_number_in_range() {
     [[ "$normalized" < "$MAX_FEATURE_NUMBER" || "$normalized" == "$MAX_FEATURE_NUMBER" ]]
 }
 
-# Function to get highest number from specs directory
+# Function to get highest number from specs directory.
+# PaymentArch override: 递归扫描（本项目为 docs/specs/<stage>/<feature>/ 两层层级，
+# 且 Feature 编号跨阶段全局连续）。单层布局下行为与 upstream 逐字一致。
 get_highest_from_specs() {
     local specs_dir="$1"
     local highest=0
+    local dir dirname
 
     if [ -d "$specs_dir" ]; then
-        for dir in "$specs_dir"/*; do
+        while IFS= read -r dir; do
             [ -d "$dir" ] || continue
             dirname=$(basename "$dir")
             # Match sequential prefixes (>=3 digits), but skip timestamp dirs.
@@ -127,20 +147,23 @@ get_highest_from_specs() {
                     fi
                 fi
             fi
-        done
+        done < <(find "$specs_dir" -mindepth 1 -maxdepth 2 -type d 2>/dev/null | sort)
     fi
 
     echo "$highest"
 }
 
 # Return success when a spec directory owns the given numeric prefix.
+# PaymentArch override: 同样递归（编号跨阶段全局唯一，须在全部阶段内查重）。
 spec_prefix_exists() {
     local specs_dir="$1"
     local feature_num="$2"
+    local spec_path
 
-    for spec_path in "$specs_dir/${feature_num}-"*; do
+    while IFS= read -r spec_path; do
         [ -d "$spec_path" ] && return 0
-    done
+    done < <(find "$specs_dir" -mindepth 1 -maxdepth 2 -type d -name "${feature_num}-*" 2>/dev/null)
+
     return 1
 }
 
@@ -188,7 +211,51 @@ REPO_ROOT=$(get_repo_root) || exit 1
 
 cd "$REPO_ROOT"
 
-SPECS_DIR="$REPO_ROOT/specs"
+# ─────────────────────────────────────────────────────────────────────────────
+# PaymentArch repo-local override（本项目唯一补丁块，upstream 升级时按本块重新应用）
+#
+# 本项目 Spec 落点 = `docs/specs/<stage>/<feature>/`（**禁止**顶层 `specs/`，也**禁止**
+# `docs/specs/<feature>/`），见 docs/standards/spec-standard.md §3。
+# 覆盖来源优先级：--stage 参数 > SPECS_STAGE 环境变量 > .specify/repo-config.json
+# 的 default_stage。未配置任何来源时**报错并给出指引**，不静默回退到顶层 specs/。
+# ─────────────────────────────────────────────────────────────────────────────
+SPECS_ROOT_REL="specs"
+SPECS_STAGE_LAYOUT=false
+DEFAULT_STAGE=""
+REPO_CONFIG="$REPO_ROOT/.specify/repo-config.json"
+if [ -f "$REPO_CONFIG" ]; then
+    _cfg_specs_dir=$(sed -n 's/.*"specs_dir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO_CONFIG" | head -1)
+    _cfg_default_stage=$(sed -n 's/.*"default_stage"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$REPO_CONFIG" | head -1)
+    _cfg_stage_layout=$(sed -n 's/.*"stage_layout"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$REPO_CONFIG" | head -1)
+    [ -n "$_cfg_specs_dir" ] && SPECS_ROOT_REL="$_cfg_specs_dir"
+    [ -n "$_cfg_default_stage" ] && DEFAULT_STAGE="$_cfg_default_stage"
+    [ "$_cfg_stage_layout" = "true" ] && SPECS_STAGE_LAYOUT=true
+fi
+
+SPECS_SCAN_ROOT="$REPO_ROOT/$SPECS_ROOT_REL"
+STAGE_NAME=""
+if [ "$SPECS_STAGE_LAYOUT" = true ]; then
+    STAGE_NAME="$STAGE_ARG"
+    [ -z "$STAGE_NAME" ] && STAGE_NAME="${SPECS_STAGE:-}"
+    [ -z "$STAGE_NAME" ] && STAGE_NAME="$DEFAULT_STAGE"
+    if [ -z "$STAGE_NAME" ]; then
+        >&2 echo "Error: 本仓库使用 docs/specs/<stage>/<feature>/ 布局，必须指定阶段（--stage / SPECS_STAGE / .specify/repo-config.json 的 default_stage）。"
+        >&2 echo "       现有阶段目录："
+        if [ -d "$SPECS_SCAN_ROOT" ]; then
+            find "$SPECS_SCAN_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '         - %f\n' 2>/dev/null || true
+        fi
+        exit 1
+    fi
+    if [ ! -d "$SPECS_SCAN_ROOT/$STAGE_NAME" ]; then
+        >&2 echo "Error: 阶段目录不存在：$SPECS_ROOT_REL/$STAGE_NAME"
+        >&2 echo "       阶段目录属 Constitution §Governance 人类决策边界，MUST 先由人类确认新增阶段，再在此创建目录。"
+        exit 1
+    fi
+    SPECS_DIR="$SPECS_SCAN_ROOT/$STAGE_NAME"
+else
+    SPECS_DIR="$SPECS_SCAN_ROOT"
+fi
+
 if [ "$DRY_RUN" != true ]; then
     mkdir -p "$SPECS_DIR"
 fi
@@ -276,7 +343,7 @@ else
 
     # Determine branch number from existing feature directories
     if [ -z "$BRANCH_NUMBER" ]; then
-        HIGHEST=$(get_highest_from_specs "$SPECS_DIR")
+        HIGHEST=$(get_highest_from_specs "$SPECS_SCAN_ROOT")
         if [ "$HIGHEST" -eq "$MAX_FEATURE_NUMBER" ]; then
             echo "Error: feature number must be between 0 and $MAX_FEATURE_NUMBER, got '9223372036854775808'" >&2
             exit 1
@@ -294,12 +361,12 @@ else
         REQUESTED_BRANCH_NAME=$(fit_branch_name "$FEATURE_NUM" "$BRANCH_SUFFIX")
         REQUESTED_DIR="$SPECS_DIR/$REQUESTED_BRANCH_NAME"
         if [ "$ALLOW_EXISTING" != true ] || [ ! -d "$REQUESTED_DIR" ]; then
-            spec_prefix_exists "$SPECS_DIR" "$FEATURE_NUM" && SPEC_CONFLICT=true
+            spec_prefix_exists "$SPECS_SCAN_ROOT" "$FEATURE_NUM" && SPEC_CONFLICT=true
         fi
 
         if [ "$SPEC_CONFLICT" = true ]; then
             REQUESTED_NUM="$FEATURE_NUM"
-            HIGHEST=$(get_highest_from_specs "$SPECS_DIR")
+            HIGHEST=$(get_highest_from_specs "$SPECS_SCAN_ROOT")
             BRANCH_NUMBER=$HIGHEST
             while true; do
                 if [ "$BRANCH_NUMBER" -eq "$MAX_FEATURE_NUMBER" ]; then
@@ -308,7 +375,7 @@ else
                 fi
                 BRANCH_NUMBER=$((BRANCH_NUMBER + 1))
                 FEATURE_NUM=$(printf "%03d" "$((10#$BRANCH_NUMBER))")
-                spec_prefix_exists "$SPECS_DIR" "$FEATURE_NUM" || break
+                spec_prefix_exists "$SPECS_SCAN_ROOT" "$FEATURE_NUM" || break
             done
             >&2 echo "[specify] Warning: --number $REQUESTED_NUM conflicts with an existing spec directory; using $FEATURE_NUM instead"
         fi

@@ -73,39 +73,38 @@ Given that feature description, do this:
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. **Branch creation** (optional, via hook):
+2. **Branch creation**:
 
-   If a `before_specify` hook ran successfully in the Pre-Execution Checks above, it will have created/switched to a git branch and output JSON containing `BRANCH_NAME` and `FEATURE_NUM`. Note these values for reference, but the branch name does **not** dictate the spec directory name.
+   **本仓库当前未注册任何 hook**（`.specify/extensions.yml` 不存在 ⇒ Pre-Execution Checks 整段跳过），因此**不存在「自动创建分支」这一行为**，不要假定分支已被创建。
 
-   If the user explicitly provided `GIT_BRANCH_NAME`, pass it through to the hook so the branch script uses the exact value as the branch name (bypassing all prefix/suffix generation).
+   - `before_specify` hook 若被注册（当前**没有**），它会创建/切换 git 分支并输出含 `BRANCH_NAME` / `FEATURE_NUM` 的 JSON。
+   - 分支的创建与命名遵循 `.specify/memory/constitution.md` §Governance › 提交与合并节奏 与 [docs/guides/engineering-standards.md](../../../docs/guides/engineering-standards.md) §6：**非 docs-only 代码改动**用 `feature/<NNN>-<slug>` 分支；**纯 Spec / 文档**在**独立 worktree** 编写（`./spec-worktree.sh new <NNN>-<slug>`）。
+   - 若用户显式提供 `GIT_BRANCH_NAME`，透传给 hook（在 hook 不存在时该值只作记录，不产生分支）。
 
 3. **Create the spec feature directory**:
 
-   Specs live under the default `specs/` directory unless the user explicitly provides `SPECIFY_FEATURE_DIRECTORY`.
+   **本仓库的 Spec 落点固定为 `docs/specs/<stage>/<feature>/`**——顶层 `specs/` 与 `docs/specs/<feature>/` **均为非法**（见 [docs/standards/spec-standard.md](../../../docs/standards/spec-standard.md) §3）。
 
-   **Resolution order for `SPECIFY_FEATURE_DIRECTORY`**:
-   1. If the user explicitly provided `SPECIFY_FEATURE_DIRECTORY` (e.g., via environment variable, argument, or configuration), use it as-is
-   2. Otherwise, auto-generate it under `specs/`:
-      - Check `.specify/init-options.json` for `feature_numbering` (preferred) or `branch_numbering` (deprecated, migration only — will be removed in a future release)
-      - If `"timestamp"`: prefix is `YYYYMMDD-HHMMSS` (current timestamp)
-      - If `"sequential"` or absent: prefix is `NNN` (next available 3-digit number after scanning existing directories in `specs/`)
-      - Construct the directory name: `<prefix>-<short-name>` (e.g., `003-user-auth` or `20260319-143022-user-auth`)
-      - Set `SPECIFY_FEATURE_DIRECTORY` to `specs/<directory-name>`
-      - If `branch_numbering` was used (and `feature_numbering` was absent), emit a one-line warning: "⚠️ `branch_numbering` in init-options.json is deprecated. Rename to `feature_numbering`."
+   **唯一权威执行方式 = 调用 vendored 脚本**（它已按本仓库布局改造，读取 `.specify/repo-config.json`）：
 
-   **Create the directory and spec file**:
-   - `mkdir -p SPECIFY_FEATURE_DIRECTORY`
-   - Resolve the active `spec-template` through the Spec Kit preset/template resolution stack (equivalent to `specify preset resolve spec-template`)
-   - Copy the resolved `spec-template` file to `SPECIFY_FEATURE_DIRECTORY/spec.md` as the starting point
-   - Set `SPEC_FILE` to `SPECIFY_FEATURE_DIRECTORY/spec.md`
-   - Persist the resolved path to `.specify/feature.json`:
-     ```json
-     {
-       "feature_directory": "<resolved feature dir>"
-     }
-     ```
-     Write the actual resolved directory path value (for example, `specs/003-user-auth`), not the literal string `SPECIFY_FEATURE_DIRECTORY`.
-     This allows downstream commands (`/speckit-plan`, `/speckit-tasks`, etc.) to locate the feature directory without relying on git branch name conventions.
+   ```bash
+   bash .specify/scripts/bash/create-new-feature.sh \
+     --stage <stage-dir> \
+     --short-name "<2-4 words>" \
+     "<feature description>"
+   # 加 --dry-run --json 可先预览落点
+   ```
+
+   脚本行为（不要再在对话里手工复现这套逻辑）：
+
+   - **Specs 根**来自 `.specify/repo-config.json` 的 `specs_dir`（= `docs/specs`）；
+   - **阶段**解析顺序：`--stage` > 环境变量 `SPECS_STAGE` > `repo-config.json` 的 `default_stage`；**解析不到即报错退出**并列出可选阶段，**不静默回退**到顶层 `specs/`；
+   - **Feature 编号跨阶段全局连续**：脚本递归扫描 `docs/specs/*/` 取最大编号 +1（本项目为 `NNN` 三位数字，如 `036-...`）；
+   - 落点 = `docs/specs/<stage>/<NNN>-<short-name>/spec.md`，并把该路径写入 `.specify/feature.json` 的 `feature_directory`（供 `/speckit-plan` 等下游命令定位）。
+
+   ⚠️ **阶段目录的归属**：新增阶段目录属 Constitution §Governance › 人类决策边界，MUST 先经人类确认再创建；脚本在阶段目录不存在时会**拒绝创建**。
+
+   ⚠️ **h1 唯一性**：不得手工 `mkdir` + 复制模板绕过脚本，否则编号查重与 `feature.json` 落点会漂移。
 
    **IMPORTANT**:
    - You must only create one feature per `/speckit-specify` invocation

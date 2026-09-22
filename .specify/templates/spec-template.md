@@ -4,7 +4,11 @@
 
 **Created**: [DATE]
 
-**Status**: Draft
+`<!-- PaymentArch：Status 只能用统一 8 态词表，禁止自由文本。法条见 docs/standards/spec-standard.md §4。 -->`
+
+> **Status**: Draft `<!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->`
+> **Path**: `docs/specs/<stage>/[###-feature-name]/`
+> **四件套**: `spec.md`（本文件） / `plan.md` / `tasks.md` / `acceptance.md` —— 仅 UI / 设计规范等特性可用 `delivery_mode: design-only` 显式豁免（须在 spec 中声明）。
 
 **Input**: User description: "$ARGUMENTS"
 

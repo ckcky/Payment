@@ -30,7 +30,7 @@
 | 8 | 🟡 Low | `pom.xml:15` 注释 | 「gateway 与 ledger-service 本 MVP 延后，故不在 modules 中」——ledger 实际已在 modules | 与同文件 `:45` 自相矛盾 | 改为「gateway 延后未建；ledger-service 已实现」 | 待裁决 |
 | 9 | 🟡 Med | `StructuredAuditLogger.mask()` | 脱敏能力**保留但生产路径零调用**，易造成「已脱敏」的假象 | 见下方专项说明 | 二选一：接入审计日志路径，或删除并在文档中明确「本期不做脱敏」 | 待裁决 |
 | 10 | 🟠 Med | 4 个 `infra/redis/` 目录 | `WindowsSafeRedisHealthIndicator` 等文件**未纳入版本库**（untracked） | `git status` 显示 catalog/order 各 2 个目录未跟踪 | 见下方「R4 待裁决项」 | 待裁决 |
-| 11 | 🟡 Med | `RefundStatus.PARTIALLY_SUCCEEDED` + `Refund.partiallySucceed()` | **ADR-0016 回退不彻底**：枚举值、状态转换方法与三处 Javadoc 仍在，但 `partiallySucceed()` **零调用**（死方法） | `refund-service/.../domain/Refund.java:91-96`、`domain/RefundStatus.java:13`；`RefundPostProcessOrchestrator:20`、`LedgerPostingGateway:6`、`Refund:15/86/120/145` 引用该状态 | 删除枚举值 + 死方法 + 相关 Javadoc（需先确认无外部序列化依赖，如已落库的状态字符串）；或保留枚举值但加 `@Deprecated` 并写明「不可达」 | 待裁决 |
+| 11 | 🟡 Med | `RefundStatus.PARTIALLY_SUCCEEDED` + `Refund.partiallySucceed()` | **ADR-0016 回退不彻底**：枚举值、状态转换方法与三处 Javadoc 仍在，但 `partiallySucceed()` **零调用**（死方法） | `payment-service/src/main/java/com/payment/payment/refund/domain/Refund.java:91-96`、`domain/RefundStatus.java:13`；`RefundPostProcessOrchestrator:20`、`LedgerPostingGateway:6`、`Refund:15/86/120/145` 引用该状态 | 删除枚举值 + 死方法 + 相关 Javadoc（需先确认无外部序列化依赖，如已落库的状态字符串）；或保留枚举值但加 `@Deprecated` 并写明「不可达」 | 待裁决 |
 | 12 | 🟡 Med | `docs/specs/stage-02-demo-idempotency-seckill/014-seckill-and-cache/acceptance.md` | §1 仍写「k6 压测 —— 本机不可用」，§3 仍把压测列为未验证项，但**实测数据已存在** | 2026-09-02 已实跑（Node 负载生成器），证据在 `deployment/performance/results/`；ADR-0044 已补 | Phase 5 阶段⑤ 按新证据更新该文件：验收方式补「Node 等价实跑」，未验证项保留「不超卖并发断言」 | 待处理（已排期） |
 | 13 | 🟡 Med | `deployment/schema/016-refund-channel-attempt.sql` | 迁移脚本使用 `ADD COLUMN IF NOT EXISTS`（**MariaDB 方言**），MySQL 8 直接报语法错误，存量库无法重放 | spec 018 plan.md §「禁用 016 的 ADD COLUMN IF NOT EXISTS（MariaDB 方言，MySQL 8 报错）」；018 迁移已改用 information_schema 守卫 + PREPARE 动态 SQL | 按 018 的幂等模式重写该脚本；涉及 refund 库存量环境时优先 | 待裁决（spec 018 T016 登记，2026-09-07） |
 | 14 | 🟡 Med | `fulfillment-service` 权益授予后处理 | 权益 RPC 失败后履约事实保留，但当前没有自动重试 / Outbox / 补偿扫描 | `FulfillmentApplicationService.acceptPaymentSucceeded`：履约落库后同步调用 entitlement；失败不回滚，当前依赖人工补发 | 后续单独评估幂等补偿方案；涉及跨服务一致性时先立 ADR，不在文档治理阶段实现 | 已登记（Phase 4.6，未实现） |
@@ -50,7 +50,7 @@
 | `OrderEntryIdempotencyService.mask(String)` | ℹ️ 局部私有方法 | order-service 内部的**幂等键截断**方法，用于避免长 key 刷屏日志，**与 ADR-0027 的脱敏范畴无关** |
 
 **结论**：当前系统**不具备有效的敏感信息脱敏**。对外表述应为「脱敏⛔ 本期不做」，而非「已部分实现」。
-宪法 v2.3.0 的 §Security.4 / §Observability.2 已按此口径加入例外条款。
+宪法的 §Security.4 / §Observability.2 已按此口径加入例外条款。
 
 **风险敞口**：当前项目无真实卡号与渠道凭证，日志中不出现 PAN / 密钥，敞口有限。
 **前置条件**：接入真实支付渠道或处理真实卡号/凭证前，MUST 重新引入脱敏并补齐调用点。
