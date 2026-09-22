@@ -2,13 +2,13 @@
 
 # ADR-0069: 全链路自动化测试体系——独立 E2E 模块 + 分层门禁 + 不变量断言（spec 022 立项）
 
-- 状态：✅ **Implemented**（2026-09-07 批次 B~F 代码落地；2026-09-08 批次 G 收尾：T433 缺陷注入验证（SC-002/SC-003 实测变红，dump 可定位）、T434 全量回归（verify 全绿 + E2E 22/23，唯一红为本机环境伪影，CI 为准）、T430 verify.yml PR 追加 L3 快照 job、T436 run-all.sh 评估维持现状。详见 [spec 022 tasks](../specs/022-full-chain-automated-testing/tasks.md)）
+- 状态：✅ **Implemented**（2026-09-07 批次 B~F 代码落地；2026-09-08 批次 G 收尾：T433 缺陷注入验证（SC-002/SC-003 实测变红，dump 可定位）、T434 全量回归（verify 全绿 + E2E 22/23，唯一红为本机环境伪影，CI 为准）、T430 verify.yml PR 追加 L3 快照 job、T436 run-all.sh 评估维持现状。详见 [spec 022 tasks](../specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/tasks.md)）
 - 关联：ADR-0067 / spec 019（order 驱动两层退款单 TXRF/PMRF —— E2E 的主验证对象）、ADR-0066 / spec 018（按 item 履约 —— 断言需逐条）、spec 017（会计四核对 —— 对账差异注入器）、spec 011/012（幂等 —— 用例来源）、ADR-0025（渠道回调验签占位，**禁止据此写断言**）、spec 021（traceId 串联，P2 校验项）
 - 需求源头：负责人 2026-09-07——「想给这个项目加上自动化测试，最好是完整链路的，比如说在 demo 控制台发起的支付退款，观察各个系统的状态，还有 db 数据检查啥的。发起退款，看看功能是不是正常，超退能不能拦截，对账准不准确，单号有没有记错啥的。看看业内先进水平是如何设计的。」追加：「你先去 demo 演示台和对账的演示台看看有什么功能，怎么样串起来全链路的测试，需要关注的点是什么，如何验证。」
 
 ## 背景
 
-**现状核实（G1~G6，证据见 [spec 022 §1](../specs/022-full-chain-automated-testing/spec.md)）**：
+**现状核实（G1~G6，证据见 [spec 022 §1](../specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/spec.md)）**：
 
 - 已有一批不错的单服务资产：~100 个测试类 / ~450 个用例（`@SpringBootTest` + H2 `MODE=MySQL` + 手写 fake 出站端口）、退款金额不变量/订单不变量/账本幂等等不变量测试、ArchUnit 服务边界模块。
 - 但「端到端」只有 `deployment/demo/scenario-*.sh` 一套 bash 演示脚本：无标准报告、失败无诊断产物、不在 CI、不能单条重跑（G1）。
@@ -59,8 +59,8 @@
 
 - 新增模块 `deployment/e2e-tests`（黑盒），**业务代码零改动**；唯一可能的业务侧改动是 mock-channel 的请求级故障注入扩展（D7，阶段 2）。
 - 既有 ~450 个单服务测试不受影响；`./mvnw -B verify` 语义不变。
-- 任务分批次 B~G（骨架 → 断言原语 → P0 用例 → P1 用例 → 故障注入与 CI → 收尾），详见 [spec 022 tasks](../specs/022-full-chain-automated-testing/tasks.md)。
-- 风险与缓解见 [spec 022 plan §8](../specs/022-full-chain-automated-testing/plan.md)：E2E 慢/脆（默认本地栈 + 不进 PR + 轮询 + dump）、数据污染（唯一前缀 + 按单号过滤）、与演示脚本重复（阶段 1 后评估 `run-all.sh` 是否改为调 E2E 模块）。
+- 任务分批次 B~G（骨架 → 断言原语 → P0 用例 → P1 用例 → 故障注入与 CI → 收尾），详见 [spec 022 tasks](../specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/tasks.md)。
+- 风险与缓解见 [spec 022 plan §8](../specs/stage-03-evolution-consolidation/022-full-chain-automated-testing/plan.md)：E2E 慢/脆（默认本地栈 + 不进 PR + 轮询 + dump）、数据污染（唯一前缀 + 按单号过滤）、与演示脚本重复（阶段 1 后评估 `run-all.sh` 是否改为调 E2E 模块）。
 
 ## 编号与注册
 

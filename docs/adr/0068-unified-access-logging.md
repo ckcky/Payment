@@ -2,13 +2,13 @@
 
 # ADR-0068: 统一访问日志——结束时单条 ACCESS、固定格式含服务名与异步 MDC 传播修复（spec 021 立项）
 
-- 状态：✅ **Accepted → Implemented**（2026-09-07 负责人拍板 D1~D7；代码已实施，任务见 [spec 021 tasks](../specs/021-unified-access-logging/tasks.md)）
-- 关联：ADR-0022（业务单号与雪花 traceId 同族的关联 ID 体系；MDC traceId 沿用 `X-Trace-Id` 约定）、Constitution §6（跨服务调用用 traceId 串联、资金审计单列）、spec 017（FINANCIAL_AUDIT 审计流先例）、spec 021（[spec](../specs/021-unified-access-logging/spec.md) / [plan](../specs/021-unified-access-logging/plan.md)）
+- 状态：✅ **Accepted → Implemented**（2026-09-07 负责人拍板 D1~D7；代码已实施，任务见 [spec 021 tasks](../specs/stage-03-evolution-consolidation/021-unified-access-logging/tasks.md)）
+- 关联：ADR-0022（业务单号与雪花 traceId 同族的关联 ID 体系；MDC traceId 沿用 `X-Trace-Id` 约定）、Constitution §6（跨服务调用用 traceId 串联、资金审计单列）、spec 017（FINANCIAL_AUDIT 审计流先例）、spec 021（[spec](../specs/stage-03-evolution-consolidation/021-unified-access-logging/spec.md) / [plan](../specs/stage-03-evolution-consolidation/021-unified-access-logging/plan.md)）
 - 需求源头：负责人 2026-09-07 日志规范化——「每个请求的入口和出口都要加上日志，入口打 request 完整报文，出口打 response 报文 + 耗时毫秒数」「日志格式固定一下 [服务名]」「看看业内比较先进的做法」；第二轮修正为「结束时一条 ACCESS」，并要求脱敏只留桩；追问「系统跑起来之后怎么看日志，不可能一个文件一个文件翻」。
 
 ## 背景
 
-现状核实（G1~G5，证据见 [spec 021 §当前代码现实](../specs/021-unified-access-logging/spec.md)）：全仓无任何请求级访问日志（无 ContentCaching/`@Aspect` 先例），排障只能靠业务日志反推；logback pattern 无服务名，14 个服务日志聚合后无法区分来源；4 个 `@Scheduled` 与 `ReliabilityConfig` 线程池不传播 MDC，后台日志没有 traceId（链路在异步处断开）；10 服务 10 个日志文件无任何查看工具；报文日志无截断/脱敏/开关规范。
+现状核实（G1~G5，证据见 [spec 021 §当前代码现实](../specs/stage-03-evolution-consolidation/021-unified-access-logging/spec.md)）：全仓无任何请求级访问日志（无 ContentCaching/`@Aspect` 先例），排障只能靠业务日志反推；logback pattern 无服务名，14 个服务日志聚合后无法区分来源；4 个 `@Scheduled` 与 `ReliabilityConfig` 线程池不传播 MDC，后台日志没有 traceId（链路在异步处断开）；10 服务 10 个日志文件无任何查看工具；报文日志无截断/脱敏/开关规范。
 
 **业内调研（2026-09-07）**：Spring `CommonsRequestLoggingFilter` 只打请求太弱；主流实践是 `OncePerRequestFilter` + `ContentCachingRequest/ResponseWrapper`（完整报文 + 状态码 + 全链路耗时）；日志形态有「结束一条结构化 ACCESS」与「IN/OUT 两条」两派；阿里《Java 开发手册》要求敏感信息脱敏与异常带堆栈；集中式采集以 Loki+Promtail+Grafana 为 ELK 的轻量替代。**共识：报文日志必须配截断、脱敏钩子、排除路径与总开关，否则上线即事故。**
 
