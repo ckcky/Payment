@@ -78,6 +78,11 @@ public final class LedgerTestSupport {
     }
 
     public static Wiring wiring(List<PostingRule> rules) {
+        return wiring(rules, noopMetrics());
+    }
+
+    /** 可注入 metrics 的装配（spec 035 / T31：观测断言用例传入 MicrometerBusinessMetrics）。 */
+    public static Wiring wiring(List<PostingRule> rules, BusinessMetrics metrics) {
         InMemoryAccountRepository accounts = seededAccounts();
         InMemoryLedgerRepository ledger = new InMemoryLedgerRepository();
         InMemoryLedgerPeriodRepository periods = new InMemoryLedgerPeriodRepository();
@@ -85,9 +90,9 @@ public final class LedgerTestSupport {
         PostingRuleRegistry registry = new PostingRuleRegistry(rules);
         invokeSelfCheck(registry);
         PostingEngine engine = new PostingEngine(ledger, registry, resolver, periods,
-                noopMetrics(), new StructuredAuditLogger());
+                metrics, new StructuredAuditLogger());
         BalanceChecker balanceChecker = new BalanceChecker(ledger, accounts, ledger.balances());
-        PeriodService periodService = new PeriodService(ledger, balanceChecker, periods);
+        PeriodService periodService = new PeriodService(ledger, balanceChecker, periods, metrics);
         return new Wiring(accounts, ledger, ledger.balances(), periods, resolver, registry,
                 engine, balanceChecker, periodService);
     }

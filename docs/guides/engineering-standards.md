@@ -59,12 +59,36 @@
   - **AI 会话约束**：AI Agent 收到非 docs-only 任务时，第一步 MUST 是创建/切换 feature 分支，禁止在 `master` 上直接提交代码改动。
   - **Spec 编写的 worktree 隔离（推荐）**：主工作区存在 feature WIP 时，编写新 Spec / 纯文档 MUST 使用 `./spec-worktree.sh new <NNN>-<slug>` 在独立 worktree + `docs/spec-<NNN>-<slug>` 分支上进行，完成后 `push` 子命令做 docs-only 白名单校验并直推 `origin/master`，`rm` 清理。注意：该流程仅适用于 docs-only 改动；代码改动仍一律走 feature 分支 + PR。
 
-## 7. 可观测（Observability，Constitution §Observability）
+## 7. 可观测（Observability，Constitution §Observability，spec 035 / ADR-0083）
 
-- **Metrics**：Micrometer 暴露请求量、延迟、错误率、关键业务计数（支付成功/失败/超时/退款）。
-- **Logs**：结构化日志（logback，含 traceId、orderId、paymentId 关联字段）；资金动作有审计日志。**敏感字段脱敏本期不做**（ADR-0027）。
-- **Traces**：`[目标]` Micrometer Tracing 在跨服务调用传播 traceId/spanId —— **未落地**；当前以 `TraceIdFilter` + MDC 实现本地关联。
-- **告警/SLO**：对「支付状态未知堆积」「对账差异」「退款失败」「重试耗尽」配业务告警；核心接口定义 SLO。
+- **Metrics**：Micrometer 经 `BusinessMetrics` 端口暴露请求量、延迟、错误率与关键业务计数；指标目录（名称/类型/值域/告警意义/Owner）唯一登记处为 [runbook §5](../operations/runbook.md)——**新指标未进目录不得上线**（M-2）。
+- **Logs**：结构化日志（logback 单行 kv，MDC 键 = `traceId` / `bizNo` / `dyeMode`）；资金动作 MUST 有审计日志（`FINANCIAL_AUDIT`，只记必要字段）。**敏感字段脱敏本期不做**（ADR-0027，透传桩），改以「显式约束 + 排除 + 测试」守密钥红线（见 §7.3）。
+- **Traces**：**自研 `X-Trace-Id` 为唯一权威**（`TraceIdFilter` + `TraceContext` + MDC，跨服务单头透传）；明确**不引入** APM / Micrometer Tracing / OTel / `traceparent`（ADR-0083 决策 4，资金链路不可采样）。`traceId` MUST 在进入异步/MQ 时随 envelope 传递并在消费侧恢复 MDC。
+
+### 7.1 高基数政策（HC-1~HC-4，机器可检查）
+
+| # | 条文 | 检查方式 |
+|---|---|---|
+| HC-1 | Metrics label **值集合 MUST 在发布前可穷举**（枚举类型、有界字符串、状态机态） | 代码 review + 指标目录登记值域 |
+| HC-2 | **MUST NOT** 以业务单号（`*No`）、用户/商户 ID（`*Id`）、时间戳、UUID 作为 label 的**键或值**；`merchantId` 明确禁入（按商户分析走 SQL/Loki） | `MetricsCardinalityTest`（architecture-tests）静态扫描全仓 `metrics.counter/timer/gauge` 调用：标签键 ∈ 有界白名单，值表达式不得命中 `*No`/`*Id`/`getPeriod()`（YYYY-MM）模式——**红即拦** |
+| HC-3 | 新 label 引入 MUST 在指标目录登记其值域（同 PR） | 目录 PR 门禁 + HC-2 扫描的键白名单同步扩展 |
+| HC-4 | 单指标序列数预算 **200**；预计超出改用日志 + Loki 查询或 Gauge 覆盖写 | `MetricsAssert.assertTagValuesWithinAllowedSet(registry, …)`（test-infra，L2a 遍历 `MeterRegistry` 断言）；CI 可选抓取 `/actuator/prometheus` 序列数 |
+
+`period`（`YYYY-MM`）**例外条款**：只允许出现在 `Gauge`（瞬时值、单序列覆盖写）；Counter/Timer 上禁用（单调累积 ⇒ 序列只增不减）。既有 `period` 标签仅存在于限额子域且值为**窗口枚举**（`LimitPeriod`，非 `YYYY-MM`），属有界值，不在此禁令的实际射程内——扫描对「值表达式 = `getPeriod()`/YYYY-MM 字面量」做棘轮基线，新增即红。既有 93 指标**零改名零删除**，政策守增量不追历史（spec 035 §12 M-1）。
+
+### 7.2 Trace / 日志关联标准（spec 035 §6）
+
+- 九个业务 ID（`transactionNo`/`paymentNo`/`paymentAttemptId`/`channelRequestId`/`refundNo`/`channelRefundNo`/`ledgerTransactionNo`/`reconciliationId`/`settlementNo`）**只进日志不进 Metrics label**：单笔链路主键进 MDC `bizNo`，其余进日志 kv；`channelCode`/`currency` 等**有界枚举**两者皆可。
+- **所有资金写操作日志 MUST 带 `bizNo`**（缺失视为缺陷）。
+- `ACCESS_LOG` 的 `uri` MUST 归一化路径变量（记 `/payments/{ref}` 级别模式，不落具体单号），否则访问日志自身成为高基数源。
+- 关联链判据：给一个 `paymentNo`，四跳内拼出完整链路（bizNo grep → traceId 横向拉通 → FINANCIAL_AUDIT → `deployment/demo/trace-grep.sh`），不依赖 Metrics。
+
+### 7.3 密钥与完整报文不入日志（spec 035 §10，H7 纠偏）
+
+- **显式禁令**：`sign` / `privateKey` / `token` / `app_cert` / 完整渠道报文 MUST NOT 出现在任何日志、指标、审计字段。
+- **路径排除**：`common.access-log.exclude-paths` 默认含 `/actuator/**` 与 `/internal/channels/**`——渠道回调入口（如支付宝 notify form）不落正文，保留 `method/uri/status/costMs/traceId/bizNo` 与控制器处理日志。
+- **测试**：notify 端点与渠道出站用例 MUST 断言捕获日志不含 `sign=` 与私钥片段（`AccessLogFilterTest`）。
+- **边界**：不借机启用通用脱敏（ADR-0027 裁决不变）；字段级 mask 若将来需要，由**单个服务**注册自己的 `SensitiveBodyMasker` Bean（`@ConditionalOnMissingBean` 覆盖点），MUST NOT 改 common-core 默认透传实现。
 
 ## 8. 安全（Security）
 
@@ -78,7 +102,7 @@
   - 渠道回调验签 —— **预留空函数恒放行**（`ChannelCallbackSignatureFilter#verifySignature` 恒 `true`，ADR-0025/0052）。接入真实渠道前 MUST 实现。
   - 对外 API 鉴权 / 身份体系 —— **不做**，预留空实现（ADR-0024）。
   - 内部服务间鉴权令牌 —— **不做**，出站不发、入站不校验（ADR-0024/0034/0035）。
-  - 敏感数据脱敏 —— **本期不做**（ADR-0027）。
+  - 敏感数据脱敏 —— **本期不做**（ADR-0027；密钥/完整报文不入日志改以「排除 + 禁令 + 测试」守红线，见 §7.3）。
   - 风控 —— **不做**，类已删除（ADR-0028）。
 - **运维前提**：上述"本期不做"成立的前提是**部署环境不对公网暴露**；一旦暴露到不可信网络，鉴权 MUST 先于功能上线补齐。
 

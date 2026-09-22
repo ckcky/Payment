@@ -136,5 +136,28 @@ class ReliabilityMetricsTest {
         var timer = registry.find("payment.unknown.duration").timer();
         assertThat(timer).isNotNull();
         assertThat(timer.totalTime(java.util.concurrent.TimeUnit.NANOSECONDS)).isGreaterThanOrEqualTo(0L);
+
+        // spec 035 / T32（A-03 信号源）：渠道出站查询进 channel_request{channelCode,result}
+        assertThat(registry.find("channel_request").tags("channelCode", "MOCK", "result", "success")
+                .counter()).isNotNull();
+        assertThat(registry.get("channel_request").tags("channelCode", "MOCK", "result", "success")
+                .counter().count()).isEqualTo(1.0);
+        assertThat(registry.find("channel_timeout").tags("channelCode", "MOCK").counter())
+                .as("明确成功不计渠道超时").isNull();
+    }
+
+    @Test
+    void channelUnknownResultCountedAsChannelTimeoutProxy() {
+        // 渠道契约：超时/断连 MUST 映射 UNKNOWN ⇒ UNKNOWN 结果 = channel_timeout 唯一可观测代理
+        savePayment(4L, 40L, PaymentStatus.PROCESSING);
+        new TimeoutScanner(payments, attempts, metrics, config).scan(Instant.now());
+        channel.queryResult = ChannelResult.businessUnknown("still pending");
+
+        queryService.queryRound();
+
+        assertThat(registry.get("channel_request").tags("channelCode", "MOCK", "result", "unknown")
+                .counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("channel_timeout").tags("channelCode", "MOCK").counter().count())
+                .isEqualTo(1.0);
     }
 }

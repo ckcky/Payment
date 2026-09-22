@@ -57,6 +57,22 @@ wait_healthy() {
   return 1
 }
 
+wait_nacos_registered() {
+  # 健康 200 ≠ 服务发现可用：容器重建存在「旧实例已下线、新实例未注册」窗口，
+  # order 侧 Feign 会报 No servers available for service: payment-service
+  # （2026-09-22 035 demo 实测）。轮询 Nacos 实例列表直到新实例注册，再留 3s 让订阅端收敛。
+  for i in $(seq 1 30); do
+    if curl -s --noproxy '*' "http://localhost:8848/nacos/v1/ns/instance/list?serviceName=payment-service" 2>/dev/null \
+        | grep -q '"ip"'; then
+      sleep 3
+      echo "payment-service 已在 Nacos 注册（第 $i 次探测）"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "⚠️ payment-service 未在 Nacos 出现（30s+），后续场景可能 No servers available" >&2
+}
+
 # ---- 模式判定：容器模式下 payment-service 由 compose 管理，不是宿主 JVM ----
 # 判定依据：compose 中 payment-service 正在运行。docker 不可用或容器未起 → 一律回落宿主模式，
 # 保证 IDE 断点调试等既有路径不被破坏（FR-009 / T502）。
@@ -76,6 +92,7 @@ if [ "$MODE" = "container" ]; then
   env "${ENV_ARGS[@]}" \
     docker compose -f "$COMPOSE_FILE" --profile full up -d --force-recreate --no-deps payment-service
   wait_healthy container
+  wait_nacos_registered
   exit 0
 fi
 
@@ -136,3 +153,4 @@ echo "$! payment-service" >> "$PID_FILE"
 echo "payment-service 以 mock-scenario=$SCENARIO 重启（PID $!）；等待健康…"
 sleep 5
 wait_healthy host
+wait_nacos_registered

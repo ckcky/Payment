@@ -17,8 +17,8 @@
 | Technical Solution | 12 章但含字段 / DTO / 端点 / 单服务内部细节 | 12 章骨架 + **MUST NOT 清单** + 「下沉到 System Design」规则 |
 | System Design | 9 份各写各的章号（1.1/2.1/3.x…，payment 到 10 章） | **统一 15 章核心骨架**（域扩展自 §16 起），9 份全部迁移完成 |
 | Spec 路径 | `docs/specs/<feature>/` 与 `<stage>/<feature>/` 并存 | **仅 `docs/specs/<stage>/<feature>/`**（Spec Kit 脚本 / 模板 / Skill 全部收口） |
-| Spec 四件套 | "三件套"口径，acceptance 常缺 | **四件套** `spec/plan/tasks/acceptance`，`delivery_mode: design-only` 显式豁免（3 个 Feature） |
-| Spec 状态 | 自由文本（设计完成 / 待评审 / 提案中 / 部分完成…） | **统一 8 态**；34 篇 spec.md 全部归位（33 Implemented + 1 In Review） |
+| Spec 四件套 | "三件套"口径，acceptance 常缺 | **四件套** `spec/plan/tasks/acceptance`，`delivery_mode: design-only` 显式豁免（2 个 Feature：020 / 024 两个 UI 设计规范类） |
+| Spec 状态 | 自由文本（设计完成 / 待评审 / 提案中 / 部分完成…） | **统一 8 态**；34 篇 spec.md 全部归位（**34 Implemented**，含合并远端后落地的 035） |
 | 事实分层 | Current / Proposed / Historical 混写 | 三层模型 + 硬规则："Current 文档 MUST NOT 把 Proposed 写成现状" |
 | 架构图 | 3 张图（命名按功能、无 C4 层级、puml 与 svg 关系不明） | **8 张 C4 分层图**（L1/L2/L3/Dynamic/Deployment），`.puml` 唯一事实源、`.svg` 生成物 |
 | ADR 索引 | README 声明「44 文件」实际 42；0054 重号无消歧规则 | **42 文件**对齐 + **ADR-0054 强制消歧口径** + 状态机 + 双向 Supersedes |
@@ -132,7 +132,7 @@ Constitution → Standards → Templates → 实际文档 → Review → AI Agen
 | 文件 | 改动 |
 |---|---|
 | `.claude/skills/architecture/SKILL.md` | **重写为导航层**：权威源表（technical-solution / 02-container-overview.puml / systems/ / 宪法 §III·§IV·§V / adr README+traceability / docs/standards）；服务口径（9 业务 + 1 Demo = 10 进程；gateway 不在 MVP；refund-service 已由 ADR-0064 退役）；payment-service 两层结构（ADR-0072）；一致性 = Saga 思路 + 同步 RPC + 幂等 + 调用方补偿台账，**禁用 2PC/XA**；Redis Streams 事务消息通道已实现（ADR-0074），**不引入 MQ/Kafka/ES**；分层 `api → application → domain ← infra`；技术栈行注明 Spring Cloud Gateway 不在 MVP、Micrometer Tracing 未落地 |
-| `.claude/skills/observability/SKILL.md` | **重写为导航层**：四支柱 + 现状表（结构化日志+traceId ✅ / 资金审计 ✅ / Micrometer+Prom+Grafana+Loki ✅ / 业务告警 ✅ / **Micrometer Tracing ❌ 未落地** / **敏感数据脱敏 ❌ 本期不做（ADR-0027）** / Testcontainers ⚠️ 仅真库语义用例）；ADR-0083 标注 🟡 Proposed 且"尚未进入 L0" |
+| `.claude/skills/observability/SKILL.md` | **重写为导航层**：四支柱 + 现状表（结构化日志+traceId ✅ / 资金审计 ✅ / Micrometer+Prom+Grafana+Loki ✅ / 业务告警 ✅ / **Micrometer Tracing ❌ 未落地** / **敏感数据脱敏 ❌ 本期不做（ADR-0027）** / Testcontainers ⚠️ 仅真库语义用例）；ADR-0083 在合并远端 035 落地后已为 🟢 Accepted（本报告初稿写作时尚为 🟡 Proposed，见 §5.8） |
 | `.claude/skills/payment-domain/SKILL.md` | **重写为导航层**：铁律取自宪法 §II（含"未知状态不猜成败"）；边界表修正（#5 退款是 order 驱动的跨域编排 ADR-0067 而非服务；#6 payment 只通知 order-service ADR-0054）；一致性问答改引 §V；禁止项补"**重复支付自动退款是既有能力，不是缺口**" |
 | `.claude/commands/review.md` | 判据全部改为**真实存在的章号**（§IV / §Engineering Standards 2 / §II / §V / §AI Development 3·4 / §Governance › 人类决策边界），并加"不要凭记忆引用条款号"；Money 值对象**当前未启用**；四件套 + `docs/specs/<stage>/<feature>/` 口径；drift → `DOCUMENTATION_DRIFT` |
 | `.claude/commands/payment-review.md` | 6 组检查按现状重写：记账幂等口径（ADR-0082/C-19）、下单入口 Redis 四态（ADR-0039/0040）、终态吸收、反向路径恒取 `payment_attempts.channel_code`、**JSON 回调验签为预留空实现（ADR-0025/0052）不得描述为"已验签"**（Alipay notify 才是真 RSA2）、脱敏"不做"的正确审查角度、失败恢复归属（ADR-0082）；显式提示 surplus 自动退款不是缺陷 |
@@ -172,8 +172,8 @@ Constitution → Standards → Templates → 实际文档 → Review → AI Agen
 ### 5.1 状态漂移
 
 - **ADR-0074** → 正文与索引统一为 `🟢 Accepted → Implemented`（2026-09-20 随 spec 029 批次 A~G 落地，`--no-ff` 合入 master `5e2c00d`），不再是"生效中的提案"。
-- **ADR-0077~0082** 状态统一：0077~0079 / 0080 / 0081 / 0082 均 `Accepted`（含落地说明）；**ADR-0083 保持 `🟡 Proposed`** 并明确"未 Accepted 前告警只出报表、不 page"、"尚未进入 L0"。
-- **Spec Status 重写**（优先清单 002/003/004/005/007/010/030/031/032/033/034 + 各 Feature 内 Plan/Spec/Tasks/Acceptance 互相矛盾）：正文已写"实现完成 / tasks 全绿 / 已合入 master"的，一律从 Draft/Proposed 改为 **Implemented** 并附依据。最终 **34 篇 spec.md = 33 Implemented + 1 In Review（035，ADR-0083 尚 Proposed）**。
+- **ADR-0077~0082** 状态统一：0077~0079 / 0080 / 0081 / 0082 均 `Accepted`（含落地说明）。**ADR-0083** 在本次治理进行期间由并行的 035 会话推进：2026-09-21 负责人批量裁决 🟡 Proposed → 🟢 **Accepted**，2026-09-22 随 spec 035 落地（本报告初稿写于裁决前，故其中"0083 保持 Proposed"的表述已被 §5.8 的合并校正覆盖）。
+- **Spec Status 重写**（优先清单 002/003/004/005/007/010/030/031/032/033/034 + 各 Feature 内 Plan/Spec/Tasks/Acceptance 互相矛盾）：正文已写"实现完成 / tasks 全绿 / 已合入 master"的，一律从 Draft/Proposed 改为 **Implemented** 并附依据。合并远端 035 落地提交后，最终 **34 篇 spec.md = 34 Implemented**（035 由初稿的 `In Review` 校正为 `Implemented`，其 `delivery_mode: design-only` 声明同步移除——plan/tasks/acceptance 三件已齐，不再满足豁免条件）。
 - **Feature 内一致性**：acceptance / plan / tasks / specs README / roadmap 的措辞与 `spec.md` 状态行对齐。
 - `docs/adr/README.md` + [docs/adr/traceability.md](../../../adr/traceability.md) 与 ADR 实际状态对齐；历史信息**零删除**。
 
@@ -261,6 +261,32 @@ Constitution → Standards → Templates → 实际文档 → Review → AI Agen
 - **修法（不推翻现状、不新增工具）**：规范新增 **§1.0「两类图的分工」**，明确 —— 跨服务架构图属 `diagrams/*.puml`（PlantUML、C4 分层、唯一事实源）；**文档内行内示意**（ER / 时序 / 状态 / 流程）是**既有事实**，继续用 Mermaid，仅受视觉规范约束、**不替代**架构图、MUST NOT 放进 `diagrams/`；同时禁止引入第三种图形语法。
 - 与之配套，[system-design-standard.md](../../../standards/system-design-standard.md) §5 新增第 7 条「图随章节走」：**§4 MUST 含 ER 图**、§5 状态图、§7 时序图，且行内图必须与正文表格一致。
 
+### 5.8 与并行会话的合并校正（2026-09-22 晚）
+
+治理提交固化后发现 `origin/master` 已前进 **13 个提交**（`feature/035-observability-slo` 当日合入，PR #16），其中 **8 个文件与本次治理改到同一文件**。按仓库纪律（**禁 rebase**）以 **merge** 方式合并，4 个文件冲突逐个人工裁决：
+
+- `docs/adr/README.md`、`docs/adr/traceability.md`、`docs/architecture/roadmap.md`、`docs/specs/README.md`
+
+**裁决原则**：**事实层取更新的远端版本；规则层保留本次治理的增补**。
+
+| 冲突点 | 裁决 | 依据 |
+|---|---|---|
+| ADR-0082 / 0083 索引行 | 取远端（0083 已 🟢 Accepted、告警扩容至 24 条） | 远端为更晚的事实 |
+| 「下一可用编号」水位行 | 取远端（七条 ADR 全部裁决收口） | 同上 |
+| 「编号冲突备案」条目 | 取远端 + **回补**本次的「2026-09-22 治理裁定」句 | 两者互不冲突，都需保留 |
+| traceability「仅 0083 仍 Proposed」段 | 取远端（design-only / 未裁决状态解除） | 远端为更晚的事实 |
+| roadmap stage-05 状态行 | 取远端（五 Feature 全落地、27 项裁决收口） | 同上 |
+| specs/README **030 行** | **保留本次的 `Implemented`** 并补证据，**不取远端** | ⚠️ 远端该行仍写「Spec v1.1 + Plan 三件已就绪，**待开工**」、状态说明仍称「030 及其余 Feature 仍为提案」——**与事实不符**：`origin/master` 上已有 **5 个 030 分支 PR（#5~#9）** 合入（沙箱凭证 / INV-7 门禁 / 本地隧道 / notify 验签修正 / Payment-Channel 边界复审 FIX-1~4），`payment-service/src/main/java/com/payment/payment/application/channel/` 下统一渠道契约代码（`PaymentChannel` / `ChannelRegistry` / `ChannelRouter` / `AlipayGateway` / `ChannelResult`）齐全 |
+| specs/README 状态说明段 | **8 态体例取本次** + **事实取远端**（030~035 全部 Implemented） | 规则用本次、事实用远端 |
+
+**合并后连带校正 3 处被事实推翻的治理结论**（均属事实层，非规则层）：
+
+1. `035-observability-slo/spec.md`：`In Review` + `delivery_mode: design-only` → **`Implemented`**，并移除豁免声明（plan/tasks/acceptance 三件已齐，不再满足 design-only 条件）；
+2. `.claude/skills/observability/SKILL.md`：ADR-0083 从「🟡 Proposed，尚未进入 L0」→「🟢 Accepted → Implemented」，并指向 `docs/operations/runbook.md §5` 的指标目录唯一登记处；
+3. 本报告 §0 / §5.1 / §9 / §10 相关表述同步校正（不掩盖初稿的旧结论）。
+
+**合并后复跑**：16 组检查仍为 `16/16 PASS` —— 说明两边改动在**规则层无冲突**，仅在事实层需要按"就新不就旧"裁决。
+
 ---
 
 ## 6. 变更文件清单（按区域）
@@ -321,7 +347,7 @@ Constitution → Standards → Templates → 实际文档 → Review → AI Agen
 [PASS] 4. ADR 编号重复（仅允许 0054 历史例外）                     (已知例外：ADR-0054（2 处）)
 [PASS] 5. Spec 状态使用统一 8 态                             (共 34 篇 spec.md)
 [PASS] 6. 无自由文本状态
-[PASS] 7. Spec 四件套齐备（design-only 例外已声明）               (共 34 个 Feature，其中 design-only 3 个)
+[PASS] 7. Spec 四件套齐备（design-only 例外已声明）               (共 34 个 Feature，其中 design-only 2 个)
 [PASS] 8. 宪法版本号统一（无未加限定的 v2.3.0 引用）
 [PASS] 9. 无过时服务名退款服务（未加历史标注的）
 [PASS] 10. 服务数口径（禁止「10 个服务」）
@@ -393,10 +419,10 @@ Tests run: 14, Failures: 1, Errors: 0
 均为**本次治理范围外**或**需人类决策**的项，已显式登记，不做静默处理：
 
 1. **`docs/architecture/systems/payment-service.md` 的 L0 内容实为"拟议"而非现状**（如把不存在的 `channel_mode` 列写成已实现）。按 [AGENTS.md](../../../../AGENTS.md)「L0 文档漂移只上报、不自行改写」，本次**仅上报**，未改写；需负责人确认后单独修。
-2. **ADR-0083 仍为 `Proposed`**：SLO 目标值属宪法 §Governance「非功能目标」人类决策；未 Accepted 前 035 的 spec 保持 `In Review`，这是**正确的现状表达**，不是漂移。
+2. ~~**ADR-0083 仍为 `Proposed`**~~ —— **已消解**：2026-09-21 负责人裁决 🟢 Accepted，2026-09-22 随 spec 035 落地（并行会话 PR #16），本次合并后 **035 = `Implemented`、34 篇 spec.md 全为 Implemented**（见 §5.8）。初稿曾据当时状态把 035 记为 `In Review`，属**当时正确、现已过期**，已校正。
 3. **`docs/specs/README.md` / `roadmap.md` 的阶段归属**：Feature 编号与阶段命名属宪法 §Governance 人类决策边界，本次未改动，仅做一致性对齐。
 4. **历史 ADR 正文内的 System Design 旧章号未回改**（按 [adr-standard.md](../../../standards/adr-standard.md) §5 第 6 条，属设计选择）：索引类链接已保证可达，但 ADR 正文内的章号是撰写时快照。
-5. **校验脚本的链接检查是"可达性"而非"语义正确性"**：能发现死链与路径错，但无法判断"链接到的文档是否还讲这件事"。
+5. **校验脚本的链接检查是"可达性 + 编号一致性"而非完整语义正确性**：检查 1 覆盖死链与路径错、**检查 16** 覆盖 `[ADR-NNNN]` 标签与目标承载文件是否一致，但仍无法判断"链接到的文档是否还讲这件事"（例：030 行的"待开工"描述与 5 个已合并 PR 之间的矛盾，脚本查不出——见 §5.8）。
 6. **AI Skill 的"不定义事实"约束无机器强制**：目前靠条款 + Review 流程约束，未做 CI 门禁（引入需人类决策）。
 7. **`.claude/skills/speckit-*` 其余技能**（analyze / checklist / clarify / constitution / converge / implement / plan / tasks / taskstoissues）本次仅逐项核对与 `docs/specs/<stage>/<feature>/` 口径对齐，未做重写。
 8. ~~`architecture-tests` 的 ArchUnit 误报~~ —— **人类裁定：不处置**（2026-09-22，负责人指示「`.workbuddy/` 这个文件夹下的文件不用关心」）。成因记录保留在 §9.2 供后续追溯：`AccountingVocabularyBoundaryTest.isModuleSource()` 未排除点目录，导致 gitignored 的 `.workbuddy/p3-removed-refund-service/`（47 个 `.java` 的 2026-09-05 备份）被计入扫描。**结论：该测试在工作区含 `.workbuddy/` 备份时会红，属环境噪声，非代码缺陷**；`.workbuddy/` 为项目数据目录、**禁止删除**。

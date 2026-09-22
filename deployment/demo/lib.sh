@@ -59,6 +59,14 @@ http() { # http METHOD URL [BODY] [HEADERS]
   echo "    <- $STATUS $(echo "$BODY" | head -c 220)"
 }
 
+# ---- `python` 兼容垫片：部分场景脚本直接用 `python -c` 解析 JSON，而 macOS 只有 python3。----
+# lib.sh 是所有 scenario 的共同入口；此处定义函数并 export -f（子 shell `bash -c` 亦继承），
+# 无 python 时透明转发 python3。
+if ! command -v python >/dev/null 2>&1; then
+  python() { command python3 "$@"; }
+  export -f python
+fi
+
 # ---- JSON 取值：json_get <expr>（expr 为 python 表达式，d 为 dict / list）----
 json_get() {
   local expr="$1"

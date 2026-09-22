@@ -9,6 +9,9 @@ global:
   evaluation_interval: 15s
 
 rule_files:
+  # SLO Recording Rules（spec 035 / ADR-0083 决策 1~2）：4 个 SLI、错误预算余量、
+  # 快/慢窗口 burn rate。告警（payment-alerts.yml）只消费这些派生序列。
+  - "/etc/prometheus/rules/slo-recording.yml"
   - "/etc/prometheus/rules/payment-alerts.yml"
 
 scrape_configs:

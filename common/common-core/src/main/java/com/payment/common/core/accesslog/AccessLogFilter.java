@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
@@ -31,7 +32,10 @@ import org.springframework.web.util.ContentCachingResponseWrapper;
  *
  * <p>报文口径（D4）：GET 无 body 记 {@code req=-}；multipart / 非文本 content-type 只记
  * {@code <binary>} 占位；正文经 {@link SensitiveBodyMasker} 桩后按 {@code maxBodyBytes}
- * 截断并带省略标记；排除路径（默认 {@code /actuator/**}）在 {@link #shouldNotFilter} 直接放行。</p>
+ * 截断并带省略标记；排除路径（默认 {@code /actuator/**} 与 {@code /internal/channels/**}，
+ * spec 035 §10 C-1——渠道回调入口不落正文，密钥/完整报文不入日志）在 {@link #shouldNotFilter} 直接放行。
+ * {@code uri} 记 Spring MVC 命中模式（{@code /payments/{ref}} 级，035 §6.2 纪律 2：
+ * 防访问日志自身成为高基数源），未命中路由回落原始 URI。</p>
  */
 public class AccessLogFilter extends OncePerRequestFilter {
 
@@ -92,7 +96,12 @@ public class AccessLogFilter extends OncePerRequestFilter {
 
     private void logAccess(ContentCachingRequestWrapper request,
                            ContentCachingResponseWrapper response, long costMs) {
-        String uri = request.getRequestURI()
+        // spec 035 §6.2 纪律 2：uri MUST 归一化路径变量——Spring MVC 命中路由后会写
+        // BEST_MATCHING_PATTERN 属性（如 /internal/payments/{ref}/channel-callback），
+        // 优先记录该模式；未命中路由（404/静态）无该属性时回落原始 URI。
+        // 否则访问日志自己就是高基数源（单号进 uri = 单号进 label 的日志版）。
+        Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        String uri = (pattern instanceof String p && !p.isBlank() ? p : request.getRequestURI())
                 + (request.getQueryString() != null ? "?" + request.getQueryString() : "");
         String req = bodyOf(request.getContentType(), request.getContentAsByteArray(),
                 request.getMethod());

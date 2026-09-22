@@ -16,7 +16,7 @@ description: 可观测性规范导航——指标、结构化日志（traceId �
 
 ## SLO
 
-核心接口定义目标（可用性 / P99 延迟 / 对账达成率），有错误预算意识。观测基线与高基数政策见 [ADR-0083](../../../docs/adr/README.md)（🟡 Proposed，**尚未进入 L0**——未裁决前不得当作当前事实）。
+核心接口定义目标（可用性 / P99 延迟 / 对账达成率），有错误预算意识。观测基线与高基数政策见 [ADR-0083](../../../docs/adr/README.md)（🟢 Accepted → Implemented，2026-09-22 随 spec 035 落地；指标目录的唯一登记处是 `docs/operations/runbook.md §5`）。
 
 ## 当前状态（务必区分「已实现」与「未落地」）
 

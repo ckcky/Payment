@@ -1,9 +1,14 @@
 package com.payment.testinfra;
 
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import org.assertj.core.api.Assertions;
 
 /**
@@ -54,6 +59,42 @@ public final class MetricsAssert {
         Assertions.assertThat(actual)
                 .as("timer %s%s", name, tagKeyValuePairs.length == 0 ? "" : " " + describe(tagKeyValuePairs))
                 .isGreaterThanOrEqualTo(expected);
+    }
+
+    /**
+     * 高基数运行期遍历断言（spec 035 §7.1 HC-1/HC-2/HC-4 的 registry 侧机制，ADR-0083 决策 2）：
+     * 遍历 {@code MeterRegistry} 已注册 meters，断言
+     * ① 每个 tag 的<b>键</b>属于登记的有界白名单；
+     * ② 每个 tag 的<b>值</b>不含单号/ID/UUID 形态（长度 ≤64 且非 UUID/长数字形态——运行期无法
+     *    穷举值域，用形态启发 + 白名单键双重拦截；权威值域守护在静态扫描 {@code MetricsCardinalityTest}）；
+     * ③ 同名 meter 的序列数 ≤ 200（HC-4 预算）。
+     *
+     * <p>用途：各服务 L2a（{@code @SpringBootTest} + H2）用例驱动一轮真实业务后调用，
+     * 断言「这一轮产生的所有标签」合规——是 035-A 交付的可复用断言本体。</p>
+     */
+    public static void assertTagValuesWithinAllowedSet(MeterRegistry registry, Set<String> allowedTagKeys) {
+        Pattern uuidish = Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}|\\d{12,}");
+        Map<String, Integer> seriesByName = new HashMap<>();
+        for (Meter meter : registry.getMeters()) {
+            seriesByName.merge(meter.getId().getName(), 1, Integer::sum);
+            for (Tag tag : meter.getId().getTags()) {
+                Assertions.assertThat(allowedTagKeys)
+                        .as("meter %s 的标签键 %s 须在有界白名单内（HC-1/HC-3）",
+                                meter.getId().getName(), tag.getKey())
+                        .contains(tag.getKey());
+                Assertions.assertThat(tag.getValue())
+                        .as("meter %s 标签 %s=%s 的值不得呈单号/ID 形态（HC-2：长度须 ≤64）",
+                                meter.getId().getName(), tag.getKey(), tag.getValue())
+                        .hasSizeLessThanOrEqualTo(64);
+                Assertions.assertThat(uuidish.matcher(tag.getValue()).find())
+                        .as("meter %s 标签 %s=%s 的值不得含 UUID 片段或长数字（HC-2）",
+                                meter.getId().getName(), tag.getKey(), tag.getValue())
+                        .isFalse();
+            }
+        }
+        seriesByName.forEach((name, count) -> Assertions.assertThat(count)
+                .as("指标 %s 的序列数须 ≤ HC-4 预算 200", name)
+                .isLessThanOrEqualTo(200));
     }
 
     private static Iterable<Tag> tags(String... keyValuePairs) {
