@@ -1,10 +1,12 @@
 # Feature Specification: Reconciliation 对账（Mock/预置渠道账单核对与差异处理闭环）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **Feature Branch**: `006-reconciliation`
 
 **Created**: 2026-08-29
 
-**Status**: ✅ **Implemented**（2026-09-09 收口：ADR-0019~0021 均 Accepted（2026-08-30 裁决）；实现早已落地，本轮补齐真缺口 + 测试债 + 文档，验收 23/24 项通过，见 [acceptance.md](acceptance.md) 与 [tasks.md](tasks.md)）
+> **Status**: Implemented — 2026-09-09 收口：ADR-0019~0021 均 Accepted（2026-08-30 裁决），实现早已落地，本轮补齐真缺口 + 测试债 + 文档，验收 23/24 项通过（见 [acceptance.md](acceptance.md) 与 [tasks.md](tasks.md)） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: 用户描述：为 Roadmap Phase 6 · Reconciliation 建立 Spec Kit 产物。本 Feature **不是从零构建**——`reconciliation-service`（端口 8088，Schema `reconciliation`）核心比对链路已实现，本 Spec 是**缺口补齐 / 收口**型 Spec。
 

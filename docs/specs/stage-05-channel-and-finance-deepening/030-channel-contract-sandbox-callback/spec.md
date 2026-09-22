@@ -2,7 +2,7 @@
 
 **版本**：1.1
 **日期**：2026-09-19
-**状态**：Draft —— **本轮只写 Spec，不写代码**；生成后停止，等待 Plan 指令
+> **Status**: Implemented — 原「Draft／本轮只写 Spec，不写代码」为设计轮表述，已被后续实现取代：[tasks.md](tasks.md) 载「已全部完成（142/142）并已合入 master」（合并点 `3a39a7a`），[acceptance.md](acceptance.md) 载「已实现并已合入 master（`e348090`）」 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **阶段**：`stage-05-channel-and-finance-deepening`（**提案中**；阶段命名与 Feature 编号属宪法 §Governance 人类决策边界）
 **编号与取代关系**：本 Feature 编号 **`030`**，落在 **stage-05**。原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 四件套**已于 2026-09-19 整目录删除**（纯文档、零代码实现，其设计已被本 Spec 全量吸收）——见 [§0.3](#03-编号裁决与旧-030-的处置)
 **依赖决策**：[ADR-0075](../../../adr/0075-unified-channel-contract.md)（🟢 **Accepted**）、[ADR-0076](../../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)（🟢 **Accepted**）——**两者已于 2026-09-19 由 Proposed 升级为 Accepted，门 1 通过**；已登记进 `adr/README.md` 索引表 + 编号速查表 + `adr/traceability.md`
@@ -80,7 +80,7 @@
 ### 0.4 本 Spec 与 L0 文档的关系
 
 - 本 Spec **不是** L0 当前系统事实源；所有 `【目标】` 项在实现完成前 **MUST NOT** 写入 `technical-solution.md` / `systems/*.md`；
-- **字段级契约权威定义**仍在 [`payment-service.md §3.11`](../../../architecture/systems/payment-service.md#311-渠道内部契约spec-030--adr-0075)（**该节待门 0 补齐，见 D-1**），本 Spec 只承载**需求与验收**，不复制字段表；
+- **字段级契约权威定义**仍在 [`payment-service.md §6.11`](../../../architecture/systems/payment-service.md#611-渠道内部契约spec-030--adr-0075)（**该节待门 0 补齐，见 D-1**），本 Spec 只承载**需求与验收**，不复制字段表；
 - 本 Spec 中的**新决策**（若有）MUST 先立 ADR，不得以 Spec 替代 ADR。
 
 ---
@@ -1255,7 +1255,7 @@ ALTER TABLE payment_attempts
 | SC-A-13 | 沙箱协议离线可测：新依赖可下载；固定向量单测通过；**全程不连沙箱、不访问公网** |
 | SC-A-14 | notify 端点：合法通知收敛并**恰好返回纯文本 `success`**；验签失败 `403` 且不触达收敛服务；`WAIT_BUYER_PAY` 不推进 |
 | SC-A-15 | 零回归：不染色路径既有测试**零改动**通过 |
-| SC-A-16 | 文档一致：`payment-service.md §3.11` 与代码一致；ADR README 两张表 + traceability 已登记；**链接与锚点自检 0 断链** |
+| SC-A-16 | 文档一致：`payment-service.md §6.11` 与代码一致；ADR README 两张表 + traceability 已登记；**链接与锚点自检 0 断链** |
 
 ### 16.2 B 类验收（**逐项可判**）
 
@@ -1373,8 +1373,8 @@ ALTER TABLE payment_attempts
 | **ADR 同步** | `docs/adr/README.md`、`docs/adr/traceability.md`、`docs/adr/0075`、`docs/adr/0076` | 指向旧 030 的链接改指本 Spec；指向 `031` 的改为 `030` | ✅ 本轮执行 |
 | 待办 · 编号 | `docs/specs/README.md` | **后续 Feature 编号重排**（H9/H15，是否顺移一位） | ❌ 待裁决 |
 | 待办 · 计划 | `docs/architecture/roadmap.md` | 同步阶段与 Feature | ❌ 待裁决 |
-| 待办 · 门 0（剩余） | `payment-service.md`（重复 `### 3.10` + 悬空 `§3.11` 锚点）、`technical-solution.md` 等 | D-1~D-6 漂移收口（**实现前先做 docs-only 提交**） | ❌ 门 0（待做） |
-| 待办 · L0 | `payment-service.md §3.11`、`technical-solution.md` | 实现完成后同步（**实现前 MUST NOT 写入 `【目标】`**） | ❌ 实现后 |
+| 待办 · 门 0（剩余） | `payment-service.md`（重复 `### 3.10` + 悬空 `§6.11` 锚点（治理前为 §3.11））、`technical-solution.md` 等 | D-1~D-6 漂移收口（**实现前先做 docs-only 提交**） | ❌ 门 0（待做） |
+| 待办 · L0 | `payment-service.md §6.11`、`technical-solution.md` | 实现完成后同步（**实现前 MUST NOT 写入 `【目标】`**） | ❌ 实现后 |
 | ✅ 已执行 · ADR | `adr/README.md`、`adr/traceability.md` | **ADR-0075 / ADR-0076 已转 Accepted（H1）并登记**：索引表 + 编号速查表（标题改 `0001–0076`）+ traceability；`下一可用编号` 更新为 **ADR-0077** | ✅ 已执行 |
 | 不变 | spec 028 的 INV-1~INV-6、幂等键结构、路由确定性、前向/反向分离；ADR-0012 / ADR-0049 / ADR-0063 / ADR-0026 | 不改动 | — |
 
@@ -1401,7 +1401,7 @@ ALTER TABLE payment_attempts
 
 - ✅ **附 A 的最小裁决集 H1 / H2 / H3 / H4 已全部给出**（2026-09-19），并已落进正文与两份 ADR；
 - ⏳ **仍待裁决（不阻塞主体实现）**：H9/H15（编号重排）、H13（`UNKNOWN → ACCEPTED`）、H17（B7 兜底扫描器）、H20（C-23 / `close` 归属）；
-- ⏳ **门 0 剩余项**：`payment-service.md` 重复 `### 3.10` 与悬空 `§3.11` 锚点等 D-1~D-6 漂移收口（建议独立 docs-only 提交，**不依赖任何裁决**）；
+- ⏳ **门 0 剩余项**：`payment-service.md` 重复 `### 3.10` 与悬空 `§6.11` 锚点（治理前为 §3.11）等 D-1~D-6 漂移收口（建议独立 docs-only 提交，**不依赖任何裁决**）；
 - ✅ **Plan 阶段产出已就绪**：`plan.md` / `tasks.md` / `acceptance.md`（含门 0 收口任务、`extra_json` 三处 schema 落地顺序、批次依赖与并行说明）。
 
 **在负责人下达开工指令前，不进入任何代码实现。**

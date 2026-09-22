@@ -1,10 +1,12 @@
 # Tasks: Ledger 资金账本（复式记账）
 
-**Input**: Design documents from `/specs/004-ledger/` (spec.md, plan.md, research.md, data-model.md, contracts/, quickstart.md)
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
+**Input**: Design documents from `docs/specs/stage-01-core-mvp/004-ledger/004-ledger/` (spec.md, plan.md, research.md, data-model.md, contracts/, quickstart.md)
 
 **Prerequisites**: plan.md ✅、spec.md ✅、research.md ✅、data-model.md ✅、contracts/ ✅
 
-**Current Progress（2026-08-28）**: 文档先行阶段已完成（spec/plan/research/data-model/contracts/checklists/acceptance/quickstart）。ADR-0008~0011 状态 **Proposed**，待负责人确认后方可进入实现。本文件为后续实现阶段的任务清单（当前**未开始实现**）。
+**Current Progress（2026-08-28）**: 文档先行阶段已完成（spec/plan/research/data-model/contracts/checklists/acceptance/quickstart）。ADR-0008~0011 状态 **Proposed**，待负责人确认后方可进入实现。本文件为后续实现阶段的任务清单（当前**已实现**）。
 
 **Tests**: 本 Feature 资金正确性敏感，按 Constitution §VII 与 spec 要求，**MUST** 包含测试任务（已内联到各 US 阶段）。
 

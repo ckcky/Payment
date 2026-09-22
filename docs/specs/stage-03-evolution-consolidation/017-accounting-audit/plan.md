@@ -2,7 +2,7 @@
 
 **版本**：0.4（已实施：2026-09-07 代码合并 master，测试与 live 冒烟通过）
 **日期**：2026-09-06
-**状态**：✅ Accepted → **已实施**（2026-09-07 落地 63f73d1）
+**状态**：✅ Implemented（2026-09-07 落地 63f73d1）
 **关联**：spec 004-ledger（FR-007/FR-008、SC-005）、spec 006-reconciliation、spec 007-settlement、spec 016（N4 缺口）、spec 011-demo-showcase、ADR-0054、ADR-0065
 
 > **v0.2 变更**（本轮需求："加测试和验收、要模拟数据、demo 里搞个界面能看到触发/执行/结果、挂账调账"）

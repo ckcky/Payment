@@ -1,5 +1,7 @@
 # Plan: 022 全链路自动化测试体系
 
+> **口径注明（2026-09-22 文档治理）**：本文件撰写时「10 个服务」指 **10 个应用进程** = **9 个核心业务服务 + 1 个演示组件 `mock-channel-web`**。当前统一口径：描述**业务服务**用 **9**，描述**运行进程**用 **10**（见 [docs/standards/documentation-governance.md](../../../standards/documentation-governance.md)）。本文为已实现 Feature 的历史记录，正文措辞保留原样。
+
 > 承载目标：把「在 demo 控制台发起支付/退款 → 观察各系统状态与 DB 数据」变成可重复、可报告、可进 CI 的自动化测试；
 > 重点覆盖四件事：**退款功能正常 / 超退能拦截 / 对账准确 / 单号记对**（[spec.md](spec.md) US1~US5）。
 > 形态按负责人拍板：**新建 Java Maven 模块（黑盒 HTTP + JDBC）**、默认复用本地栈、**不引 SCC/Pact**、**PR 快跑 + nightly 全量**。

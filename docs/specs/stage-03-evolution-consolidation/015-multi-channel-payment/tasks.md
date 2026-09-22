@@ -1,5 +1,7 @@
 # Tasks: 015-multi-channel-payment
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 > 每个任务完成后跑 `mvn -o clean verify -fae`（或对应模块 `mvn -o -pl <m> -am test`）门禁，绿色再继续。最后统一全量门禁 + 精确提交。
 
 ## P0 数据底座

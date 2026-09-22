@@ -2,7 +2,7 @@
 
 **版本**：0.1
 **日期**：2026-09-06
-**状态**：⏸ **待执行**——本 Feature 当前仅文档，后端 `/internal/audit/**` 与演示页尚未落位（负责人指示：先把 spec 文档搞好）
+**状态**：✅ **Implemented**——2026-09-07 已实现并合并 master（`63f73d1`，450 测试全绿、live 冒烟闭环通过）；原「待执行（本 Feature 当前仅文档）」为设计轮表述，任务与证据见 [tasks.md](tasks.md)、[plan.md](plan.md)
 **关联**：[spec.md](spec.md)（SC-001~018 权威清单）· [plan.md](plan.md)（测试策略 §8、模拟数据 §8.2、演示控制台 §10）· [tasks.md](tasks.md) · [audit-console-mockup.html](audit-console-mockup.html)（离线原型）
 
 ---

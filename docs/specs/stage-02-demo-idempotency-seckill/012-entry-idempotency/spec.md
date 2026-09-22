@@ -2,7 +2,7 @@
 
 **版本**：0.1（收口型）
 **日期**：2026-09-02
-**状态**：Accepted（实现已存在，本 Spec 为**事后补写的收口产物**）
+> **Status**: Implemented — 实现已存在，本 Spec 为**事后补写的收口产物** <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **输入**：`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md` §5（F2）
 
 > ⚠️ **收口说明（ADR-0053）**：同 013/014，本 Feature 的代码在 Spec 之前已写入 working tree。

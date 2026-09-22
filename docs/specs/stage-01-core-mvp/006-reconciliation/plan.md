@@ -2,7 +2,7 @@
 
 **Branch**: `006-reconciliation` | **Date**: 2026-08-29 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `/specs/006-reconciliation/spec.md`
+**Input**: Feature specification from `docs/specs/stage-01-core-mvp/006-reconciliation/006-reconciliation/spec.md`
 
 ## Summary
 

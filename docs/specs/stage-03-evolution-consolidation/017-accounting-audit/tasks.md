@@ -1,7 +1,7 @@
 # Tasks: 017-accounting-audit（会计四核对 + 挂账·调账闭环）
 
 > 承载目标：兑现 spec 004 SC-005（账证覆盖率），补齐账账 / 账实 / 账表，并把「只记录差异」升级为「挂账 → 调账 → 复核 → 关批」闭环；配确定性模拟数据与演示控制台。
-> **当前状态：已实现（2026-09-07，feature/017-accounting-audit）**。核心交付：reconciliation `audit` 包
+> **当前状态：Implemented（2026-09-07，feature/017-accounting-audit）**。核心交付：reconciliation `audit` 包
 > （四核对 + 挂账/调账/recheck/关批/结算门禁）、ledger `SUSPENSE` 科目与分录只读端点、settlement 审计事实
 > 与门禁接入、`audit.html` 演示控制台（MOCK/LIVE）、fixture SQL 与 `scenario-audit.sh`。
 > 测试口径说明（T029/T059）：项目测试风格为内存仓储 + fake 网关（无 @SpringBootTest 先例），

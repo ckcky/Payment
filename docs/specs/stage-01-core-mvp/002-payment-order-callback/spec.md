@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-27
 
-**Status**: Draft
+> **Status**: Implemented — 实现已在 `001-core-business-model` 主线内落地，规划产物于 2026-08-28 补齐、按源码核验验收通过（FR-009 留痕与 T022 补测为已登记的已知缺口，不阻塞主体正确性） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: User description: 打通「支付成功 → 订单/交易」的状态回写闭环。当一笔支付被明确确认为成功时，订单与交易通过回调感知支付成功，分别推进到「已支付」和「成功」，消除当前「支付已成功但订单仍待支付、交易仍处理中」的一致性问题；重复回调幂等吸收。
 

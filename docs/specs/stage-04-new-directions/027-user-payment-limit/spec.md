@@ -2,9 +2,9 @@
 
 **版本**：0.1
 **日期**：2026-09-16
-**状态**：Implemented（D1~D13 已确认并已由 payment-service 实现；当前事实见 `payment-service.md` §9）
+> **Status**: Implemented — D1~D13 已确认并已由 payment-service 实现（批次 A~J，2026-09-16 验收通过）；当前事实见 `payment-service.md` §9 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **分支**：`docs/spec-027-user-payment-limit`（纯文档，经 `./spec-worktree.sh`）→ 实现期另开 `feature/027-user-payment-limit`
-**决策**：ADR-0071（[0071-user-payment-limit.md](../../adr/0071-user-payment-limit.md)，🟡 Proposed）
+**决策**：ADR-0071（[0071-user-payment-limit.md](../../../adr/0071-user-payment-limit.md)，🟡 Proposed）
 
 > ⚠️ **与 ADR-0028 的切割（必读）**：ADR-0028「最小风控」已于 2026-08-30 裁决 ⛔ **Not Implemented**，代码已删除。
 > 那是「阈值评分 + 命中**只记录不阻断**」；本 Spec 是「确定性额度比较 + 命中**硬拒绝**」。
@@ -422,7 +422,7 @@ CREATE TABLE IF NOT EXISTS limit_operations (
 |---|---|---|
 | 新增 ADR | `docs/adr/0071-user-payment-limit.md`（ADR-0071，🟡 Proposed） | 已创建 |
 | 新增 Spec | `docs/specs/stage-04-new-directions/027-user-payment-limit/`（本文档） | 已创建 |
-| 新增 Spec 三件套 | `plan.md`（技术方案：架构 / DDL / 流程 / Redis 设计 / 包结构论证 / 挂点清单）、`tasks.md`（T101~T130，批次 A~J）、`acceptance.md`（SC 逐条验收清单） | 已创建（2026-09-16） |
+| 新增 Spec Kit 四件套（本 Feature 新增 plan/tasks/acceptance） | `plan.md`（技术方案：架构 / DDL / 流程 / Redis 设计 / 包结构论证 / 挂点清单）、`tasks.md`（T101~T130，批次 A~J）、`acceptance.md`（SC 逐条验收清单） | 已创建（2026-09-16） |
 | **切割声明** | ADR-0028「最小风控」⛔ Not Implemented | **不改变**其结论；本 Spec §0 与 ADR-0071 背景段均显式切割，避免被误读为翻案 |
 | **例外登记** | ADR-0048「演示组件只读代理」 | 若 D9 采纳 ②，需在 ADR-0071 登记例外，**范围仅限 `/internal/limits/**`** |
 | 实现期同步 | `payment-service.md`（新增限额章节：数据模型 / 建单挂点 / 错误码 / 指标）；`docs/operations/runbook.md`（`payment.limit.*` 配置）；`deployment/schema/`（新增 DDL 文件） | 实现期（SC-013） |

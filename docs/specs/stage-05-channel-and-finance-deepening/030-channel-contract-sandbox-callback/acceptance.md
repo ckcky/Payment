@@ -83,7 +83,7 @@
 - [x] **SC-A-13（离线可测）** 新依赖可下载；签名 / 验签 / 参数排序用**固定向量**单测钉死；**全程不连沙箱、不访问公网** —— 🔵 沙箱相关测试全部用桩网关（`StubGateway` / `ScriptedGateway`），门禁在离线模式 `-o` 下通过 ⇒ 无公网依赖
 - [x] **SC-A-14（notify 端点）** 合法通知收敛并**恰好返回纯文本 `success`**（无引号 / 无换行 / 无 JSON 包装）；验签失败 `403` 且**不触达**收敛服务；`WAIT_BUYER_PAY` **不推进** —— 🔵 `AlipayNotifyControllerTest` / `AlipayNotifyValidationTest` 绿；🟢 公网侧 403 由 live 动线验证（§3.2）
 - [x] **SC-A-15（零回归）** 不染色路径既有测试**零改动**通过 —— 🟢 全量 834 tests 绿；本会话改动的测试仅限「把误标的凭证 Kind 更正为 `FORM_HTML`」（授权修正，证据链见 §2.5 F1）
-- [x] **SC-A-16（文档一致）** `payment-service.md §3.11` 与代码一致；`adr/README.md` 两张表 + `traceability.md` 已登记；**链接与锚点自检 0 断链** —— 🟢 §3.11 / §3.11.1 已回写；ADR-0075/0076 已登记进索引表 + 编号速查表（`0001–0076`，下一可用 **ADR-0077**）+ `traceability.md`
+- [x] **SC-A-16（文档一致）** `payment-service.md §6.11` 与代码一致；`adr/README.md` 两张表 + `traceability.md` 已登记；**链接与锚点自检 0 断链** —— 🟢 §6.11 / §6.11.1 已回写；ADR-0075/0076 已登记进索引表 + 编号速查表（`0001–0076`，下一可用 **ADR-0077**）+ `traceability.md`
 
 ### 2.5 B 类 —— B1 账本幂等键（🔴）
 

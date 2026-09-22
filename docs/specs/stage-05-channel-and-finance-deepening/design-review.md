@@ -1,7 +1,9 @@
 # Stage 05 Design Review
 
+**Status**: Proposed（一次性审查的设计输入文档；**不是** L0 当前系统事实源，不产生已生效决策）
+
 **审查对象**：`docs/specs/stage-05-channel-and-finance-deepening/stage-design.md`（v0.1 Draft）+ 其覆盖的六面能力（渠道 / 账务 / 对账结算 / 可靠性 / 可观测 / 测试）
-**审查依据**：**当前仓库真实代码**（`payment-service` / `ledger-service` / `reconciliation-service` / `settlement-service` / `order-service` / `deployment/schema`）、spec 030、ADR-0072~0076、Constitution v2.3.0
+**审查依据**：**当前仓库真实代码**（`payment-service` / `ledger-service` / `reconciliation-service` / `settlement-service` / `order-service` / `deployment/schema`）、spec 030、ADR-0072~0076、Constitution（审查时为 v2.3.0，现行为 v2.4.0）
 **审查日期**：2026-09-19
 **审查性质**：**只读审查**。本轮不写业务代码、不改数据库、不改 API、不新增依赖、不新增服务、不改现有 ADR。
 **事实来源优先级**：`代码 > Schema > 测试 > L0 文档 > L2 Spec > L3 ADR > stage-design.md`。

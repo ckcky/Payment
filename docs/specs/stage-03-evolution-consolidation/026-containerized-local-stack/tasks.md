@@ -1,5 +1,7 @@
 # Tasks: 026-containerized-local-stack
 
+> **口径注明（2026-09-22 文档治理）**：本文件撰写时「10 个服务」指 **10 个应用进程** = **9 个核心业务服务 + 1 个演示组件 `mock-channel-web`**。当前统一口径：描述**业务服务**用 **9**，描述**运行进程**用 **10**（见 [docs/standards/documentation-governance.md](../../../standards/documentation-governance.md)）。本文为已实现 Feature 的历史记录，正文措辞保留原样。
+
 - 版本: v1
 - 日期: 2026-09-15
 - 对应: [spec 026](./spec.md) / [plan 026](./plan.md) / ADR-0070
@@ -82,7 +84,7 @@
 - [x] T602 `deployment/README.md`：脚本清单 / profiles 用法 / 容器模式说明 / 宿主模式 JDK 17+ 前提
 - [x] T603 `docs/operations/runbook.md`：启动先选模式；UNKNOWN 场景两种模式各自的切换手段
 - [x] T604 `docs/architecture/technical-solution.md`：部署形态改为双模式表 + 「明确不做 K8s」
-- [x] T605 `docs/architecture/diagrams/02-deployment-topology.puml` 补容器模式形态（**SVG 待重新渲染**，需 PlantUML）
+- [x] T605 `docs/architecture/diagrams/08-deployment.puml`（当时名为 `02-deployment-topology.puml`）补容器模式形态（SVG 已于 2026-09-22 文档治理时按 C4 Deployment 层级重新渲染）
 - [x] T606 `CHANGELOG.md` 记录容器化与已知未完成项
 - [x] T607 全仓扫描 `start-all.sh` / `spring-boot:run` 的引用，逐处标注所属模式
 - [x] T608 扫描复核：主要过时指引已清理（SC-007 部分达成）

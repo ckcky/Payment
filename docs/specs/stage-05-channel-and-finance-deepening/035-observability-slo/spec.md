@@ -2,7 +2,8 @@
 
 **Feature**：035　**标题**：Observability & SLO
 **版本**：v1.0（Draft，设计轮产物）　**日期**：2026-09-21
-**状态**：🟡 **设计完成，待 Architecture Review 与负责人裁决**（本轮**只出设计，不改代码、不改配置、不加依赖**）
+> **Status**: In Review
+> **delivery_mode**: `design-only`（本轮只出设计、未实现，无 plan.md / tasks.md；豁免依据见 [spec-standard.md](../../../standards/spec-standard.md) §5） — 本轮只出设计、未实现，待 Architecture Review 与负责人裁决 H-035-1~4（ADR-0083 仍为 Proposed；本轮只出设计，不改代码、不改配置、不加依赖） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **前置**：031（账务事件/试算平衡/期间）、032（对账差异与渠道资金事实）、034（失败台账与恢复出口）产出新指标；本 Feature 是它们的**观测收口**
 **输入权威**：[stage-design §7](../stage-design.md)、[design-review §12.2 H7、§12.3 M8/M9、§13 H14](../design-review.md)、
 [Constitution §Observability](../../../../.specify/memory/constitution.md)

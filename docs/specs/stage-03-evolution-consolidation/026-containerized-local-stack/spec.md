@@ -2,7 +2,9 @@
 
 - 版本: v1
 - 日期: 2026-09-15
-- 状态: ✅ **Implemented**（2026-09-15 收口）——P1~P7 全部完成并合入 master：
+> **Status**: Implemented — 2026-09-15 收口：P1~P7 全部完成并合入 master（提交、实测与遗留如下） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
+
+> **口径注明（2026-09-22 文档治理）**：本文件撰写时「10 个服务」指 **10 个应用进程** = **9 个核心业务服务 + 1 个演示组件 `mock-channel-web`**。当前统一口径：描述**业务服务**用 **9**，描述**运行进程**用 **10**（见 [docs/standards/documentation-governance.md](../../../standards/documentation-governance.md)）。本文为已实现 Feature 的历史记录，正文措辞保留原样。
   ①`61e9e3d` / `6a07a3d`（P1/P2/P3/P6：Dockerfile、compose 编排、模式守卫、启动脚本）；
   ②`08f3bb1`（P4/P5/P7：容器模式可观测、`restart-payment.sh` 双模、验证矩阵全绿）；
   ③`01193ff`（验收后缺陷补丁：容器模式收银台 payUrl 客户端不可达，见 tasks.md「补丁」节）。
@@ -173,7 +175,8 @@ Loki 中 `{job="payment-arch"}` 能查到全部 10 个服务的日志。
   并在文档中声明推荐容器配额 16GiB。
 - **FR-014**: 文档 MUST 同步更新，至少覆盖：`README.md`、`deployment/README.md`、
   `docs/operations/runbook.md`、`docs/architecture/technical-solution.md`、
-  `docs/architecture/diagrams/02-deployment-topology.puml`（及据此重生成的 SVG）。
+  `docs/architecture/diagrams/08-deployment.puml`（及据此重生成的 SVG；当时文件名为
+  `02-deployment-topology.puml`，2026-09-22 文档治理按 C4 层级重命名）。
 - **FR-015**: 两种模式的启动入口 MUST 在各自帮助信息里说明「另一种模式怎么起、怎么停」。
 
 ### Key Entities

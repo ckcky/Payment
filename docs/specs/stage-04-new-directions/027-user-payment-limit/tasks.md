@@ -2,7 +2,7 @@
 
 > 承载目标：payment 内限额子域 + 两阶段预占（RESERVE/CONFIRM/RELEASE）+ 四道幂等闸门 +
 > 在途占用 TTL（Redis 惰性回收）+ 软超限口径 + 演示可视化。
-> **当前状态：✅ 全部完成（2026-09-16，批次 A~J）。** 实现于 `feature/027-user-payment-limit`
+> **当前状态：✅ Implemented（2026-09-16，批次 A~J）。** 实现于 `feature/027-user-payment-limit`
 > worktree；ADR-0071 已转 🟢 Accepted → Implemented。实际验收结果见 [acceptance.md](acceptance.md)。
 > 每个任务完成后跑对应模块测试门禁，最后统一 `mvn -o clean verify -fae`。
 > 技术方案见 [plan.md](plan.md)（含 DDL、挂点清单、包结构论证），需求见 [spec.md](spec.md)。
@@ -10,7 +10,7 @@
 ## 批次 A — 文档与决策（已完成）
 
 - [x] **T101** 编写 spec 027：`docs/specs/stage-04-new-directions/027-user-payment-limit/spec.md`（现状 C1~C14 / 不变量 INV-1~9 / US1~US4 / FR-001~043 / SC-001~016 / 限制 L1~L11 / 决策 D9~D13）
-- [x] **T102** 立项 [ADR-0071](../../adr/0071-user-payment-limit.md)：D1~D13（含 **D13 允许 payment 使用 Redis 作为过期索引**，显式反转 ADR-0044 的「payment 不用 Redis」）
+- [x] **T102** 立项 [ADR-0071](../../../adr/0071-user-payment-limit.md)：D1~D13（含 **D13 允许 payment 使用 Redis 作为过期索引**，显式反转 ADR-0044 的「payment 不用 Redis」）
 - [x] **T103** `docs/adr/README.md` 索引新增 ADR-0071 行（**索引表 + 编号速查表两处**）+ 与 ADR-0048 互链
   - 实现期完成（026 / spec 028 均已合入 master，本 worktree 基于含其改动的基线，无覆盖风险）；下一可用编号已是 ADR-0074（0072/0073 为 spec 028）
 

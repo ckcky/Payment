@@ -2,7 +2,7 @@
 
 - 版本: v1
 - 日期: 2026-09-04
-- 状态: Implemented（分支 feature/snowflake-order-no）
+> **Status**: Implemented — 2026-09-04 落地于分支 `feature/snowflake-order-no`（ADR-0062） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 - 输入: 用户需求——所有系统的单号统一用雪花算法生成，前面加两个字母作为系统标识
 - 关联: ADR-0062
 

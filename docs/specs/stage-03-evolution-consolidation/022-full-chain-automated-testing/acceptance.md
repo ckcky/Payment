@@ -1,6 +1,6 @@
 # Acceptance: 022-full-chain-automated-testing
 
-> 验收执行方式与 DoD。状态：✅ Accepted → **待实施**（验收标准随 spec 022 拍板；执行待代码落地，本次仅文档）。
+> 验收执行方式与 DoD。状态：✅ **Implemented**（验收标准随 spec 022 拍板；代码已落地）。
 
 ## 验收执行方式
 

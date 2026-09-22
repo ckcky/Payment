@@ -2,7 +2,7 @@
 
 **版本**：0.2
 **日期**：2026-08-29（初稿）／2026-08-31（按负责人裁决修订）
-**状态**：✅ 已裁决 —— 部分 Accepted、部分 ⛔ Not Implemented（代码已按裁决改完，`mvn -o clean verify -fae` 全量 15 reactor 条目 BUILD SUCCESS）
+> **Status**: Implemented — 2026-08-30/31 负责人裁决已按最简形态落地：ADR-0024/0025 降级为接入点空实现、ADR-0026 用明文 env，ADR-0027/0028/0034~0037 裁决不做；`mvn -o clean verify -fae` 全量 15 reactor 条目 BUILD SUCCESS <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 > ## ⛔ 负责人裁决（2026-08-30）
 >

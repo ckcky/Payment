@@ -1,6 +1,6 @@
 # Acceptance: 018-schema-normalization-item-fulfillment
 
-> 验收执行方式与 DoD。状态：✅ Accepted（验收标准随 spec 018 拍板；执行待代码实施）。
+> 验收执行方式与 DoD。状态：✅ Implemented（验收标准随 spec 018 拍板；代码已实施）。
 
 ## 验收执行方式
 

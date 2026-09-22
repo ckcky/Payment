@@ -1,10 +1,12 @@
 # Feature Specification: Refund 退款（部分/全部退款、幂等、后处理编排与记账）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **Feature Branch**: `005-refund`
 
 **Created**: 2026-08-29
 
-**Status**: Draft（设计决策见 `docs/adr/0016-refund-decisions.md`，ADR-0016~0018 待负责人决策）
+> **Status**: Implemented — ADR-0016（部分退款）2026-08-30 裁决不做、ADR-0017/0018 Accepted（见 `docs/adr/0016-refund-decisions.md`）；2026-08-31 `mvn -o clean verify -fae` 全量 BUILD SUCCESS、验收通过（T017/T027/T030/T031 为已登记、不阻塞的遗留项） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: 用户描述：为 Roadmap Phase 5 · Refund 建立 Spec Kit 产物。本 Feature **不是从零构建**——`refund-service`（端口 8085，Schema `refund`）核心链路已实现，本 Spec 是**缺口补齐 / 收口**型 Spec。
 
@@ -20,11 +22,11 @@
 > | **ADR-0018 refund→ledger** | ✅ **Accepted** | US4 全量落地，记账金额 = `amountMinor` |
 >
 > - 裁决口径：**单笔退款没有「部分成功」**。渠道只回三态（`SUCCEEDED`/`FAILED`/`UNKNOWN`），成功即视为该笔申请额全额退回；若真实发生部分退回，走 `UNKNOWN` + 对账收敛，**不落 `PARTIALLY_SUCCEEDED`、不记 `refundedAmountMinor`**。
-> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../../adr/0016-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
+> - ⭐ **金额校验口径（新增 ADR-0047，Proposed）**：**同一支付仍支持多笔退款**（每笔独立幂等键，按申请额累计占用额度，受 `refund_intake_locks` 行锁串行化）。`RefundPolicy.decide` **只做**「币种一致 / 金额为正 / 累计申请额 + 本次申请额 ≤ 已支付金额」，**不做**「申请额 = 可退全额」的等值校验 —— 后者会与 `001-core-business-model/spec.md`「退款默认支持部分退款和多次退款」的已 Accepted 基线冲突。详见 [ADR-0047](../../../adr/0016-refund-decisions.md#adr-0047-退款金额校验口径adr-0016-回退后是否强制申请额--可退全额)。
 > - ⚠️ **落地补充说明（2026-08-31）**：ADR-0016 曾按最简实现落地过（`refundedAmountMinor` 全链路），裁决后**已整体回退**。
->   回退清单见 [ADR-0016 回退落地记录](../../adr/0016-refund-decisions.md)。
+>   回退清单见 [ADR-0016 回退落地记录](../../../adr/0016-refund-decisions.md)。
 > - US2 / US3 中涉及 `PARTIALLY_SUCCEEDED` 的验收条款**一并移除**；**全额路径的条款全部保持有效**。
-> - 落地口径见 [technical-solution §2.4](../../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
+> - 落地口径见 [technical-solution §2.4](../../../architecture/technical-solution.md#24-本阶段范围裁剪与预留契约)。
 
 ## 当前代码现实（已核实，禁止按绿地项目理解）
 
@@ -69,7 +71,7 @@
 
 ### ~~User Story 1 - 部分退款可追踪且累计金额不超限 (Priority: P1)~~ ⛔ 不做（ADR-0016 Rejected）
 
-> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../../adr/0016-refund-decisions.md) 的「回退落地记录」即为准绳。
+> **本节整体不适用**，保留为历史决策记录。重新开放部分退款时，本节与 [ADR-0016](../../../adr/0016-refund-decisions.md) 的「回退落地记录」即为准绳。
 >
 > ⭐ **替代口径（当前生效）**：累计额度一律按**申请额 `amountMinor`** 计（含在途 `PROCESSING`/`UNKNOWN` 保守占位），
 > 超额申请 `REJECTED` 且不发起渠道尝试——防超退不变量（H1）不受影响。用例见

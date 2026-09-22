@@ -1,6 +1,6 @@
 # Tasks: Reconciliation 对账（缺口补齐）
 
-**Input**: Design documents from `/specs/006-reconciliation/` (spec.md, plan.md, data-model.md, acceptance.md, quickstart.md)
+**Input**: Design documents from `docs/specs/stage-01-core-mvp/006-reconciliation/006-reconciliation/` (spec.md, plan.md, data-model.md, acceptance.md, quickstart.md)
 
 **Prerequisites**: spec.md ✅、plan.md ✅、data-model.md ✅、checklists/ ✅、acceptance.md ✅、quickstart.md ✅
 

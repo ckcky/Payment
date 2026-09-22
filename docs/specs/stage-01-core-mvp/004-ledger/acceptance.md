@@ -49,7 +49,7 @@
 
 ## 验收结论
 
-- **状态**：**已完成（功能与非功能验收全绿；仅「Testcontainers 集成测试」一项保留）**
+- **状态**：**Implemented（功能与非功能验收全绿；仅「Testcontainers 集成测试」一项保留）**
 - **遗留**：真库并发 / 集成测试（见上）。非阻塞——内存仓储 + 确定性撞键桩已覆盖幂等语义，
   真库唯一约束的并发行为靠 `uk_postings_idempotency_key` 兜底（生产语义未变）。
 - **本次补强**（2026-09-09）：新增 `RefundPostingTest` / `SettlementPostingTest` 共 10 个用例，

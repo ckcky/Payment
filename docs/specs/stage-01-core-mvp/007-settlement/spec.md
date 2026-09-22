@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-29
 
-**Status**: Draft（设计决策见 `docs/adr/0022-settlement-decisions.md`，ADR-0022~0023 待负责人决策）
+> **Status**: Implemented — 代码已全部落地且 `mvn test` 全量通过；ADR-0022~0023 已于 2026-09-03 经负责人确认 Accepted（见 `docs/adr/0022-settlement-decisions.md`），2026-09-09 补 `OutboundResilienceTest`（7 用例全绿） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: 用户描述：为 Roadmap Phase 7 · Settlement 建立 Spec Kit 产物。本 Feature **不是从零构建**——`settlement-service`（端口 8089，Schema `settlement`）已有**可运行 MVP**，本 Spec 是**缺口补齐 / 收口**型 Spec。
 

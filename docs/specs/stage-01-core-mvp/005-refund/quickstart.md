@@ -1,5 +1,7 @@
 # Quickstart: Refund 退款（本地验证指南）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **Feature**: `005-refund` | **Date**: 2026-08-29 | **Plan**: [plan.md](plan.md)
 
 > **状态（2026-08-31）：实现已完成并验收**，本指南已按最终裁决校准。

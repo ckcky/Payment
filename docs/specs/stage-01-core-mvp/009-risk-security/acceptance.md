@@ -1,6 +1,6 @@
 # Acceptance: Phase 9 风险 / 安全底座（009-risk-security）
 
-**Feature**: `009-risk-security` | **Date**: 2026-08-29 | **Spec**: [spec.md](spec.md) | **ADR**: [0024-risk-security-decisions.md](../../adr/0024-risk-security-decisions.md) / [0034-internal-token-decisions.md](../../adr/0034-internal-token-decisions.md)
+**Feature**: `009-risk-security` | **Date**: 2026-08-29 | **Spec**: [spec.md](spec.md) | **ADR**: [0024-risk-security-decisions.md](../../../adr/0024-risk-security-decisions.md) / [0034-internal-token-decisions.md](../../../adr/0034-internal-token-decisions.md)
 
 > **最终验收（2026-08-31）**：已按负责人 2026-08-30 裁决完成降级与清理。`mvn -o clean verify -fae` 全量 **15 个 reactor 条目 BUILD SUCCESS**。
 >

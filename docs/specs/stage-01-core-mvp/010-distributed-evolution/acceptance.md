@@ -1,6 +1,8 @@
 # Acceptance: 分布式演进门禁（010-distributed-evolution）
 
-**Feature**: `010-distributed-evolution` | **Date**: 2026-08-30 | **Spec**: [spec.md](spec.md) | **ADR**: [0029-distributed-evolution-decisions.md](../../adr/0029-distributed-evolution-decisions.md)
+> **历史文档提示（2026-09-22 文档治理）**：本文为 `Implemented` Feature 的历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
+**Feature**: `010-distributed-evolution` | **Date**: 2026-08-30 | **Spec**: [spec.md](spec.md) | **ADR**: [0029-distributed-evolution-decisions.md](../../../adr/0029-distributed-evolution-decisions.md)
 
 > 实现已完成（最简方案），`mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS。功能项全部勾选；**决策验收仍需负责人确认**（Constitution §8）。
 

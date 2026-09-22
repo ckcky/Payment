@@ -1,6 +1,8 @@
 # MVP 代码 Review 发现记录（T078）
 
-> 由 `/review`（通用）与 `/payment-review`（资金专项）两轮只读审查产出，对照 [constitution](../../../.specify/memory/constitution.md) 与 [engineering-standards](../../guides/engineering-standards.md)。
+> **历史文档提示（2026-09-22 文档治理）**：本文为 `Implemented` Feature 的历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
+> 由 `/review`（通用）与 `/payment-review`（资金专项）两轮只读审查产出，对照 [constitution](../../../../.specify/memory/constitution.md) 与 [engineering-standards](../../../guides/engineering-standards.md)。
 > 本文记录发现，不改动代码；标注「需人类确认」的项按宪法 §8 暂停等拍板。
 
 ## 结论速览
