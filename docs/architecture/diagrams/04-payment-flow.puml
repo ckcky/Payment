@@ -1,0 +1,77 @@
+@startuml
+' PaymentArch · 04 Payment Flow（C4 Dynamic）
+' SOURCE OF TRUTH = 本 .puml；同目录 04-payment-flow.svg 为渲染产物，禁止手工编辑。
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/04-payment-flow.puml
+' 规范：docs/standards/diagram-standard.md
+' 依据：docs/architecture/systems/payment-service.md §4.1（ADR-0054 / 0072 / 0073）
+title PaymentArch · Dynamic —— 支付主链：创建支付意图 → 渠道扣款 → 记账 → 通知订单
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #2F6FBF
+skinparam ArrowThickness 1
+skinparam sequence {
+  ArrowColor #2F6FBF
+  LifeLineBorderColor #B4B2A9
+  ParticipantBorderColor #5B7DA8
+  ParticipantBackgroundColor #DCE6F2
+  ParticipantFontStyle bold
+}
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #B4B2A9
+
+participant "order-service\n[Container]" as O
+participant "PaymentController\n[Component]" as C
+participant "PaymentApplicationService\n[Component]" as A
+participant "ChannelRouter / ChannelRegistry\n[Port]" as R
+participant "ChannelAttemptRecorder\n[Port]" as AR
+participant "渠道实现族\n[Component]" as I
+participant "支付宝开放平台（沙箱）\n[External System]" as AL
+participant "PaymentPersistence\n[Component]" as PP
+participant "ledger-service\n[Container]" as L
+
+O -> C : 创建支付意图\nREST / HTTP（amountMinor + currencyCode + 幂等键）
+C -> A : createPaymentIntent()\nJava（进程内）
+A -> A : findByIdempotencyKey 回查\n命中 ⇒ created=false 回放（不再建 attempt）
+A -> R : route(RouteContext)\nJava（端口，事务外先选路）
+R --> A : channelCode（确定性，不读染色）
+A -> PP : insertPending()\nJava（**事务 A**）
+activate PP
+PP -> PP : 插 payments（uk_payments_idempotency_key）\n撞键 ⇒ 回查返回 created=false
+PP -> AR : openPaymentAttempt()\nJava（端口）
+PP -> PP : payment.start(attemptId)  PENDING → PROCESSING
+deactivate PP
+
+A -> I : chargeWithRetry(ChargeRequest)\nJava（端口，事务外）
+activate I
+I -> AL : 支付指令\nHTTPS · RSA2
+AL --> I : 受理 / 结果
+deactivate I
+I --> A : ChannelResult（SUCCESS / FAILURE / UNKNOWN）
+
+A -> PP : applyAndPersist()\nJava（**事务 B**）
+activate PP
+PP -> PP : converge(attempt) → applyPayment(payment)\n顺序不可变，同一本地事务
+PP -> PP : save payments + payment_attempts
+deactivate PP
+
+alt 真正迁移为 SUCCESS
+  A -> L : postPaymentCapture()\nFeign RPC
+  L --> A : Posting（幂等键隔离来源）
+  A -> O : notifyPaymentSucceeded()\nFeign RPC（业务侧唯一扇出）
+  note over O
+    履约触发 / surplus 判定与自动退款
+    由 order 的 transaction 层编排（ADR-0054）
+  end note
+else 终态吸收 / 重复
+  A -> A : 返回 changed=false\n计 payment.duplicate_callback，不重复记账
+end
+
+legend right
+  **Legend**
+  连线语义：Primary Flow = Blue ｜ Success = Green ｜ Unknown = Orange ｜ Failure = Red
+  关系标签格式：<动词短语> + <技术协议>
+  事务边界：**事务 A** = 建单（payments + attempt + 限额预占）；**事务 B** = 结果应用；渠道调用与记账/通知在事务外
+endlegend
+
+@enduml

@@ -3,32 +3,20 @@
 **服务**：fulfillment-service（履约 + 交付 + 权益触发）
 **端口**：8086 | **Schema**：`fulfillment` | **包根**：`com.payment.fulfillment`
 
-**上游依赖**：payment-service（支付成功触发履约，同步 RPC）
-**下游依赖**：entitlement-service（履约完成后触发权益授予，同步 RPC）
-
 > 标注约定：无标记 = 已实现；`[目标]` = 建议值待确认；`[待定]` = 留待后续；`[Phase N 延后]` = 明确延后。
 
 ---
 
-## 1. 设计目标与约束
+> **章节结构**：遵循 [system-design-standard](../../standards/system-design-standard.md) 的 15 章骨架。
+> 2026-09-22 文档治理将原 6 章结构重排为标准章号，**正文内容未删改**。
 
-### 1.1 职责边界（负责 / 不负责）
+---
 
-| 维度 | 说明 |
-|---|---|
-| **负责** | 接收 order-service 的支付成功 RPC、按订单明细创建履约聚合与自有状态机、交付执行（当前 Mock）、明细粒度幂等、履约完成后触发权益授予 RPC；自身失败记录与终态 |
-| **不负责** | 支付金额/渠道/退款决策（归属 payment-service 退款域）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service） |
+## 1. 职责（Responsibility）
 
-### 1.2 硬约束（Constitution / ADR）
+接收 order-service 的支付成功 RPC、按订单明细创建履约聚合与自有状态机、交付执行（当前 Mock）、明细粒度幂等、履约完成后触发权益授予 RPC；自身失败记录与终态
 
-- **Fulfillment 不强耦合 Payment（Constitution #6）**：履约有**自己的状态机**，不被支付状态反向阻塞；入站 RPC 只接收 common-dto `PaymentSucceededRequest`（携带原始事实），不访问 payment 模块内部实体。支付成功只**触发**履约，不决定履约最终状态。
-- **状态机铁律**：状态只能通过 `domain.Fulfillment` 的领域方法（`start/deliver/fail/cancel`）推进，禁止外部直接 `setStatus`；非法迁移抛 `STATE_TRANSITION_VIOLATION`（`Fulfillment.java:73`）。
-- **幂等**：按 `(source_payment_no, order_item_id)` 唯一确定一条明细履约；同一支付可因多个订单明细创建多条履约，重复通知由该复合键吸收。
-- **终态不反写前序事实**：履约失败/权益失败**不回写支付为失败**，履约 DELIVERED 事实独立保留（technical-solution §4.3.4）。
-- **UNKNOWN 不臆断**：交付异常视为失败并记录，绝不臆断为成功（`FulfillmentApplicationService.java:49-55`）。
-- **Database-per-Service**：自有 `fulfillment` Schema，绝不直连他服务表（Constitution 数据所有权）。
-
-### 1.3 技术指标（`[目标]`，待确认）
+### 1.1 技术指标（`[目标]`，待确认）
 
 | 指标 | 目标值 |
 |---|---|
@@ -39,9 +27,31 @@
 
 ---
 
-## 2. 核心数据模型（DDD）
+## 2. 不负责（Non-Responsibility）
 
-### 2.1 聚合与值对象
+支付金额/渠道/退款决策（归属 payment-service 退款域）；权益内部生命周期与发放细节（归属 entitlement-service）；订单/交易最终状态（归属 order-service）
+
+## 3. 上下文与约束（Context）
+
+### 3.1 上下游依赖方向
+
+- **上游依赖**：payment-service（支付成功触发履约，同步 RPC）
+- **下游依赖**：entitlement-service（履约完成后触发权益授予，同步 RPC）
+
+- **依赖方式**：跨服务交互一律经公开 REST / Feign RPC 或事件通道，**禁止**直接 SQL 他服务 Schema（Database-per-Service，见 [technical-solution.md §3.1](../technical-solution.md)）。
+
+### 3.2 硬约束（Constitution / ADR）
+
+- **Fulfillment 不强耦合 Payment（Constitution #6）**：履约有**自己的状态机**，不被支付状态反向阻塞；入站 RPC 只接收 common-dto `PaymentSucceededRequest`（携带原始事实），不访问 payment 模块内部实体。支付成功只**触发**履约，不决定履约最终状态。
+- **状态机铁律**：状态只能通过 `domain.Fulfillment` 的领域方法（`start/deliver/fail/cancel`）推进，禁止外部直接 `setStatus`；非法迁移抛 `STATE_TRANSITION_VIOLATION`（`Fulfillment.java:73`）。
+- **幂等**：按 `(source_payment_no, order_item_id)` 唯一确定一条明细履约；同一支付可因多个订单明细创建多条履约，重复通知由该复合键吸收。
+- **终态不反写前序事实**：履约失败/权益失败**不回写支付为失败**，履约 DELIVERED 事实独立保留（technical-solution §4.3.4）。
+- **UNKNOWN 不臆断**：交付异常视为失败并记录，绝不臆断为成功（`FulfillmentApplicationService.java:49-55`）。
+- **Database-per-Service**：自有 `fulfillment` Schema，绝不直连他服务表（Constitution 数据所有权）。
+
+## 4. 领域模型（Domain Model）
+
+### 4.1 聚合与值对象
 
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
@@ -55,25 +65,7 @@
 
 **基数关系（当前）**：`Payment (1) ── (N) Fulfillment`，每个 `OrderItem` 对应一条履约；`Fulfillment` 本身承载订单项引用，不另设 `FulfillmentItem` / `Delivery` 子实体。
 
-### 2.2 状态机
-
-**Fulfillment**（`FulfillmentStatus`）：
-
-```text
-PENDING --start--> PROCESSING --deliver--> DELIVERED
-                     |      \--fail--------> FAILED
-PENDING --cancel--> CANCELLED
-（PARTIALLY_DELIVERED 已声明但未实现可达迁移，见 §5.4）
-```
-
-- `start()`：PENDING → PROCESSING（`Fulfillment.java:49`）。
-- `deliver()`：PROCESSING → DELIVERED（`Fulfillment.java:55`）。
-- `fail(reason)`：PROCESSING → FAILED，记录 `failureReason`（`Fulfillment.java:61`）。
-- `cancel()`：PENDING → CANCELLED（`Fulfillment.java:68`）。
-- `requireStatus(expected, action)`：非期望状态抛 `STATE_TRANSITION_VIOLATION`（`Fulfillment.java:73`）。
-- **终态吸收**：`deliver/fail` 仅对 PROCESSING 有效；已 DELIVERED/FAILED/CANCELLED 再次调用将抛异常（由上层调用方保证不重复驱动）。
-
-### 2.3 表结构与索引策略
+### 4.2 表结构与索引策略
 
 来源：[deployment/schema/04-fulfillment-schema.sql](../../../deployment/schema/04-fulfillment-schema.sql)（权威 DDL）。
 
@@ -98,11 +90,27 @@ PENDING --cancel--> CANCELLED
 
 ---
 
-## 3. 接口详细定义（API 契约）
+## 5. 状态机（State Machine）
 
-> 统一错误响应体 `ApiError`（common-core），错误码见 §3.4。响应成功体均为 JSON。
+**Fulfillment**（`FulfillmentStatus`）：
 
-### 3.1 支付成功触发履约（内部 RPC，供 payment-service）
+```text
+PENDING --start--> PROCESSING --deliver--> DELIVERED
+                     |      \--fail--------> FAILED
+PENDING --cancel--> CANCELLED
+（PARTIALLY_DELIVERED 已声明但未实现可达迁移，见 §8.1）
+```
+
+- `start()`：PENDING → PROCESSING（`Fulfillment.java:49`）。
+- `deliver()`：PROCESSING → DELIVERED（`Fulfillment.java:55`）。
+- `fail(reason)`：PROCESSING → FAILED，记录 `failureReason`（`Fulfillment.java:61`）。
+- `cancel()`：PENDING → CANCELLED（`Fulfillment.java:68`）。
+- `requireStatus(expected, action)`：非期望状态抛 `STATE_TRANSITION_VIOLATION`（`Fulfillment.java:73`）。
+- **终态吸收**：`deliver/fail` 仅对 PROCESSING 有效；已 DELIVERED/FAILED/CANCELLED 再次调用将抛异常（由上层调用方保证不重复驱动）。
+
+## 6. 接口与事件契约（API / Event Contract）
+
+### 6.1 支付成功触发履约（内部 RPC，供 payment-service）
 
 `POST /internal/fulfillments/on-payment-succeeded` → `200`
 
@@ -116,7 +124,7 @@ PENDING --cancel--> CANCELLED
 
 **错误**：`STATE_TRANSITION_VIOLATION`（异常状态推进，理论上不应发生）、出站权益 RPC 异常向上抛（payment 侧 catch 忽略，不回滚支付事实）。
 
-### 3.2 查询履约
+### 6.2 查询履约
 
 `GET /fulfillments/{id}` → `200`
 
@@ -126,7 +134,7 @@ PENDING --cancel--> CANCELLED
 
 **错误**：`NOT_FOUND`。
 
-### 3.3 出站 RPC（fulfillment → entitlement）
+### 6.3 出站 RPC（fulfillment → entitlement）
 
 来源：[infra/client/EntitlementFeignClient.java:10](../../../fulfillment-service/src/main/java/com/payment/fulfillment/infra/client/EntitlementFeignClient.java)
 
@@ -137,7 +145,7 @@ PENDING --cancel--> CANCELLED
 
 **规则**：仅履约 DELIVERED 后触发一次；权益失败不反写履约为失败（履约事实已落库）。当前没有自动重试/补偿机制，失败交由人工补发。
 
-### 3.4 错误码枚举（全局，common-core `ErrorCodes`）
+### 6.4 错误码枚举（全局，common-core `ErrorCodes`）
 
 | 错误码 | 语义 | 本服务使用场景 |
 |---|---|---|
@@ -149,7 +157,7 @@ PENDING --cancel--> CANCELLED
 
 ---
 
-### 3.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
+### 6.5 事件通道（生产 / 消费，spec 029 / [ADR-0074](../../adr/0074-redis-transactional-message.md#adr-0074)，✅ 已实现）
 
 支付成功后的当前调用方是 order-service；order 使用自身 `order_items` 事实源补齐明细后，通过 `PaymentSucceededRequest.items` 调用本服务。履约完成后仍由 fulfillment-service 调用 entitlement-service，order 不直接修改权益。
 
@@ -163,9 +171,9 @@ PENDING --cancel--> CANCELLED
 | 回查 checker | `fulfillment.completed` → 履约单是否 DELIVERED；`fulfillment.revoked` → 履约单是否 CANCELLED 或不存在 |
 | 注入说明 | `FulfillmentApplicationService` 主构造器 `@Autowired` 收 `ObjectProvider<FulfillmentEventPublisher>`；另留 3 参 / 4 参构造器给测试 |
 
-## 4. 关键流程链路剖析
+## 7. 运行链路（Runtime Flow）
 
-### 4.1 接收支付成功并履约
+### 7.1 接收支付成功并履约
 
 `PaymentSuccessRpcController.onPaymentSucceeded` → `FulfillmentApplicationService.acceptPaymentSucceeded`（`FulfillmentApplicationService.java:35`）：
 
@@ -176,7 +184,7 @@ PENDING --cancel--> CANCELLED
 5. `metrics.counter("fulfillment.completed")` → `repository.save(fulfillment)`（DELIVERED 落库）。
 6. `entitlementGateway.notifyFulfillmentCompleted(...)` 触发权益授予（同步 RPC）；权益失败抛异常，不反写履约 DELIVERED 事实。
 
-### 4.2 跨服务链路
+### 7.2 跨服务链路
 
 ```mermaid
 sequenceDiagram
@@ -196,36 +204,15 @@ sequenceDiagram
     end
 ```
 
-### 4.3 幂等命中与指标
+### 7.3 幂等命中与指标
 
 - 幂等命中路径**不递增** `fulfillment.completed/failed` 计数，也无独立 `fulfillment.duplicate` 指标（`[待定]` 建议补齐，对齐 payment-service 的 `payment.duplicate` 观测）。
 
 ---
 
-## 5. 存储与缓存设计 + 详细逻辑处理策略（Edge Cases）
+## 8. 失败与恢复（Failure / Recovery）
 
-### 5.1 存储读写策略
-
-- **写路径**：`MybatisFulfillmentRepository`（`MybatisFulfillmentRepository.java:42`）`save`：新对象 `insert` 并回填 id/version；已存在对象 `updateById`，0 行命中抛 `CONFLICT`（乐观锁）。
-- **读路径**：`findById`（PK）、`findBySourcePaymentNoAndOrderItemId`（复合唯一键）、`findByOrderNo`（退款撤销遍历）。
-- **映射**：领域 `Fulfillment` ↔ PO `FulfillmentEntity`（`@TableName("fulfillments")`）双向映射，状态机逻辑只在领域层，持久化只存枚举名（`MybatisFulfillmentRepository.java:58-75`）。
-- **缓存**：`[已评估·本期不引入]` 当前无 Redis/本地缓存，直连 MySQL；履约状态需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
-- **@Transactional**：应用服务方法未显式标注事务（`[待定]` 建议补 `@Transactional` 以明确写边界与可回滚语义）。
-
-### 5.2 幂等性方案
-
-| 作用域 | 机制 |
-|---|---|
-| 支付成功触发履约 | `(source_payment_no, order_item_id)` 复合唯一约束 + `findBySourcePaymentNoAndOrderItemId` 先回查 |
-| 请求契约 | `items` 为空直接返回 `INVALID_ARGUMENT`；order-service 必须先以自身 `order_items` 富化明细 |
-| 权益授予「最多一次」 | 仅在新建且 DELIVERED 后触发一次（幂等命中路径不触发） |
-
-### 5.3 分布式事务方案
-
-- 单服务内：`save(fulfillment)` 为单次 MySQL 写（当前未包 `@Transactional`，`[待定]`）。
-- 跨服务：权益授予 RPC 为后置副作用，**失败不回滚履约 DELIVERED 事实**；当前实现保留履约事实并将失败交由人工补发处理（禁 2PC/XA）。
-
-### 5.4 异常与边界场景
+### 8.1 异常与边界场景
 
 | 场景 | 处理 | 阈值/规则 |
 |---|---|---|
@@ -242,9 +229,52 @@ sequenceDiagram
 
 ---
 
-## 6. 部署拓扑与配置文件设计
+## 9. 幂等 / 一致性 / 并发（Idempotency / Consistency / Concurrency）
 
-### 6.1 运行态配置（application.yml）
+### 9.1 幂等性方案
+
+| 作用域 | 机制 |
+|---|---|
+| 支付成功触发履约 | `(source_payment_no, order_item_id)` 复合唯一约束 + `findBySourcePaymentNoAndOrderItemId` 先回查 |
+| 请求契约 | `items` 为空直接返回 `INVALID_ARGUMENT`；order-service 必须先以自身 `order_items` 富化明细 |
+| 权益授予「最多一次」 | 仅在新建且 DELIVERED 后触发一次（幂等命中路径不触发） |
+
+### 9.2 分布式事务方案
+
+- 单服务内：`save(fulfillment)` 为单次 MySQL 写（当前未包 `@Transactional`，`[待定]`）。
+- 跨服务：权益授予 RPC 为后置副作用，**失败不回滚履约 DELIVERED 事实**；当前实现保留履约事实并将失败交由人工补发处理（禁 2PC/XA）。
+
+## 10. 数据与存储（Data / Storage）
+
+### 10.1 存储读写策略
+
+- **写路径**：`MybatisFulfillmentRepository`（`MybatisFulfillmentRepository.java:42`）`save`：新对象 `insert` 并回填 id/version；已存在对象 `updateById`，0 行命中抛 `CONFLICT`（乐观锁）。
+- **读路径**：`findById`（PK）、`findBySourcePaymentNoAndOrderItemId`（复合唯一键）、`findByOrderNo`（退款撤销遍历）。
+- **映射**：领域 `Fulfillment` ↔ PO `FulfillmentEntity`（`@TableName("fulfillments")`）双向映射，状态机逻辑只在领域层，持久化只存枚举名（`MybatisFulfillmentRepository.java:58-75`）。
+- **缓存**：`[已评估·本期不引入]` 当前无 Redis/本地缓存，直连 MySQL；履约状态需强一致，不引入 Cache-Aside。Redis 已在平台引入（ADR-0044），本服务经评估**不使用**（状态需强一致）；未来若出现只读热点须另立 ADR。
+- **@Transactional**：应用服务方法未显式标注事务（`[待定]` 建议补 `@Transactional` 以明确写边界与可回滚语义）。
+
+## 11. 可观测性与安全（Observability / Security）
+
+### 11.1 埋点与日志键（本服务）
+
+**业务指标（Micrometer，`BusinessMetrics`）**：
+
+| 指标键 | 类型 | 维度 | 说明 |
+|---|---|---|---|
+| `fulfillment.completed` | counter | module=fulfillment | 履约交付成功（DELIVERED） |
+| `fulfillment.failed` | counter | module=fulfillment | 履约交付失败（FAILED） |
+| `fulfillment.duplicate` | counter | module=fulfillment | `[待定]` 幂等命中（当前未计数） |
+
+**资金/履约审计日志**：`[待定]` 当前未落地 `FINANCIAL_AUDIT` 级别结构化日志（delivery/权益触发可观测性建议补齐，对齐 payment-service §11.1）。
+
+**关联字段**：`traceId`（`TraceContext` / `TraceIdFilter` 跨服务传播，Feign 透传），用于串联 payment→fulfillment→entitlement 调用链。
+
+## 12. 部署（Deployment）
+
+- **进程与端口**：`fulfillment-service` :8086；单机多进程部署，独立进程 / 独立端口 / 独立部署单元（整体部署形态见 [technical-solution.md §6](../technical-solution.md) 与 [diagrams/08-deployment](../diagrams/08-deployment.puml)）。
+
+### 12.1 运行态配置（application.yml）
 
 来源：[application.yml](../../../fulfillment-service/src/main/resources/application.yml)
 
@@ -264,7 +294,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 ```
 
-### 6.2 环境变量清单（dev / test / prod 差异化项，`[目标]` 建议）
+### 12.2 环境变量清单（dev / test / prod 差异化项，`[目标]` 建议）
 
 | 配置项 | dev（默认） | test | prod（`[目标]`） |
 |---|---|---|---|
@@ -275,7 +305,7 @@ mybatis-plus:
 | 连接池大小 `spring.datasource.hikari.maximum-pool-size` | 默认 10 | — | `[目标]` 按并发调优 |
 | 出站 Feign 超时 | 未配置 | — | `[目标]` connect 1s / read 3s |
 
-### 6.3 启动依赖顺序
+### 12.3 启动依赖顺序
 
 ```text
 1. MySQL 8.0 就绪（fulfillment schema 由 deployment/schema/04-fulfillment-schema.sql 建库建表）
@@ -284,16 +314,44 @@ mybatis-plus:
 4. 上游 payment-service 可延后就绪（履约 RPC 由支付成功触发，不阻塞启动）
 ```
 
-### 6.4 埋点与日志键（本服务）
+## 13. 测试与验证（Testing / Verification）
 
-**业务指标（Micrometer，`BusinessMetrics`）**：
+### 13.1 验证方式
 
-| 指标键 | 类型 | 维度 | 说明 |
-|---|---|---|---|
-| `fulfillment.completed` | counter | module=fulfillment | 履约交付成功（DELIVERED） |
-| `fulfillment.failed` | counter | module=fulfillment | 履约交付失败（FAILED） |
-| `fulfillment.duplicate` | counter | module=fulfillment | `[待定]` 幂等命中（当前未计数） |
+- **领域 / 单元测试**：金额、状态迁移、幂等等领域不变量以纯单测覆盖，源码位于 [`fulfillment-service/src/test/java/`](../../../fulfillment-service/src/test/java/)。
+- **集成测试**：Spring Boot 上下文 + H2 载体（项目既定测试载体，见 [ADR-0081](../../adr/0081-test-carrier-and-schema-replayability.md)）；E2E 默认 `skipTests`，按需显式启用（见 [engineering-standards.md §测试](../../guides/engineering-standards.md)）。
+- **架构不变量**：`deployment/architecture-tests` 的 ArchUnit 规则在 `./mvnw -B verify` 中执行。
+- **端到端 / 演示验证**：`deployment/demo/*.sh` 与 `mock-channel-web`（:8091）演示控制台；全链路追踪用 `/demo/trace?orderId=`。
 
-**资金/履约审计日志**：`[待定]` 当前未落地 `FINANCIAL_AUDIT` 级别结构化日志（delivery/权益触发可观测性建议补齐，对齐 payment-service §6.4）。
+## 14. 相关文档（Related Documents）
 
-**关联字段**：`traceId`（`TraceContext` / `TraceIdFilter` 跨服务传播，Feign 透传），用于串联 payment→fulfillment→entitlement 调用链。
+### 14.1 本文明文引用的 ADR
+
+`ADR-0044`、`ADR-0054`、`ADR-0063`、`ADR-0074`
+
+> 完整索引见 [docs/adr/README.md](../../adr/README.md)，落点追溯见 [docs/adr/traceability.md](../../adr/traceability.md)。
+
+### 14.2 本文明文引用的 Spec
+
+`spec 029`
+
+> Spec 索引见 [docs/specs/README.md](../../specs/README.md)。
+
+### 14.3 相关图
+
+- [01-system-context](../diagrams/01-system-context.puml)（C4 L1）
+- [02-container-overview](../diagrams/02-container-overview.puml)（C4 L2）
+- [08-deployment](../diagrams/08-deployment.puml)（C4 Deployment）
+
+### 14.4 关联文档
+
+- [technical-solution.md](../technical-solution.md)（全局当前事实）
+- [roadmap.md](../roadmap.md)（阶段与状态）
+- [system-design-standard.md](../../standards/system-design-standard.md)（本文件遵循的规范）
+- [code-debt-backlog.md](../../operations/code-debt-backlog.md)（已知缺口台账）
+
+## 15. 已知缺口（Known Gaps）
+
+### 15.1 当前缺口登记
+
+本节只登记**已确认的当前缺口与显式接受的风险**，不登记未来设计。与 fulfillment-service 相关的已知缺口见 [code-debt-backlog.md](../../operations/code-debt-backlog.md) 与 [stage-05 design-review.md](../../specs/stage-05-channel-and-finance-deepening/design-review.md)。

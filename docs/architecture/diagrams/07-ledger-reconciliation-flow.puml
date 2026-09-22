@@ -1,0 +1,73 @@
+@startuml
+' PaymentArch · 07 Ledger / Reconciliation / Settlement Flow（C4 Dynamic · Domain Runtime Flow）
+' SOURCE OF TRUTH = 本 .puml；同目录 07-ledger-reconciliation-flow.svg 为渲染产物，禁止手工编辑。
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/07-ledger-reconciliation-flow.puml
+' 规范：docs/standards/diagram-standard.md
+' 依据：technical-solution.md §4.3.5 / §4.4；systems/ledger-service.md；systems/reconciliation-service.md；systems/settlement-service.md；ADR-0010 / 0018 / 0020 / 0065 / 0077~0080
+title PaymentArch · Dynamic / Domain —— 资金闭环：记账 → 对账 → 结算
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowThickness 1
+skinparam sequence {
+  ArrowColor #6B6B6B
+  LifeLineBorderColor #B4B2A9
+  ParticipantBorderColor #5B7DA8
+  ParticipantBackgroundColor #DCE6F2
+  ParticipantFontStyle bold
+}
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #B4B2A9
+
+participant "payment-service /\norder-service /\nsettlement-service\n[事实源 Container]" as SRC
+participant "ledger-service\n[Container]" as L
+participant "渠道账单\n[External System]" as ST
+participant "reconciliation-service\n[Container]" as R
+participant "settlement-service\n[Container]" as S
+
+== ① 事实确认（只认终态事实）==
+note over SRC
+  支付 / 退款到达 **SUCCEEDED** 终态才产生财务事实；
+  UNKNOWN / 处理中 / 失败 / 拒绝 一律**不记账、不结算**
+end note
+
+== ② 复式记账（Accounting Event + Posting Rule）==
+SRC -> L : 上报财务事实（Accounting Event）\nFeign RPC（**同步**，调用方不再组装分录）
+L -> L : 幂等键 **Ledger 派生**：`{eventType}:{sourceId}`\n重复请求返回首次 Posting
+L -> L : Posting Rule 决定科目与借贷方向\n（科目 Definition / Instance 两级）
+L -> L : postings + ledger_entries（append-only）\n+ account_balances 同事务余额投影 + 试算平衡
+L --> SRC : Posting 结果\n（记账失败不回滚业务事实）
+note over L
+  更正只能**新增反向分录**（冲正），禁止修改历史分录；
+  期间由 `ledger_periods` 关账门禁约束（ADR-0079）
+end note
+
+== ③ 对账（比对渠道账与平台账）==
+ST -> R : 导入渠道账单\n文件导入（statement_imports / statement_lines，SHA-256 指纹）
+R -> SRC : 读取已确认事实\nFeign RPC（只读；期间 + 商户锚）
+SRC --> R : 支付 / 退款事实
+R -> R : 匹配键 `(merchantId, referenceType, reference)`\n三级降级 typed 匹配
+R -> R : 产出差异（reconciliation_differences）\n复用四核对 5 态差异生命周期
+note over R
+  对账**只记录差异**，**永不修改**原始 Payment / Refund 事实；
+  差异处置走 ADJUSTING / ADJUST_FAILED 分态（ADR-0080）
+end note
+
+== ④ 结算（划转 + 记账）==
+R --> S : 已确认事实 + 差异处置结果\nFeign RPC
+S -> S : 按商户 + 周期幂等生成结算批次\n净额 = 全部已确认事实 − excludedFacts 净影响
+S -> L : 记账 SETTLEMENT\nFeign RPC
+L -> L : SETTLEMENT_PAYABLE / MERCHANT_PAYABLE 分录\n（净额 ≤ 0 不记账）
+note over S
+  结算口径先于差异策略化；**期间已关闭**（`ledger_periods`）
+  或存在未解释差异时 MUST NOT 建批
+end note
+
+legend right
+  **Legend**
+  Blue = Primary Flow ｜ Green = Success ｜ Orange = Unknown ｜ Red = Failure
+  记账链路**维持同步**（不异步）：记账失败不回滚业务事实，差异由对账兜底 + 待记账台账补偿
+  科目：1 CUSTOMER_CASH ｜ 2 MERCHANT_PAYABLE ｜ 3 PLATFORM_FEE_REVENUE ｜ 4 SETTLEMENT_PAYABLE ｜ 5 SUSPENSE
+endlegend
+
+@enduml

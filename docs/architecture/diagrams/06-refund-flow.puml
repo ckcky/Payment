@@ -1,0 +1,71 @@
+@startuml
+' PaymentArch · 06 Refund Flow（C4 Dynamic）
+' SOURCE OF TRUTH = 本 .puml；同目录 06-refund-flow.svg 为渲染产物，禁止手工编辑。
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/06-refund-flow.puml
+' 规范：docs/standards/diagram-standard.md
+' 依据：payment-service.md §4.3 / §8；ADR-0054 / 0067 / 0072；spec 019 / 016
+title PaymentArch · Dynamic —— 退款链路：order 驱动 + 两层退款单（TXRF / PMRF）+ 渠道异步回调
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowThickness 1
+skinparam sequence {
+  ArrowColor #6B6B6B
+  LifeLineBorderColor #B4B2A9
+  ParticipantBorderColor #5B7DA8
+  ParticipantBackgroundColor #DCE6F2
+  ParticipantFontStyle bold
+}
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #B4B2A9
+
+participant "order-service\ntransaction 层\n[Container]" as O
+participant "PaymentRefundService\n[Component]" as RF
+participant "ChannelRegistry\n[Port]" as REG
+participant "渠道实现族\n[Component]" as I
+participant "支付宝开放平台（沙箱）\n[External System]" as AL
+participant "RefundResultProcessor\n[Component]" as RP
+participant "ledger-service\n[Container]" as L
+
+note over O
+  退款**整体决策**归 order：发起 / 收口 / 秒杀回补 /
+  履约终止 / 权益撤销（ADR-0054）；payment 只提供渠道事实
+end note
+
+O -> O : 落 TXRF 退款单（transaction 层，REQUESTED）\n（在途守卫：同一 TX 同向在途则短路）
+O -> RF : 请求退款\nFeign RPC（TXRF 单号 + 支付单号 + 金额）
+
+RF -> RF : 断言支付单 SUCCEEDED\n否则 STATE_TRANSITION_VIOLATION
+RF -> REG : 解析渠道归属\nJava（端口）
+note over REG
+  channel_code **取自原支付单的生效 PAYMENT 尝试**
+  （同一 payment_no 下 PAYMENT 且 SUCCEEDED 的那条）；
+  **禁止重新路由**、禁止静默回落默认渠道
+end note
+REG --> RF : channelCode
+
+RF -> I : refund(RefundRequest)\nJava（端口，事务外）
+I -> AL : 渠道退款指令\nHTTPS
+AL --> I : accepted（受理流水号，无业务结论）
+I --> RF : ChannelResult.accepted(ref, reason)
+RF -> RF : 落 PMRF 退款单 + REFUND 尝试行\n经 ChannelAttemptRecorder.recordRefundAttempt()\n（payment_attempts 唯一写入口）
+RF --> O : 已受理（**支付单保持 SUCCEEDED 事实不回滚**）
+
+== 退款权威结果：渠道异步回调收敛 ==
+AL -> RP : 退款异步回调\nHTTPS（进程内推送桥 / 内部端点）
+RP -> RP : 退款状态机终态 + REFUND 尝试行收敛\n（三路收敛共用同一幂等吸收）
+alt 退款成功
+  RP -> L : 记账冲正 REFUND:{PMRF}\nFeign RPC
+  RP -> O : 通知收口（TXRF + PMRF 双号）\nFeign RPC
+else 退款失败 / 拒绝
+  RP -> O : 通知失败\n（退款单终态 FAILED；由 order 决定后续处置）
+end
+
+legend right
+  **Legend**
+  Blue = Primary Flow ｜ Green = Success ｜ Orange = Unknown ｜ Red = Failure
+  ★ 两层退款单：**TXRF**（transaction 层，order 侧）/ **PMRF**（payment 层）互记
+  ★ 退款渠道归属恒来自 `payment_attempts.channel_code` 列，退款/重试/查询**均不重新走支付路由**
+endlegend
+
+@enduml

@@ -1,0 +1,97 @@
+@startuml
+' PaymentArch · 02 Container Overview（C4 Level 2）
+' SOURCE OF TRUTH = 本 .puml；同目录 02-container-overview.svg 为渲染产物，禁止手工编辑。
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/02-container-overview.puml
+' 规范：docs/standards/diagram-standard.md
+!pragma layout smetana
+left to right direction
+
+title PaymentArch · L2 Container —— 平台内有哪些主要运行单元？
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #6B6B6B
+skinparam ArrowThickness 1
+skinparam ArrowFontSize 10
+skinparam Padding 4
+skinparam roundcorner 10
+
+skinparam rectangle<<container>> {
+  BackgroundColor #DCE6F2
+  BorderColor #5B7DA8
+  BorderThickness 1
+  FontSize 11
+}
+skinparam rectangle<<demo>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+  BorderThickness 1
+  FontSize 11
+}
+skinparam rectangle<<external>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+  BorderThickness 1
+  FontSize 11
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #B4B2A9
+  BorderThickness 1
+  FontSize 12
+}
+skinparam database {
+  BackgroundColor #D7E9F5
+  BorderColor #5B7DA8
+  BorderThickness 1
+}
+
+rectangle "买家 / 商户 / 运营\n[Person]" as User #EDEDED
+
+package "9 个核心业务服务" as BIZ {
+  rectangle "order-service\n8083 · 订单与交易" as O <<container>>
+  rectangle "payment-service\n8084 · 支付编排 + 渠道层 + 退款域" as P <<container>>
+  rectangle "catalog-service · 8082\n商品 / SKU / 库存" as Cat <<container>>
+  rectangle "fulfillment-service · 8086\n履约" as F <<container>>
+  rectangle "entitlement-service · 8087\n权益" as E <<container>>
+  rectangle "merchant-service · 8081\n商户" as M <<container>>
+  rectangle "ledger-service · 8090\n复式记账" as L <<container>>
+  rectangle "reconciliation-service · 8088\n对账" as R <<container>>
+  rectangle "settlement-service · 8089\n结算" as S <<container>>
+}
+
+rectangle "mock-channel-web · 8091\n演示收银台 + 演示控制台\n[Demo 进程，非业务服务]" as DEMO <<demo>>
+rectangle "支付宝开放平台（沙箱）\n[External System]" as Alipay <<external>>
+
+database "MySQL 8.0 · 3306\n每服务独占 Schema" as DB
+database "Redis 7 · 6379\n非数据源 + 事务消息通道" as Redis
+rectangle "Nacos 3.0.3 · 8848\n注册与发现（硬依赖）" as Nacos #D7E9F5
+
+User --> DEMO : 打开收银台 / 演示页\nHTTPS
+User --> O : 下单 / 查订单\nHTTPS · REST
+
+O --> P : 创建支付意图 / 退款请求\nFeign RPC
+P --> O : 通知支付成功\nFeign RPC + Redis Streams
+O --> Cat : 预留 / 确认库存\nFeign RPC
+O --> F : 驱动履约\nFeign RPC
+O --> E : 授予权益\nFeign RPC
+
+P --> L : 记账（支付 / 退款）\nFeign RPC
+S --> L : 记账（结算批次）\nFeign RPC
+R --> P : 读取已确认支付事实\nFeign RPC（只读）
+S --> R : 读取已确认事实\nFeign RPC（只读）
+
+P --> Alipay : 支付指令 / 接收 notify\nHTTPS · RSA2
+DEMO --> Alipay : 沙箱跳转与回调转发\nHTTPS
+P --> Redis : 事务消息 prepare/commit/回查\nRedis Streams
+BIZ --> DB : JDBC（独占 Schema）
+BIZ --> Nacos : 注册与发现
+
+legend right
+  **Legend**
+  Internal Container = 蓝灰 ｜ Demo 进程 / External System = 灰 ｜ Database = 标准 Database 形状
+  连线语义：Primary Flow = Blue ｜ Success = Green ｜ Unknown = Orange ｜ Failure = Red
+  ★ 业务服务 = **9**；运行进程 = **10**（含 1 个 Demo 进程 mock-channel-web）——见 technical-solution.md §1
+endlegend
+
+@enduml

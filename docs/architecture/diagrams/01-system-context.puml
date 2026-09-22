@@ -1,0 +1,59 @@
+@startuml
+' PaymentArch · 01 System Context（C4 Level 1）
+' SOURCE OF TRUTH = 本 .puml；同目录 01-system-context.svg 为渲染产物，禁止手工编辑。
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/01-system-context.puml
+' 规范：docs/standards/diagram-standard.md
+!pragma layout smetana
+
+title PaymentArch · L1 System Context —— PaymentArch 和谁交互？
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #2F6FBF
+skinparam ArrowThickness 1
+skinparam ArrowFontSize 11
+skinparam Padding 6
+skinparam Linetype ortho
+skinparam roundcorner 10
+
+skinparam rectangle<<person>> {
+  BackgroundColor #EDEDED
+  BorderColor #9E9E9E
+  BorderThickness 1
+  FontSize 12
+}
+skinparam rectangle<<system>> {
+  BackgroundColor #DCE6F2
+  BorderColor #5B7DA8
+  BorderThickness 1
+  FontSize 13
+  FontStyle bold
+}
+skinparam rectangle<<external>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+  BorderThickness 1
+  FontSize 12
+}
+
+rectangle "买家 / 用户\n[Person]" as Buyer <<person>>
+rectangle "商户 / 运营人员\n[Person]" as Ops <<person>>
+
+rectangle "PaymentArch\n电商与支付平台\n[Software System]\n9 个核心业务服务 + 1 个 Demo 进程" as SYS <<system>>
+
+rectangle "支付宝开放平台（沙箱）\n[External System]\nRSA2 异步通知 / 支付指令" as Alipay <<external>>
+rectangle "渠道对账账单\n[External System]\nCSV 由渠道侧提供、人工导入" as Stmt <<external>>
+
+Buyer -r-> SYS : 下单 / 支付 / 查订单\nHTTPS
+Ops -r-> SYS : 管理商品 / 订单 / 对账\nHTTPS
+SYS -r-> Alipay : 发起支付指令、接收异步通知\nHTTPS · RSA2（纯文本 success）
+Stmt -l-> SYS : 导入渠道账单\n文件导入（statement_imports）
+
+legend right
+  **Legend**
+  Person = 浅灰 ｜ Internal Container = 蓝灰 ｜ External System = 灰 ｜ Database = 浅蓝
+  连线语义：Primary Flow = Blue ｜ Success = Green ｜ Unknown = Orange ｜ Failure = Red
+  关系标签格式：<动词短语> + <技术协议>
+endlegend
+
+@enduml
