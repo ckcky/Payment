@@ -1,19 +1,18 @@
 @startuml
-' PaymentArch · 08 Deployment（C4 Deployment）
+' PaymentArch · 08 Deployment（C4 Deployment）—— 结构视图：只回答「这些 Container 部署在哪」，不画连线
 ' SOURCE OF TRUTH = 本 .puml；同目录 08-deployment.svg 为渲染产物，禁止手工编辑。
-' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/08-deployment.puml
-' 规范：docs/standards/diagram-standard.md
-' 依据：technical-solution.md §6；deployment/README.md；ADR-0070 / 0059；spec 026
-!pragma layout smetana
+' 渲染：cd docs/architecture/diagrams && java -jar ../../../deployment/output/tools/plantuml.jar -tsvg -charset UTF-8 08-deployment.puml
+' 规范：docs/standards/diagram-standard.md（结构视图 MUST NOT 画可见连线；-[hidden]- 仅用于排版）
+' 依据：technical-solution.md §6；deployment/README.md；ADR-0070 / 0059 / 0074；spec 026
+' 排版：同层节点 -[hidden]right- 排成一行；层与层 -[hidden]down- 声明自上而下的部署层序。
 
-title PaymentArch · Deployment —— 这些 Container 如何部署（单机双模式 · 二选一）
+title PaymentArch · Deployment —— 10 个运行进程如何部署（单机双模式 · 二选一）
 
 skinparam shadowing false
 skinparam defaultFontName "Microsoft YaHei"
-skinparam ArrowColor #6B6B6B
-skinparam ArrowThickness 1
-skinparam ArrowFontSize 10
-skinparam Padding 4
+skinparam Padding 10
+skinparam Nodesep 14
+skinparam Ranksep 22
 skinparam roundcorner 10
 
 skinparam node {
@@ -27,68 +26,71 @@ skinparam rectangle {
   BorderThickness 1
   FontSize 11
 }
+skinparam rectangle<<apps>> {
+  BackgroundColor #DCE6F2
+  BorderColor #5B7DA8
+}
+skinparam rectangle<<demo>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+}
+skinparam rectangle<<infra>> {
+  BackgroundColor #D7E9F5
+  BorderColor #5B7DA8
+}
+skinparam rectangle<<external>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+}
 skinparam database {
   BackgroundColor #D7E9F5
   BorderColor #5B7DA8
-  BorderThickness 1
+  FontSize 11
 }
 
-node "单机（开发 / 演示主机）" as HOST {
+node "单机（开发 / 演示主机）· 端口 8081–8091 两种模式互斥" as HOST {
 
   node "模式 A · 容器模式（推荐）— docker compose --profile full" as FULL {
-    node "应用容器 × 10（9 个业务服务 + 1 个 Demo 进程）" as APPS {
-      rectangle "8081 merchant · 8082 catalog · 8083 order · 8084 payment" as ROW1 #DCE6F2
-      rectangle "8086 fulfillment · 8087 entitlement · 8088 reconciliation" as ROW2 #DCE6F2
-      rectangle "8089 settlement · 8090 ledger · 8091 mock-channel-web（Demo）" as ROW3 #E8E8E8
-    }
-    rectangle "镜像：宿主打 fat jar → Dockerfile 只 COPY\n基础镜像 eclipse-temurin:21-jre-jammy（ADR-0070 D3）" as IMG #FFFFFF
+    rectangle "应用容器 × 9\n:8081 merchant ｜ :8082 catalog ｜ :8083 order ｜ :8084 payment ｜ :8086 fulfillment\n:8087 entitlement ｜ :8088 reconciliation ｜ :8089 settlement ｜ :8090 ledger" as FULLAPPS <<apps>>
+    rectangle "Demo 容器 × 1\n:8091 mock-channel-web\n（Demo 进程，非业务服务）" as FULLDEMO <<demo>>
+    rectangle "镜像构建：宿主打 fat jar → Dockerfile 只 COPY\n基础镜像 eclipse-temurin:21-jre-jammy（ADR-0070 D3）\ndepends_on nacos: service_healthy" as IMG <<apps>>
+    FULLAPPS -[hidden]right- FULLDEMO
+    FULLDEMO -[hidden]right- IMG
   }
 
   node "模式 B · 宿主模式（保留，用于调试）— ./mvnw spring-boot:run" as HOSTM {
-    rectangle "8081~8090 业务服务 × 9 + 8091 mock-channel-web\nIDE 断点调试 / 改码热重启" as HAPP #FFFFFF
+    rectangle "同 10 个进程在宿主 JDK 上运行（端口 8081–8091 不变）\nIDE 断点调试 / 改码热重启 ｜ 需 JDK 17+\n日志落 deployment/logs/<service>.log" as HAPPS <<apps>>
+    rectangle "入口脚本\ndeployment/start-all.sh" as HSCRIPT <<apps>>
+    HAPPS -[hidden]right- HSCRIPT
   }
 
-  node "基础设施容器（两种模式共用 · compose --profile infra）" as INFRA {
-    database "MySQL 8.0 · 3306\n每服务独占 Schema，卷持久化" as DB
-    database "Redis 7 · 6379\n非数据源 + 事务消息通道\n（AOF + noeviction，ADR-0074）" as REDIS
-    rectangle "Nacos 3.0.3 · 8848/9848/9849\n注册与发现（硬依赖，ADR-0059）" as NACOS #D7E9F5
-    rectangle "Prometheus · 9090\n抓取 10 个进程 /actuator/prometheus" as PROM #D7E9F5
-    rectangle "Grafana · 3000\n业务指标看板" as GRAF #D7E9F5
-    rectangle "Loki + Promtail · 3100\n日志聚合（共用 ./logs 卷）" as LOKI #D7E9F5
+  node "基础设施容器 · 两种模式共用 — compose --profile infra" as INFRA {
+    database "MySQL 8.0\n:3306\n每服务独占 Schema（卷持久化）" as DB
+    database "Redis 7\n:6379\n非数据源 + 事务消息通道\nAOF + noeviction（ADR-0074）" as REDIS
+    rectangle "Nacos 3.0.3\n:8848 / :9848 / :9849\n注册与发现（硬依赖，ADR-0059）" as NACOS <<infra>>
+    rectangle "Prometheus\n:9090\n抓取 10 个进程\n/actuator/prometheus" as PROM <<infra>>
+    rectangle "Grafana\n:3000\n业务指标看板" as GRAF <<infra>>
+    rectangle "Loki + Promtail\n:3100\n日志聚合（共用 ./logs 卷）" as LOKI <<infra>>
+    DB -[hidden]right- REDIS
+    REDIS -[hidden]right- NACOS
+    NACOS -[hidden]right- PROM
+    PROM -[hidden]right- GRAF
+    GRAF -[hidden]right- LOKI
   }
 }
 
-rectangle "支付宝开放平台（沙箱）\n[External System]" as ALI #E8E8E8
+' ==== 仅用于排版的隐藏连接（渲染不可见，不表达任何关系）====
+FULL -[hidden]down- HOSTM
+HOSTM -[hidden]down- INFRA
 
-APPS --> DB : JDBC · 3306
-APPS --> REDIS : Redis 协议（幂等 / 消息）
-APPS --> NACOS : 注册与发现
-HOSTM --> DB : JDBC · 3306
-HOSTM --> NACOS : 注册与发现
-HAPP --> NACOS : 注册与发现
-APPS --> ALI : HTTPS · RSA2
-HAPP --> ALI : HTTPS · RSA2
-PROM --> APPS : 抓取指标（容器模式按服务名）
-PROM --> HAPP : 抓取指标（宿主模式 host.docker.internal:808x）
-
-note right of FULL
-  **入口**：deployment/start-container.sh
-  **构建**：deployment/build-images.sh（jar → 镜像）
-  depends_on nacos: service_healthy
-  端口 8081–8091 与宿主模式**互斥**
-end note
-
-note right of HOSTM
-  **入口**：deployment/start-all.sh
-  日志落 deployment/logs/<service>.log
-  需 JDK 17+（spring-boot-maven-plugin RunMojo）
-end note
-
-legend right
+legend bottom left
   **Legend**
-  节点 = 部署节点 ｜ 蓝灰 = 应用容器（业务服务）｜ 灰 = Demo 容器 ｜ 浅蓝 = 基础设施容器 ｜ Database = 标准 Database 形状
-  两种模式**共用同一份 compose**：`--profile infra` 只起中间件（宿主模式用）、`--profile full` 起全栈（容器模式用）
-  ★ 应用进程 = **10**（9 个业务服务 + 1 个 Demo 进程 mock-channel-web）——见 technical-solution.md §1
+  节点 = 部署节点 ｜ 蓝灰 = 应用容器 / 宿主进程 ｜ 灰 = Demo 进程 / 外部系统 ｜ 浅蓝 = 基础设施容器 ｜ Database = 标准 Database 形状
+  ★ **结构视图：不画任何连线。** 连通性由「同一单机 / 同一 compose 网络 / 同一端口段」隐含表达。
+  ★ 两种模式**共用同一份 compose**：--profile infra 只起中间件（宿主模式用）、--profile full 起全栈（容器模式用）。
+  ★ 计数口径：**应用进程 = 10**（9 个业务服务 + 1 个 Demo 进程 mock-channel-web，见 [02-container-overview]）。
+  ★ 本图**不含外部系统**：支付宝沙箱（HTTPS / RSA2）不是部署对象，两种模式均由应用出站直连；
+    系统边界与外部交互见 [01-system-context]。
 endlegend
 
 @enduml

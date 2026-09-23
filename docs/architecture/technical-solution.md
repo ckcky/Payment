@@ -112,22 +112,38 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 模型按**聚合根（Aggregate Root）**组织：每个聚合根是不变式与事务的边界，聚合内一致性由本地事务保证；**跨聚合只经业务单号引用或公开 RPC**，禁止共享表 / 共享实体（[ADR-0063](../adr/0063-cross-service-reference-by-business-no.md)）。
 
+> **读图须知**：领域模型是**结构关系**，不是调用流 —— 因此图中连线**一律不画箭头**，只用标签说明关系性质（组成 / 业务单号引用 / 记账 / 只读事实…）。
+> 谁调用谁、按什么顺序调用属于**动态视图**，见 §4.3 时序图与 [diagrams/04-payment-flow](diagrams/04-payment-flow.puml) ~ [07-ledger-reconciliation-flow](diagrams/07-ledger-reconciliation-flow.puml)。
+
 ```mermaid
-graph LR
-    Merchant["Merchant"] -. 结算资格 .-> Settlement["Settlement"]
-    Product["Product / SKU"] --- Order["Order"]
-    Order --- Transaction["Transaction"]
-    Transaction --- Payment["Payment"]
-    Payment --- PaymentAttempt["PaymentAttempt"]
-    Payment --> Channel["Payment Channel"]
-    Payment --> Refund["Refund"]
-    Order -. 支付成功驱动 .-> Fulfillment["Fulfillment"]
-    Fulfillment --> Entitlement["Entitlement"]
-    Payment -. 记账 .-> Ledger["Ledger"]
-    Refund -. 冲正 .-> Ledger
-    Reconciliation["Reconciliation"] -. 只读事实 .-> Payment
-    Reconciliation -. 只读事实 .-> Refund
-    Reconciliation --> Settlement
+graph TB
+    Merchant["Merchant<br/>merchant-service"]
+    Product["Product / SKU<br/>catalog-service"]
+    Order["Order<br/>order-service"]
+    Transaction["Transaction<br/>order-service"]
+    Payment["Payment<br/>payment-service"]
+    PaymentAttempt["PaymentAttempt<br/>payment-service"]
+    Channel["Payment Channel<br/>payment-service"]
+    Refund["Refund<br/>payment-service"]
+    Fulfillment["Fulfillment<br/>fulfillment-service"]
+    Entitlement["Entitlement<br/>entitlement-service"]
+    Ledger["Ledger<br/>ledger-service"]
+    Reconciliation["Reconciliation<br/>reconciliation-service"]
+    Settlement["Settlement<br/>settlement-service"]
+    Product ---|业务单号引用| Order
+    Order ---|同服务 1:1| Transaction
+    Transaction ---|业务单号引用 1:N| Payment
+    Payment ---|同服务 1+N| PaymentAttempt
+    Payment ---|同服务 端口依赖| Channel
+    Payment ---|同服务 退款域| Refund
+    Order ---|支付成功驱动| Fulfillment
+    Fulfillment ---|业务单号引用| Entitlement
+    Payment ---|记账| Ledger
+    Refund ---|冲正| Ledger
+    Merchant ---|结算资格| Settlement
+    Reconciliation ---|只读事实| Payment
+    Reconciliation ---|只读事实| Refund
+    Reconciliation ---|差异处置| Settlement
 ```
 
 | 聚合根 | 关键实体 / 值对象 | 归属服务 |

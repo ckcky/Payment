@@ -33,20 +33,20 @@ end note
 
 == ② 复式记账（Accounting Event + Posting Rule）==
 SRC -> L : 上报财务事实（Accounting Event）\nFeign RPC（**同步**，调用方不再组装分录）
-L -> L : 幂等键 **Ledger 派生**：`{eventType}:{sourceId}`\n重复请求返回首次 Posting
+L -> L : 幂等键 **Ledger 派生**：{eventType}:{sourceId}\n重复请求返回首次 Posting
 L -> L : Posting Rule 决定科目与借贷方向\n（科目 Definition / Instance 两级）
 L -> L : postings + ledger_entries（append-only）\n+ account_balances 同事务余额投影 + 试算平衡
 L --> SRC : Posting 结果\n（记账失败不回滚业务事实）
 note over L
   更正只能**新增反向分录**（冲正），禁止修改历史分录；
-  期间由 `ledger_periods` 关账门禁约束（ADR-0079）
+  期间由 ledger_periods 关账门禁约束（ADR-0079）
 end note
 
 == ③ 对账（比对渠道账与平台账）==
 ST -> R : 导入渠道账单\n文件导入（statement_imports / statement_lines，SHA-256 指纹）
 R -> SRC : 读取已确认事实\nFeign RPC（只读；期间 + 商户锚）
 SRC --> R : 支付 / 退款事实
-R -> R : 匹配键 `(merchantId, referenceType, reference)`\n三级降级 typed 匹配
+R -> R : 匹配键 (merchantId, referenceType, reference)\n三级降级 typed 匹配
 R -> R : 产出差异（reconciliation_differences）\n复用四核对 5 态差异生命周期
 note over R
   对账**只记录差异**，**永不修改**原始 Payment / Refund 事实；
@@ -59,7 +59,7 @@ S -> S : 按商户 + 周期幂等生成结算批次\n净额 = 全部已确认事
 S -> L : 记账 SETTLEMENT\nFeign RPC
 L -> L : SETTLEMENT_PAYABLE / MERCHANT_PAYABLE 分录\n（净额 ≤ 0 不记账）
 note over S
-  结算口径先于差异策略化；**期间已关闭**（`ledger_periods`）
+  结算口径先于差异策略化；**期间已关闭**（ledger_periods）
   或存在未解释差异时 MUST NOT 建批
 end note
 

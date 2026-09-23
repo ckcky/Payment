@@ -102,10 +102,27 @@ System Design = **一个服务 / 子系统的实现事实**。
 4. **禁止跨服务直改**：文档中出现的跨服务读写 MUST 是 API/RPC/事件，不得是直接 SQL。
 5. **状态机完整**：枚举 + 迁移矩阵 + 终态吸收语义；「可合法不一致」的口径 MUST 显式说明。
 6. **不写其他服务内部实现**。
-7. **图随章节走（2026-09-22 补充）**：
-   - **§4 领域模型 MUST 含 ER 图**：用行内 Mermaid `erDiagram` 写在 §4 内，标出**基数**与**唯一键**；只画本服务拥有的表（跨服务关系属 `../diagrams/*.puml`）。实体超过 ~10 个时按聚合拆多张子图。
-   - 其余章节的图按需用行内 Mermaid：§5 状态图（`stateDiagram-v2`）、§7 时序图（`sequenceDiagram`）。
+7. **图随章节走（2026-09-22 起；2026-09-23 补齐四类必备图）**：
+   - **每篇系统设计文档 MUST 至少含四类结构图**，各就位于对应章节末尾，MUST 用行内 Mermaid：
+
+     | 章节 | 必备图 | 语法 | 回答什么 | 生成脚本 |
+     |---|---|---|---|---|
+     | §3 上下文与约束 | **内部分层与模块图** | `flowchart TB` | 这个服务内部有哪几层、每层有哪些类、依赖哪张库/哪个外部服务 | `deployment/tools/gen-module-diagrams.py` |
+     | §4 领域模型 | **ER 图** | `erDiagram` | 本服务的表、字段、主键/唯一键、同库关系 | `deployment/tools/gen-er-diagrams.py` |
+     | §5 状态机 | **状态迁移图** | `stateDiagram-v2` | 每个聚合的状态与迁移（含触发动作） | `deployment/tools/gen-sysdoc-diagrams.py` |
+     | §10 数据与存储 | **存储拓扑图** | `flowchart LR` | 数据落在哪个库、哪些表、Redis 用在何处 | `deployment/tools/gen-sysdoc-diagrams.py` |
+
+   - **ER 图 MUST 来自真实 Schema**：字段/主键/唯一键由 `deployment/schema/*.sql` 解析得出，**禁止手写编造**。
+     图内**只画同库关系**——跨服务引用一律走业务单号、不建外键（[ADR-0063](../adr/0063-cross-service-reference-by-business-no.md)），
+     因此图中不出现跨库连线，这是正确结果而非遗漏。
+   - **状态图 MUST 由本章上文的迁移文本/表格机械转换**（`A --action--> B` 或迁移表格），
+     **不得**引入正文没有的状态或迁移。
+   - **模块图 MUST 来自真实代码**：由 `src/main/java` 的包与类扫描得出，DTO 不计入。
+   - 其余章节的图按需用行内 Mermaid：§7 时序图（`sequenceDiagram`）。
    - 行内图 MUST 与正文表格一致（图是表格的视图，不是第二套事实）；**不得**放进 `docs/architecture/diagrams/`。
+   - 自动生成的图 MUST 用幂等标记包裹，便于重跑覆盖：
+     `<!-- diagram:module|er|state|storage -->` … `<!-- /diagram:xxx -->`；
+     重跑命令：`python deployment/tools/insert-system-diagrams.py`。
    - 每节 MUST 说明「写什么 / 需要什么」——完整逐节指引见 [../templates/system-design.md](../templates/system-design.md)。
 
 ---

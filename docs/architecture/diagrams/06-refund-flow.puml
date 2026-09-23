@@ -65,7 +65,7 @@ legend right
   **Legend**
   Blue = Primary Flow ｜ Green = Success ｜ Orange = Unknown ｜ Red = Failure
   ★ 两层退款单：**TXRF**（transaction 层，order 侧）/ **PMRF**（payment 层）互记
-  ★ 退款渠道归属恒来自 `payment_attempts.channel_code` 列，退款/重试/查询**均不重新走支付路由**
+  ★ 退款渠道归属恒来自 payment_attempts.channel_code 列，退款/重试/查询**均不重新走支付路由**
 endlegend
 
 @enduml
