@@ -293,6 +293,75 @@ class ServiceBoundaryTest {
     }
 
     /**
+     * INV-7 的<b>第二家渠道实例</b>（渠道插件化 / STRIPE-01）：Stripe SDK 只能被端口实现类引用。
+     *
+     * <p>支付宝接入时定下了「SDK 收口」这条纪律（见
+     * {@link #alipaySdkMustBeConfinedToItsInfrastructureAdapter()}），但它此前<b>只为支付宝写过一次</b>——
+     * 这类「按渠道手写一条规则」的门禁，接第二家渠道时最容易漏。
+     * 漏掉的后果是真实的：SDK 类一旦散进 {@code application/**}，
+     * Stripe 的版本升级就会绑架平台业务代码，而「换纯 JDK 实现」将变成全仓扩散。</p>
+     *
+     * <p>本规则与支付宝那条<b>逐字同构</b>（含阳性对照）：目标是
+     * {@code com.stripe..}，收口主体是 {@code StripeSdkGateway}。
+     * 将来第三家渠道接入，应照此模板再加一条——更好的做法是抽出参数化规则，
+     * 但那属于「第三次重复时才做」的重构，现在保持与既有规则一致更好读。</p>
+     */
+    @Test
+    void stripeSdkMustBeConfinedToItsInfrastructureAdapter() {
+        JavaClass sdkAdapter = serviceClasses.stream()
+                .filter(c -> c.getSimpleName().equals("StripeSdkGateway"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "找不到 StripeSdkGateway：INV-7 的收口主体不存在，本规则将空转（假绿）"));
+        boolean referencesSdkPackage = sdkAdapter.getDirectDependenciesFromSelf().stream()
+                .anyMatch(d -> d.getTargetClass().getPackageName().startsWith("com.stripe."));
+        assertThat(referencesSdkPackage)
+                .as("StripeSdkGateway 必须真实引用 com.stripe..；为 false 说明包名写错，"
+                        + "下面的否定式规则会静默空转（INV-7 防空转对照）")
+                .isTrue();
+
+        ArchRule rule = noClasses()
+                .that().resideInAnyPackage(
+                        "com.payment.payment.application..",
+                        "com.payment.payment.domain..",
+                        "com.payment.payment.api..")
+                .should().dependOnClassesThat().resideInAPackage("com.stripe..")
+                .because("Stripe SDK 是第三方依赖，必须被端口实现 StripeSdkGateway"
+                        + "（infra.channel.stripe）独占；应用层/领域层/接入层一旦 import 它，"
+                        + "SDK 的升级节奏就会绑架业务代码，换实现将全仓扩散（INV-7 / ADR-0076）");
+        rule.check(serviceClasses);
+    }
+
+    /**
+     * 渠道插件化内核门禁（SPI-10）：<b>内核不认识任何具体渠道</b>。
+     *
+     * <p>微内核 + 插件化的成立条件是「接新渠道不改内核」。若 {@code application/**}
+     * 里出现了 {@code Alipay} / {@code Stripe} / {@code Wechat} / {@code Douyin} 这些
+     * 渠道专属类名，就说明渠道概念泄漏进了内核——此后每接一家渠道都要改内核，
+     * 插件化名存实亡。</p>
+     *
+     * <p><b>为什么按类名匹配而不是按包</b>：渠道实现都在 {@code infra.channel.<vendor>}，
+     * 用包规则的话，本类（架构测试）自己提到这些字符串不会误判，但内核里若只是
+     * 在 Javadoc 中提及也无所谓——ArchUnit 只扫<b>编译期依赖</b>，注释不算。
+     * 故按「类名前缀」匹配足够，且能同时覆盖「未来有人把渠道类放到别的包」的情况。</p>
+     *
+     * <p><b>豁免</b>：{@code application.channel.spi..} 是插件契约本身，
+     * 它的 Javadoc 会举例说明各家渠道的协议差异——注释不产生编译期依赖，无需豁免。</p>
+     */
+    @Test
+    void channelKernelMustNotKnowAnyConcreteChannel() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("com.payment.payment.application..")
+                .should().dependOnClassesThat().haveSimpleNameStartingWith("Alipay")
+                .orShould().dependOnClassesThat().haveSimpleNameStartingWith("Stripe")
+                .orShould().dependOnClassesThat().haveSimpleNameStartingWith("Wechat")
+                .orShould().dependOnClassesThat().haveSimpleNameStartingWith("Douyin")
+                .because("微内核 + 插件化的前提是「接新渠道不改内核」；application/** 一旦依赖具体渠道类，"
+                        + "渠道差异就泄漏进内核，插件化名存实亡（渠道插件化内核 / SPI-10）");
+        rule.check(serviceClasses);
+    }
+
+    /**
      * INV-3（spec 030 / FR-120、FR-122）：<b>染色只决定协议实现，不参与路由决策</b>。
      *
      * <p>染色（{@code X-Dye-Tag} ⇒ {@code DyeContext}）回答的是「这次调用走 mock 还是真实沙箱」，

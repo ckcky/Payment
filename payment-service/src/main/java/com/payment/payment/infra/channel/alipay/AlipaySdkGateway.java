@@ -14,7 +14,7 @@ import com.alipay.api.response.AlipayTradePagePayResponse;
 import com.alipay.api.response.AlipayTradeQueryResponse;
 import com.alipay.api.response.AlipayTradeRefundResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.payment.payment.application.channel.AlipayGateway;
+import com.payment.payment.infra.channel.alipay.AlipayGateway;
 import com.payment.payment.infra.config.AlipaySandboxProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

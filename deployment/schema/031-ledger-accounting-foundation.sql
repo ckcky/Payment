@@ -156,7 +156,11 @@ INSERT INTO accounts
     (11, 'CHANNEL_FEE_EXPENSE', 'CHANNEL',  'ALIPAY',   'CNY', 'CHANNEL_FEE_EXPENSE','支付宝渠道手续费成本', 'EXPENSE',   NOW()),
     (12, 'CHANNEL_FEE_EXPENSE', 'CHANNEL',  'WECHAT',   'CNY', 'CHANNEL_FEE_EXPENSE','微信渠道手续费成本',   'EXPENSE',   NOW()),
     (13, 'CHANNEL_FEE_EXPENSE', 'CHANNEL',  'DOUYIN',   'CNY', 'CHANNEL_FEE_EXPENSE','抖音渠道手续费成本',   'EXPENSE',   NOW()),
-    (14, 'CHANNEL_FEE_EXPENSE', 'CHANNEL',  'MOCK',     'CNY', 'CHANNEL_FEE_EXPENSE','MOCK 渠道手续费成本',  'EXPENSE',   NOW())
+    (14, 'CHANNEL_FEE_EXPENSE', 'CHANNEL',  'MOCK',     'CNY', 'CHANNEL_FEE_EXPENSE','MOCK 渠道手续费成本',  'EXPENSE',   NOW()),
+    -- 渠道插件化：STRIPE 渠道实例（新增渠道 MUST 同步开户，否则该渠道的
+    -- 应收/手续费成本分录无账户可落 —— 见 AccountResolver 的渠道维度解析）
+    (15, 'CHANNEL_RECEIVABLE',  'CHANNEL',  'STRIPE',   'CNY', 'CHANNEL_RECEIVABLE', 'Stripe 渠道应收',      'ASSET',     NOW()),
+    (16, 'CHANNEL_FEE_EXPENSE', 'CHANNEL',  'STRIPE',   'CNY', 'CHANNEL_FEE_EXPENSE','Stripe 渠道手续费成本','EXPENSE',   NOW())
 ON DUPLICATE KEY UPDATE name = VALUES(name), code = VALUES(code), type = VALUES(type);
 
 -- ---------------------------------------------------------------------------

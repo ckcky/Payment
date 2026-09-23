@@ -5,7 +5,7 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.rpc.BusinessCode;
 import com.payment.common.core.rpc.TransportCode;
-import com.payment.payment.application.channel.AlipayGateway;
+import com.payment.payment.infra.channel.alipay.AlipayGateway;
 import com.payment.payment.application.channel.CallbackUrls;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;

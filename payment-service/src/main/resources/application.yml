@@ -86,6 +86,28 @@ payment:
           # **MUST < payment.reliability.timeout(30s)**：若沙箱超时更长，会出现「整体超时先触发、
           # 渠道还在等」——把不确定态记成确定态。
           http-timeout-ms: ${PAYMENT_ALIPAY_SANDBOX_HTTP_TIMEOUT_MS:10000}
+      # 渠道插件化 / STRIPE-03：Stripe **测试模式（test mode）**沙箱。
+      # 与支付宝沙箱同口径：enabled 默认 false（一键 kill switch）；
+      # 染色 SANDBOX 而 enabled=false ⇒ 400，**绝不静默回落 mock**（FR-241 / INV-8）。
+      # ⚠️ 协议差异（全部关在插件内，内核无感）：Stripe **没有** per-request notify_url，
+      #    只有全局 webhook 端点 /internal/channels/STRIPE/callback，靠 event 里的
+      #    metadata.paymentNo 反查单据。本地接收需跑：
+      #      stripe listen --forward-to localhost:8084/internal/channels/STRIPE/callback
+      #    终端会打印 whsec_...，即下面的 webhook-secret。
+      stripe:
+        sandbox:
+          enabled: ${PAYMENT_STRIPE_SANDBOX_ENABLED:false}
+          # 测试模式密钥 sk_test_...（仅 env 注入，INV-2：禁硬编码 / 禁入库 / 禁明文日志）
+          secret-key: ${PAYMENT_STRIPE_SANDBOX_SECRET_KEY:}
+          # webhook 签名密钥 whsec_...（enabled=true 时**启动期强校验**，缺失拒绝启动——
+          # 缺失即跳过验签是「任何伪造事件都能把未付款订单推进成已支付」的漏洞）
+          webhook-secret: ${PAYMENT_STRIPE_SANDBOX_WEBHOOK_SECRET:}
+          # 付款完成/取消后 Stripe 跳回的地址（**不承载资金事实**，仅买家体验）
+          success-url: ${PAYMENT_STRIPE_SANDBOX_SUCCESS_URL:http://localhost:8091/demo.html?stripe=success}
+          cancel-url: ${PAYMENT_STRIPE_SANDBOX_CANCEL_URL:http://localhost:8091/demo.html?stripe=cancel}
+          connect-timeout-ms: ${PAYMENT_STRIPE_SANDBOX_CONNECT_TIMEOUT_MS:5000}
+          # MUST < payment.reliability.timeout(30s)：理由同支付宝沙箱（FR-140）
+          read-timeout-ms: ${PAYMENT_STRIPE_SANDBOX_READ_TIMEOUT_MS:10000}
   # 支付渠道路由（Feature 028 / ADR-0073 / FR-031）
   routing:
     # false = 回落旧行为（channelCode 必填，不选路）；灰度开关，可一键退回今天的行为（FR-020①/FR-033）
@@ -95,6 +117,10 @@ payment:
       ALIPAY: { enabled: true,  priority: 10 }
       WECHAT: { enabled: true,  priority: 20 }
       DOUYIN: { enabled: false, priority: 30 }
+      # 渠道插件化：STRIPE 由插件工厂注册（infra/channel/stripe）。
+      # enabled=false = 「别自动挑我」（显式指定仍可用，FR-020②/L3）——沙箱默认不参与自动选路，
+      # 需要演示时用 X-Dye-Tag: SANDBOX + channelCode=STRIPE 显式指定，或把这里改 true。
+      STRIPE: { enabled: false, priority: 40 }
       MOCK:   { enabled: true,  priority: 90 }
     # per-channel 可用性（Feature 028 / FR-034、FR-035）：**静态配置桩**，不做真实探测。
     # UP = 正常；DEGRADED = 保留候选但排序降级；DOWN = 排除出候选集（显式指定则 409 CHANNEL_UNAVAILABLE）。

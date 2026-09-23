@@ -7,7 +7,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.PaymentCallbackService;
-import com.payment.payment.application.channel.AlipayGateway;
+import com.payment.payment.infra.channel.alipay.AlipayGateway;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;

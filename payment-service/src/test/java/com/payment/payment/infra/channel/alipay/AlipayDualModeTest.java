@@ -2,7 +2,7 @@ package com.payment.payment.infra.channel.alipay;
 
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
-import com.payment.payment.application.channel.AlipayGateway;
+import com.payment.payment.infra.channel.alipay.AlipayGateway;
 import com.payment.payment.application.channel.CallbackUrls;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
