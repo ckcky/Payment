@@ -1,7 +1,10 @@
 # Specs 索引（按阶段分组）
 
 > 本目录按**阶段（Stage）**组织 Feature 文档。阶段 = 以目标为导向的一组相关 Feature；每个阶段一个 slug 子目录。
-> 各 Feature 文档遵循 Spec Kit 产物：`spec.md` / `plan.md` / `tasks.md` / `acceptance.md`。
+> 各 Feature 文档遵循 **Spec Kit 四件套**：`spec.md` / `plan.md` / `tasks.md` / `acceptance.md`。
+>
+> **状态口径**：Feature 生命周期统一为 8 态——`Draft` / `In Review` / `Approved` / `In Development` / `Implemented` / `Deprecated` / `Superseded` / `Not Implemented`（详见 [standards/documentation-governance.md](../standards/documentation-governance.md) §5.3）。本索引的状态描述 MUST 与各 Feature 的 `spec.md` 头部一致。
+> 明确属于 design-only 的 Feature（如 UI 设计规范类）在 `spec.md` 头部声明 `delivery_mode: design-only`，不强制四件套齐全。
 
 ## 阶段分层约定
 
@@ -58,7 +61,7 @@
 - [028-channel-routing](stage-04-new-directions/028-channel-routing/)
 - [029-redis-transactional-mq](stage-04-new-directions/029-redis-transactional-mq/)
 
-## stage-05-channel-and-finance-deepening — 渠道与资金纵深（🟡 提案中，待负责人确认）
+## stage-05-channel-and-finance-deepening — 渠道与资金纵深（030~034 已实现；035 设计完成、`In Review`）
 
 > 本阶段总目标设计书：**[stage-design.md](stage-05-channel-and-finance-deepening/stage-design.md)（Draft，2026-09-19）**——
 > 现状评估 + 总体架构 + 渠道接入 / 账务总账 / 对账结算 / 可靠性 / 可观测性 / 测试策略六面目标态 + Feature 拆分建议。
@@ -72,7 +75,7 @@
 > **自动退款的恢复路径不可自愈**（C-18/C-19）与**对账/结算事实缺期间与商户维度**（C-20）。
 > 结论：**stage-design 方向通过，需修订后生效**；进入实现前须先完成「文档收口 + 前置一致性收口（B1~B7）」两个门。
 
-- [030-channel-contract-sandbox-callback](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/) —— 🟢 **Spec v1.1 + Plan 三件已就绪，待开工**；ADR-0075 / ADR-0076 已转 Accepted。⚠️ 本编号占用 `030`（原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 已于 2026-09-19 删除，设计被本 Feature 全量吸收，见 [spec §0.3](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)）。
+- [030-channel-contract-sandbox-callback](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/) —— 🟢 **Implemented**（合并点 `3a39a7a`；[tasks.md](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/tasks.md) 载 142/142 完成，[acceptance.md](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/acceptance.md) 载已合入 master `e348090`；ADR-0075 / ADR-0076 均 Accepted → Implemented）。**旁证**：`origin/master` 上已合并 5 个 030 分支 PR（#5~#9），统一渠道契约代码落在 `payment-service/src/main/java/com/payment/payment/application/channel/`（`PaymentChannel` / `ChannelRegistry` / `ChannelRouter` / `AlipayGateway` / `ChannelResult` 等）。⚠️ 本编号占用 `030`（原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 已于 2026-09-19 删除，设计被本 Feature 全量吸收，见 [spec §0.3](stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)）。
 - [031-ledger-accounting-foundation](stage-05-channel-and-finance-deepening/031-ledger-accounting-foundation/) —— 🟢 **已实现（2026-09-21，spec + Plan/Tasks/Acceptance 三件套齐）**：Accounting Event + Posting Rule + 两级科目 + 余额投影/期间；载体决策 [ADR-0077~0079](../adr/0077-ledger-accounting-foundation-decisions.md)（**Accepted**，负责人 D-1~D-7 按推荐方案批准）。⚠️ 编号勘误：stage-design §9.2 旧名 `032-ledger-account-view` 作废，后续 Feature 顺移（032=对账、033=测试、034=可靠性、035=可观测，与 design-review §12 对齐），已随本条回写。
 - [032-reconciliation-real-statement](stage-05-channel-and-finance-deepening/032-reconciliation-real-statement/) —— 🟢 **已实现（2026-09-21，spec + Plan/Tasks/Acceptance 三件套齐）**：渠道账单成为导入对象（`statement_imports`/`statement_lines`，**删除 `sample.csv` 静默回退**）+ 匹配键升级 `(merchantId, referenceType, reference)` 三级降级 + 差异拆独立行表并复用四核对 5 态 + 032 为 `CHANNEL_SETTLEMENT`/`CHANNEL_FEE` 唯一产生方 + 结算口径先于差异策略化；关闭 C-13/C-20/C-22；决策 [ADR-0080](../adr/0080-reconciliation-statement-and-fund-facts.md)（**Accepted，2026-09-21 负责人按 spec 推荐方案批准 H-032-1~6**）。T24b（依赖 034 C-19 的记账同事务回归）已随 2026-09-21 合并 master(034) 后全量回归与 demo 实测收口。
 - [033-test-infrastructure](stage-05-channel-and-finance-deepening/033-test-infrastructure/) —— 🟢 **已实现（2026-09-21，spec + Plan/Tasks/Acceptance 三件套齐）**：Testcontainers 放宽至**仅测试作用域**（`deployment/test-infra` 共享基座：单例 MySQL 容器 + 类内独占库 + DDL 单一来源，只切幂等竞争/并发累加/并发唯一三类）+ schema 双路径重放成 CI 门禁（首基线 `baseline/033.sql`）+ 迁移可重放条文与 lint（016 方言修复）+ 运行时 RPC 边允许清单（15 条 Feign 边）；决策 [ADR-0081](../adr/0081-test-carrier-and-schema-replayability.md)（**Accepted，2026-09-21 负责人按 spec 推荐方案批准 H-033-1~5；触及 Constitution §Engineering.3 已同步**）。既有 H2 用例与桩零删除；业务用例本体归 031/032/payment 域。
@@ -80,6 +83,6 @@
 - [035-observability-slo](stage-05-channel-and-finance-deepening/035-observability-slo/) —— 🟢 **已实现（2026-09-22，spec + Plan/Tasks/Acceptance 三件套齐）**：指标目录（runbook §5 跨 Feature 唯一登记处）+ 高基数政策 HC-1~HC-4 落地为 `MetricsCardinalityTest` 静态门禁 + `MetricsAssert` 运行期遍历断言 + 4 个 SLO 以 Recording Rule 表达（双窗 burn rate，目标 ≠ 实测，slo-report.md 固化）+ 告警扩容至 24 条五要素齐全（既有零删改）+ 密钥/完整报文不入日志（`/internal/channels/**` 路径排除 + uri 归一化，不推翻 ADR-0027）+ **否决引入 APM**（依赖清单变化 = 0）；决策 [ADR-0083](../adr/0083-observability-baseline-slo-and-cardinality.md)（**Accepted，2026-09-21 负责人按 spec 推荐方案批准 H-035-1~4**）。
 - **[design-summary.md](stage-05-channel-and-finance-deepening/design-summary.md)** —— 🟡 **031~035 跨 Feature 设计收口（2026-09-21）**：统一术语 / 依赖图（含对 stage-design §9.2 的 4 处修正）/ 事实源与幂等键总表 / 恢复职责划分 / 观测与测试边界 / 禁止耦合清单 P-1~P-9 / 实现顺序六道门 / 待人类裁决汇总 / 本轮明确未做的事。
 
-> ⚠️ **状态说明**：`031` 编号与范围已由负责人 2026-09-21 裁决（见 spec 031 §0.2）；**`031` / `032` / `033` / `034` 已实现（2026-09-21，ADR 均 🟢 Accepted）；`035` 已实现（2026-09-22，ADR-0083 🟢 Accepted，H-035-1~4 按推荐批准）——stage-05 五 Feature 全部落地，合计 27 项人类裁决全收口**；`030` 及其余 Feature 仍为提案。
-> `stage-design.md` / `design-review.md` 均为 **Draft / 提案**，**不是** L0 当前系统事实源，**不产生**任何已生效决策；
-> `roadmap.md` 的阶段切换与 Current Status 回写在 031 ADR 转 Accepted 时进行。
+> ⚠️ **状态说明（2026-09-22 统一为 8 态生命周期）**：`030`~`035` **全部为 `Implemented`**（`030` 2026-09-20 合入 master；`031`~`034` 2026-09-21；`035` 2026-09-22；ADR-0075/0076/0077~0079/0080/0081/0082/0083 均 🟢 Accepted）——**stage-05 六个 Feature 全部落地，合计 27 项人类裁决全收口**。
+> `stage-design.md` / `design-review.md` / `design-summary.md` 均为 **Proposed**（见各自头部 `Status`），**不是** L0 当前系统事实源、**不产生**任何已生效决策。
+> 各 Feature 的正式状态以各自 `spec.md` 头部为准，本索引 MUST 与之保持一致（[documentation-governance.md](../standards/documentation-governance.md) §5.3）。

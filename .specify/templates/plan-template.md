@@ -2,7 +2,7 @@
 
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Input**: Feature specification from `docs/specs/<stage>/[###-feature-name]/spec.md`（本仓库 Spec 落点固定为 `docs/specs/<stage>/<feature>/`，见 `docs/standards/spec-standard.md`）
 
 **Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
 
@@ -46,15 +46,17 @@
 
 ### Documentation (this feature)
 
+本仓库 Feature 交付物为 **Spec Kit 四件套**（见 `docs/standards/spec-standard.md`）：
+
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit-plan command output)
-├── research.md          # Phase 0 output (/speckit-plan command)
-├── data-model.md        # Phase 1 output (/speckit-plan command)
-├── quickstart.md        # Phase 1 output (/speckit-plan command)
-├── contracts/           # Phase 1 output (/speckit-plan command)
-└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
+docs/specs/<stage>/[###-feature]/
+├── spec.md            # 需求与验收契约（权威源，由 /speckit-specify 产出）
+├── plan.md            # 本文件（/speckit-plan 产出）
+├── tasks.md           # 任务清单 + [FR-nnn] 追溯（/speckit-tasks 产出）
+└── acceptance.md      # INV 门禁 + 演示验收 + 已知限制（收尾产出）
 ```
+
+> **不新增第五个必需文件**。Spec Kit 上游的 `research.md` / `data-model.md` / `quickstart.md` / `contracts/` 在本仓库**不是必需产物**：其内容分别归入 `plan.md`（技术方案与取舍）、`spec.md` 的 Key Entities、`acceptance.md` 的演示验收、以及 `docs/architecture/systems/*.md` 的 API 契约章节。仅在确有必要时按需新增，并在 `plan.md` 中说明原因。
 
 ### Source Code (repository root)
 <!--

@@ -8,8 +8,9 @@
 
 | 文档 | 内容 | 何时读 |
 |---|---|---|
-| [.specify/memory/constitution.md](.specify/memory/constitution.md) | 最高宪法（v2.3.0）：领域边界、架构、一致性、工程、可观测、AI 原则、人类决策边界、提交与合并节奏 | 涉及的工程 / 架构 / 业务约束 |
+| [.specify/memory/constitution.md](.specify/memory/constitution.md) | 最高宪法（v2.4.0）：领域边界、架构、一致性、工程、可观测、AI 原则、人类决策边界、提交与合并节奏 | 涉及的工程 / 架构 / 业务约束 |
 | [docs/README.md](docs/README.md) | 文档体系导航（分类目录、权威层级、路径收口） | 找文档时 |
+| [docs/standards/](docs/standards/) | **文档治理标准**（类型 / 职责矩阵 / 骨架 / 图规范 / Review 清单）——新增或修改任何文档前先读 | 写 / 改文档时 |
 | [docs/adr/](docs/adr/) | 架构决策记录（索引见 [docs/adr/README.md](docs/adr/README.md)，ADR 落点追溯见 [docs/adr/traceability.md](docs/adr/traceability.md)） | 需要历史决策原因、架构迁移或用户明确要求时 |
 | [docs/architecture/technical-solution.md](docs/architecture/technical-solution.md) | 总体技术方案（**当前系统现状**：定位 / 架构 / 流程 / 非功能 / 部署 / 风险） | 涉及服务、端口、Schema、RPC 或部署 |
 | [docs/architecture/systems/](docs/architecture/systems/) | 每服务系统设计文档（DDD 数据模型、API 契约、流程链路、存储缓存、部署拓扑） | 深入某一服务实现细节 |
@@ -24,7 +25,7 @@
 - 核心领域（Payment/Order/Ledger）依赖具体渠道实现（Payment ≠ Channel）。
 - 金额用 `float`/`double`；资金变动绕过 ledger 复式记账直改余额。
 - 资金入口无幂等键；散落直改 `status` 绕过状态机。
-- 无理由新增微服务 / 中间件；引入 2PC/XA 分布式事务（跨服务用 Saga + Outbox + 幂等）。
+- 无理由新增微服务 / 中间件；引入 2PC/XA 分布式事务（跨服务用 Saga + RPC + 幂等，异步通知走 Redis 事务消息通道，见 ADR-0074）。
 - 删测试或改测试迎合错误实现。
 - 擅自改领域模型 / 状态机 / 服务边界 / 数据库结构 / 公共 API（见宪法 Governance 人类决策边界）。
 
@@ -40,14 +41,15 @@
 ### L1 — Current Constraints & Engineering Rules
 
 - `.specify/memory/constitution.md`
+- `docs/standards/*.md`（文档治理标准：类型 / 职责 / 骨架 / Review）
 - `docs/guides/*.md`
 
-描述当前必须遵守的工程、业务和 AI 开发规则。只读取与当前任务直接相关的约束，不默认读取全部 L1 文档。
+描述当前必须遵守的工程、业务、AI 开发与文档治理规则。只读取与当前任务直接相关的约束，不默认读取全部 L1 文档。
 
 ### L2 — Active Feature Work
 
 - Stage 分组：`docs/specs/<stage>/`，索引见 `docs/specs/README.md`
-- Feature：`docs/specs/<stage>/<feature>/spec.md` / `plan.md` / `tasks.md`
+- Feature：`docs/specs/<stage>/<feature>/spec.md` / `plan.md` / `tasks.md` / `acceptance.md`（Spec Kit 四件套）
 
 仅当任务明确属于该 Active Feature 时读取对应 Feature 文档。代码或架构文档中的 Feature 编号不会自动触发整套 Spec 读取。
 
@@ -118,5 +120,6 @@
 ## 命令与技能
 
 - **Spec Kit（唯一 Feature 流程入口）**：`/speckit-specify` `/speckit-clarify` `/speckit-plan` `/speckit-tasks` `/speckit-implement` 等。技能定义在 `.claude/skills/speckit-*`；Claude Code 下以 `/speckit-*` 调用，其他工具按同名技能加载。
-- **辅助检查**：`/review` `/payment-review` `/test`（`.claude/commands/`）。
-- **项目技能**：`payment-domain` `architecture` `observability`（`.claude/skills/`）。
+- **辅助检查**：`/review` `/payment-review` `/test` `/doc-review <file>`（`.claude/commands/`）。
+- **项目技能**：`payment-domain` `architecture` `observability` `documentation-review`（`.claude/skills/`）。
+- **写文档前**：读 `docs/standards/documentation-governance.md`（类型与职责）→ 对应 Standard → `docs/templates/` 空模板 → 交付前跑 `/doc-review`。

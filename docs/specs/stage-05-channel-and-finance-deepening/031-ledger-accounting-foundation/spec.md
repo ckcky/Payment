@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-21
 
-**Status**: 🟡 **Draft v1.0**——架构决策以 [ADR-0077~0079](../../../../docs/adr/0077-ledger-accounting-foundation-decisions.md)（Proposed）为载体，**涉及人类决策边界的条目（§17）MUST 先经负责人裁决再进 `/speckit-plan`**。
+> **Status**: Implemented — 原「Draft v1.0／§17 须先裁决再进 `/speckit-plan`」为设计轮表述，已被后续收口取代：ADR-0077~0079 经负责人 D-1~D-7 批准（Accepted），2026-09-21 已实现并合入 master（`mvnw verify` 866 tests 全绿；Plan/Tasks/Acceptance 为回写补记） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **输入**: Ledger/Accounting 架构审计结论（2026-09-21，基于 030 合并后的真实代码与 stage-05 两份文档）+ 负责人对业务模型的锁定（平台代商户收款）与编号裁决（本 Feature 编号 **031**，stage-design 旧名 `032-ledger-account-view` 作废）。
 

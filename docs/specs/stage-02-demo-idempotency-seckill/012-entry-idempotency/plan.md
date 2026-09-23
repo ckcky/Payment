@@ -1,7 +1,7 @@
 # Plan: 012-entry-idempotency
 
 **Feature**：`012-entry-idempotency`
-**状态**：已实现（**收口型 plan**，2026-09-02 补写；代码先行）
+**状态**：Implemented（**收口型 plan**，2026-09-02 补写；代码先行）
 **关联**：`spec.md` ｜ ADR-0039 / ADR-0040（`docs/adr/0038-next-stage-decisions.md`）
 
 > 本 plan 记录**已落地实现的既有设计**。补写动因：代码中已大量引用 ADR-0039/0040，

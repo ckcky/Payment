@@ -1,6 +1,6 @@
 # Acceptance: 021-unified-access-logging
 
-> 验收执行方式与 DoD。状态：✅ Accepted（验收标准随 spec 021 拍板；执行待代码实施）。
+> 验收执行方式与 DoD。状态：✅ Implemented（验收标准随 spec 021 拍板；代码已实施）。
 
 ## 验收执行方式
 

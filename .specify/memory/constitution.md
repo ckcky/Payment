@@ -49,6 +49,22 @@ Sync Impact Report:
 - TODO: 无
 -->
 
+<!--
+Sync Impact Report:
+- Version: 2.3.0 → 2.4.0（MINOR：追认 ADR-0074 Redis 事务消息通道落地；同步服务清单与 Spec 路径口径）
+- 新增：§IV 禁止清单 例外二 —— Redis 另承载「事务消息通道」（spec 029 / ADR-0074），
+  硬要求 AOF + noeviction、通道故障可降级回落同步 RPC、Redis 全丢仍正确（详见 Core Principle V.3 增补）
+- 修订：§III 服务清单 —— 移除已并入 payment-service 的 `refund-service`（ADR-0064 / Feature 015），
+  明确 `gateway` 不在本 MVP 范围，统一为「9 个核心业务服务 + 1 个 Demo 进程」
+- 修订：§Governance 文档条款 —— Spec 路径由 `docs/specs/<feature>/` 统一为 `docs/specs/<stage>/<feature>/`
+- 关联：docs/adr/0074-redis-transactional-message.md（ADR-0074）、
+  docs/adr/0064-multi-payment-per-transaction.md（ADR-0064）、
+  docs/standards/documentation-governance.md（文档治理层）
+- 决策来源：2026-09-20 ADR-0074 落地；2026-09-22 负责人批准 Documentation Governance v1（版本号统一为 2.4.0）
+- 说明：本次只做「追认已落地事实 + 消除与 Current Facts 冲突的旧口径」，不新增义务、不推翻原则
+- TODO: 无
+-->
+
 # PaymentArch Constitution
 
 > Commerce & Payment Platform — 长期有效的工程与架构约束（最高宪法）。
@@ -122,9 +138,9 @@ Sync Impact Report:
 
 ### IV. 架构边界（Architecture：Spring Cloud 微服务）
 
-**总体架构**：Spring Cloud 微服务（见 ADR-0001）。按 **Bounded Context** 划分服务（一个领域上下文一个服务），每个服务拥有独立的数据逻辑边界；在单机部署阶段允许多个服务使用同一物理数据库，但必须使用独立 Schema，禁止跨服务访问或修改他服务的数据。跨服务默认通过同步 API/RPC 交互，后置流程也通过明确的 HTTP/RPC 用例触发；不以 MQ 或跨服务异步事件作为当前默认方案。分布式一致性用 Saga + RPC + 幂等，**禁止** 2PC/XA 分布式事务（见 Core Principle V）。
+**总体架构**：Spring Cloud 微服务（见 ADR-0001）。按 **Bounded Context** 划分服务（一个领域上下文一个服务），每个服务拥有独立的数据逻辑边界；在单机部署阶段允许多个服务使用同一物理数据库，但必须使用独立 Schema，禁止跨服务访问或修改他服务的数据。跨服务默认通过同步 API/RPC 交互，后置流程也通过明确的 HTTP/RPC 用例触发；不以 MQ 或跨服务异步事件作为当前默认方案（**异步通知通道的例外与硬约束见 Core Principle V.3 增补**）。分布式一致性用 Saga + RPC + 幂等，**禁止** 2PC/XA 分布式事务（见 Core Principle V）。
 
-服务清单（详见 ADR-0001）：`gateway`、`merchant-service`、`catalog-service`、`order-service`、`payment-service`（含 Channel 适配）、`refund-service`、`fulfillment-service`、`entitlement-service`、`ledger-service`、`reconciliation-service`、`settlement-service`。
+服务清单（**9 个核心业务服务**，详见 ADR-0001 与 `docs/architecture/technical-solution.md`）：`merchant-service`、`catalog-service`、`order-service`、`payment-service`（含 Channel 适配与退款域）、`fulfillment-service`、`entitlement-service`、`ledger-service`、`reconciliation-service`、`settlement-service`。`gateway` **不在本 MVP 范围**；`refund-service` 已于 Feature 015 并入 `payment-service`（ADR-0064）。另有 **1 个 Demo 进程** `mock-channel-web`（8091），**不是业务服务**——描述运行进程时用「10 个进程」（9 个业务服务 + 1 个 Demo 进程），描述业务服务时用「9 个服务」。
 
 **六条架构边界**：
 
@@ -155,7 +171,7 @@ Sync Impact Report:
 1. **Idempotency（幂等）**：支付、退款、结算等资金入口 MUST 有幂等键；相同幂等键的重复请求 MUST NOT 产生重复资金动作。幂等键由调用方提供，服务端持久化并唯一约束。
 2. **State Machine（状态机）**：Order / Payment / Refund / Fulfillment / Entitlement / Settlement 都 MUST 有**显式、单向**的状态机。禁止非法状态跳转；状态流转 MUST 通过集中状态转换函数，禁止散落直接 set 状态。
 3. **Eventual Consistency（最终一致）**：与外部系统（渠道、网关）的交互采用最终一致；单服务内部状态变更用本地事务保证原子；跨服务通过同步 RPC 编排和幂等重试实现最终一致。三者分层，不可混淆。
-   > **异步通知通道（2026-09-19 增补 → 2026-09-20 落地，[ADR-0074](../docs/adr/0074-redis-transactional-message.md#adr-0074)）**：不引入 MQ 中间件，改用已存在的 Redis（`redis:7`）Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 回查真相表）做跨服务**通知与解耦**。硬约束：① 仅用于通知，**不得承载资金事实的唯一真相**（消息丢了不影响正确性，只影响时效）；② 消费端 MUST 幂等（at-least-once，重复投递由下游幂等键吸收，INV-2）；③ 记账链路（→ledger）维持同步；④ Redis 非数据源（全丢时系统仍正确，只需人工重放）；⑤ **traceId MUST 跨异步边界连续**（写入信封 + 消费端恢复进 MDC；回查补投沿用原始 traceId，禁止新建）；⑥ MDC MUST 同时携带 **bizNo**（orderNo/paymentNo/refundNo），使「一笔业务事实的全历史」可按单号检索（FR-605~607）；⑦ 半消息回查 MUST 以**业务库真相表**为唯一判据（不得以 Redis 内状态自证）。
+   > **异步通知通道（2026-09-19 增补 → 2026-09-20 落地，[ADR-0074](../../docs/adr/0074-redis-transactional-message.md#adr-0074)）**：不引入 MQ 中间件，改用已存在的 Redis（`redis:7`）Streams 承载**事务消息**语义（半消息 → 本地事务 → commit/rollback → 回查真相表）做跨服务**通知与解耦**。硬约束：① 仅用于通知，**不得承载资金事实的唯一真相**（消息丢了不影响正确性，只影响时效）；② 消费端 MUST 幂等（at-least-once，重复投递由下游幂等键吸收，INV-2）；③ 记账链路（→ledger）维持同步；④ Redis 非数据源（全丢时系统仍正确，只需人工重放）；⑤ **traceId MUST 跨异步边界连续**（写入信封 + 消费端恢复进 MDC；回查补投沿用原始 traceId，禁止新建）；⑥ MDC MUST 同时携带 **bizNo**（orderNo/paymentNo/refundNo），使「一笔业务事实的全历史」可按单号检索（FR-605~607）；⑦ 半消息回查 MUST 以**业务库真相表**为唯一判据（不得以 Redis 内状态自证）。
 4. **Retry（重试）**：对幂等的外部调用才允许自动重试，重试 MUST 有退避与上限；非幂等调用禁止盲目重试。
 5. **Duplicate Message / Callback（重复消息/回调）**：消费/处理侧 MUST 假设消息与回调会重复到达，靠幂等键 + 状态机幂等吸收，不重复入账。
 6. **Timeout（超时）**：所有外部调用 MUST 有超时；超时**不等于失败或成功**，需进入「未知状态」处理（见下条）。
@@ -167,7 +183,7 @@ Sync Impact Report:
 2. **分层**：`api → application → domain ← infra`，依赖单向；`domain` 不依赖任何框架层；DTO / Entity 分离，跨服务只传 DTO / 事件。
 3. **Testing**：JUnit 5 + Mockito + AssertJ。资金逻辑 MUST 有测试；表驱动测试优先；关键路径（支付成功/失败/超时/重复回调/渠道失败/服务重启/最终一致）有集成测试。**MUST NOT** 删测试或改测试迎合错误实现。
    - **集成测试载体**：Testcontainers **已落地**（spec 033 / ADR-0081，2026-09-21）：共享基座 `deployment/test-infra`，**仅测试作用域**（`src/main` 禁依赖，ArchUnit 门禁强制），L2b 真库子层默认仍 H2，唯一键竞争 / 并发时序 / 方言特性类断言升级 L2b（判据见 engineering-standards §4）；无 Docker 本地 skip 且显式汇总，CI `real-db` job 无 Docker 即红。
-4. **Documentation & ADR**：不可逆/重要决策 MUST 立 ADR（`docs/adr/NNNN-*.md`）；领域需求以 Spec（`docs/specs/<feature>/spec.md`）为单一事实源。
+4. **Documentation & ADR**：不可逆/重要决策 MUST 立 ADR（`docs/adr/NNNN-*.md`）；领域需求以 Spec（`docs/specs/<stage>/<feature>/spec.md`，按阶段归组）为单一事实源。文档类型、骨架与 Review 规则见 `docs/standards/`。
 5. **CI/CD**：Maven Wrapper（mvnw）锁定版本；`mvnw verify`（compile+test）→ lint → 打包；配置与代码分离（Nacos / 环境变量）；Conventional Commits + 功能分支 + PR Review。
 6. **Dependency Management**：父 POM + `dependencyManagement` 统一版本（Spring Boot BOM + Spring Cloud BOM）；最小化依赖，每个新依赖 MUST 有理由（ADR 或 commit）。
 7. **Backward Compatibility**：已发布的 API / 跨服务接口 / 对外 schema 变更 MUST 向后兼容或提供迁移路径；破坏性变更 MUST 经人类确认（见 Governance）。
@@ -264,7 +280,7 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
 3. 修订后按语义化版本递增版本号：MAJOR（原则删除/重定义）、MINOR（新增原则/扩展）、PATCH（措辞/澄清）。
 4. 更新版本行并记录修订历史。
 
-**Version**: 2.3.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-03
+**Version**: 2.4.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-22
 
 ---
 
@@ -277,3 +293,4 @@ AI Agent 在项目内的一切工作，除遵守本文其他条款外，还 MUST
 | 2.1.0 | 2026-08-28 | MINOR | Ledger 从「延后 Phase 8」前置到 Feature 004；新增 MVP 过渡条款 |
 | 2.2.0 | 2026-09-02 | MINOR | 新增 Governance §提交与合并节奏（每 Spec 完成即提交并 merge master） |
 | 2.3.0 | 2026-09-03 | MINOR | 追认 ADR-0010（Money VO 不启用）/ ADR-0027（脱敏本期不做）；澄清 Redis 引入为 ADR-0044 已论证例外；Checkstyle+Spotless / Testcontainers / Micrometer Tracing 标注 `[目标] 未落地`；细化「文档无漂移」判定依据 |
+| 2.4.0 | 2026-09-22 | MINOR | 追认 ADR-0074（Redis 事务消息通道落地，§IV 例外二 + §V.3 增补）；服务清单移除 `refund-service`、明确 `gateway` 延后，统一「9 个核心业务服务 + 1 个 Demo 进程」；Spec 路径统一为 `docs/specs/<stage>/<feature>/` |

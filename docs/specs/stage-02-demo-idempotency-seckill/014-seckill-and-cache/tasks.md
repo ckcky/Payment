@@ -1,7 +1,7 @@
 # Tasks: 014-seckill-and-cache
 
 **Feature**：`014-seckill-and-cache`
-**状态**：全部完成（**收口型 tasks**，2026-09-02 补写；代码先行，任务为事后反向登记）
+**状态**：Implemented（**收口型 tasks**，2026-09-02 补写；代码先行，任务为事后反向登记）
 **关联**：`spec.md` / `plan.md`
 
 | # | 任务 | 验收方式 | 状态 |

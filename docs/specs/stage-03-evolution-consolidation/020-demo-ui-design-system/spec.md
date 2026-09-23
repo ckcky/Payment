@@ -4,7 +4,8 @@
 
 **Created**: 2026-09-07
 
-**Status**: ✅ Accepted（2026-09-07 负责人拍板：D1–D5 全部采纳建议项——D1 Stripe light 基调 / D2 四页全改 / D3 系统字体栈 / D4 内联 SVG 图标 / D5 spec 直推 master、实现走本分支；**2026-09-07 本分支实施**）
+> **Status**: Implemented — 2026-09-07 负责人拍板 D1–D5 全部采纳建议项（D1 Stripe light 基调 / D2 四页全改 / D3 系统字体栈 / D4 内联 SVG 图标 / D5 spec 直推 master、实现走本分支）；2026-09-07 本分支实施。⚠️ D1 视觉基调 / FR-002 色板 / FR-006 渐变横幅 / FR-008 靛紫 accent 已被 spec `024-demo-ui-apple-redesign` 取代，其余部分继续有效 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
+> **delivery_mode**: design-only
 
 **Input**: 负责人 2026-09-07 需求（原文归纳）：
 

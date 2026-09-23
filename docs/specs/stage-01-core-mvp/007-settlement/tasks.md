@@ -1,6 +1,6 @@
 # Tasks: Settlement 结算（缺口补齐）
 
-**Input**: Design documents from `/specs/007-settlement/` (spec.md, plan.md, data-model.md)
+**Input**: Design documents from `docs/specs/stage-01-core-mvp/007-settlement/007-settlement/` (spec.md, plan.md, data-model.md)
 
 **Prerequisites**: spec.md ✅、plan.md ✅、data-model.md ✅
 

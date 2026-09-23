@@ -4,7 +4,7 @@
 
 - 状态：🟢 **Accepted / Implemented**（2026-09-15 立项并实施完毕，P1~P7 全部实测通过；
   验证结论见文末「复核清单」与 spec 026 `tasks.md` 的 P7 矩阵）
-- 关联：[spec 026](../specs/026-containerized-local-stack/spec.md)、ADR-0059（Nacos 硬依赖）、
+- 关联：[spec 026](../specs/stage-03-evolution-consolidation/026-containerized-local-stack/spec.md)、ADR-0059（Nacos 硬依赖）、
   ADR-0064（refund 并库，8085 退役）、ADR-0048（mock-channel-web 为演示组件）
 - **Supersedes: ADR-0057**（「服务未容器化」，理由「容器化非当前目标」于 2026-09-15 被本决策推翻：
   宿主 JDK 版本绑架与进程生命周期脆弱两个真实痛点已证明容器化对本项目具备学习与实践价值）

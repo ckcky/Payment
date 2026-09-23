@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-28
 
-**Status**: In Development（ADR-0003/0004/0005/0007 Accepted；US4/ADR-0006 Deferred）
+> **Status**: Implemented — US1/US2/US3/US5 已实现并验收通过（2026-08-28 结论「实现完成、测试全绿」，2026-09-09 全量 BUILD SUCCESS），US4 人工收敛按 ADR-0006 维持 Deferred <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: User description: 继续开发下一个 spec（Payment Reliability），使用 Spec Kit 开发流程。强化支付超时、UNKNOWN 收敛、重复/乱序回调、有限重试与人工收敛；对分歧/歧义点记录架构决策文档（ADR）。
 

@@ -1,6 +1,8 @@
 # Tasks: Refund 退款（缺口补齐）
 
-**Input**: Design documents from `/specs/005-refund/` (spec.md, plan.md, data-model.md, contracts/refund-orchestration.md, quickstart.md)
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
+**Input**: Design documents from `docs/specs/stage-01-core-mvp/005-refund/005-refund/` (spec.md, plan.md, data-model.md, contracts/refund-orchestration.md, quickstart.md)
 
 **Prerequisites**: spec.md ✅、plan.md ✅、data-model.md ✅、contracts/ ✅、checklists/ ✅、acceptance.md ✅、quickstart.md ✅
 
@@ -15,7 +17,7 @@
 > | **ADR-0018 refund→ledger 记账** | ✅ **Accepted** | US4（Phase 6）按计划落地；记账金额取 `amountMinor`（全额退款恒为申请额） |
 >
 > 标记约定：`[x]` 已完成 · `[ ]` 未开始 · `[-]` **不做（延后/已回退）**。
-> US1 的回退清单见 [ADR-0016 回退落地记录](../../adr/0016-refund-decisions.md)。
+> US1 的回退清单见 [ADR-0016 回退落地记录](../../../adr/0016-refund-decisions.md)。
 
 **Tests**: 本 Feature 资金正确性敏感，按 Constitution §VII 与 spec FR-017，**MUST** 包含测试任务（已内联到各 US 阶段）；**MUST NOT** 删测试或改测试迎合错误实现。
 

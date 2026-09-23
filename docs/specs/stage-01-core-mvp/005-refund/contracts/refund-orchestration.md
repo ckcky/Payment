@@ -1,5 +1,7 @@
 # Contract: Refund 跨域编排 RPC 契约
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../../architecture/systems/) 与 [technical-solution.md](../../../../architecture/technical-solution.md)。
+
 **Feature**: `005-refund` | **Date**: 2026-08-29 | **Spec**: [spec.md](../spec.md) | **Data Model**: [data-model.md](../data-model.md)
 
 > 本文件汇总 refund-service 作为**编排方**的全部出站 RPC 契约。

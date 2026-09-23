@@ -5,9 +5,11 @@ description: "Task list template for feature implementation"
 
 # Tasks: [FEATURE NAME]
 
-**Input**: Design documents from `/specs/[###-feature-name]/`
+**Input**: Design documents from `docs/specs/<stage>/[###-feature-name]/`（本仓库 Spec 落点固定为 `docs/specs/<stage>/<feature>/`）
 
-**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
+**Prerequisites**: spec.md (required), plan.md (required), acceptance.md (required — Spec Kit 四件套之一，见 `docs/standards/spec-standard.md`)
+
+> 每条任务 MUST 通过 `[FR-nnn]` / `[INV-nnn]` 标注其覆盖的需求或约束；MUST NOT 自造 spec 中不存在的 ID。
 
 **Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
 

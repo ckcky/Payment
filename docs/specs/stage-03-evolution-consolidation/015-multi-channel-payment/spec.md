@@ -1,8 +1,10 @@
 # Spec: 015-multi-channel-payment（一交易多支付单 + 退款并入 + 三渠道 mock + 流量脚本）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **版本**：0.1
 **日期**：2026-09-04
-**状态**：Accepted（负责人确认，按三次模型反转后的最终口径）
+> **Status**: Implemented — 负责人确认（按三次模型反转后的最终口径）；2026-09-04 验收报告：开发完成、全量门禁绿色（遗留 1 项见 [acceptance-report.md](acceptance-report.md) §6） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **分支**：`feature/015-multi-channel-payment`
 
 > 本 Spec 是之前「demo 全链路流量 + 换支付方式」需求的最终落地规范，整合了三次模型反转：
@@ -132,7 +134,7 @@
 ## 8. 不做（Out of Scope）
 
 - ❌ ~~不做 `Map<ChannelCode, PaymentChannel>` 注册表~~；不改 `channelCode` 为枚举。
-  > ⚠️ **第一条已于 2026-09-16 被 [ADR-0073](../../adr/0073-channel-routing.md) 取代**（[spec 028](../../specs/028-channel-routing/spec.md) 引入 `ChannelRegistry` / `ChannelRouter`）：当时「一期不做」是**最简实现的取舍，不是永久否决**。「不改 `channelCode` 为枚举」**仍然有效**。
+  > ⚠️ **第一条已于 2026-09-16 被 [ADR-0073](../../../adr/0073-channel-routing.md) 取代**（[spec 028](../../stage-04-new-directions/028-channel-routing/spec.md) 引入 `ChannelRegistry` / `ChannelRouter`）：当时「一期不做」是**最简实现的取舍，不是永久否决**。「不改 `channelCode` 为枚举」**仍然有效**。
 - ❌ 不做自动退款的定时扫描兜底（同步重试 3 次后转人工）。
 - ❌ 不修改 `/internal/stock/seed` 支持补货（流量自建 SKU 绕开）。
 - ❌ 不引入 CLOSED 状态；15 分钟到期沿用 `cancel()` → CANCELLED。

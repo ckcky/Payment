@@ -1,5 +1,7 @@
 # Acceptance: Refund 退款（缺口补齐）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **Feature**: `005-refund` | **Date**: 2026-08-29 | **Spec**: [spec.md](spec.md)
 **最终验收：2026-08-31** —— `mvn -o clean verify -fae` 全量 15 模块 **BUILD SUCCESS**
 
@@ -18,7 +20,7 @@
 ### US1 · 部分退款（缺口 G1）—— ⛔ 整节不做
 
 > **ADR-0016 已裁决「部分退款不做」。** 本节条目全部**不适用**，保留仅作历史对照。
-> 回退清单见 [ADR-0016 回退落地记录](../../adr/0016-refund-decisions.md)。
+> 回退清单见 [ADR-0016 回退落地记录](../../../adr/0016-refund-decisions.md)。
 
 - [-] ~~渠道部分退回 → 落 `PARTIALLY_SUCCEEDED` 且记录 `refundedAmountMinor`~~
 - [-] ~~渠道全额退回 → 落 `SUCCEEDED`，`refundedAmountMinor == amountMinor`~~ → **实际：全额退回落 `SUCCEEDED`** ✅
@@ -81,7 +83,7 @@
 
 ## 验收结论
 
-- **状态**：✅ **已通过**（2026-08-31）
+- **状态**：✅ **Implemented**（2026-08-31 验收通过）
 - **未通过 / 遗留项（已知、未闭环，不阻塞本 Feature 验收）**：
   1. T017 —— fulfillment 退款端点缺专属测试
   2. T030 / T031 —— 退款记账缺断言测试

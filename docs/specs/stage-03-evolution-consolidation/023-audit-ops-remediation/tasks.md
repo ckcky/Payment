@@ -1,5 +1,7 @@
 # Tasks: 023 审计中性项收尾
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 > 批次 A/C 可并行；B 独立；D 收尾。代码批次在 `feature/023-audit-ops-remediation` 分支，完成 `--no-ff` 合并 master。
 
 ## 批次 A：可观测收尾

@@ -83,7 +83,7 @@
 - **`035-observability-slo` 已实现（2026-09-22，[ADR-0083](../adr/0083-observability-baseline-slo-and-cardinality.md) Accepted）**：指标目录唯一登记处（runbook §5 六域分表：类型/标签值域/业务意义/告警映射/Owner + 确认不存在埋点黑名单）+ 高基数政策 HC-1~HC-4 机器化（`MetricsCardinalityTest` 静态扫描：键白名单/单号ID禁令/period 棘轮基线，`MetricsAssert` 运行期遍历断言；门禁落地即捕获 032 `outcome` 标签漂移并走「登记→白名单增长」闭环）+ 缺失指标补齐（`ledger_unbalanced`/`trial_balance_break`/`balance_rebuild_applied`/`channel_request`/`channel_timeout`/`limit_inflight_leak`/`settlement_pending_amount`）+ 4 项 SLO Recording Rules（双窗 burn rate fast 1h>14.4 && slow 6h>6，目标值 `[目标]` 固化于 slo-report.md）+ 告警 24 条五要素齐全（runbook §5.4 逐条处置段落，既有零删改）+ 密钥/完整报文不入日志（`/internal/channels/**` 排除 + ACCESS_LOG uri 归一化到路由模式，不推翻 ADR-0027）+ redis-exporter `CHECK_STREAMS=mq:stream:*` 修正（A-17 死规则救活）+ 看板新增「⑦ SLO 与错误预算」「⑧ 资金健康」两行；**零新增运行时依赖、不引 APM**。`mvn verify` 981 tests 全绿（18 模块，EXIT=0）；demo 七场景全 PASS（含套件顺序/垫片四处收口修复，见 acceptance §3.8）；spec 035 三件套（plan/tasks/acceptance）齐。
 - **当前 Feature**：无进行中 Feature（`027-user-payment-limit` / `028-channel-routing` / `029-redis-transactional-mq` 均已实现并闭环）——详见 `docs/specs/stage-04-new-directions/027-user-payment-limit/spec.md`、`docs/specs/stage-04-new-directions/028-channel-routing/spec.md` 与 `docs/specs/stage-04-new-directions/029-redis-transactional-mq/spec.md`。
 - **⚠️ 已知偏离（SOP 偏离，已收口，待复盘）**：working tree 曾含**超前 roadmap 顺序（011→012→013→014）**落地的 `013-inventory-reservation` / `014-seckill-and-cache` 实质实现（catalog `Stock*` 聚合 + 三段式库存、order `OrderTimeoutScheduler` Redis ZSet 时间轮 + `SeckillResult` + 限流 + 幂等 + Lua）。代码先行、当时缺 spec/ADR，属 **ADR-0053** 记录的偏离。现已于 2026-08-31 补写 `docs/specs/stage-02-demo-idempotency-seckill/013-*` / `014-*` 与 **ADR-0041~0046**（`0038-next-stage-decisions.md`）完成收口。**唯一遗留偏离**：014 的 Redis 引入**仍未经 roadmap §7「压测基线→论证引入」闸门**（ADR-0044 标注），k6 基线 + 论证证据列为 TODO。
-- **Feature 状态**：`001`~`029`（除 `008`/`027` 历史缺口与 `020`/`024` UI 规范类无 tasks 外）均有完整 Spec/Plan/Tasks 产物且已代码实现；`029` 已于 2026-09-20 实现落地（批次 A~G 增量提交于 `feature/029-redis-transactional-mq`，同日 `--no-ff` 合入 master `5e2c00d`）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
+- **Feature 状态**：`001`~`029`（除 `008` 历史缺口外）均已代码实现；`020` / `024`（UI 设计规范类）以 `delivery_mode: design-only` 显式豁免四件套，故无 `tasks.md`（例外规则见 [spec-standard](../standards/spec-standard.md) §5）。Feature 生命周期统一为 8 态（`Draft` / `In Review` / `Approved` / `In Development` / `Implemented` / `Deprecated` / `Superseded` / `Not Implemented`，见 [documentation-governance](../standards/documentation-governance.md) §5.3）；**正式状态以各 `spec.md` 头部为准，本文件 MUST 与之保持一致**。`029` 已于 2026-09-20 实现落地（批次 A~G 增量提交于 `feature/029-redis-transactional-mq`，同日 `--no-ff` 合入 master `5e2c00d`）。（**012/013/014 为代码先行后补写收口，见 ADR-0053**；其中 012 的 spec 与 ADR-0039/0040 于 2026-09-02 补写，消除了代码中已存在但文档缺失的**悬空引用**）；可观测埋点（metrics + 资金审计 + traceId 透传）已落地。
   **非阻塞遗留**（均为「待补 Testcontainers 集成测试」，不影响功能）：`003` T016~T018（人工收敛，标记 Deferred，但代码已由 `023` 的 F2 修复实际落地——`POST /payments/{ref}/resolve` + `ResolveAuthorizationInterceptor`，003 的 tasks.md 未回头更新）；`006` T023（并发乐观锁）；`007` T013/T031/T039/T045（集成测试与最终 `/review`）。
 - **当前能力**：`./mvnw -o verify -fae` 全量 BUILD SUCCESS（16 个 Maven 子模块：**4 common**（新增 `common-redis-mq`）+ 9 服务 + `mock-channel-web` + `e2e-tests` + `architecture-tests`，含 root 共 **17 个 reactor 条目**）；各服务暴露 `/actuator/health`、`/actuator/prometheus` 与 Swagger UI；支付/退款/结算均已接入 ledger 复式记账。**双运行模式**（宿主进程 / 容器）由 `deployment/lib-mode-guard.sh` 双向互斥守卫，端口契约 8081–8091 两模式一致。
 - **ADR 状态（2026-08-30 负责人已裁决，2026-08-31 全部落定）**：
@@ -164,7 +164,7 @@ Phase 0 Foundation
 - 每个服务使用独立端口；单机可启动多个独立服务。
 - 每个服务的 Schema 约定清楚，禁止跨服务直连数据。
 - `mvnw validate` 或等价可重复构建入口可用。
-- Spec Kit 可以创建并定位 `docs/specs/<feature>/`。
+- Spec Kit 可以创建并定位 `docs/specs/<stage>/<feature>/`。
 
 ### 完成后获得的能力
 
@@ -579,7 +579,7 @@ Phase 6 完成；商户结算资格和最小净额规则确认。
 
 ## 每个 Feature 完成后的 SOP
 
-1. 使用 Spec Kit 创建或更新 `docs/specs/<feature>/spec.md`。
+1. 使用 Spec Kit 创建或更新 `docs/specs/<stage>/<feature>/spec.md`。
 2. 运行 `/speckit-clarify`，只解决会改变范围、边界、状态机或验收的关键歧义。
 3. 运行 `/speckit-plan`，检查是否符合当前总体架构方案和 Roadmap 阶段。
 4. 负责人审阅并确认 Spec、Plan 和涉及的人类决策边界。

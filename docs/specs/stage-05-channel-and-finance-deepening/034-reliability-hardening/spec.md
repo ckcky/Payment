@@ -2,7 +2,7 @@
 
 **Feature**：034　**标题**：Reliability & Failure Recovery
 **版本**：v1.0（Draft，设计轮产物）　**日期**：2026-09-21
-**状态**：🟡 **设计完成，待 Architecture Review 与负责人裁决**（本轮**只出设计，不改代码、不建 migration、不加测试、不引入依赖**）
+> **Status**: Implemented — 原「设计完成，待 Architecture Review 与负责人裁决（本轮只出设计，不改代码、不建 migration、不加测试、不引入依赖）」为设计轮表述，已被后续实现取代：ADR-0082 已 Accepted（负责人 2026-09-21 批准 H-034-1~5），2026-09-21 已实现并合入 master，acceptance.md 载真库用例 TT-1~TT-12 全绿 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **前置**：030（含 B7/C-18 在途守卫修复）已合入 master；031 的账务事件契约与待记账台账设计已定稿；032 的差异处置闭环已定稿
 **输入权威**：[stage-design §6](../stage-design.md)、[design-review §11 §12.2 H5/H10/H12、§13 H13/H17/H18/H20](../design-review.md)
 

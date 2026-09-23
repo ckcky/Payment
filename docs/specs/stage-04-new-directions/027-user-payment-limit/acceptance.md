@@ -1,6 +1,6 @@
 # Acceptance: 027-user-payment-limit（用户支付限额）
 
-> **当前状态：✅ 已验收（2026-09-16）**——批次 A~J 全部完成，实现于 `feature/027-user-payment-limit` worktree。
+> **当前状态：✅ Implemented（2026-09-16 已验收）**——批次 A~J 全部完成，实现于 `feature/027-user-payment-limit` worktree。
 > 全量回归 `./mvnw -o clean verify -fae` **BUILD SUCCESS**（16 reactor 条目，与实现前一致），
 > `architecture-tests` 8/8（含 spec 028 的 2 条边界规则），payment-service 206 测 0 失败。
 > **live 验证（2026-09-16，容器模式全栈）**：`scenario-limit.sh` `EXIT=0`，58 条断言全 PASS（见 §7）。

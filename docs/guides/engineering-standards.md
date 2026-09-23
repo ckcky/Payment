@@ -4,7 +4,7 @@
 >
 > **权威层级**：本规范不得与 [Constitution](../../.specify/memory/constitution.md) 冲突；冲突时以宪法为准。流程规范见 [ai-standards.md](ai-standards.md)，业务规范见 [business-standards.md](business-standards.md)。
 >
-> **口径说明**：标注 `[目标]` 的条目为**尚未落地**的目标态，不得当作现行强制要求引用（宪法 v2.3.0 已同步标注，避免"虚假合规"）。
+> **口径说明**：标注 `[目标]` 的条目为**尚未落地**的目标态，不得当作现行强制要求引用（宪法已同步标注，避免"虚假合规"）。
 
 ## 1. 代码质量（Code Quality）
 
@@ -17,14 +17,14 @@
 ## 2. 资金正确性（Money Invariants，最高优先级）
 
 - 金额用 **`long`（最小单位分）+ 独立 `currencyCode` 字段，或 `BigDecimal`（明确 scale）** 表示；**禁止 `float` / `double`**（Constitution §II）。
-- `Money` 值对象**不启用**（ADR-0010，已由宪法 v2.3.0 追认）：金额以 `long` 分 + `currencyCode` 表达。
+- `Money` 值对象**不启用**（ADR-0010，已由宪法追认）：金额以 `long` 分 + `currencyCode` 表达。
 - 任何资金变动必须经 `ledger-service` 复式记账，借贷平衡；**禁止**直接改余额字段。
 
 ## 3. 一致性（Consistency，Constitution §V）
 
 - **幂等**：支付/退款/结算入口必须有幂等键，数据库唯一约束兜底；重复请求不产生重复资金动作。
 - **状态机**：Order/Payment/Refund/Fulfillment/Entitlement/Settlement 用显式单向状态机，集中在 `domain` 的状态转换函数，禁止散落直接 set 状态。
-- **分布式一致性**：跨服务用 **Saga + 同步 RPC + 幂等重试**；当前不引入 MQ 或跨服务异步事件；**禁止** 2PC/XA 分布式事务。
+- **分布式一致性**：跨服务用 **Saga + 同步 RPC + 幂等重试**；**不引入 MQ 中间件**——跨服务**异步解耦**改用**既有 Redis（`redis:7`）的 Streams 模拟 MQ** 的事务消息能力（半消息 → 本地事务 → commit/rollback → 回查真相表），**目的是减少需要新增与长期运维的组件**（复用已存在的 Redis 依赖，禁 Kafka / RocketMQ 等新运维实体）；**禁止** 2PC/XA 分布式事务。硬约束见宪法 §IV + §V.3 增补与 [ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074)。
 - **未知支付状态**：结果不确定时进 UNKNOWN 状态，靠查询接口 / 对账 / 人工收敛，**禁止**猜成败直接落账。
 - **事务边界**：`@Transactional` 只放在 `application` 应用服务层，且只覆盖**单服务本地事务**。
 

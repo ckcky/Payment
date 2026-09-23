@@ -1,8 +1,10 @@
 # Implementation Plan: Ledger 资金账本（复式记账）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **Branch**: `004-ledger` | **Date**: 2026-08-28 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `/specs/004-ledger/spec.md`
+**Input**: Feature specification from `docs/specs/stage-01-core-mvp/004-ledger/004-ledger/spec.md`
 
 ## Summary
 

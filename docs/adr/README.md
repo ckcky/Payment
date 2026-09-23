@@ -6,6 +6,10 @@
 
 ## 索引
 
+> **口径说明（2026-09-22 治理）**：下表为**历史序号口径**（首列 = 文件序号，bundle 文件可承载多条决策），保留以供追溯。**ADR 编号 → 标题 → 当前状态 → 承载文件**的权威完整清单见下方「ADR 完整文件清单（42 文件，权威）」；两者不一致时以完整清单与各 ADR 文件正文为准。
+>
+> ⚠️ **ADR-0054 引用消歧（强制）**：`0054-core-payment-correctness.md`（核心支付正确性确认性纪录）与 `0054-order-payment-orchestration.md`（支付编排职责归位）**共用 ADR-0054**（历史成因见文末「编号冲突备案」）。**引用 ADR-0054 时 MUST 同时使用文件名 + 标题**消歧；今后**禁止**产生新的重复 ADR ID。
+
 | 编号 | 标题 | 状态 | 关联 |
 |---|---|---|---|
 | [0001](0001-adopt-spring-cloud-microservices.md) | 采用 Spring Cloud 微服务架构 | Accepted | 取代 Constitution §3.1；→ 0002 |
@@ -37,11 +41,64 @@
 
 | [0075](0075-unified-channel-contract.md) | 聚合支付统一渠道契约：能同时容纳支付宝 / 微信 / 抖音 / Stripe（ADR-0075） | 🟢 **Accepted**（2026-09-19 提出并拍板 D1~D11；**同日负责人确认由 Proposed 升级为 Accepted**；**尚未实现**） | **[spec 030](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)**（原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 四件套已于 2026-09-19 删除，设计被该 spec 全量吸收）；**扩展** ADR-0072 的渠道层契约（其结构条款——表归属 / 写入口 / 分层≠拆事务——**全部不变**）；`scene` / `channelExtra` **不参与选路**（ADR-0073 语义不变）；金额扁平化沿用 ADR-0010；双响应码派生沿用 ADR-0012；`outRequestNo` 只为将来保留渠道语义，**不改变 ADR-0016「退款恒按全退」**；契约内标识沿用 ADR-0063；落点追溯见 [traceability](traceability.md) |
 | [0076](0076-traffic-dyeing-and-alipay-sandbox.md) | 全链路染色分流（mock / 沙箱）+ 渠道模态落库 + 支付宝沙箱接入（ADR-0076） | 🟢 **Accepted**（2026-09-19 提出并拍板 D1~D11；**同日负责人确认由 Proposed 升级为 Accepted**；**尚未实现**；**门 2 已裁决**：模态载体 = 通用 JSON 列 `extra_json` 的 `channelMode` 键（~~专用列 `channel_mode`~~，**语义不变**，见该 ADR「修订记录」）、`alipay-sdk-java` **确认引入**） | **[spec 030](../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)**；**部分取代 ADR-0072**（`ALIPAY` 升级为双模态特例，**MOCK 分支必须 `super` 委托**；「❌ 不接入真实渠道 SDK」被取代；其余条款不变）、**部分取代 ADR-0073**（「不做：真实渠道 SDK 接入」被取代；**路由规则本身不变**）；给出 ADR-0052「是否接入真实验签」的裁决（支付宝走 **RSA2 独立端点**，HMAC 占位**保留给本地 mock 路径**）；**不改 ADR-0025 口径**；密钥沿用 ADR-0026（env 注入 / 禁硬编码 / 禁入库）；染色非法值与「开关未开」一律 **fail fast**（ADR-0049）；染色**入站读与出站写必须同批**（ADR-0024 / ADR-0034 全线 403 先例教训）；落点追溯见 [traceability](traceability.md) |
-| [0077](0077-ledger-accounting-foundation-decisions.md) | Ledger / Accounting 地基决策集合（ADR-0077~0079） | 🟢 **Accepted**（2026-09-21 负责人裁决 D-1~D-7 按 spec 推荐方案批准；**同日实现落地**，见 spec 031 三件套） | **[spec 031](../specs/stage-05-channel-and-finance-deepening/031-ledger-accounting-foundation/spec.md)**；**Partially Supersedes ADR-0008**（调用方组装分录 + 固定科目枚举两条）、**修订 ADR-0009/0018/0023 契约描述**（触发时机/同步/失败不回滚语义不变）、**修订 ADR-0011 边界**（引入渠道清算**科目**，清算**链路**仍延后至 032+）；吸收 M1 / H3（C-07）/ G3（C-09）；复式结构、平衡门禁、append-only、幂等范式**保留** |
+| [0077](0077-ledger-accounting-foundation-decisions.md) | Ledger / Accounting 地基决策集合（ADR-0077~0079） | 🟢 **Accepted**（2026-09-21 负责人裁决 D-1~D-7 按 spec 推荐方案批准；**同日实现落地**，见 spec 031 四件套） | **[spec 031](../specs/stage-05-channel-and-finance-deepening/031-ledger-accounting-foundation/spec.md)**；**Partially Supersedes ADR-0008**（调用方组装分录 + 固定科目枚举两条）、**修订 ADR-0009/0018/0023 契约描述**（触发时机/同步/失败不回滚语义不变）、**修订 ADR-0011 边界**（引入渠道清算**科目**，清算**链路**仍延后至 032+）；吸收 M1 / H3（C-07）/ G3（C-09）；复式结构、平衡门禁、append-only、幂等范式**保留** |
 | [0080](0080-reconciliation-statement-and-fund-facts.md) | 对账真实化：渠道账单导入对象 + 事实维度升级 + 渠道资金事实入账（ADR-0080） | 🟢 **Accepted**（2026-09-21 负责人裁决，按 spec 推荐方案批准 H-032-1~6；随 spec 032 实现落地） | **[spec 032](../specs/stage-05-channel-and-finance-deepening/032-reconciliation-real-statement/spec.md)**；**扩展 ADR-0020**（账单来源由周期 fixture 升级为导入对象，**删除 `sample.csv` 静默回退**，据 ADR-0049）、**复用 ADR-0065** 的 5 态差异生命周期（不新建平行状态机）、**接续 ADR-0011/0079** 挂起的渠道清算链路；032 是 `CHANNEL_SETTLEMENT` / `CHANNEL_FEE` 的**唯一产生方**（`CS-`/`CF-{channel}-{period}`）；关闭 C-13/C-20/C-22 |
 | [0081](0081-test-carrier-and-schema-replayability.md) | 测试载体升级：真库 Testcontainers（仅测试作用域）+ schema 双路径可重放门禁 + RPC 边允许清单（ADR-0081） | 🟢 **Accepted**（2026-09-21 负责人裁决，按 spec 推荐方案批准 H-033-1~5；随 spec 033 实现落地） | **[spec 033](../specs/stage-05-channel-and-finance-deepening/033-test-infrastructure/spec.md)**；**变更 Constitution §Engineering.3「不引入 Testcontainers」的现行约束**（design-review §13 **H16**），以 L5 规则「`src/main` 不得依赖 `org.testcontainers`」封口；是 031 §10 / 032 §8 登记的「真库并发验证」缺口唯一关闭路径；不改动 [ADR-0069](0069-end-to-end-automated-testing.md) 的测试钻石分层，只补其从未验证的**增量迁移重放**；既有 H2 用例与 `InMemory*Repository` 桩**零删除** |
 | [0082](0082-failure-recovery-ownership-and-compensation.md) | 失败恢复归属与补偿闭环（ADR-0082） | 🟢 **Accepted**（2026-09-21 负责人裁决，按 spec 推荐方案批准；随 spec 034 实现落地） | **[spec 034](../specs/stage-05-channel-and-finance-deepening/034-reliability-hardening/spec.md)**；**落地 ADR-0079 的待记账台账**（`pending_postings` 由调用方写入，spec 031 §12 设计首次有实现归属）、**沿用 ADR-0021**「不引熔断中间件」并据此**移除**未使用的 Resilience4j 依赖（了结 backlog #5）、**沿用 ADR-0077 D4** 的 Ledger 派生幂等键作为安全重放前提；不新增 Payment 状态、不引入 2PC/XA、不做通用补偿框架 |
 | [0083](0083-observability-baseline-slo-and-cardinality.md) | 观测基线：SLO/错误预算落地、高基数政策、密钥与报文不入日志、保留自研 trace（ADR-0083） | 🟢 **Accepted**（2026-09-21 负责人裁决，H-035-1~4 按 spec 推荐批准；随 spec 035 实现落地；实测积累满一周期前告警只出报表不 page） | **[spec 035](../specs/stage-05-channel-and-finance-deepening/035-observability-slo/spec.md)**；把 Constitution §Obs.5 的 SLO 文字首次变成 Recording Rule（design-review §13 **H14**）；**不推翻 ADR-0027**（脱敏仍为透传桩，改以 `exclude-paths` 增补 `/internal/channels/**` + 显式禁令 + 测试满足 ADR-0068/H7）；**否决引入 APM / Micrometer Tracing / OTel**，自研 `X-Trace-Id` 保留；指标目录为跨 Feature 观测单一登记处，既有 93 指标零改名 |
+
+## ADR 完整文件清单（42 文件，权威）
+
+> 本表是 **ADR 编号 → 标题 → 当前状态 → 承载文件**的**权威登记处**，覆盖 `docs/adr/` 下全部 42 个 ADR 文件（不含本 README 与 [traceability.md](traceability.md)）。状态与各 ADR 文件正文一致；新增 / 变更 ADR 时 MUST 同步本表与 [traceability.md](traceability.md)。
+
+| ADR 编号 | 标题 | 状态 | 承载文件 |
+|---|---|---|---|
+| 0001 | 采用 Spring Cloud 微服务架构 | Accepted | [0001](0001-adopt-spring-cloud-microservices.md) |
+| 0002 | 技术栈选型 | Accepted | [0002](0002-technology-stack.md) |
+| 0003~0007 | 支付可靠性决策集合（0006 人工收敛 ⛔ Not Implemented） | 混合 | [0003](0003-payment-reliability-decisions.md) |
+| 0008~0011 | Ledger 设计决策集合 | Accepted | [0008](0008-ledger-design-decisions.md) |
+| 0012~0015 | 支付可靠性实现期决策集合 | Accepted | [0012](0012-payment-reliability-impl-decisions.md) |
+| 0016~0018、0047 | 退款决策集合（0016 ⛔ Rejected 已回退；0017/0018 Accepted；0047 Accepted） | 混合 | [0016](0016-refund-decisions.md) |
+| 0019~0021 | 对账决策集合 | Accepted | [0019](0019-reconciliation-decisions.md) |
+| 0022~0023 | 结算决策集合 | Accepted | [0022](0022-settlement-decisions.md) |
+| 0024~0028 | 风险 / 安全决策集合（0027/0028 ⛔ Not Implemented） | 混合 | [0024](0024-risk-security-decisions.md) |
+| 0029~0033 | 分布式演进决策集合（0031 ⛔ 不使用 MQ → **Superseded by ADR-0074**） | 混合 | [0029](0029-distributed-evolution-decisions.md) |
+| 0034~0037 | 内部服务令牌闭环 | ⛔ Not Implemented | [0034](0034-internal-token-decisions.md) |
+| 0038~0046 | 下一阶段决策集合（0038 → **Superseded by ADR-0048**；其余 Accepted） | 混合 | [0038](0038-next-stage-decisions.md) |
+| 0048~0051 | 端到端演示形态决策集合 | Accepted | [0048](0048-demo-showcase-decisions.md) |
+| 0052 | 渠道回调验签接入真实现 | ⛔ Not Implemented（回退至 ADR-0025 占位） | [0052](0052-channel-callback-signature-decisions.md) |
+| 0053 | 库存/秒杀代码超前 roadmap 落地的处置 | Accepted | [0053](0053-wip-ahead-of-roadmap.md) |
+| **0054（A）** | 核心支付正确性约束（确认性纪录） | Accepted | [0054-core-payment-correctness](0054-core-payment-correctness.md) |
+| **0054（B）** | 支付编排职责归位（order 升业务编排者） | ✅ Accepted → Implemented | [0054-order-payment-orchestration](0054-order-payment-orchestration.md) |
+| 0055 | 支付意图幂等键由 order-service 生成 | Accepted | [0055](0055-entry-and-infra-decisions.md) |
+| 0056 | Nacos 启用（落实 ADR-0002） | Accepted | [0055](0055-entry-and-infra-decisions.md) |
+| 0057 | 服务未容器化 | ⛔ **Superseded by ADR-0070** | [0055](0055-entry-and-infra-decisions.md) |
+| 0058 | 性能与容量目标基线 | Accepted（基线已建立） | [0058](0058-performance-baseline.md) |
+| 0059 | 启用 Nacos 服务发现与注册中心（实施记录） | Accepted | [0059](0059-enable-nacos.md) |
+| 0060 | Redis 客户端启用 Lettuce 连接池 | Accepted | [0060](0060-redis-lettuce-pool.md) |
+| 0061 | 可观测性补全与演示脚本漂移修复 | Accepted | [0061](0061-observability-panel-fix.md) |
+| 0062 | 业务单号统一采用两字母前缀 + 雪花算法 | Accepted | [0062](0062-business-no-snowflake.md) |
+| 0063 | 跨系统关联一律使用业务单号 | Accepted | [0063](0063-cross-service-reference-by-business-no.md) |
+| 0064 | 一交易多支付单（Feature 015；§决策#4 **Superseded by ADR-0054(B)**） | Accepted | [0064](0064-multi-payment-per-transaction.md) |
+| 0065 | 会计四核对与挂账·调账闭环 | ✅ Accepted → Implemented | [0065](0065-accounting-audit-suspense-adjustment.md) |
+| 0066 | 表结构列序规范化与按订单明细粒度履约 | ✅ Accepted → Implemented | [0066](0066-schema-normalization-and-item-granular-fulfillment.md) |
+| 0067 | order 驱动的两层退款单模型与退款异步回调闭环 | ✅ Accepted → Implemented | [0067](0067-order-driven-refund-two-layer-refund-order.md) |
+| 0068 | 统一访问日志 | ✅ Accepted → Implemented | [0068](0068-unified-access-logging.md) |
+| 0069 | 全链路自动化测试体系 | ✅ Implemented | [0069](0069-end-to-end-automated-testing.md) |
+| 0070 | 本地全栈容器化：Compose + 双轨并存（**Supersedes ADR-0057**） | 🟢 Accepted → Implemented | [0070](0070-containerized-local-stack.md) |
+| 0071 | 用户支付限额——日月年周期额度与两阶段预占 | 🟢 Accepted → Implemented | [0071](0071-user-payment-limit.md) |
+| 0072 | payment-service 两层结构（payment 支付层 / channelAttempt 渠道层） | ✅ Accepted → Implemented | [0072](0072-two-layer-channel-architecture.md) |
+| 0073 | 支付渠道路由：注册表 + 规则化确定性选路 | ✅ Accepted → Implemented | [0073](0073-channel-routing.md) |
+| 0074 | Redis 事务消息通道：Streams + 半消息协议（**Supersedes ADR-0031**） | 🟢 Accepted → Implemented | [0074](0074-redis-transactional-message.md) |
+| 0075 | 聚合支付统一渠道契约：四组结构化字段 + 类型化 PayCredential | 🟢 Accepted → **Implemented**（spec 030，2026-09-20 合入 master） | [0075](0075-unified-channel-contract.md) |
+| 0076 | 全链路染色分流 + 渠道模态落库 + 支付宝沙箱接入 | 🟢 Accepted → **Implemented**（spec 030，2026-09-20 合入 master） | [0076](0076-traffic-dyeing-and-alipay-sandbox.md) |
+| 0077 | 记账契约「Accounting Event + Posting Rule」+ 幂等键 Ledger 派生 + 负净额反向分录 | 🟢 Accepted → Implemented（spec 031，2026-09-21） | [0077](0077-ledger-accounting-foundation-decisions.md) |
+| 0078 | 科目 Definition/Instance 两级 + 新增渠道清算/手续费科目 | 🟢 Accepted → Implemented（spec 031） | [0077](0077-ledger-accounting-foundation-decisions.md) |
+| 0079 | 余额投影（同事务）+ 期间/关账 + 待记账台账 | 🟢 Accepted → Implemented（spec 031） | [0077](0077-ledger-accounting-foundation-decisions.md) |
+| 0080 | 对账真实化：渠道账单导入对象 + 事实维度升级 + 渠道资金事实入账 | 🟢 Accepted → Implemented（spec 032） | [0080](0080-reconciliation-statement-and-fund-facts.md) |
+| 0081 | 测试载体升级：真库 Testcontainers + schema 双路径重放门禁 | 🟢 Accepted → Implemented（spec 033） | [0081](0081-test-carrier-and-schema-replayability.md) |
+| 0082 | 失败恢复归属与补偿闭环 | 🟢 Accepted → **Implemented**（spec 034，2026-09-21） | [0082](0082-failure-recovery-ownership-and-compensation.md) |
+| 0083 | 观测基线：SLO/错误预算、高基数政策、密钥与报文不入日志 | 🟡 Proposed（待裁决 H-035-1~4） | [0083](0083-observability-baseline-slo-and-cardinality.md) |
 
 ## ADR 编号速查（0001–0083）
 
@@ -128,8 +185,8 @@
 | [0052](0052-channel-callback-signature-decisions.md#adr-0052) | 渠道回调验签接入真实现 —— ⛔ 未实施（回退至 ADR-0025 占位） | [0052-channel-callback-signature-decisions.md](0052-channel-callback-signature-decisions.md) |
 | [0053](0053-wip-ahead-of-roadmap.md#adr-0053) | 库存/秒杀代码超前 roadmap 落地（缺 spec/ADR）的处置 | [0053-wip-ahead-of-roadmap.md](0053-wip-ahead-of-roadmap.md) |
 
-| [0075](0075-unified-channel-contract.md#adr-0075) | 聚合支付统一渠道契约：四组结构化字段（`Goods` / `CallbackUrls` / `Payer` / `PaymentScene`）+ `channelExtra` 扩展袋 + 类型化 `PayCredential`（6 种 Kind：`REDIRECT_URL`/`FORM_HTML`/`QR_CODE`/`H5_URL`/`JSAPI_PARAMS`/`CLIENT_SECRET`）+ `ChannelResult.credential` 与 `accepted(ref, reason, credential)`；金额保持扁平（`amountMinor` + `currencyCode`）；**保留兼容构造器 + `default` 方法**（既有 4 处构造点 / 6 处测试桩**零改动**）；凭证不落库（🟢 Accepted，2026-09-19 由 Proposed 升级，**待实现**） | 0075 |
-| [0076](0076-traffic-dyeing-and-alipay-sandbox.md#adr-0076) | 全链路染色分流 + 渠道模态落库 + 支付宝沙箱接入：`X-Dye-Tag`（`MOCK`/`SANDBOX`，**缺省即 `MOCK`**，非法值 400 **fail fast**）+ common-core 三段式（`DyeFilter` order=-190 / `DyeContext` / `DyeRequestInterceptor`，**入站读与出站写同批**）+ `payment_attempts.extra_json` 的 `channelMode` 键落库（~~`channel_mode` 专用列~~，**H2 修订**；写入侧强制 + 读取侧 fail-safe）+ 反向三路径（退款/查询/超时扫描）**按落库记录还原模态** + 单 Adapter 双模态（`AlipayGateway` 收口 SDK，`application/**` 禁依赖 SDK **Java 包 `com.alipay.api`**——⚠️ 非 Maven 坐标 `com.alipay.sdk`）+ `POST /internal/channels/alipay/notify`（RSA2 验签，响应体**恰好纯文本 `success`**）（🟢 Accepted，2026-09-19 由 Proposed 升级，**待实现**；**门 2 已裁决**：载体 = 通用 JSON 列、SDK = 确认引入） | 0076 |
+| [0075](0075-unified-channel-contract.md#adr-0075) | 聚合支付统一渠道契约：四组结构化字段（`Goods` / `CallbackUrls` / `Payer` / `PaymentScene`）+ `channelExtra` 扩展袋 + 类型化 `PayCredential`（6 种 Kind：`REDIRECT_URL`/`FORM_HTML`/`QR_CODE`/`H5_URL`/`JSAPI_PARAMS`/`CLIENT_SECRET`）+ `ChannelResult.credential` 与 `accepted(ref, reason, credential)`；金额保持扁平（`amountMinor` + `currencyCode`）；**保留兼容构造器 + `default` 方法**（既有 4 处构造点 / 6 处测试桩**零改动**）；凭证不落库（🟢 Accepted → **Implemented**，2026-09-19 由 Proposed 升级，2026-09-20 随 spec 030 合入 master） | 0075 |
+| [0076](0076-traffic-dyeing-and-alipay-sandbox.md#adr-0076) | 全链路染色分流 + 渠道模态落库 + 支付宝沙箱接入：`X-Dye-Tag`（`MOCK`/`SANDBOX`，**缺省即 `MOCK`**，非法值 400 **fail fast**）+ common-core 三段式（`DyeFilter` order=-190 / `DyeContext` / `DyeRequestInterceptor`，**入站读与出站写同批**）+ `payment_attempts.extra_json` 的 `channelMode` 键落库（~~`channel_mode` 专用列~~，**H2 修订**；写入侧强制 + 读取侧 fail-safe）+ 反向三路径（退款/查询/超时扫描）**按落库记录还原模态** + 单 Adapter 双模态（`AlipayGateway` 收口 SDK，`application/**` 禁依赖 SDK **Java 包 `com.alipay.api`**——⚠️ 非 Maven 坐标 `com.alipay.sdk`）+ `POST /internal/channels/alipay/notify`（RSA2 验签，响应体**恰好纯文本 `success`**）（🟢 Accepted → **Implemented**，2026-09-19 由 Proposed 升级、2026-09-20 随 spec 030 合入 master；**门 2 已裁决**：载体 = 通用 JSON 列、SDK = 确认引入） | 0076 |
 
 | [0077](0077-ledger-accounting-foundation-decisions.md) | Ledger / Accounting 地基（ADR-0077~0079）：0077 记账契约「原始分录」→「Accounting Event + Posting Rule」+ 幂等键 Ledger 派生 + 负净额反向分录；0078 科目 Definition/Instance 两级 + 新增 CHANNEL_RECEIVABLE/BANK_CASH/CHANNEL_FEE_EXPENSE + CUSTOMER_CASH 判 LEGACY；0079 余额投影（同事务）+ 期间/关账 + 待记账台账（🟢 Accepted，2026-09-21 负责人批准并实现）；**Partially Supersedes ADR-0008**、修订 ADR-0009/0011/0018/0023 描述 | 0077 |
 
@@ -144,7 +201,7 @@
 - ✅ **文件命名规则（2026-09-19 起生效，已统一应用到全部历史文件）**：**ADR 文件的文件名前缀 = 该文件内第一个 ADR 的编号**——如 `0074-redis-transactional-message.md` 承载 ADR-0074、`0071-user-payment-limit.md` 承载 ADR-0071。此举消除「目录序号 ↔ ADR 编号」的双编号心智负担（历史上 0031↔0070、0032↔0071、0033↔0072、0034↔0073 偏移不固定，必须查表才能对应）。
   > 2026-09-19 已将历史 bundle 文件（0004~0034）**全部按此规则重命名**并全库同步引用（序号冲突仅 ADR-0054 一处，见下「编号冲突备案」）。今后**新增 ADR 一律**以首个 ADR 编号作文件名前缀，不再使用目录序号。
 - **下一可用编号：ADR-0084**（ADR-0071 = 用户支付限额，见 `0071-user-payment-limit.md`；ADR-0072 = payment-service 两层结构，见 `0072-two-layer-channel-architecture.md`；ADR-0073 = 支付渠道路由，见 `0073-channel-routing.md`；ADR-0074 = Redis 事务消息通道，见 `0074-redis-transactional-message.md`；**ADR-0075 = 聚合支付统一渠道契约，见 `0075-unified-channel-contract.md`（2026-09-19 登记）**；**ADR-0076 = 全链路染色分流 + 渠道模态落库 + 支付宝沙箱接入，见 `0076-traffic-dyeing-and-alipay-sandbox.md`（2026-09-19 登记）**；**ADR-0077~0079 = Ledger / Accounting 地基（spec 031），见 `0077-ledger-accounting-foundation-decisions.md`（2026-09-21 负责人裁决 D-1~D-7 批准并已 🟢 Accepted，随 spec 031 实现落地）**；**ADR-0080 = 对账真实化（spec 032）、ADR-0081 = 测试载体升级（spec 033）、ADR-0082 = 失败恢复归属与补偿边界（spec 034）、ADR-0083 = 观测基线（spec 035）均已 🟢 Accepted（2026-09-21/22 负责人裁决，H-032-1~6 / H-033-1~5 / H-034-1~5 / H-035-1~4 全部按 spec 推荐批准，随对应 spec 实现落地）**——stage-05 设计轮七条 ADR 全部裁决收口。⚠️ 0071 若 spec 027 被否决、0072/0073 若 spec 028 被否决或改号、0074 若 spec 029 被否决、**0075/0076 若 spec 030 被否决**、**0077~0079 若 spec 031 被否决或改号**、**0080/0082/0083 若对应 spec 032/034/035 被否决或改号**，此处水位随之回退）。
-- ⚠️ **编号冲突备案（2026-09-06）**：`0054-core-payment-correctness.md` 与 `0054-order-payment-orchestration.md` **同时使用了 ADR-0054**（前者为确认性纪录「核心支付正确性约束」，后者为 016 编排职责归位）。速查表两行并存，引用时以「文件名 + 标题」消歧；后续如重排编号需全库同步引用（spec 016 / AGENTS.md / systems 文档多处引用 `0054-order-payment-orchestration.md` 的 ADR-0054，改动成本高，暂保持现状）。
+- ⚠️ **编号冲突备案（2026-09-06）**：`0054-core-payment-correctness.md` 与 `0054-order-payment-orchestration.md` **同时使用了 ADR-0054**（前者为确认性纪录「核心支付正确性约束」，后者为 016 编排职责归位）。速查表两行并存，引用时以「文件名 + 标题」消歧；后续如重排编号需全库同步引用（spec 016 / AGENTS.md / systems 文档多处引用 `0054-order-payment-orchestration.md` 的 ADR-0054，改动成本高，暂保持现状）。**2026-09-22 治理裁定：保留现状、不重排；引用 MUST 用「文件名 + 标题」消歧；今后禁止产生新的重复 ADR ID（见 [adr-standard §3.1](../standards/adr-standard.md)）。**
 - ✅ **ADR-0038~0046 号段已全部落文（无空号）**，均收录于 `0038-next-stage-decisions.md`：
   - **0038**（演示形态）→ **Superseded by ADR-0048**（议题由 0048 处理，结论一致：做 `mock-channel-web` 收银台组件）；
   - **0039/0040**（012 幂等键签发 / 并发幂等接管）→ 2026-09-02 **补写**（此前代码已引用但无文档）；
@@ -173,6 +230,8 @@ Proposed（提案） → Accepted（已接受/生效） → Superseded（被新 
 - 已接受的 ADR 视为不可变：要改变决策就写一条新 ADR 去 supersede 旧的，而不是直接编辑旧文件。
 
 ## 何时写 ADR
+
+> **写 ADR 前 MUST 先读** [docs/standards/adr-standard.md](../standards/adr-standard.md)（7 段骨架 / 编号规则 / 状态机 / Supersede 双向登记）与空模板 [docs/templates/adr.md](../templates/adr.md)；交付前跑 `/doc-review <file>`。
 
 遇到以下情况之一，写一条 ADR：
 

@@ -1,13 +1,13 @@
 # Tasks: 018-schema-normalization-item-fulfillment
 
 > 承载目标：全项目表结构列序规范化 + payment_attempts 金额留痕 + 按 order_item 粒度履约 + demo 中文注释 + 门户主界面。
-> **当前状态：✅ 全部完成（2026-09-07）**。T001~T016 全勾：单测全绿 + `mvn clean verify -fae` 15 模块 BUILD SUCCESS + live 冒烟通过。
+> **当前状态：✅ Implemented（2026-09-07）**。T001~T016 全勾：单测全绿 + `mvn clean verify -fae` 15 模块 BUILD SUCCESS + live 冒烟通过。
 > 每个任务完成后跑对应模块测试门禁，最后统一 `mvn -o clean verify -fae`。
 
 ## 批次 A — 文档与决策（已完成）
 
 - [x] **T001** 编写 spec 018 四件套：spec.md（US1~US5 / FR-001~008 / NFR-001~004 / SC-001~005 / 决策 D1~D4）
-- [x] **T002** 立项 [ADR-0066](../../adr/0066-schema-normalization-and-item-granular-fulfillment.md)（列序规范化 + 按 order_item 粒度履约 + order_item_no 引入）+ `docs/adr/README.md` 注册
+- [x] **T002** 立项 [ADR-0066](../../../adr/0066-schema-normalization-and-item-granular-fulfillment.md)（列序规范化 + 按 order_item 粒度履约 + order_item_no 引入）+ `docs/adr/README.md` 注册
 
 ## 批次 B — DDL 规范化（依赖：无）
 

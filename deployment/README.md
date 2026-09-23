@@ -117,13 +117,13 @@ bash deployment/build-images.sh
 
 ### 容器模式
 
-`start-container.sh` 依次做：模式守卫 → 校验 10 个 fat jar 齐全 → `./mvnw clean install -DskipTests`
+`start-container.sh` 依次做：模式守卫 → 校验 10 个 fat jar（9 个业务服务 + 演示组件）齐全 → `./mvnw clean install -DskipTests`
 （`PAYMENT_SKIP_BUILD=1` 可跳过）→ `docker compose --profile full build` → `--profile full up -d`
-→ 等待 10 个服务 `/actuator/health` 全部 200（超时即 exit 1，不做假成功）。
+→ 等待 10 个进程（9 个业务服务 + 演示组件）`/actuator/health` 全部 200（超时即 exit 1，不做假成功）。
 
 应用镜像由 `deployment/docker/Dockerfile` 生成（**一份通用 Dockerfile 服务 9 个领域服务和演示组件**）：
 采用「宿主打 jar，镜像只 COPY」策略（ADR-0070 D3）——fat jar 由父 POM repackage 到
-`deployment/output/jars/`，镜像内**不执行 Maven 构建**（否则 10 个服务会把 3 个 common 模块重复编译 10 次）。
+`deployment/output/jars/`，镜像内**不执行 Maven 构建**（否则 10 个模块会把 3 个 common 模块重复编译 10 次）。
 基础镜像 `eclipse-temurin:21-jre-jammy`（对应 `<java.version>21</java.version>`）。
 
 > 前提：镜像构建需要能访问 Docker Hub 拉取基础镜像。若网络不可达，`docker compose build` 会在
@@ -137,7 +137,7 @@ bash deployment/build-images.sh
 ### 宿主模式
 
 `start-all.sh` 依次做：模式守卫 → `docker compose up -d`（仅中间件）→ `./mvnw -q install -DskipTests`
-（首次构建，后续可跳过）→ 后台启动 10 个服务（+ `mock-channel-web` 演示收银台，共 11 个进程），
+（首次构建，后续可跳过）→ 后台启动 9 个业务服务 + 1 个演示组件（`mock-channel-web` 演示收银台，共 10 个进程），
 每个服务控制台输出重定向到 `deployment/logs/<service>.log`。
 
 > 前提：已安装并**启动 Docker Desktop**（Windows/macOS）或 docker 引擎（Linux），且 `docker` 在 PATH 上。首次 `install` 较慢属正常。
@@ -150,7 +150,7 @@ bash deployment/build-images.sh
 | profile | 起什么 | 对应模式 |
 |---|---|---|
 | `infra` | 7 个中间件（mysql / redis / nacos / prometheus / grafana / loki / promtail） | 宿主模式 |
-| `full` | 7 个中间件 + 10 个应用 | 容器模式 |
+| `full` | 7 个中间件 + 10 个应用进程（9 个业务服务 + 演示组件） | 容器模式 |
 
 ```sh
 docker compose -f deployment/docker-compose.yml --profile infra up -d   # 只起中间件

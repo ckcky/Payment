@@ -2,11 +2,11 @@
 
 **版本**：1.0
 **日期**：2026-09-16
-**状态**：Implemented（[spec.md](spec.md) / [plan.md](plan.md) / [tasks.md](tasks.md) / [acceptance.md](acceptance.md) 已闭环；ADR-0072/0073 已 Accepted，代码已实现）
+> **Status**: Implemented — [spec.md](spec.md) / [plan.md](plan.md) / [tasks.md](tasks.md) / [acceptance.md](acceptance.md) 已闭环；ADR-0072/0073 已 Accepted，代码已实现（批次 A–G 全绿、`mvn -o clean verify -fae` 16 模块 BUILD SUCCESS，已 `--no-ff` 合并 master） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **分支**：`docs/spec-028-channel-routing`（纯文档）→ 实现期另开 `feature/028-channel-routing`
 **决策**：
-- [ADR-0072](../../adr/0072-two-layer-channel-architecture.md)（🟡 Proposed）—— payment-service 两层结构：payment 支付层 / channelAttempt 渠道层
-- [ADR-0073](../../adr/0073-channel-routing.md)（🟡 Proposed）—— 支付渠道路由：注册表 + 规则化确定性选路
+- [ADR-0072](../../../adr/0072-two-layer-channel-architecture.md)（🟡 Proposed）—— payment-service 两层结构：payment 支付层 / channelAttempt 渠道层
+- [ADR-0073](../../../adr/0073-channel-routing.md)（🟡 Proposed）—— 支付渠道路由：注册表 + 规则化确定性选路
 
 > 本 Spec 承载**两项互相依赖**的结构变更。ADR-0072 定结构（渠道层成为真正的层 + 渠道身份），ADR-0073 定选路规则；
 > 两者必须有同一份 spec 落地——先拆三渠道再回头收口，等于把同一批文件动两遍，中间态比现状更别扭。

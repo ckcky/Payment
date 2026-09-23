@@ -1,0 +1,58 @@
+@startuml
+' PaymentArch · C4 L1 System Context（结构视图）
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -charset UTF-8 docs/architecture/diagrams/01-system-context.puml
+' 布局：Graphviz dot（本机已装）；无 Graphviz 时 PlantUML 自动回退 smetana，无需 pragma
+
+title PaymentArch · L1 System Context —— 系统边界与外部交互
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowColor #6B6B6B
+skinparam ArrowThickness 1
+skinparam ArrowFontSize 11
+skinparam Padding 8
+skinparam Nodesep 34
+skinparam Ranksep 46
+skinparam Linetype ortho
+skinparam roundcorner 10
+
+skinparam rectangle {
+  BorderThickness 1
+  FontSize 12
+}
+skinparam rectangle<<person>> {
+  BackgroundColor #EDEDED
+  BorderColor #9E9E9E
+}
+skinparam rectangle<<platform>> {
+  BackgroundColor #DCE6F2
+  BorderColor #5B7DA8
+  FontSize 14
+}
+skinparam rectangle<<external>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+}
+
+rectangle "买家 / 用户\n[Person · 外部角色]" as U <<person>>
+rectangle "商户 / 运营人员\n[Person · 外部角色]" as OPS <<person>>
+U -[hidden]right- OPS
+
+rectangle "PaymentArch 电商与支付平台\n[Software System]\n\n9 个核心业务服务 + 1 个 Demo 进程\n独立进程 · 独立端口 8081–8091 · 独立 Schema" as SYS <<platform>>
+
+rectangle "支付宝开放平台（沙箱）\n[External System]\nRSA2 异步通知 · 主动支付指令" as ALI <<external>>
+rectangle "渠道对账账单\n[External System]\nCSV 由渠道侧提供" as ST <<external>>
+ALI -[hidden]right- ST
+
+U --> SYS : 下单 / 支付 / 查订单
+OPS --> SYS : 管理商品 / 订单 / 对账
+SYS --> ALI : 发起支付指令\n接收异步通知（RSA2 验签）
+SYS --> ST : 导入渠道账单
+
+legend bottom
+  **读法**：灰 = 外部角色 / 外部系统；蓝 = 本系统。箭头 = 跨越系统边界的交互，标签写明动作与协议。
+  **系统边界**：PaymentArch 自有 9 个业务服务 + 1 个 Demo 进程，各自独立 Schema，服务间不共享表。
+  **渠道关系**：当前仅支付宝沙箱；渠道访问统一经 payment-service 的 channel 层适配器（ADR-0072）。
+endlegend
+
+@enduml

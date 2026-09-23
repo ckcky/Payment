@@ -4,7 +4,8 @@
 
 **Created**: 2026-09-08
 
-**Status**: ✅ Accepted（2026-09-08 负责人拍板：D1–D6 全部采纳建议项；**2026-09-08 本分支实施**）
+> **Status**: Implemented — 2026-09-08 负责人拍板 D1–D6 全部采纳建议项；2026-09-08 本分支实施 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
+> **delivery_mode**: design-only
 
 **Supersedes**: spec `020-demo-ui-design-system` 的 **D1 视觉基调**、**FR-002 色板**、**FR-006 渐变横幅**、**FR-008 靛紫 accent**（Stripe 靛紫 `#533afd` 基底）。020 的其余部分（DESIGN.md 九段结构、状态语义映射表 FR-004、tnum 金额排版 FR-005、内联 SVG 图标 FR-007、零外部依赖 NFR-001）**继续有效并为本 Spec 继承**。
 

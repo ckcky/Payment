@@ -1,8 +1,10 @@
 # Spec: 010-distributed-evolution（分布式演进门禁）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为 `Implemented` Feature 的历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **版本**：0.1
 **日期**：2026-08-30
-**状态**：Proposed（代码按最简实现已落地，ADR-0029~0033 待负责人确认）
+> **Status**: Implemented — 代码已按最简实现落地（`mvn -o verify -fae` 全量 14 模块 BUILD SUCCESS）；ADR-0029/0030/0032/0033 经负责人 2026-08-30 裁决为 Accepted、ADR-0031（不使用 MQ）为 Not Implemented <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 ## 1. 背景与目标
 

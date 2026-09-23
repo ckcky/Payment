@@ -1,0 +1,114 @@
+@startuml
+' PaymentArch · C4 L2 Container（结构视图 · 不表达调用关系）
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -charset UTF-8 docs/architecture/diagrams/02-container-overview.puml
+' 布局：Graphviz dot（本机已装）
+
+title PaymentArch · L2 Container —— 运行单元与归属域（结构视图 · 不表达调用关系）
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam Padding 10
+skinparam Nodesep 18
+skinparam Ranksep 30
+skinparam roundcorner 10
+skinparam Linetype ortho
+skinparam rectangle {
+  BorderThickness 1
+  FontSize 11
+}
+skinparam rectangle<<person>> {
+  BackgroundColor #EDEDED
+  BorderColor #9E9E9E
+  FontSize 12
+}
+skinparam rectangle<<container>> {
+  BackgroundColor #DCE6F2
+  BorderColor #5B7DA8
+}
+skinparam rectangle<<demo>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+}
+skinparam rectangle<<external>> {
+  BackgroundColor #E8E8E8
+  BorderColor #A0A0A0
+}
+skinparam rectangle<<infra>> {
+  BackgroundColor #D7E9F5
+  BorderColor #5B7DA8
+}
+skinparam database {
+  BackgroundColor #D7E9F5
+  BorderColor #5B7DA8
+  FontSize 11
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #B4B2A9
+  BorderThickness 1
+  FontSize 12
+}
+
+rectangle "买家 / 用户" as U <<person>>
+rectangle "商户 / 运营人员" as OPS <<person>>
+U -[hidden]right- OPS
+
+package "交易域 · 承接下单意图，管理商品与订单" as P1 {
+  rectangle "merchant-service\n:8081\n商户与结算账户" as M <<container>>
+  rectangle "catalog-service\n:8082\n商品 / SKU / 库存" as C <<container>>
+  rectangle "order-service\n:8083\n订单 / 交易 / 退款决策" as O <<container>>
+  M -[hidden]right- C
+  C -[hidden]right- O
+}
+
+package "支付域 · 资金动作与渠道交互（含退款）" as P2 {
+  rectangle "payment-service\n:8084\npayment 支付层 + channel 渠道层 + 退款域" as PAY <<container>>
+}
+
+package "履约与权益域 · 交付与消费权利" as P3 {
+  rectangle "fulfillment-service\n:8086\n履约交付" as F <<container>>
+  rectangle "entitlement-service\n:8087\n权益发放与核销" as E <<container>>
+  F -[hidden]right- E
+}
+
+package "资金域 · 账务事实、核对与结算" as P4 {
+  rectangle "reconciliation-service\n:8088\n对账与差异处置" as R <<container>>
+  rectangle "settlement-service\n:8089\n结算批次" as S <<container>>
+  rectangle "ledger-service\n:8090\n复式记账" as L <<container>>
+  R -[hidden]right- S
+  S -[hidden]right- L
+}
+
+package "Demo 进程与外部系统 · 非业务服务" as P5 {
+  rectangle "mock-channel-web\n:8091\n演示收银台 / 演示控制台" as D <<demo>>
+  rectangle "支付宝开放平台\n（沙箱）\n支付指令 · 异步通知" as ALI <<external>>
+  rectangle "渠道对账账单\n（CSV）\n由渠道侧提供" as ST <<external>>
+  D -[hidden]right- ALI
+  ALI -[hidden]right- ST
+}
+
+package "基础设施 · compose --profile infra（两种启动模式共用）" as P6 {
+  database "MySQL 8.0\n:3306\n每服务独占 Schema" as DB
+  database "Redis 7\n:6379\n非数据源\n事务消息通道" as RD
+  rectangle "Nacos 3.0.3\n:8848\n注册与发现" as NA <<infra>>
+  rectangle "Prometheus :9090\nGrafana :3000\nLoki :3100" as OB <<infra>>
+  DB -[hidden]right- RD
+  RD -[hidden]right- NA
+  NA -[hidden]right- OB
+}
+
+U -[hidden]down- P1
+P1 -[hidden]down- P2
+P2 -[hidden]down- P3
+P3 -[hidden]down- P4
+P4 -[hidden]down- P5
+P5 -[hidden]down- P6
+
+legend bottom
+  **结构视图**：本图只回答「有哪些运行单元、各自属于哪个域」，因此**不画可见箭头**。
+  调用关系见 technical-solution.md §4.3.6 跨服务调用表与 04–07 动态图。
+  **计数口径**：业务服务 9 个 + Demo 进程 1 个 = 运行进程 10 个（禁止写成「10 个服务」）。
+  **payment-service 归属**：payment 支付层（资金动作状态）+ channelAttempt 渠道层（单次渠道交互）+ 退款域，同进程同事务（ADR-0072：分层 ≠ 拆事务）。
+endlegend
+
+@enduml

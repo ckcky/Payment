@@ -1,13 +1,13 @@
 # Tasks: 021-unified-access-logging
 
 > 承载目标：结束时单条 ACCESS 访问日志 + 日志格式固定含服务名 + 异步 MDC 传播修复 + 日志查看脚本。
-> **当前状态：T301~T313 全部完成（2026-09-07），spec 021 闭环**。全量回归绿；demo 冒烟通过。
+> **当前状态：Implemented（T301~T313 全部完成，2026-09-07），spec 021 闭环**。全量回归绿；demo 冒烟通过。
 > 每个任务完成后跑对应模块测试门禁，最后统一 `mvn -o clean verify -fae`。
 
 ## 批次 A — 文档与决策（已完成）
 
 - [x] **T301** 编写 spec 021 四件套：spec.md（业内对比 / 目标链路 / US1~US4 / FR-001~006 / NFR / SC / 决策 D1~D7）
-- [x] **T302** 立项 [ADR-0068](../../adr/0068-unified-access-logging.md)（统一访问日志与固定格式）+ `docs/adr/README.md` 注册
+- [x] **T302** 立项 [ADR-0068](../../../adr/0068-unified-access-logging.md)（统一访问日志与固定格式）+ `docs/adr/README.md` 注册
 
 ## 批次 B — common-core 访问日志（依赖：无）
 

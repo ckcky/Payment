@@ -1,0 +1,6 @@
+{
+  "specs_dir": "docs/specs",
+  "stage_layout": true,
+  "default_stage": "stage-05-channel-and-finance-deepening",
+  "_comment": "PaymentArch 仓库级 Spec Kit 覆盖配置。Spec 落点 = docs/specs/<stage>/<feature>/，见 docs/standards/spec-standard.md §3。stage_layout=true 时 create-new-feature.sh 必须解析出阶段（--stage / SPECS_STAGE / 本文件的 default_stage）。新增阶段属 Constitution §Governance 人类决策边界，MUST 先经人类确认。"
+}

@@ -2,7 +2,7 @@
 
 **Feature**：032　**标题**：Reconciliation & Real Statement
 **版本**：v1.0（Draft，设计轮产物）　**日期**：2026-09-21
-**状态**：🟡 **设计完成，待 Architecture Review 与负责人裁决**（本轮**只出设计，不改代码、不建 migration、不加测试**）
+> **Status**: Implemented — 原「设计完成，待 Architecture Review 与负责人裁决（本轮只出设计，不改代码、不建 migration、不加测试）」为设计轮表述，已被后续实现取代：ADR-0080 已 Accepted（2026-09-21 负责人按 spec 推荐方案批准 H-032-1~6），2026-09-21 已实现并合入 master，acceptance.md 为回写补记 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **前置**：030 已合入 master；031 已交付事件契约 / 两级科目 / 余额投影 / 期间（[spec 031](../031-ledger-accounting-foundation/spec.md)、[ADR-0077~0079](../../../adr/0077-ledger-accounting-foundation-decisions.md)）
 **输入权威**：[stage-design §5](../stage-design.md)、[design-review §8 §9 §11 §12 附A](../design-review.md)
 

@@ -2,7 +2,7 @@
 
 **Branch**: `007-settlement` | **Date**: 2026-08-29 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `/specs/007-settlement/spec.md`
+**Input**: Feature specification from `docs/specs/stage-01-core-mvp/007-settlement/007-settlement/spec.md`
 
 ## Summary
 

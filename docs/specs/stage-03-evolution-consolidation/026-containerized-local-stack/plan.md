@@ -1,8 +1,10 @@
 # Plan: 026-containerized-local-stack
 
+> **口径注明（2026-09-22 文档治理）**：本文件撰写时「10 个服务」指 **10 个应用进程** = **9 个核心业务服务 + 1 个演示组件 `mock-channel-web`**。当前统一口径：描述**业务服务**用 **9**，描述**运行进程**用 **10**（见 [docs/standards/documentation-governance.md](../../../standards/documentation-governance.md)）。本文为已实现 Feature 的历史记录，正文措辞保留原样。
+
 - 版本: v1
 - 日期: 2026-09-15
-- 状态: Draft
+- 状态: Implemented
 - 上游: [spec 026](./spec.md) / ADR-0070
 - 已决策：双轨并存 + 模式开关；宿主打 jar + 镜像只 COPY
 
@@ -154,7 +156,7 @@ ENTRYPOINT ["java","-jar","/app/app.jar"]
 | `deployment/README.md` | 脚本清单、模式守卫、profiles 用法、配额建议（16GiB） |
 | `docs/operations/runbook.md` | 启动/停止/排障按模式分节 |
 | `docs/architecture/technical-solution.md` | 部署形态描述更新 |
-| `docs/architecture/diagrams/02-deployment-topology.puml` | 拓扑图：补容器模式形态；重生成 SVG |
+| `docs/architecture/diagrams/08-deployment.puml` | 拓扑图：补容器模式形态；重生成 SVG（当时文件名为 `02-deployment-topology.puml`，2026-09-22 文档治理按 C4 层级重命名为 `08-deployment.puml`） |
 | `deployment/docker-compose.yml` 头注释 | 移除「Dockerfile 就绪后补齐」等已过期表述 |
 | `CHANGELOG.md` | 记录本次容器化 |
 

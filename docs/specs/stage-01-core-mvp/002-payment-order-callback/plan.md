@@ -2,7 +2,7 @@
 
 **Branch**: `002-payment-order-callback` | **Date**: 2026-08-28 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `docs/specs/stage-01-core-mvp/002-payment-order-callback/spec.md`（当前 Feature，状态 Draft；实现已在 `001-core-business-model` 主线内落地，本 Plan 用于补齐规划产物、对齐实现与验收）。
+**Input**: Feature specification from `docs/specs/stage-01-core-mvp/002-payment-order-callback/spec.md`（当前 Feature，状态 Implemented；实现已在 `001-core-business-model` 主线内落地，本 Plan 用于补齐规划产物、对齐实现与验收）。
 
 ## Summary
 

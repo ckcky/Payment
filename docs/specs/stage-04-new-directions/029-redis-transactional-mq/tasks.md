@@ -1,6 +1,6 @@
 # Tasks: 029 Redis 事务消息通道 + 跨服务异步解耦
 
-> **状态**：**已实现**（批次 A~G，2026-09-20 落地于 `feature/029-redis-transactional-mq`）
+> **状态**：**Implemented**（批次 A~G，2026-09-20 落地于 `feature/029-redis-transactional-mq`）
 > 批次顺序 **A → B → C → D → E → F → G** 不可乱序（后批次依赖前批次类型与配置）
 > 对应 [plan.md](plan.md) / [spec.md](spec.md) / [acceptance.md](acceptance.md)
 

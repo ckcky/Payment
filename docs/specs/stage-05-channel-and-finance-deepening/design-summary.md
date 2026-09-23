@@ -1,7 +1,7 @@
 # Stage-05 设计总结（031~035）：全局架构、边界与实施顺序
 
 **日期**：2026-09-21　**版本**：v1.0
-**状态**：🟡 **设计轮收口，待 Architecture Review**（本文件是 031~035 的**跨 Feature 一致性视图**，不替代任何 spec）
+**状态**：🟡 **Proposed**（设计轮收口，待 Architecture Review；本文件是 031~035 的**跨 Feature 一致性视图**，不替代任何 spec，**不是** L0 当前系统事实源）
 **范围**：`031 Ledger & Accounting Foundation` / `032 Reconciliation & Real Statement` /
 `033 Test Infrastructure & Business Verification` / `034 Reliability & Failure Recovery` / `035 Observability & SLO`
 **输入**：[stage-design.md](stage-design.md)（阶段总目标）、[design-review.md](design-review.md) v1.1（C-01~C-24 冲突清单与 B/H/M 分级）、

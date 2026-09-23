@@ -1,7 +1,7 @@
 # Plan: 034-reliability-hardening（可靠性加固与失败恢复闭环）
 
 **版本**：v1.0（实现轮）　**日期**：2026-09-21
-**前置**：[spec.md](spec.md)（v1.0，已批准）；[ADR-0082](../../../../../docs/adr/0082-failure-recovery-ownership-and-compensation.md)
+**前置**：[spec.md](spec.md)（v1.0，已批准）；[ADR-0082](../../../../docs/adr/0082-failure-recovery-ownership-and-compensation.md)
 **裁决**：2026-09-21 负责人按 spec 推荐方案批准全部四组决策
 （C-19 同事务化·方案 A / 出站失败台账 `pending_postings` 归调用方 / Resilience4j 移除 / 退款双扫描器 + late-success 复用超付分支）。
 

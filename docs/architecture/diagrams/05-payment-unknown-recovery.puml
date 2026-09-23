@@ -1,0 +1,76 @@
+@startuml
+' PaymentArch · 05 Payment UNKNOWN Recovery（C4 Dynamic）
+' SOURCE OF TRUTH = 本 .puml；同目录 05-payment-unknown-recovery.svg 为渲染产物，禁止手工编辑。
+' 渲染：java -jar deployment/output/tools/plantuml.jar -tsvg -o <目标目录> docs/architecture/diagrams/05-payment-unknown-recovery.puml
+' 规范：docs/standards/diagram-standard.md
+' 依据：payment-service.md §2.2 / §4.2 / §5.4；Constitution §V.6 / §V.7；ADR-0015 / 0072 / 0073
+title PaymentArch · Dynamic —— 支付进入 UNKNOWN 后怎么收敛（不猜成败）
+
+skinparam shadowing false
+skinparam defaultFontName "Microsoft YaHei"
+skinparam ArrowThickness 1
+skinparam sequence {
+  ArrowColor #6B6B6B
+  LifeLineBorderColor #B4B2A9
+  ParticipantBorderColor #5B7DA8
+  ParticipantBackgroundColor #DCE6F2
+  ParticipantFontStyle bold
+}
+skinparam NoteBackgroundColor #FFFFFF
+skinparam NoteBorderColor #B4B2A9
+
+participant "PaymentRetryService\n[Component]" as RT
+participant "渠道实现族\n[Component]" as I
+participant "支付宝开放平台 / Mock 渠道\n[External System]" as AL
+participant "PaymentPersistence\n[Component]" as PP
+participant "TimeoutScanner\n[Component]" as TS
+participant "ChannelQueryService\n[Component]" as Q
+participant "PaymentCallbackService /\nPaymentResultProcessor\n[Component]" as CB
+participant "order-service +\nledger-service\n[Container]" as DOWN
+
+== 阶段 1 · 渠道结果不确定 ⇒ 进入 UNKNOWN ==
+RT -> AL : 支付指令（第 N 次，同 attempt 重放）\nHTTPS
+AL --> RT : 超时 / 断连 / 不完整响应
+note over RT
+  **不猜成败**：一律判为 UNKNOWN，
+  退避 1s / 2s / 4s 重试；耗尽后标 RETRY_EXHAUSTED
+  仍保持 UNKNOWN（同 attempt 重放，不新建 attempt、不换渠道）
+end note
+RT -> PP : applyAndPersist(UNKNOWN)\nJava（**事务 B**）
+PP --> RT : payment = UNKNOWN / attempt = UNKNOWN
+
+== 阶段 2 · 反向路径收敛（渠道来源 = payment_attempts.channel_code）==
+TS -> PP : 扫描 PROCESSING / UNKNOWN 支付单\nJava（定时器）
+PP --> TS : 候选支付单
+TS -> Q : 发起主动查询\nJava（端口）
+Q -> Q : 按 payment_attempts.channel_code 解析渠道\n经 ChannelRegistry（**禁止重新路由**，ADR-0073）
+Q -> I : query(paymentNo / channelReference)\nJava（端口）
+I -> AL : 查询交易状态\nHTTPS
+AL --> I : SUCCESS / FAILURE / 仍不确定
+
+alt 渠道返回终态 SUCCESS / FAILURE
+  I --> Q : ChannelResult（终态）
+  Q -> PP : applyAndPersist(终态)\nJava（**事务 B**）
+  PP -> CB : changed=true ⇒ 扇出
+  CB -> DOWN : 记账 + notifyPaymentSucceeded\nFeign RPC
+else 渠道仍不确定
+  I --> Q : ChannelResult（UNKNOWN）
+  Q -> Q : 保持 UNKNOWN，计 payment.unknown_open\n（**不落账、不通知**）
+end
+
+== 阶段 3 · 异步回调抢答（与阶段 2 幂等互斥）==
+AL -> CB : 异步通知（RSA2 验签）\nHTTPS · 纯文本 success
+CB -> PP : applyAndPersist(回调结果)\nJava（**事务 B**，终态吸收）
+note over CB
+  终态已定 ⇒ 迟到/冲突结果被**吸收**（changed=false）；
+  只有真正迁移才记账与通知
+end note
+
+legend right
+  **Legend**
+  Orange = Unknown 路径 ｜ Green = Success ｜ Red = Failure ｜ Blue = Primary Flow
+  ★ 三路收敛（主动查询 / 回调 / 超时扫描）**共用**同一结果应用与幂等吸收，终态不可被覆盖
+  ★ 反向路径**绝不**调用 ChannelRouter：渠道恒由 payment_attempts.channel_code 列确定
+endlegend
+
+@enduml

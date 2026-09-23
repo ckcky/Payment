@@ -3,7 +3,7 @@
 **配套**：[spec.md](spec.md)（v1.1） · [tasks.md](tasks.md) · [acceptance.md](acceptance.md)
 **决策**：[ADR-0075](../../../adr/0075-unified-channel-contract.md)（🟢 **Accepted**） · [ADR-0076](../../../adr/0076-traffic-dyeing-and-alipay-sandbox.md)（🟢 **Accepted**，含 2026-09-19 **落库形态修订**）
 **编号**：本 Feature 编号 **`030`**（原 `031`）。原 stage-04 的 `030-channel-contract-dye-alipay-sandbox` 四件套**已整目录删除**（2026-09-19，设计已全量吸收，见 [spec §0.3](spec.md#03-编号裁决与旧-030-的处置) 与本文 §5）
-**本轮状态**：**只写 Plan，不写代码**。本文件是可执行的实现计划，经负责人确认后按批次开工。
+**状态**：**Implemented**（原「只写 Plan，不写代码」为设计轮表述，已被后续实现取代——[tasks.md](tasks.md) 载 142/142 完成并合入 master，[acceptance.md](acceptance.md) 载「已实现并已合入 master」）。本文件保留为可追溯的实现计划。
 
 ---
 

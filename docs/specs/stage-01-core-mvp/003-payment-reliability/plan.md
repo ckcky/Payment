@@ -2,7 +2,7 @@
 
 **Branch**: `003-payment-reliability` | **Date**: 2026-08-28 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `/specs/003-payment-reliability/spec.md`
+**Input**: Feature specification from `docs/specs/stage-01-core-mvp/003-payment-reliability/003-payment-reliability/spec.md`
 
 ## Summary
 

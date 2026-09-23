@@ -1,10 +1,12 @@
 # Feature Specification: 审计中性项收尾——可观测与一致性加固
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 **Feature Branch**: `feature/023-audit-ops-remediation`（代码）/ `docs/spec-023-audit-ops-remediation`（本 spec）
 
 **Created**: 2026-09-07
 
-**Status**: ✅ **Implemented**（2026-09-08 全部收尾：T5/T14 live 实测通过——Prometheus 无 job="refund"、happy path 全断言过、graceful shutdown 完整；T16/T17/T18 随 d40602d 落地/核实）
+> **Status**: Implemented — 2026-09-08 全部收尾：T5/T14 live 实测通过（Prometheus 无 job="refund"、happy path 全断言过、graceful shutdown 完整）；T16/T17/T18 随 d40602d 落地/核实 <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: 2026-09-07 两份审计报告（`.workbuddy/reports/2026-09-07-comprehensive-audit.md` 与 `docs/archive/audits/2026-09-07-技术审计报告-audit.md`）经负责人逐项裁决后的**中性工程遗留项**。
 

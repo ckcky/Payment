@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-28
 
-**Status**: Draft（设计决策见 `docs/adr/0008-ledger-design-decisions.md`，ADR-0008~0011 待负责人决策）
+> **Status**: Implemented — ADR-0008~0011 已于 2026-08-29 经负责人确认 Accepted（见 `docs/adr/0008-ledger-design-decisions.md`），功能与非功能验收全绿（仅「Testcontainers 集成测试」一项保留，不阻塞） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 **Input**: 用户描述：审计发现 Constitution §II.3（一切资金变动 MUST 经 `ledger-service` 复式记账）与 Roadmap（Ledger 延后到 Phase 8）自相矛盾（审计 D1）。用户决策：**先把 ledger 前置实现**，按 Spec Kit 流程「文档先行」。本 Spec 解决该矛盾，把 Ledger 从「延后」改为「当前 Feature」。
 

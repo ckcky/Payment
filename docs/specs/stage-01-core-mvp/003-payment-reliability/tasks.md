@@ -1,6 +1,6 @@
 # Tasks: 支付可靠性（超时、UNKNOWN 收敛、有限重试与人工收敛）
 
-**Input**: Design documents from `/specs/003-payment-reliability/` (spec.md, plan.md, research.md, data-model.md, contracts/manual-resolution.md, quickstart.md)
+**Input**: Design documents from `docs/specs/stage-01-core-mvp/003-payment-reliability/003-payment-reliability/` (spec.md, plan.md, research.md, data-model.md, contracts/manual-resolution.md, quickstart.md)
 
 **Prerequisites**: plan.md ✅、spec.md ✅、research.md ✅、data-model.md ✅、contracts/ ✅
 

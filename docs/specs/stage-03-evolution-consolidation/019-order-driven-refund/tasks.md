@@ -1,13 +1,13 @@
 # Tasks: 019-order-driven-refund
 
 > 承载目标：order 驱动退款 + 两层退款单（TXRF/PMRF 互记）+ 渠道退款异步回调闭环。
-> **当前状态：T101~T114 全部完成（2026-09-07），spec 019 闭环**。全量回归 BUILD SUCCESS；live 冒烟通过。
+> **当前状态：Implemented（T101~T114 全部完成，2026-09-07），spec 019 闭环**。全量回归 BUILD SUCCESS；live 冒烟通过。
 > 每个任务完成后跑对应模块测试门禁，最后统一 `mvn -o clean verify -fae`。
 
 ## 批次 A — 文档与决策（已完成）
 
 - [x] **T101** 编写 spec 019 四件套：spec.md（业内对比 / 目标链路 / US1~US5 / FR-001~010 / NFR / SC / 决策 D1~D8）
-- [x] **T102** 立项 [ADR-0067](../../adr/0067-order-driven-refund-two-layer-refund-order.md)（order 驱动两层退款单 + 异步回调闭环）+ `docs/adr/README.md` 注册
+- [x] **T102** 立项 [ADR-0067](../../../adr/0067-order-driven-refund-two-layer-refund-order.md)（order 驱动两层退款单 + 异步回调闭环）+ `docs/adr/README.md` 注册
 
 ## 批次 B — order 侧（依赖：spec 018 批次 B/C）
 

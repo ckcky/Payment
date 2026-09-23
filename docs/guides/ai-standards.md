@@ -36,7 +36,7 @@ Feature 开发的唯一入口是 Spec Kit；其他命令和技能只能作为 Sp
 /speckit-specify <用业务语言描述目标、用户、场景和约束>
 ```
 
-检查 `docs/specs/<feature>/spec.md`：范围是否小而明确，正常流、失败流、重复请求、超时和未知状态是否有验收标准。需要讨论的业务选择先解决，再进入设计。
+检查 `docs/specs/<stage>/<feature>/spec.md`：范围是否小而明确，正常流、失败流、重复请求、超时和未知状态是否有验收标准。需要讨论的业务选择先解决，再进入设计。
 
 ### 3.2 形成技术设计
 
@@ -70,11 +70,14 @@ Plan 阶段确认服务边界、端口、Schema 数据所有权、同步 RPC、�
 
 | 阶段 | 产出物 | 位置 | 门禁（进入下一阶段前） |
 |---|---|---|---|
-| **Spec** | 需求、边界、场景、验收与非功能要求 | `docs/specs/<feature>/spec.md` | 需求明确；涉及人类决策边界时确认 |
-| **Plan** | 技术上下文、研究、数据模型、契约、快速验证 | `docs/specs/<feature>/plan.md` 及其附件 | 架构与依赖不越界 |
-| **Task** | 按用户故事组织的可执行任务 | `docs/specs/<feature>/tasks.md` | 每项有 ID、路径和验收方式 |
+| **Spec** | 需求、边界、场景、验收与非功能要求 | `docs/specs/<stage>/<feature>/spec.md` | 需求明确；涉及人类决策边界时确认 |
+| **Plan** | 技术上下文、研究、数据模型、契约、快速验证 | `docs/specs/<stage>/<feature>/plan.md` 及其附件 | 架构与依赖不越界 |
+| **Task** | 按用户故事组织的可执行任务 | `docs/specs/<stage>/<feature>/tasks.md` | 每项有 ID、路径和验收方式 |
+| **Acceptance** | 如何判定完成（INV 门禁 + 演示验收 + 已知限制） | `docs/specs/<stage>/<feature>/acceptance.md` | 验收可复现、缺口显式登记 |
 | **Implement** | 代码 + 测试 + 迁移脚本 | 对应服务模块 | 编译通过 + 测试通过 |
 | **Review** | 对照 Spec 的回检结论 + 缺口清单 | 记录在 Plan / ADR | 缺口闭合或显式记录为后续阶段 |
+
+> 上述 `spec.md` / `plan.md` / `tasks.md` / `acceptance.md` 四件即为 **Spec Kit 四件套**。文档类型、骨架与 Review 规则见 `docs/standards/`。
 
 **合并回 master 前 MUST 满足**宪法 Governance §提交与合并节奏的四条前置校验：① 全量 `mvn clean verify` 通过；② Spec 验收清单勾选；③ ADR 状态已决；④ 文档无漂移（判定依据见 [engineering-standards.md](engineering-standards.md) §11 文档漂移检查清单）。
 

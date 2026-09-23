@@ -1,5 +1,7 @@
 # Contract: 退款记账（Post Refund）
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../../architecture/systems/) 与 [technical-solution.md](../../../../architecture/technical-solution.md)。
+
 **方向**：refund-service → ledger-service（内部 RPC，OpenFeign）
 **端点**：`POST /internal/ledger/postings`
 **请求体**：`PostingRequest`（common-dto）

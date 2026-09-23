@@ -8,7 +8,7 @@
 
 **历史修订**：2026-08-31（2026-08-30 负责人裁决的**落地同步**：鉴权 / 验签 = 预留空函数；出站令牌 / 风控 / 脱敏 = 代码已删除；部分退款 = 代码已回退；退款金额校验口径新增 ADR-0047 —— 见 §2.4、§4.3.3）
 
-**关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)、[ADR-0006](../adr/0016-refund-decisions.md)、[ADR-0009](../adr/0024-risk-security-decisions.md)、[ADR-0011](../adr/0034-internal-token-decisions.md)
+**关联决策**：[ADR-0001](../adr/0001-adopt-spring-cloud-microservices.md)、[ADR-0002](../adr/0002-technology-stack.md)、[ADR-0016](../adr/0016-refund-decisions.md)、[ADR-0024](../adr/0024-risk-security-decisions.md)、[ADR-0034](../adr/0034-internal-token-decisions.md)
 
 **权威来源**：本文是 Constitution（最高约束）、ADR（决策日志）、Spec 001（业务模型）在「当前系统」层面的**落地化综合**。本文不得与 [Constitution](../../.specify/memory/constitution.md) 冲突；若需调整领域边界、服务边界、状态机或数据层，属于 Constitution §8 人类决策边界，须另立 ADR / 提案并经人类确认。
 
@@ -27,10 +27,10 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 ### 1.2 当前现状（Phase 0 — Foundation）
 
 - 架构基线已确认：**Spring Cloud 微服务**，按限界上下文划分（ADR-0001），技术栈 Java 21 + Spring Boot 3.x + MyBatis-Plus + Nacos + OpenFeign（ADR-0002）。
-- 已建 **10 个服务模块 + 3 个共享库**（见 §3），`gateway` 不在本 MVP 范围；`ledger-service`（8090）已按 `004-ledger` 实现并接入 payment/refund/settlement 三处复式记账（ADR-0008~0011 已于 2026-08-29 Accepted）；2026-09-21 起（Feature 031，ADR-0077~0079）入站契约升级为 Accounting Event——调用方只报财务事实，科目与分录由账本 Posting Rule 决定（详见 `systems/ledger-service.md`）。
+- 已建 **9 个核心业务服务 + 1 个 Demo 进程（`mock-channel-web`，共 10 个运行进程）+ 3 个共享库**（见 §3），`gateway` 不在本 MVP 范围（`refund-service` 已于 Feature 015 并入 `payment-service`，ADR-0064）；`ledger-service`（8090）已按 `004-ledger` 实现并接入 payment/refund/settlement 三处复式记账（ADR-0008~0011 已于 2026-08-29 Accepted）；2026-09-21 起（Feature 031，ADR-0077~0079）入站契约升级为 Accounting Event——调用方只报财务事实，科目与分录由账本 Posting Rule 决定（详见 `systems/ledger-service.md`）。
 - 根 Maven 工程 `validate` 已通过；各服务有启动类与上下文测试，部分服务已有领域/应用/契约/集成测试。
 - 当前 Feature `001-core-business-model` 已有 Spec/Plan/Tasks；业务主链路（下单→支付→回调/收敛→履约→权益）与资金闭环（对账→结算）**均已落地**，Ledger 复式记账已接入，形成完整业务闭环（roadmap 主链走至 `014-seckill-and-cache`）。
-- **尚未引入**：真实支付渠道（当前 Mock Channel）、独立 MQ 中间件、API 网关、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现；熔断组件 Resilience4j 已在 payment-service 引入并保留）。
+- **尚未引入**：真实支付渠道（当前 Mock Channel）、独立 MQ 中间件、API 网关、K8s/服务网格（Ledger 复式记账已按 `004-ledger` 前置实现；熔断组件 Resilience4j 曾于 payment-service 引入，已随 spec 034-F 移除，见 §2.3 例外观）。
 - **已实现**：跨服务异步事件——以 **Redis 事务消息通道**实现（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074) / spec 029，🟢 Accepted，2026-09-20 落地），不引入 MQ 中间件。
 
 ---
@@ -110,24 +110,40 @@ PaymentArch 是一个 **Production-Oriented 的 Commerce & Payment Platform**（
 
 #### 3.1.1 领域模型
 
-模型按**聚合根（Aggregate Root）**组织：每个聚合根是不变式与事务的边界，聚合内一致性由本地事务保证；**跨聚合只经业务单号引用或公开 RPC**，禁止共享表 / 共享实体（[ADR-0023](../adr/0063-cross-service-reference-by-business-no.md)）。
+模型按**聚合根（Aggregate Root）**组织：每个聚合根是不变式与事务的边界，聚合内一致性由本地事务保证；**跨聚合只经业务单号引用或公开 RPC**，禁止共享表 / 共享实体（[ADR-0063](../adr/0063-cross-service-reference-by-business-no.md)）。
+
+> **读图须知**：领域模型是**结构关系**，不是调用流 —— 因此图中连线**一律不画箭头**，只用标签说明关系性质（组成 / 业务单号引用 / 记账 / 只读事实…）。
+> 谁调用谁、按什么顺序调用属于**动态视图**，见 §4.3 时序图与 [diagrams/04-payment-flow](diagrams/04-payment-flow.puml) ~ [07-ledger-reconciliation-flow](diagrams/07-ledger-reconciliation-flow.puml)。
 
 ```mermaid
-graph LR
-    Merchant["Merchant"] -. 结算资格 .-> Settlement["Settlement"]
-    Product["Product / SKU"] --- Order["Order"]
-    Order --- Transaction["Transaction"]
-    Transaction --- Payment["Payment"]
-    Payment --- PaymentAttempt["PaymentAttempt"]
-    Payment --> Channel["Payment Channel"]
-    Payment --> Refund["Refund"]
-    Order -. 支付成功驱动 .-> Fulfillment["Fulfillment"]
-    Fulfillment --> Entitlement["Entitlement"]
-    Payment -. 记账 .-> Ledger["Ledger"]
-    Refund -. 冲正 .-> Ledger
-    Reconciliation["Reconciliation"] -. 只读事实 .-> Payment
-    Reconciliation -. 只读事实 .-> Refund
-    Reconciliation --> Settlement
+graph TB
+    Merchant["Merchant<br/>merchant-service"]
+    Product["Product / SKU<br/>catalog-service"]
+    Order["Order<br/>order-service"]
+    Transaction["Transaction<br/>order-service"]
+    Payment["Payment<br/>payment-service"]
+    PaymentAttempt["PaymentAttempt<br/>payment-service"]
+    Channel["Payment Channel<br/>payment-service"]
+    Refund["Refund<br/>payment-service"]
+    Fulfillment["Fulfillment<br/>fulfillment-service"]
+    Entitlement["Entitlement<br/>entitlement-service"]
+    Ledger["Ledger<br/>ledger-service"]
+    Reconciliation["Reconciliation<br/>reconciliation-service"]
+    Settlement["Settlement<br/>settlement-service"]
+    Product ---|业务单号引用| Order
+    Order ---|同服务 1:1| Transaction
+    Transaction ---|业务单号引用 1:N| Payment
+    Payment ---|同服务 1+N| PaymentAttempt
+    Payment ---|同服务 端口依赖| Channel
+    Payment ---|同服务 退款域| Refund
+    Order ---|支付成功驱动| Fulfillment
+    Fulfillment ---|业务单号引用| Entitlement
+    Payment ---|记账| Ledger
+    Refund ---|冲正| Ledger
+    Merchant ---|结算资格| Settlement
+    Reconciliation ---|只读事实| Payment
+    Reconciliation ---|只读事实| Refund
+    Reconciliation ---|差异处置| Settlement
 ```
 
 | 聚合根 | 关键实体 / 值对象 | 归属服务 |
@@ -159,9 +175,19 @@ graph LR
 
 ### 3.2 分层架构
 
-![PaymentArch 系统架构分层](diagrams/01-system-architecture.svg)
+本节给出**两级 C4 视图**：L1 系统上下文说明系统的边界与外部参与者，L2 容器视图说明本平台的运行单元与依赖。单服务内部结构见 [systems/](systems/) 下对应文档（L3 Component 仅在确有深度的容器内展开，当前只有 payment-service 有 `03-payment-components`）。
 
-> 该图的 PlantUML 源码：[diagrams/01-system-architecture.puml](diagrams/01-system-architecture.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
+**L1 — 系统上下文（System Context）**
+
+![PaymentArch 系统上下文（C4 L1）](diagrams/01-system-context.svg)
+
+> 该图的 PlantUML 源码：[diagrams/01-system-context.puml](diagrams/01-system-context.puml)（**唯一事实源**，改动后需重新渲染为 SVG；图表规范见 [diagram-standard](../standards/diagram-standard.md)）
+
+**L2 — 容器视图（Container）**
+
+![PaymentArch 容器视图（C4 L2）](diagrams/02-container-overview.svg)
+
+> 该图的 PlantUML 源码：[diagrams/02-container-overview.puml](diagrams/02-container-overview.puml)（**唯一事实源**）。口径：**9 个核心业务服务 + 1 个 Demo / 演示进程 = 10 个运行进程**；`mock-channel-web` 是演示组件，**不是业务服务**。
 
 - **接入层**：`gateway` 作为统一入口/鉴权/限流，本 MVP **延后**（虚线）；当前调用方直连各服务暴露的 REST。
 - **编排层**：order / payment / refund 承接业务意图并编排跨域流程（§3.3），可调用下游；独立进程、独立端口、独立部署单元。
@@ -320,7 +346,7 @@ Order (1) ───── (1) Transaction (1) ───── (N) Payment ──
 > （Feature 016 / FR-017），同一 `payment_no` 可有 **1 条 PAYMENT 尝试 + N 条 REFUND 尝试**，故整体记为 **`1+N`**
 > （图式中 `Payment ── (1+N) PaymentAttempt` 即此意）。渠道重试在同一 attempt 行内 `retry_count` 递增、**不新建行**（ADR-0054）。
 >
-> **口径一致性**：本表述与 [systems/payment-service.md §2.3](systems/payment-service.md#23-表结构与索引策略) 的
+> **口径一致性**：本表述与 [systems/payment-service.md §4.2](systems/payment-service.md#42-表结构与索引策略) 的
 > `payment_attempts` 说明同源——**`attempt_type` 是两类尝试的唯一区分维度**；任一侧修改基数口径时另一侧 **MUST** 同步。
 >
 > ⚠️ **ADR-0054 原文的「`payment_no : payment_attempts = 1:1`」已过时**：该约定写于退款尝试复用本表（Feature 016）之前，只覆盖支付尝试。引用时须按本行的修订口径理解。
@@ -457,9 +483,9 @@ flowchart LR
 
 资金链路只有一条准入门槛：**未确认的事实不得进入账务与结算**。
 
-![PaymentArch 资金闭环与复式记账映射](diagrams/03-funds-closed-loop.svg)
+![PaymentArch 记账-对账-结算链路（C4 Dynamic / Domain）](diagrams/07-ledger-reconciliation-flow.svg)
 
-> 该图的 PlantUML 源码：[diagrams/03-funds-closed-loop.puml](diagrams/03-funds-closed-loop.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
+> 该图的 PlantUML 源码：[diagrams/07-ledger-reconciliation-flow.puml](diagrams/07-ledger-reconciliation-flow.puml)（**唯一事实源**，改动后需重新渲染为 SVG）
 
 **复式记账映射**（`ledger-service`，四个预置科目，MVP 仅 CNY）：
 
@@ -475,7 +501,7 @@ flowchart LR
 - **结算**：settlement-service 只消费「已确认且差异可解释」的财务事实（校验商户结算资格 → 净额计算 → 生成结算批次）。同一商户周期不重复生成批次；未知执行结果不等于成功。
 - **分录不可变**：已提交分录禁止 UPDATE/DELETE，更正只能新增反向分录（冲正）。
 
-> **注**：`ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），设计决策见 [ADR-0004](../adr/0008-ledger-design-decisions.md)；§2.3 非目标中「不实现 Ledger 复式记账」的表述应以 Roadmap Current Status 为准。
+> **注**：`ledger-service` 已按 `004-ledger` **前置实现**（原定 Roadmap Phase 8），设计决策见 [ADR-0008](../adr/0008-ledger-design-decisions.md)；§2.3 非目标中「不实现 Ledger 复式记账」的表述应以 Roadmap Current Status 为准。
 
 #### 4.3.6 典型跨服务调用
 
@@ -502,7 +528,7 @@ settlement-service → merchant/reconciliation  校验结算资格 + 生成结�
 | **幂等** | 支付、退款、结算等资金入口 MUST 有幂等键；幂等键由调用方提供、服务端持久化并唯一约束；同键重复请求返回同一业务结果，不产生重复资金动作 |
 | **状态机** | Order/Payment/Refund/Fulfillment/Entitlement/Settlement 均显式、单向；状态流转集中在状态转换函数，禁止散落 set |
 | **本地事务** | 单服务内部状态变更用本地事务保证原子 |
-| **最终一致** | 跨服务通过同步 RPC 编排 + 幂等重试实现最终一致；对外部系统（渠道）采用最终一致；当前未实现跨服务异步事件通道，ADR-0074 / spec 029 保持 Active Proposal；资金事实仍以 ledger DB 为准，差异由对账兜底 |
+| **最终一致** | 跨服务通过同步 RPC 编排 + 幂等重试实现最终一致；对外部系统（渠道）采用最终一致；跨服务**异步通知**通道已由 **Redis 事务消息**实现（[ADR-0074](../adr/0074-redis-transactional-message.md#adr-0074) / spec 029，🟢 Accepted，2026-09-20 落地），仅承载通知与解耦、**不承载资金事实的唯一真相**，消费端 at-least-once + 幂等；资金事实仍以 ledger DB 为准，差异由对账兜底 |
 | **重试** | 仅对幂等的外部调用允许自动重试，须有退避与上限；非幂等调用禁止盲目重试 |
 | **重复消息/回调** | 处理侧假设消息与回调会重复，靠幂等键 + 状态机幂等吸收，不重复入账 |
 | **超时** | 所有外部调用有超时；超时 ≠ 失败/成功，进入未知状态 |
@@ -620,9 +646,9 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 
 **当前部署形态：单机多进程 + 单 MySQL 独立 Schema**（不是模块化单体）：
 
-![PaymentArch 单机部署拓扑](diagrams/02-deployment-topology.svg)
+![PaymentArch 部署视图（C4 Deployment）](diagrams/08-deployment.svg)
 
-> 该图的 PlantUML 源码：[diagrams/02-deployment-topology.puml](diagrams/02-deployment-topology.puml)（供 AI 阅读与后续编辑，改动后需重新渲染为 SVG）
+> 该图的 PlantUML 源码：[diagrams/08-deployment.puml](diagrams/08-deployment.puml)（**唯一事实源**，改动后需重新渲染为 SVG）
 
 - 服务是**独立进程、独立端口、独立部署单元**；单机只是多个进程跑在同一台服务器，不改变服务边界。
 - `gateway` 本 MVP **不创建、不部署**；`ledger-service`（8090）已按 `004-ledger` 前置创建并纳入部署。
@@ -630,7 +656,7 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 
   | 模式 | 入口 | 应用形态 | 说明 |
   |---|---|---|---|
-  | 容器模式 | `deployment/start-container.sh` | 10 个 Docker 容器 | 镜像由 `deployment/docker/Dockerfile` 生成（宿主打 jar，镜像只 COPY） |
+  | 容器模式 | `deployment/start-container.sh` | 10 个 Docker 容器（9 个业务服务 + 1 个演示组件 `mock-channel-web`） | 镜像由 `deployment/docker/Dockerfile` 生成（宿主打 jar，镜像只 COPY） |
   | 宿主模式 | `deployment/start-all.sh` | 宿主 JVM 进程（`./mvnw spring-boot:run`） | IDE 断点调试、改码热重启 |
 
   两种模式**对外端口完全一致（8081–8091）**，因此**互斥、二选一**，由 `deployment/lib-mode-guard.sh`
@@ -704,4 +730,4 @@ payment-service 当前提供用户日/月/年支付限额能力。限额属于�
 
 **数据模型 delta**：reconciliation 库 `audit_batches` / `audit_differences`（11 类差异 × 三级 severity × 5 态状态机）/ `audit_adjustments`（处置台账）；ledger `accounts` 新增 id=5 SUSPENSE seed；业务单号新增 AB（审计批）/ AD（调账）前缀（ADR-0062 扩展）。
 
-**关联文档**：spec/plan/tasks → `docs/specs/stage-03-evolution-consolidation/017-accounting-audit/`；服务视角 → `docs/architecture/systems/reconciliation-service.md` §7。
+**关联文档**：spec/plan/tasks → `docs/specs/stage-03-evolution-consolidation/017-accounting-audit/`；服务视角 → `docs/architecture/systems/reconciliation-service.md` §16。

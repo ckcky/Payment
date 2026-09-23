@@ -1,7 +1,7 @@
 # Plan: 033-test-infrastructure（测试基础设施与业务验证体系）
 
 **版本**：v1.0（实现轮）　**日期**：2026-09-21
-**前置**：[spec.md](spec.md)（v1.0，已批准）；[ADR-0081](../../../../../docs/adr/0081-test-carrier-and-schema-replayability.md)
+**前置**：[spec.md](spec.md)（v1.0，已批准）；[ADR-0081](../../../../docs/adr/0081-test-carrier-and-schema-replayability.md)
 **裁决**：2026-09-21 负责人按 spec 推荐方案批准 H-033-1~5 全部五项
 （Testcontainers 放宽至仅测试作用域 / 基线入库 / refund 保留标遗留 / R-A 边允许清单 / skip 即红强制）。
 

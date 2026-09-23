@@ -2,7 +2,7 @@
 
 **版本**：0.2
 **日期**：2026-08-31
-**状态**：Accepted
+> **Status**: Implemented — 构建门禁通过、交付内容齐备；2026-09-09 全栈运行时验收通过（5 场景 / 96 条断言 / 0 失败）；ADR-0052 真实验签经负责人确认回退为 Not Implemented（维持 ADR-0025 占位） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 
 > **修订记录（2026-08-31 负责人裁决）**：原 v0.1 结论「不做收银台 / 不新增 mock-channel-web / 不引入 payUrl」已被负责人推翻。
 > 最终决策：新增独立演示组件 `mock-channel-web`（端口 8091，非领域服务、ArchUnit 不纳管），由它承载收银台页面与

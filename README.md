@@ -67,11 +67,11 @@ bash deployment/demo/run-all.sh
 - 总体技术方案：[docs/architecture/technical-solution.md](docs/architecture/technical-solution.md)
 - Roadmap：[docs/architecture/roadmap.md](docs/architecture/roadmap.md)
 - 架构决策：[docs/adr/](docs/adr/)
-- 特性设计：`docs/specs/<feature>/`
+- 特性设计：`docs/specs/<stage>/<feature>/`
 - 本特性快速验证：[docs/specs/stage-01-core-mvp/001-core-business-model/quickstart.md](docs/specs/stage-01-core-mvp/001-core-business-model/quickstart.md)
 
 ## 当前边界（重要）
 
 - Payment / Refund / Settlement 的资金变动**经 `ledger-service`（8090）复式记账**（ADR-0011/0018/0023）**，存在可追溯账务事实；仅出款/银行对接仍 mock。
-- 跨服务一致性用 Feign（同步）+ 编排器顺序扇出/逐步重试/落库留痕（**无 MQ、无 Outbox**，见 ADR-0031 与 `CommonCoreAutoConfiguration` 注释）；Database-per-Service；集成测试用 H2（MySQL 兼容模式，未引入 Testcontainers）。
+- 跨服务一致性用 Feign（同步）+ 编排器顺序扇出/逐步重试/落库留痕；跨服务**异步解耦**用**既有 Redis（`redis:7`）Streams 模拟 MQ** 承载事务消息通道（**不引入 MQ 中间件**——复用已存在的 Redis 依赖，以减少需要新增与运维的组件，见 [ADR-0074](docs/adr/0074-redis-transactional-message.md#adr-0074)；无 Outbox）；Database-per-Service；集成测试默认 H2（MySQL 兼容模式），**真库子层已落地**——`deployment/test-infra` 提供 Testcontainers 真实 MySQL（仅测试作用域，见 [ADR-0081](docs/adr/0081-test-carrier-and-schema-replayability.md#adr-0081)）。
 - 任何真实资金路径必须先经 Ledger 建立可追溯账务事实（见宪法 §2.2）。

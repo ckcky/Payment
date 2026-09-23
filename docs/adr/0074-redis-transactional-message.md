@@ -8,9 +8,9 @@
   - [ADR-0043](0038-next-stage-decisions.md)（订单超时用 **Redis ZSet 时间轮**顶替 MQ 延迟消息——本 ADR 的先例与可复用骨架）
   - [ADR-0044](0038-next-stage-decisions.md) / [ADR-0045](0038-next-stage-decisions.md)（Redis 引入与「**Redis 非数据源**」定位；本 ADR 对 payment 用 Redis 构成显式例外）
   - [ADR-0060](0060-redis-lettuce-pool.md)（Lettuce 池化，本 ADR 的消费者连接方案受其约束）
-  - [ADR-0066](0029-column-and-fulfillment-granularity.md)（`order_items` 为明细单一事实源——决定广播点画在哪里）
-  - [ADR-0054](0019-payment-and-order-responsibility.md)（支付成功事实不回滚、surplus 判定在 transaction 层）
-  - [ADR-0063](0026-cross-system-business-no.md)（跨系统一律业务单号，事件信封沿用）
+  - [ADR-0066](0066-schema-normalization-and-item-granular-fulfillment.md)（`order_items` 为明细单一事实源——决定广播点画在哪里）
+  - [ADR-0054](0054-order-payment-orchestration.md)（支付成功事实不回滚、surplus 判定在 transaction 层）
+  - [ADR-0063](0063-cross-service-reference-by-business-no.md)（跨系统一律业务单号，事件信封沿用）
   - spec 029
 - 需求源头：负责人 2026-09-18「异步状态解耦我希望用 redis 来模拟 MQ，不要使用 rocketMQ 这种组件，我这个个人项目不想搞太多的组件」；2026-09-19 追加「就当我们这个 MQ 是 RocketMQ 的那种事务消息，并且做了容灾冗余的那种」。
 

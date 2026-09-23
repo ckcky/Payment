@@ -1,7 +1,7 @@
 # Plan: 014-seckill-and-cache
 
 **Feature**：`014-seckill-and-cache`
-**状态**：已实现（**收口型 plan**，2026-09-02 补写；代码先行）
+**状态**：Implemented（**收口型 plan**，2026-09-02 补写；代码先行）
 **关联**：`spec.md` ｜ ADR-0043~0046、ADR-0053（`docs/adr/0038-next-stage-decisions.md`、`0053-wip-ahead-of-roadmap.md`）
 
 > 本 plan 记录**已落地实现的既有设计**。与已归档的 `next-stage-design.md`（`docs/archive/design/2026-09-19-next-stage-011-014/next-stage-design.md`）§7 草案的最大差异：

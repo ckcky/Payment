@@ -2,7 +2,7 @@
 
 **Feature**：033　**标题**：Test Infrastructure & Business Verification
 **版本**：v1.0（Draft，设计轮产物）　**日期**：2026-09-21
-**状态**：🟡 **设计完成，待 Architecture Review 与负责人裁决**（本轮**只出设计，不改代码、不建 migration、不加测试、不引入依赖**）
+> **Status**: Implemented — 原「设计完成，待 Architecture Review 与负责人裁决（本轮只出设计，不改代码、不建 migration、不加测试、不引入依赖）」为设计轮表述，已被后续实现取代：ADR-0081 已 Accepted（2026-09-21 负责人按 spec 推荐方案批准 H-033-1~5），2026-09-21 已实现并合入 master（`mvnw -o clean verify -fae` 915 tests 全绿） <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **前置**：030 已合入 master；031/032 的设计已定稿（本文的验证矩阵以它们的目标契约为准绳）
 **输入权威**：[stage-design §8](../stage-design.md)、[design-review §12.2 H8/H9/M10/M12、§13 H16](../design-review.md)、
 [Constitution §Engineering.3](../../../../.specify/memory/constitution.md)、[engineering-standards §4~§5](../../../../docs/guides/engineering-standards.md)
@@ -505,7 +505,7 @@ deployment/test-infra/
 | 1 | Docker 在部分开发机/CI 不可用 | 真库测试静默消失，覆盖倒退而无人知 | §12#2 跳过必须可见 + §13.3 禁假绿① |
 | 2 | 真库测试拖慢 PR 反馈 | 开发者绕过门禁 | 独立 `real-db` job（并行不串行）+ 容器跨类复用（C-2）+ 只三类 |
 | 3 | H2 与真库双份用例长期并存成维护负担 | 复制粘贴腐化 | 明确并存语义（§5.4 ③），且真库用例只断言约束、H2 用例只断言逻辑，重叠面收敛 |
-| 4 | 基线文件（H-033-2）过期未更新 ⇒ 路径 B 永远绿 | 门禁假绿 | 基线文件名带 Feature 号，与 `docs/specs/<feature>` 对应；新增 Feature 未更新即 L-2/重放红 |
+| 4 | 基线文件（H-033-2）过期未更新 ⇒ 路径 B 永远绿 | 门禁假绿 | 基线文件名带 Feature 号，与 `docs/specs/<stage>/<feature>` 对应；新增 Feature 未更新即 L-2/重放红 |
 | 5 | `rpc-edges.txt` 允许清单被随手扩大 | §7 形同虚设 | 变更该文件 MUST 在 PR 描述中说明「为何需要新边」，并进 review 清单 |
 | 6 | demo 脚本挂 nightly 引入不稳定（环境依赖、沙箱外网） | nightly 假红、信任流失 | 只挂**离线可跑**的场景（happy path / audit / mq / reconciliation / refund）；涉沙箱的排除 |
 

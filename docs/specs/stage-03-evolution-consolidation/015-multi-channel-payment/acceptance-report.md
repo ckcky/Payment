@@ -1,5 +1,7 @@
 # Feature 015 验收报告 — 一交易多支付单 / 退款合并 / 三渠道 mock / 流量脚本
 
+> **历史文档提示（2026-09-22 文档治理）**：本文为历史记录，保留当时的设计划分；其中的 `refund-service` **已并入 payment-service**（ADR-0064，退款域现位于 payment-service 内）。**当前系统事实**见 [docs/architecture/systems/](../../../architecture/systems/) 与 [technical-solution.md](../../../architecture/technical-solution.md)。
+
 - 日期：2026-09-04
 - 分支：`feature/015-multi-channel-payment`
 - 依据：`docs/specs/stage-03-evolution-consolidation/015-multi-channel-payment/spec.md`（INV-1/INV-2、C1~C10、SC-001~007）、
