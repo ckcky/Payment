@@ -4,7 +4,7 @@ import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.payment.application.PaymentResultProcessor;
-import com.payment.payment.application.channel.AlipayGateway;
+import com.payment.payment.infra.channel.alipay.AlipayGateway;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;

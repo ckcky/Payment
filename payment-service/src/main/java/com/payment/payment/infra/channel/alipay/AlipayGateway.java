@@ -1,4 +1,4 @@
-package com.payment.payment.application.channel;
+package com.payment.payment.infra.channel.alipay;
 
 import java.time.Instant;
 import java.util.Map;
