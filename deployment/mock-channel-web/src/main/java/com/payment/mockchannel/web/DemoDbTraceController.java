@@ -85,10 +85,12 @@ public class DemoDbTraceController {
         query(sections, "order-service", "transactions",
                 "SELECT * FROM `order`.transactions WHERE order_no = ?", new Object[]{orderNo}, "交易单");
 
-        // ②-b 交易退款单（spec 019 / ADR-0067 双层退款：TXRF 是 order 驱动的上层退款单，
+        // ②-b 交易层退款单（spec 019 / ADR-0067 三层退款的第 1 层：TXRF 由 order 驱动，
         //     payment_refund_no 列存 payment 侧 PMRF，受理成功后回填）
+        //     三层显式命名（交易层 / 支付层 / 渠道层）：原先支付层那条只叫「退款单」、
+        //     渠道层那条混在「渠道交互尝试记录」里，演示时看不出退款的三层结构。
         query(sections, "order-service", "transaction_refunds",
-                "SELECT * FROM `order`.transaction_refunds WHERE order_no = ?", new Object[]{orderNo}, "交易退款单（TXRF）");
+                "SELECT * FROM `order`.transaction_refunds WHERE order_no = ?", new Object[]{orderNo}, "交易层退款单 TXRF（order-service）");
 
         // ③ 支付单（order_no 关联）+ 尝试记录（payment_no 关联），收集渠道引用供结算/对账反查
         List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
@@ -105,9 +107,19 @@ public class DemoDbTraceController {
             }
         }
 
-        // ④ 退款（Feature 015 后 refund 域并入 payment-service，refunds 表迁至 payment 库）／履约／权益
+        // ③-b 渠道层退款尝试：同一张 payment_attempts 表，只挑 attempt_type=REFUND 的行。
+        //     单独成段的原因：退款的渠道交互原本混在「渠道交互尝试记录」里与 PAYMENT 行同表展示，
+        //     演示时看不出「渠道层的退款单」在哪——三层退款必须各层都有独立可查的证据。
+        query(sections, "payment-service", "payment_attempts(REFUND)",
+                "SELECT id, payment_no, attempt_type, channel_code, channel_reference, status, "
+                        + "failure_reason, requested_at FROM payment.payment_attempts "
+                        + "WHERE attempt_type = 'REFUND' AND payment_no IN (" + placeholders(paymentNos) + ") "
+                        + "ORDER BY id",
+                paymentNos.toArray(), "渠道层退款尝试（payment_attempts · REFUND）");
+
+        // ④ 支付层退款单（Feature 015 后 refund 域并入 payment-service，refunds 表迁至 payment 库）／履约／权益
         List<Map<String, Object>> refunds = query(sections, "payment-service", "refunds",
-                "SELECT * FROM payment.refunds WHERE order_no = ?", new Object[]{orderNo}, "退款单");
+                "SELECT * FROM payment.refunds WHERE order_no = ?", new Object[]{orderNo}, "支付层退款单 PMRF（payment-service）");
         List<Object> refundNos = ids(refunds, "refund_no");
 
         // ④-b 用户限额（spec 027 / ADR-0071）：usage 按 userId 查、operations 按 paymentNo 查。

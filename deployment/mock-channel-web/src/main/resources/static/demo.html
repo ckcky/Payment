@@ -299,11 +299,14 @@ function openSandboxCredential() {
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
 
 /* ---- 全链路 DB：9 张表按 5 个域分组（默认折叠，组头显示行数）---- */
+/** 退款分组改为「表名 + 标签」双判据：渠道层退款尝试的表名是 payment_attempts(REFUND)，
+ *  纯按表名匹配会同时落进「支付」组（重复展示），按标签里的「退款」归类才唯一。 */
+const isRefundSection = (s) => /refund|退款/i.test((s.table || '') + ' ' + (s.label || ''));
 const DOMAINS = [
-  { name: '订单与交易', match: (s) => s.system === 'order-service' && !/refund/.test(s.table) },
-  { name: '支付',       match: (s) => s.system === 'payment-service' && !/refund/.test(s.table) && !/limit/.test(s.table) },
+  { name: '订单与交易', match: (s) => s.system === 'order-service' && !isRefundSection(s) },
+  { name: '支付',       match: (s) => s.system === 'payment-service' && !isRefundSection(s) && !/limit/.test(s.table) },
   { name: '用户限额',   match: (s) => /limit/.test(s.table) },
-  { name: '退款',       match: (s) => /refund/.test(s.table) },
+  { name: '退款',       match: (s) => isRefundSection(s) },
   { name: '履约与权益', match: (s) => s.system === 'fulfillment-service' || s.system === 'entitlement-service' },
   { name: '结算 · 对账 · 账本', match: (s) => ['settlement-service', 'reconciliation-service', 'ledger-service'].indexOf(s.system) >= 0 }
 ];

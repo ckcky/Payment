@@ -38,6 +38,32 @@ CREATE TABLE IF NOT EXISTS accounts (
     UNIQUE KEY uk_instance (definition_code, owner_type, owner_id, currency)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 存量卷就地升级：031 之前建的 accounts 是「科目老表」形态（id/code/name/type/currency/created_at），
+-- 没有 definition_code / owner_type / owner_id 三列。CREATE TABLE IF NOT EXISTS 不会改造已存在的表，
+-- 于是下方 seed INSERT 直接 ERROR 1054 Unknown column 'definition_code' ⇒ 整个 reset.sh 中断，
+-- 后续 10-audit-schema.sql、种子数据全部没跑（2026-09-25 实测复现）。
+-- 这里用 information_schema 守卫补列，全新库是 no-op，与 032/034 的可重放写法同款。
+SET @sql = IF (
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'definition_code') = 0,
+    'ALTER TABLE accounts ADD COLUMN definition_code VARCHAR(32) NULL AFTER id',
+    'SELECT ''accounts.definition_code 已存在'' AS note');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF (
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'owner_type') = 0,
+    'ALTER TABLE accounts ADD COLUMN owner_type VARCHAR(16) NULL COMMENT ''PLATFORM/CHANNEL/MERCHANT'' AFTER definition_code',
+    'SELECT ''accounts.owner_type 已存在'' AS note');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF (
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'owner_id') = 0,
+    'ALTER TABLE accounts ADD COLUMN owner_id VARCHAR(64) NULL COMMENT ''PLATFORM 单例=PLATFORM；哨兵=LEGACY；否则渠道码/商户号'' AFTER owner_type',
+    'SELECT ''accounts.owner_id 已存在'' AS note');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- ③ 账本交易（LedgerTransaction，spec §9）：一个 Accounting Event 一组平衡分录。
 CREATE TABLE IF NOT EXISTS postings (
     id BIGINT NOT NULL AUTO_INCREMENT,

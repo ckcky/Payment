@@ -38,7 +38,11 @@ done
 # 032 起按 033「迁移可重放六条」写为自带 USE + 守卫 + 全新库无害 no-op 的形态，
 # reset 用 TRUNCATE 不清表结构，存量卷旧表必须靠它们就地演进
 # （032 实跑踩坑：audit_adjustments.diff_no 缺失 → adjust 500）。新增迁移在此登记。
-for f in 032-reconciliation-statement.sql 034-pending-postings.sql; do
+# 027-user-payment-limit.sql 必须显式登记：spec 027 的三张表（user_payment_limits /
+# user_limit_usage / limit_operations）**不在** 03-payment-schema.sql 里，只存在于本文件。
+# 它是三位数命名，落不进上面的 [0-9][0-9]-*.sql 全量循环 ⇒ 漏放会导致演示控制台
+# 「用户限额」三个 section 全部 BadSqlGrammarException（2026-09-25 实测复现）。
+for f in 027-user-payment-limit.sql 032-reconciliation-statement.sql 034-pending-postings.sql; do
   db_mysql < "$SCHEMA_DIR/$f"
   echo "    migrated $f"
 done
