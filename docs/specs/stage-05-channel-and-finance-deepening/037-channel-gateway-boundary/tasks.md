@@ -25,7 +25,10 @@
 | 技术债归属 | 038 在 `ServiceBoundaryTest.LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES` 白名单登记 4 个类（3 回调 Controller + 1 验签过滤器），注释写明**「收口归 037」** | 归 T5 处理 |
 
 **合并记录**：`feature/037-*` 以 `--no-ff` 合入 `origin/master`，10 处冲突全部是「T2 补的 import」vs「038 的包搬迁」，
-统一取 038 侧（新包路径）。合并后全量 `./mvnw -B test` = **1120 tests / 0F / 0E / 18 模块 SUCCESS**（基线）。
+统一取 038 侧（新包路径）。合并后 `./mvnw -B clean test` = **1016 tests / 0F / 0E / 18 模块 SUCCESS**（基线）。
+> ⚠️ 计数必须用 `clean test`：`target/` 里残留 038 搬迁前的旧包路径 surefire XML
+> （`com.payment.payment.infra.channel.*` / `com.payment.refund.*`），不 clean 会把
+> payment-service 从 388 虚报成 492、全量从 1016 虚报成 1120。
 
 ---
 
@@ -102,7 +105,8 @@
 登记的 4 个类，其收口归 T5。）
 
 **实测**：`ChannelGatewayTest` 11/11 绿；payment 侧 `ChannelRegistry`/`ChannelRouter`/`ChannelPlugin`
-的**代码引用**为零（仅 `PaymentApplicationService` 一处 javadoc 提及）。
+的**代码引用**为零（仅 `PaymentApplicationService` 一处 javadoc 提及）；
+`./mvnw -B clean test` = 1016 tests / 0F / 0E / 18 模块 SUCCESS（含 038 的 16 条 `ServiceBoundaryTest` 门禁）。
 
 ## T5　回调两层：模板方法 + PaymentNotifyPort　[FR-009][FR-010][FR-011][FR-012][FR-013][INV-2][INV-5]
 
