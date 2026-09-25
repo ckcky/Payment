@@ -6,6 +6,21 @@
 
 ---
 
+## [2026-09-25] feat(038)：payment-service 包边界重构——消灭 `com.payment.refund` 顶层包 + 新建 `com.payment.channelgateway` 渠道网关域 + 退款端点收口（**含破坏性变更**）
+
+**性质**：Feature 038 实现落地（**纯结构重构，行为零变化**：不动状态机、不动表结构、不改契约字段名、不改记账口径）。一级包由「payment / refund / posting」收敛为「payment（资金动作域）/ channelgateway（渠道网关域）/ posting（跨切面）」，落实 Payment ≠ Channel 的物理边界，为 037 的门面/回调分层提供**包级门禁落点**。
+
+- **⚠️ 破坏性变更（公共 API）**：退款内部 HTTP 端点前缀由 `/internal/refunds/**` 收口为 **`/internal/payments/refunds/**`**（四条路径：`GET /{refundNo}`、`POST /{refundNo}/resolve`、`POST /{refundNo}/channel-callback`、`GET /confirmed-facts`）；**请求/响应字段名与语义零变化**。调用方已同步（6 文件 / 8 处）：`reconciliation-service` 的 `RefundFactsFeignClient`、`mock-channel-web` 的 `RefundCallbackProxy` 与 `demo.html`、`e2e-tests` 的 `Api`、`demo/scenario-refund.sh`（2 处）与 `scenario-routing.sh`。
+- **消灭 `com.payment.refund` 顶层包（G1/INV-2）**：32 个主源码 + 10 个测试迁入 `com.payment.payment.**`——`application` 层建**退款操作切片** `com.payment.payment.application.refund`（与 pay/query 同级），`api`/`domain`/`infra` **平铺吸收**（`Refund`/`RefundItem`/`RefundPolicy` 与 `Payment`/`PaymentAttempt` 同域共存）。`RefundController` + `RefundFactsController` 合并为单一 `com.payment.payment.api.RefundController`。
+- **新建 `com.payment.channelgateway` 渠道网关域（G2/INV-3）**：40 个渠道件 100% 收拢（`api`/`application`/`application.spi`/`infra`/`infra.alipay`/`infra.stripe`/`infra.config`/`web`），包名前缀按「长前缀优先」重写；`PaymentApplication` 三注解（`scanBasePackages`/`EnableFeignClients`/`MapperScan`）同步登记新包并移除 `com.payment.refund`。
+- **ArchUnit 包级门禁（G4/FR-009）**：`ServiceBoundaryTest` 新增四条——① `payment ↔ channelgateway` 单向依赖（反向依赖 payment 应用/接入层被禁，4 个既有回调类逐条白名单登记为技术债 TD-4/TD-5，收口归 037）；② `com.payment.refund` 不得存在且渠道网关域不得引用；③ 渠道插件必须落在 `channelgateway.infra.<channel>`；④ **覆盖修补**——渠道件搬出 `com.payment.payment..` 后脱离原跨服务门禁，补 `channelgateway` 的跨服务编译期依赖检查。四条均含**阳性对照防空转**。
+- **顺带修正既有缺陷**：`common-dto` 中 5 个渠道契约类（`PaymentScene`/`Goods`/`CallbackUrls`/`Payer`/`PayCredential`）此前**目录与包名错位**（文件在 `com/payment/common/dto/channel/`，`package` 却声明 `com.payment.payment.application.channel`，系 `ee9f1b3` 纯 rename 漏改），本次修正为 `com.payment.common.dto.channel`（与目录一致，并与 037 T2 计划包名对齐）。
+- **必要的可见性放宽（行为不变）**：`CachedBodyHttpServletRequest` 与 `ChannelCallbackSignatureFilter` 的两个回调路径常量由包私有放宽为 `public`——跨包引用后的机械后果，无行为变化。
+- **契约资产同步（无新增/删除边）**：`deployment/architecture-tests/src/test/resources/rpc-edges.txt` 中 `payment -> ledger` 的客户端类标签由 `com.payment.refund.infra.client.LedgerFeignClient` 改为 `com.payment.payment.infra.client.RefundLedgerFeignClient`——**边本身未变**（caller `payment` / target `ledger` 与 `@FeignClient(name="ledger-service", contextId="refundLedgerClient")` 均原样保留），仅因包迁移与同名类冲突重命名而更新标签；无新增/删除运行时调用边。
+- **文档同步（FR-011）**：`systems/payment-service.md`（端点清单 + 包路径 + 链接）、`systems/reconciliation-service.md`（退款事实端点）、`technical-solution.md`（服务表退款行 + 模块树）同步为现状；**ADR 正文不回改**（历史决策留痕）。
+
+---
+
 ## [2026-09-22] feat(035)：可观测与 SLO 收口——指标目录唯一登记处 + 高基数政策机器化 + 4 项 SLO Recording Rules + 告警 24 条五要素 + 密钥/报文不入日志（ADR-0083 Accepted）
 
 **性质**：Feature 035 实现落地（stage-05 末个 Feature，五 Feature 全部收口）。负责人 2026-09-21 批量裁决 H-035-1~4 按 spec 推荐方案批准（[ADR-0083](docs/adr/0083-observability-baseline-slo-and-cardinality.md) 🟢 Accepted）。**零新增运行时依赖、不引 APM**（G6 保留自研 X-Trace-Id，AC-5）。

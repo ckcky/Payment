@@ -10,22 +10,22 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.RefundCommandRequest;
 import com.payment.common.dto.rpc.RefundCommandResponse;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.payment.infra.channel.MockChannelAdapter;
-import com.payment.refund.application.RefundApplicationService;
-import com.payment.refund.application.RefundResultProcessor;
-import com.payment.refund.domain.Refund;
-import com.payment.refund.domain.RefundStatus;
-import com.payment.refund.infra.client.LocalPaymentRefundGateway;
-import com.payment.refund.infra.client.LocalRefundAttemptSettlementGateway;
-import com.payment.refund.infra.InMemoryRefundRepository;
-import com.payment.refund.support.RefundTestStack;
+import com.payment.channelgateway.infra.MockChannelAdapter;
+import com.payment.payment.application.refund.RefundApplicationService;
+import com.payment.payment.application.refund.RefundResultProcessor;
+import com.payment.payment.domain.Refund;
+import com.payment.payment.domain.RefundStatus;
+import com.payment.payment.infra.client.LocalPaymentRefundGateway;
+import com.payment.payment.infra.client.LocalRefundAttemptSettlementGateway;
+import com.payment.payment.infra.InMemoryRefundRepository;
+import com.payment.payment.support.RefundTestStack;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -164,8 +164,8 @@ class PaymentAutoRefundServiceTest {
                         processor, new NoopBusinessMetrics(), new StructuredAuditLogger()),
                 metrics);
         // 注入监听：模拟渠道延迟推送权威结果（真实渠道走 HTTP 回调端点，同一收敛路径）
-        channel.setRefundResultListener(new com.payment.refund.application.MockRefundResultBridge(
-                new com.payment.refund.application.RefundRpcCallbackService(refunds, processor)));
+        channel.setRefundResultListener(new com.payment.payment.application.refund.MockRefundResultBridge(
+                new com.payment.payment.application.refund.RefundRpcCallbackService(refunds, processor)));
 
         RefundCommandResponse response = service.refundByOrder(command(payment.getPaymentNo()));
 

@@ -1,11 +1,11 @@
 package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.BusinessMetrics;
-import com.payment.payment.application.channel.ChannelRegistry;
-import com.payment.payment.application.channel.ChannelResult;
-import com.payment.payment.application.channel.ChargeRequest;
-import com.payment.payment.application.channel.PaymentChannel;
-import com.payment.payment.application.channel.SingleChannelRegistry;
+import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channelgateway.application.ChargeRequest;
+import com.payment.channelgateway.application.PaymentChannel;
+import com.payment.channelgateway.application.SingleChannelRegistry;
 import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;

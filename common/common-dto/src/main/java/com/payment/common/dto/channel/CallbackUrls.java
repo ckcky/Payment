@@ -1,4 +1,4 @@
-package com.payment.payment.application.channel;
+package com.payment.common.dto.channel;
 
 /**
  * 回调地址对（平台 → 渠道，spec 030 / FR-103）。

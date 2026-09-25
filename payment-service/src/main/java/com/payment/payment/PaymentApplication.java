@@ -8,13 +8,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * payment-service（Feature 015 / P3 合并）：支付域 + 退款域单体部署。
- * 扫描范围同时覆盖 com.payment.payment、com.payment.refund 与 com.payment.posting
- * （spec 034：出站失败台账独立子域包）。
+ * 扫描范围同时覆盖 com.payment.payment、com.payment.channelgateway 与 com.payment.posting
+ * （spec 038：渠道网关域独立顶层包；spec 034：出站失败台账独立子域包）。
  */
-@SpringBootApplication(scanBasePackages = {"com.payment.payment", "com.payment.refund", "com.payment.posting"})
-@EnableFeignClients(basePackages = {"com.payment.payment", "com.payment.refund"})
+@SpringBootApplication(scanBasePackages = {"com.payment.payment", "com.payment.channelgateway", "com.payment.posting"})
+@EnableFeignClients(basePackages = {"com.payment.payment", "com.payment.channelgateway"})
 @EnableScheduling
-@MapperScan({"com.payment.payment.infra.persistence", "com.payment.refund.infra.persistence",
+@MapperScan({"com.payment.payment.infra.persistence", "com.payment.payment.infra.persistence.refund",
         // spec 027 / ADR-0071：限额子域三表 Mapper 与支付域同库，须一并扫描
         "com.payment.payment.limit.infra.persistence",
         // spec 034：出站失败台账 pending_postings Mapper

@@ -1,7 +1,7 @@
 package com.payment.payment.infra.persistence;
 
-import com.payment.payment.application.channel.ChannelAttemptRecorder;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelAttemptRecorder;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;

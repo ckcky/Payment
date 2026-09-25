@@ -29,7 +29,7 @@
 
 ## 2. 不负责（Non-Responsibility）
 
-具体渠道协议实现（由渠道层的实现族承载；payment 层只依赖 `PaymentChannel` / `AlipayGateway` 接口抽象，**不依赖 `infra/channel`，也不依赖任何渠道 SDK**）；订单/履约/权益的最终状态；退款整体决策（归属本服务退款域，见 [§17](#8-退款域设计原-refund-servicefeature-015-并入)）
+具体渠道协议实现（由渠道层的实现族承载；payment 层只依赖 `PaymentChannel` / `AlipayGateway` 接口抽象，**不依赖 `channelgateway/infra`，也不依赖任何渠道 SDK**）；订单/履约/权益的最终状态；退款整体决策（归属本服务退款域，见 [§17](#8-退款域设计原-refund-servicefeature-015-并入)）
 
 ## 3. 上下文与约束（Context）
 
@@ -42,7 +42,7 @@
 
 ### 3.2 硬约束（Constitution / ADR）
 
-- **Payment ≠ Channel**：核心 Payment 领域只依赖 `application/channel/PaymentChannel` 接口，不依赖 `infra/channel` 具体实现。**构建期强制覆盖整个应用层**：`ServiceBoundaryTest#channelRoutingAbstractionMustNotDependOnChannelInfrastructure` 的 `that()` 为 `com.payment.payment.application..`（含 `.channel` 与 `.reliability`，不只是 `.application.channel` 一个子包），并配阳性对照防空转。2026-09-20 边界复审前该规则只覆盖 `application.channel..`，曾漏掉三处 `application..` → `infra.channel.SingleChannelRegistry` 的真实穿透。
+- **Payment ≠ Channel**：核心 Payment 领域只依赖 `channelgateway/application/PaymentChannel` 接口，不依赖 `channelgateway/infra` 具体实现。**构建期强制覆盖整个应用层**：`ServiceBoundaryTest#channelRoutingAbstractionMustNotDependOnChannelInfrastructure` 的 `that()` 为 `com.payment.payment.application..`（含 `.channel` 与 `.reliability`，不只是 `.application.channel` 一个子包），并配阳性对照防空转。2026-09-20 边界复审前该规则只覆盖 `application.channel..`，曾漏掉三处 `application..` → `infra.channel.SingleChannelRegistry` 的真实穿透。
 - **金额铁律**：金额一律最小货币单位 `long`（`amountMinor`），禁止 `float`/`double`；不变量 `amountMinor > 0`。
 - **幂等**：资金入口（创建支付意图、退款尝试）必须有幂等键，数据库唯一约束兜底。
 - **UNKNOWN 不猜成败**：超时/断连/不完整响应进 `UNKNOWN`，绝不臆断成功/失败。
@@ -94,8 +94,8 @@ flowchart TB
 | 实体 | `PaymentAttempt` | [domain/PaymentAttempt.java](../../../payment-service/src/main/java/com/payment/payment/domain/PaymentAttempt.java) | 一次渠道交互的完整历史（渠道引用/时间/结果/状态） |
 | 值对象 | `Money` | [common-core](../../../common/common-core/src/main/java/com/payment/common/core/money/Money.java) | 金额 + 币种（领域内金额用 `long` 分承载） |
 | 值对象 | `IdempotencyKey` | [common-core](../../../common/common-core/src/main/java/com/payment/common/core/idempotency/IdempotencyKey.java) | 幂等键 |
-| 值对象 | `ChannelResult` | [application/channel/ChannelResult.java](../../../payment-service/src/main/java/com/payment/payment/application/channel/ChannelResult.java) | 渠道结果 SUCCESS/FAILURE/UNKNOWN + 渠道引用 + 原因 + **可选付款凭证**（spec 030） |
-| 值对象 | `ChargeRequest` / `RefundRequest` / `QueryStatusRequest` | [application/channel/](../../../payment-service/src/main/java/com/payment/payment/application/channel/) | 平台→渠道请求（只读必要字段，不访问支付聚合内部状态）；**统一契约**见 [§3.11](#311-渠道内部契约spec-030--adr-0075) |
+| 值对象 | `ChannelResult` | [channelgateway/application/ChannelResult.java](../../../payment-service/src/main/java/com/payment/channelgateway/application/ChannelResult.java) | 渠道结果 SUCCESS/FAILURE/UNKNOWN + 渠道引用 + 原因 + **可选付款凭证**（spec 030） |
+| 值对象 | `ChargeRequest` / `RefundRequest` / `QueryStatusRequest` | [channelgateway/application/](../../../payment-service/src/main/java/com/payment/channelgateway/application/) | 平台→渠道请求（只读必要字段，不访问支付聚合内部状态）；**统一契约**见 [§3.11](#311-渠道内部契约spec-030--adr-0075) |
 | 值对象 | `Goods` / `CallbackUrls` / `Payer` | 同上 | 商品信息 / 回调地址对 / 付款人（spec 030 契约分组） |
 | 值对象 | `PayCredential` | 同上 | 渠道付款凭证：`kind`（六种）+ `payload` + `expiresAt`；**不落库** |
 | 枚举 | `PaymentScene` | 同上 | 支付场景（`WEB` / `H5` / `NATIVE` / `JSAPI` / `MINI_PROGRAM` / `APP`），渠道能力声明的载体 |
@@ -519,7 +519,7 @@ stateDiagram-v2
 **响应** `RefundAttemptResponse`：`{ refundNo, status: "SUCCEEDED"|"FAILED"|"UNKNOWN", channelReference }`
 **规则**：仅 `SUCCEEDED` 支付可退款；否则 `STATE_TRANSITION_VIOLATION`。Mock 渠道默认异步受理（`payment.channel.refund-async=true`）→ 当场返回 `UNKNOWN`（已受理未定），落 REFUND 尝试行；权威结果经渠道回调收敛。
 
-`POST /internal/refunds/{refundNo}/channel-callback`（spec 019：Mock 渠道异步推送入口，HMAC 验签占位）
+`POST /internal/payments/refunds/{refundNo}/channel-callback`（spec 019：Mock 渠道异步推送入口，HMAC 验签占位）
 
 **请求体**：`{ status: "SUCCESS|FAILURE", channelReference, reason }`
 **规则**：与进程内推送桥（`MockRefundResultBridge`）走同一收敛路径 `RefundResultProcessor`——退款状态机终态 + REFUND 尝试行收敛 + 记账冲正（幂等键 `REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。终态吸收重复/迟到冲突结果。
@@ -530,7 +530,7 @@ stateDiagram-v2
 
 **响应**：`List<PaymentFactResponse>`，每项 `{ paymentId, channelReference, merchantId, amountMinor, currencyCode, status }`；仅返回 `SUCCEEDED` 支付。
 
-**规则（spec 032 / H-032-1）**：`period` 可解析为日期（`YYYY-MM-DD`）时按 `DATE(created_at) = period` 过滤（跨期不重复结算的事实侧锚点）；缺省或不可解析（demo 周期串）返回全量并 WARN 留痕。`merchantId` 为 032 匹配键（G2）与结算商户校验（G4）的事实锚，缺商户的事实会被 settlement `ConfirmedFactGate` 拒绝。退款侧 `GET /internal/refunds/confirmed-facts` 同周期过滤语义，`RefundFactResponse.merchantId` 经 payment 反查。
+**规则（spec 032 / H-032-1）**：`period` 可解析为日期（`YYYY-MM-DD`）时按 `DATE(created_at) = period` 过滤（跨期不重复结算的事实侧锚点）；缺省或不可解析（demo 周期串）返回全量并 WARN 留痕。`merchantId` 为 032 匹配键（G2）与结算商户校验（G4）的事实锚，缺商户的事实会被 settlement `ConfirmedFactGate` 拒绝。退款侧 `GET /internal/payments/refunds/confirmed-facts` 同周期过滤语义，`RefundFactResponse.merchantId` 经 payment 反查。
 
 ### 6.8 出站 RPC（payment → order / ledger；Feign 服务名寻址，ADR-0059）
 
@@ -581,7 +581,7 @@ stateDiagram-v2
 > **本节为契约权威定义**（[ADR-0075](../../adr/0075-unified-channel-contract.md) 🟢 Accepted）。
 > 字段级需求的**验收**见 [spec 030](../../specs/stage-05-channel-and-finance-deepening/030-channel-contract-sandbox-callback/spec.md)，本节只承载**契约本身**。
 
-**请求侧**（平台 → 渠道，`application/channel/`）：
+**请求侧**（平台 → 渠道，`channelgateway/application/`）：
 
 | 类型 | 字段 | 说明 |
 |---|---|---|
@@ -606,8 +606,8 @@ stateDiagram-v2
 |---|---|
 | 双模态分派 | `AlipayChannelAdapter`（**单 Adapter 双模态**，FR-130 / N11）——按 `DyeContext` 分发：`MOCK` 走 `super` 委托（基类 4 件横切行为零漂移），`SANDBOX` 走真实协议 |
 | 沙箱凭证形态 | 电脑网站支付 `alipay.trade.page.pay` ⇒ `PayCredential(Kind.FORM_HTML)`——payload 是**自动提交表单 HTML**（`pageExecute().getBody()`），**不是 URL**。消费端 MUST 按 `Kind` 分流：URL 可直接 `window.open`，表单 HTML 须先包装成可加载页面（`demo.html` 用 Blob URL）否则**空白页**。⚠️ 2026-09-20 修正：此前误标 `REDIRECT_URL` 正是空白页根因 |
-| 端口收口（INV-7） | `application/channel/AlipayGateway` 为端口（**只用平台自有类型**）；`infra/channel/alipay/AlipaySdkGateway` 是**唯一** import SDK **Java 包 `com.alipay.api`** 的类（⚠️ 不是 Maven 坐标 `com.alipay.sdk:alipay-sdk-java`，两者混淆会让门禁空转）。ArchUnit 构建期强制（`ServiceBoundaryTest#alipaySdkMustBeConfinedToItsInfrastructureAdapter`，含阳性对照） |
-| 沙箱配置 | `infra/config/AlipaySandboxProperties`（`payment.channel.adapters.alipay.sandbox.*`，`enabled` 默认 `false`）；密钥一律 env 注入，`toString()` 省略密钥（INV-2），启动期强校验缺失项（FR-134） |
+| 端口收口（INV-7） | `channelgateway/application/AlipayGateway` 为端口（**只用平台自有类型**）；`channelgateway/infra/alipay/AlipaySdkGateway` 是**唯一** import SDK **Java 包 `com.alipay.api`** 的类（⚠️ 不是 Maven 坐标 `com.alipay.sdk:alipay-sdk-java`，两者混淆会让门禁空转）。ArchUnit 构建期强制（`ServiceBoundaryTest#alipaySdkMustBeConfinedToItsInfrastructureAdapter`，含阳性对照） |
+| 沙箱配置 | `channelgateway/infra/config/AlipaySandboxProperties`（`payment.channel.adapters.alipay.sandbox.*`，`enabled` 默认 `false`）；密钥一律 env 注入，`toString()` 省略密钥（INV-2），启动期强校验缺失项（FR-134） |
 | 沙箱未启用 | 染色 `SANDBOX` 而 `enabled=false` ⇒ **400 INVALID_ARGUMENT**，**不静默回落 mock**（FR-241 / INV-8） |
 | 场景收窄 | `supportedScenes()`：沙箱取 `{WEB}`，mock 取全集（FR-131） |
 | 金额换算 | `BigDecimal.valueOf(amountMinor, 2).toPlainString()`——**禁 `double`/`float`**（INV-1 / FR-139） |
@@ -706,7 +706,7 @@ sequenceDiagram
 
 1. 加载支付（`NOT_FOUND`）；断言 `SUCCEEDED`（否则 `STATE_TRANSITION_VIOLATION`）。
 2. `channel.refund(RefundRequest)` 调 Mock Channel：默认异步受理模式（`payment.channel.refund-async=true`）当场返回 `accepted`（受理流水号，无业务结论）；同步模式可配。落 REFUND 尝试行（`payment_attempts.attempt_type='REFUND'`，UNKNOWN/ACCEPTED 态）。
-3. **不迁移支付领域状态**（支付单保留 SUCCEEDED 事实不回滚，ADR-0054）；退款权威结果经渠道回调（进程内推送桥或 `POST /internal/refunds/{refundNo}/channel-callback`）→ `RefundResultProcessor` 统一收敛：退款状态机终态 + REFUND 尝试行收敛到 SUCCEEDED/FAILED + 成功记账冲正（`REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。
+3. **不迁移支付领域状态**（支付单保留 SUCCEEDED 事实不回滚，ADR-0054）；退款权威结果经渠道回调（进程内推送桥或 `POST /internal/payments/refunds/{refundNo}/channel-callback`）→ `RefundResultProcessor` 统一收敛：退款状态机终态 + REFUND 尝试行收敛到 SUCCEEDED/FAILED + 成功记账冲正（`REFUND:{PMRF}`）+ 通知 order 收口（TXRF+PMRF 双号）。
 4. 退款整体决策（发起/收口/秒杀回补/履约终止/权益撤销）归 order，payment 只提供渠道事实（ADR-0054/0067）。
 
 > **REFUND 尝试的渠道归属（ADR-0072/0073）**：该行 `channel_code` 取自被退支付单的**生效 PAYMENT 尝试**（同一 `payment_no` 下 `attempt_type='PAYMENT'` 且状态 `SUCCEEDED` 的记录）。`PaymentRefundService` 据此经 `ChannelRegistry` 解析渠道实现，退款、重试和主动查询均不重新走正常支付路由，也不静默回落默认渠道；缺少有效渠道记录直接报数据错误。
@@ -953,7 +953,7 @@ mybatis-plus.configuration.map-underscore-to-camel-case: true
 
 ## 17. 退款域设计（原 refund-service，Feature 015 并入）
 
-> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0064-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/refund/`，原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/stage-01-core-mvp/005-refund/` 与 git 历史。
+> 本节收编原独立服务 `refund-service` 的设计要点。该服务已于 Feature 015（[ADR-0064](../../adr/0064-multi-payment-per-transaction.md)）整体并入本服务，代码位于 `payment-service/src/main/java/com/payment/payment/`（`application/refund/` 为退款**操作切片**，`api/` / `domain/` / `infra/` 平铺吸收；**spec 038 起原 `com.payment.refund` 顶层包已消灭**），原 `refund` Schema 与端口 8085 已退役。原独立文档已删除，本节为保留的权威摘要；未展开的完整历史细节见 `docs/specs/stage-01-core-mvp/005-refund/` 与 git 历史。
 
 ### 17.1 职责边界
 
@@ -1018,7 +1018,7 @@ SUCCEEDED / FAILED / REJECTED --close()--> CLOSED
 
 ### 17.7 对账事实
 
-`GET /internal/refunds/confirmed-facts`（仅 `SUCCEEDED`）供 reconciliation-service 拉取——退款事实的对外唯一窗口，见 §3.7。
+`GET /internal/payments/refunds/confirmed-facts`（仅 `SUCCEEDED`）供 reconciliation-service 拉取——退款事实的对外唯一窗口，见 §3.7。
 
 ## 18. 用户支付限额域（spec 027 / ADR-0071）
 

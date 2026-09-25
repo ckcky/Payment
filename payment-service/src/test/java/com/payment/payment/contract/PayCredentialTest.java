@@ -3,7 +3,7 @@ package com.payment.payment.contract;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.payment.payment.application.channel.PayCredential;
+import com.payment.common.dto.channel.PayCredential;
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

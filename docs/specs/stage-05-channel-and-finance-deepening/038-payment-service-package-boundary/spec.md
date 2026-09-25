@@ -1,10 +1,12 @@
 # 038-payment-service-package-boundary — Spec
 
-> **Status**: Draft `<!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->`
+> **Status**: Implemented `<!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->`
 > **Date**: 2026-09-25
 > **Stage / Path**: `docs/specs/stage-05-channel-and-finance-deepening/038-payment-service-package-boundary/`
-> **Related ADR**: 待实现阶段补（本 Feature 为**纯结构重构**，若判定需要 ADR 则新建）
+> **Related ADR**: **无新增 ADR**（纯结构重构，不改领域模型 / 状态机 / 服务边界 / 表结构 / 公共 API 语义；架构决策沿既有 ADR-0029 / ADR-0064 / ADR-0067 执行）
 > **Standard**: [spec-standard.md](../../../standards/spec-standard.md)
+
+> **实现**：2026-09-25 随本 Spec 落地（plan.md / tasks.md / acceptance.md 四件套齐）。本文正文保留设计轮的 `【现状】/【目标】` 标注体例，**实现后的权威事实**以 [acceptance.md](acceptance.md) 实测结论与 `docs/architecture/systems/payment-service.md` 为准。实现期三处修订（M-1 / M-2 / M-3）见 §3.5。
 
 > **阅读约定**：`【现状】`= 已核实的代码事实（附路径 / 行号，均已 grep 实证）；`【目标】`= 设计意图，**尚未实现**。
 > **本 Spec 是执行方唯一事实源**：`tasks.md` 的逐条打勾清单、文件移动映射表、验收命令均以此为准。
@@ -117,7 +119,7 @@ com.payment.payment.api                      → com.payment.channelgateway.api 
 com.payment.payment.web                      → com.payment.channelgateway.web       （仅 ChannelCallbackSignatureFilter）
 ```
 
-### 3.2 移动映射表 B：`com.payment.refund` → payment 域内切片（33 主 + 10 测试）
+### 3.2 移动映射表 B：`com.payment.refund` → payment 域内切片（32 主 + 10 测试）
 
 > **分层原则**：`api` / `domain` / `infra` **平铺吸收**（类名本身带 `Refund` 前缀可自辨，与 `Payment` / `PaymentAttempt` 同域平铺）；**仅 `application` 层建 `refund/` 操作切片**。
 
@@ -196,6 +198,18 @@ com.payment.refund.infra                 → com.payment.payment.infra
 | 5 | `deployment/demo/scenario-routing.sh` | 188 |
 | 6 | `deployment/mock-channel-web/src/main/resources/static/demo.html` | 774 |
 
+### 3.5 实现期修订（2026-09-25，负责人裁决，已回写）
+
+> 以下三处是 §3.1 / §3.2 映射表**未覆盖的代码事实**，实现时经负责人逐项裁决后执行；均为「使搬迁可编译 / 修正既有缺陷」，**不改行为**。
+
+| # | 问题（实现时发现） | 裁决与处理 |
+|---|---|---|
+| M-1 | `common-dto` 中 5 个渠道契约类 `PaymentScene` / `Goods` / `CallbackUrls` / `Payer` / `PayCredential` **目录与包名错位**——文件在 `common/common-dto/src/main/java/com/payment/common/dto/channel/`，`package` 却声明 `com.payment.payment.application.channel`（`ee9f1b3` 把它们从 `payment/application/channel/` 纯 `git mv` 到 `common-dto` 时**漏改 package**）。§3.1 只 grep 了 `payment-service`，故 40 文件表未含它们；若只改 payment-service，`ChargeRequest` / `ChannelResult` / `PaymentChannel` 会找不到这些符号而**编译必红** | **改为 `com.payment.common.dto.channel`**（与所在目录一致，且与 037 T2 计划包名对齐）。payment-service 侧改为 import 该包；**物理位置仍在 common-dto 不动**（保留 `ee9f1b3` 的「渠道契约 DTO 共享化」意图）。SC-002 的「40 个」判据**不受影响**（这 5 个本就不在 payment-service 内） |
+| M-2 | `refund/infra/client/LedgerFeignClient` 与既有的 `payment/infra/client/LedgerFeignClient` **同名**（两者方法完全相同，仅 `@FeignClient` 的 `contextId` 不同：`refundLedgerClient` vs 无）。§3.2 的扁平映射会导致同包同名冲突 | 按 §3.2 **自身原则**「infra 平铺吸收，类名自带 `Refund` 前缀可自辨」将其**重命名为 `RefundLedgerFeignClient`**（该目录其余类 `LocalPaymentRefundGateway` / `RefundFeignLedgerPostingGateway` 均已带前缀），`contextId=refundLedgerClient` **不变**。**不合并**两份 Feign 客户端（合并属行为/装配变更，同 §4 非目标口径） |
+| M-3 | 搬包后两处**同包可见性**失效：① `ChannelCallbackSignatureFilter`（→ `channelgateway.web`）需用 `payment.web.CachedBodyHttpServletRequest`（包私有类）；② `payment.web.WebConfig` 需用过滤器的两个回调路径常量（包私有字段） | **放宽为 `public`**（`CachedBodyHttpServletRequest` 类 + 构造器、`CALLBACK_PATH_PATTERN` / `REFUND_CALLBACK_PATH_PATTERN` 字段）。跨包引用的**机械后果**，无行为变化；`CachedBodyHttpServletRequest` 按 §3.1 仍留在 `payment/web`（故形成一条已登记的反向依赖，见 §6 FR-009 ① 白名单） |
+
+**FR-009 ① 的可达性说明（实现期确认）**：`channelgateway → payment` 的反向依赖实测共 **17 处**（`payment.domain` 值类型 6 处属既有 DIP，允许；`payment.application` / `api` / `web` 共 11 处集中在 3 个回调 Controller + 1 个验签过滤器）。因此规则 ① 以「禁反向依赖 payment 应用/接入层 + **逐条 FQN 白名单**」实现，白名单即技术债 TD-4 / TD-5，收口归 037（§4 非目标已声明本轮不做回调分层）。
+
 ---
 
 ## 4. 非目标（Non-goals）
@@ -238,7 +252,7 @@ com.payment.refund.infra                 → com.payment.payment.infra
 |---|---|
 | FR-001 | 系统 MUST 建立顶层包 `com.payment.channelgateway`，并按 §3.1 映射表把 **40 个渠道主源码文件**迁入；包名按 §3.1 重写规则改写（**长前缀优先**） |
 | FR-002 | `PaymentApplication` MUST 同步登记新包：`scanBasePackages` 增加 `com.payment.channelgateway`、**移除** `com.payment.refund`；`EnableFeignClients.basePackages` 同改；`MapperScan` 移除 `com.payment.refund.infra.persistence` 并改为 `com.payment.payment.infra.persistence.refund` |
-| FR-003 | `com.payment.refund` 顶层包 MUST 被消灭；按 §3.2 映射表把 **33 个主源码 + 10 个测试文件**迁入 `com.payment.payment.**`；包名按 §3.2 重写规则改写 |
+| FR-003 | `com.payment.refund` 顶层包 MUST 被消灭；按 §3.2 映射表把 **32 个主源码 + 10 个测试文件**迁入 `com.payment.payment.**`；包名按 §3.2 重写规则改写 |
 | FR-004 | `application` 层 MUST 建退款操作切片 `com.payment.payment.application.refund`，与支付 / 查询操作同层级；`api` / `domain` / `infra` 层平铺吸收，`Refund` / `RefundItem` / `RefundPolicy` 与 `Payment` / `PaymentAttempt` 同域共存于 `com.payment.payment.domain` |
 | FR-005 | 退款 HTTP 入口 MUST 收口到 `/internal/payments/refunds/**`（§3.4 四条路径映射）；请求 / 响应**字段名与语义零变化** |
 | FR-006 | §3.4 表中 **6 个调用方文件 / 8 处**引用 MUST 全部同步为新路径 |

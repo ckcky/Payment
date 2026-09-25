@@ -102,9 +102,9 @@ public final class Api {
         return post("order", "/internal/orders/refund", Map.of(), body);
     }
 
-    /** GET /internal/refunds/{refundNo}：PMRF 退款单状态（payment）。 */
+    /** GET /internal/payments/refunds/{refundNo}：PMRF 退款单状态（payment）。 */
     public ApiResponse getRefund(String pmrf) {
-        return get("payment", "/internal/refunds/" + pmrf);
+        return get("payment", "/internal/payments/refunds/" + pmrf);
     }
 
     /** POST /mock-channel/refund-callback：经 mock-channel 代理的退款渠道回调（可指定 status）。 */

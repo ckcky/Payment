@@ -17,7 +17,7 @@ import org.springframework.web.client.RestClient;
  * 渠道<b>退款</b>回调代理（spec 019 / T111，ADR-0067）：以"渠道"身份向 payment-service
  * 推送退款异步回调——演示「受理 → 延迟 → 回调」中回调一环的报文形态（签名、双号寻址）。
  *
- * <p>upstream：{@code POST {payment}/internal/refunds/{refundNo}/channel-callback}（PMRF 业务单号），
+ * <p>upstream：{@code POST {payment}/internal/payments/refunds/{refundNo}/channel-callback}（PMRF 业务单号），
  * 签名方式与支付回调一致（{@code X-Channel-Timestamp} + {@code X-Channel-Signature}，
  * HMAC-SHA256 over {@code timestamp + "." + rawBody}）。{@code signMode} 语义同支付回调：
  * VALID / FORGED（演示 403 fail-closed）/ NONE（缺头被拒）。</p>
@@ -70,7 +70,7 @@ public class RefundCallbackProxy {
         }
         signatureHeaders.forEach(headers::set);
 
-        String url = paymentUrl + "/internal/refunds/" + request.refundNo() + "/channel-callback";
+        String url = paymentUrl + "/internal/payments/refunds/" + request.refundNo() + "/channel-callback";
         log.info("[demo] refund callback -> payment {} (signMode={}, status={})", url, mode, request.status());
         try {
             ResponseEntity<String> upstream = restClient.post()

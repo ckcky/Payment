@@ -2,15 +2,15 @@ package com.payment.payment.application;
 
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
-import com.payment.payment.api.AlipayNotifyController;
-import com.payment.payment.infra.channel.alipay.AlipayGateway;
+import com.payment.channelgateway.api.AlipayNotifyController;
+import com.payment.channelgateway.infra.alipay.AlipayGateway;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.payment.infra.config.AlipaySandboxProperties;
+import com.payment.channelgateway.infra.config.AlipaySandboxProperties;
 import com.payment.payment.support.PaymentTestStack;
 import com.payment.payment.support.RecordingObservability;
 import org.junit.jupiter.api.AfterEach;

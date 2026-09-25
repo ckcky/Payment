@@ -2,10 +2,10 @@ package com.payment.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.channel.MockChannelAdapter;
+import com.payment.channelgateway.infra.MockChannelAdapter;
 import com.payment.payment.support.PaymentTestStack;
 import java.util.ArrayList;
 import java.util.List;
