@@ -1,4 +1,4 @@
-package com.payment.payment.application.channel;
+package com.payment.common.dto.channel;
 
 /**
  * 付款人信息（平台 → 渠道，spec 030 / FR-104）。

@@ -1,7 +1,7 @@
 package com.payment.payment.application;
 
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
 

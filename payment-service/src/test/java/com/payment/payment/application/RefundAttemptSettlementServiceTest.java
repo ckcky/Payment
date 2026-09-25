@@ -2,7 +2,7 @@ package com.payment.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;

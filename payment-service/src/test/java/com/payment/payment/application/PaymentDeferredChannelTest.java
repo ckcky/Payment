@@ -2,9 +2,9 @@ package com.payment.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.payment.payment.application.channel.ChannelResult;
-import com.payment.payment.application.channel.ChargeRequest;
-import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channelgateway.application.ChargeRequest;
+import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.support.PaymentTestStack;
@@ -34,12 +34,12 @@ class PaymentDeferredChannelTest {
         }
 
         @Override
-        public ChannelResult refund(com.payment.payment.application.channel.RefundRequest request) {
+        public ChannelResult refund(com.payment.channelgateway.application.RefundRequest request) {
             throw new AssertionError("deferred mode must not call the channel");
         }
 
         @Override
-        public ChannelResult queryStatus(com.payment.payment.application.channel.QueryStatusRequest request) {
+        public ChannelResult queryStatus(com.payment.channelgateway.application.QueryStatusRequest request) {
             throw new AssertionError("deferred mode must not call the channel");
         }
     };
@@ -84,12 +84,12 @@ class PaymentDeferredChannelTest {
             }
 
             @Override
-            public ChannelResult refund(com.payment.payment.application.channel.RefundRequest request) {
+            public ChannelResult refund(com.payment.channelgateway.application.RefundRequest request) {
                 throw new UnsupportedOperationException("not used in this test");
             }
 
             @Override
-            public ChannelResult queryStatus(com.payment.payment.application.channel.QueryStatusRequest request) {
+            public ChannelResult queryStatus(com.payment.channelgateway.application.QueryStatusRequest request) {
                 return ChannelResult.businessUnknown("not used in this test");
             }
         };

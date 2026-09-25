@@ -4,7 +4,7 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;

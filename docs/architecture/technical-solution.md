@@ -206,14 +206,14 @@ graph TB
 | catalog-service | Product / SKU | 商品、SKU、价格、可售性 | 已实现 |
 | order-service | Order / Transaction | 订单、明细、价格快照、交易状态机 | 已实现 |
 | payment-service | Payment + Channel | 支付编排、幂等、渠道适配、回调、UNKNOWN 收敛 | 已实现 |
-| ~~refund-service~~ | Refund | **Feature 015 已并入 `payment-service`**（`com.payment.refund` 包，端口 8085 退役）；退款编排（渠道退款 + 权益撤销 + 对账）由 payment-service 提供 | 已并入（ADR-0016/0017/0018，[ADR-0064](../adr/0064-multi-payment-per-transaction.md)） |
+| ~~refund-service~~ | Refund | **Feature 015 已并入 `payment-service`**（原 `com.payment.refund` 顶层包，端口 8085 退役；spec 038 起退款降为 payment 域内**操作切片** `com.payment.payment.application.refund`，顶层包已消灭）；退款编排（渠道退款 + 权益撤销 + 对账）由 payment-service 提供 | 已并入（ADR-0016/0017/0018，[ADR-0064](../adr/0064-multi-payment-per-transaction.md)；spec 038） |
 | fulfillment-service | Fulfillment | 履约、发货 | 已实现 |
 | entitlement-service | Entitlement | 权益授予 / 撤销 / 查询 | 已实现 |
 | ledger-service | Ledger | 复式记账（资金核心；031 起记账决策权归账本） | 已实现（`004-ledger` 前置 + `031` 重构，8090） |
 | reconciliation-service | Reconciliation | 异步对账（状态机全链路；032 起渠道账单为导入对象——SHA-256 指纹幂等 + typed 三级匹配 + 差异台账拆表 + 渠道资金事实入账 CHANNEL_SETTLEMENT/CHANNEL_FEE） | 已实现（ADR-0019/0020/0021 + 032/ADR-0080） |
 | settlement-service | Settlement | 结算批次、调整项、已确认事实闸门、收敛/关闭与结算侧记账（不真实出款） | 已实现（ADR-0022/0023 缺口补齐） |
 
-> Channel 不单独成服务：以「接口 + 模块」内聚在 payment-service（`application/channel` 接口 + `infra/channel` 实现），落实 Payment ≠ Channel。
+> Channel 不单独成服务：以「接口 + 模块」内聚在 payment-service（`channelgateway/application` 接口 + `channelgateway/infra` 实现），落实 Payment ≠ Channel。
 
 > **状态列口径**：上表基于本文 2026-08-26 基线。`ledger-service` 已按 `004-ledger` 前置实现并接入 payment 侧记账；refund / reconciliation / settlement 的进展以 [roadmap.md](roadmap.md) Current Status 与 `docs/specs/005~007` 为准，本文相关表述待下次基线刷新时统一修订。
 
@@ -245,7 +245,7 @@ graph TB
 | 可观测 | Micrometer + Micrometer Tracing | 指标与链路追踪（**[目标] 未落地**：当前 0 依赖，实际为 `TraceIdFilter` + MDC，见宪法 §Obs.3） |
 | 测试 | JUnit 5 + Mockito + AssertJ；Testcontainers | 集成测试用容器（**[目标] 未落地**：实际全 H2 MySQL 兼容模式，见 backlog。⚠️ spec 030 / T131：B1/B7 **并发**用例在 H2 上**可能假绿**，需 Testcontainers-MySQL 真库） |
 | 代码质量 | Checkstyle + Spotless | CI 强制（**[目标] 未落地**：根 pom 与 CI 均无插件） |
-| 第三方 SDK | 支付宝 `alipay-sdk-java`（沙箱渠道） | spec 030 / [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md)：**端口收口**——只允许 `infra/channel/alipay/AlipaySdkGateway` 一个类 import SDK 的 **Java 包 `com.alipay.api`**（⚠️ Maven 坐标是 `com.alipay.sdk:alipay-sdk-java`，门禁匹配的是包名，写错会空转；ArchUnit 构建期强制 + 阳性对照，INV-7）；SDK 供应链风险已显式接受 |
+| 第三方 SDK | 支付宝 `alipay-sdk-java`（沙箱渠道） | spec 030 / [ADR-0076](../adr/0076-traffic-dyeing-and-alipay-sandbox.md)：**端口收口**——只允许 `channelgateway/infra/alipay/AlipaySdkGateway` 一个类 import SDK 的 **Java 包 `com.alipay.api`**（⚠️ Maven 坐标是 `com.alipay.sdk:alipay-sdk-java`，门禁匹配的是包名，写错会空转；ArchUnit 构建期强制 + 阳性对照，INV-7）；SDK 供应链风险已显式接受 |
 
 ### 3.6 项目目录结构（Maven 多模块单仓库）
 
@@ -274,7 +274,7 @@ PaymentArch/
 ├── merchant-service/            # 商户
 ├── catalog-service/             # 商品 / SKU（含 SKU 缓存 + Redis）
 ├── order-service/               # 订单 / 交易（幂等键 + 超时库存释放）
-├── payment-service/             # 支付编排 + 渠道适配 + 退款（com.payment.refund，8084）
+├── payment-service/             # 支付编排 + 渠道网关 + 退款（com.payment.payment / com.payment.channelgateway，8084）
 ├── fulfillment-service/         # 履约
 ├── entitlement-service/         # 权益
 ├── reconciliation-service/      # 对账 + 会计审计中心
@@ -304,7 +304,7 @@ PaymentArch/
 **关键约定**：
 
 1. **包名**：统一 `com.payment.<service>.<layer>`，禁止在 `com.payment.common` 之外随意新建顶层包。
-2. **渠道适配**：`application/channel`（接口）与 `infra/channel`（实现）分离，落实 Payment ≠ Channel。
+2. **渠道适配**：`channelgateway/application`（接口）与 `channelgateway/infra`（实现）分离，落实 Payment ≠ Channel。
 3. **common 模块**：只放**跨服务共享**的稳定契约（DTO、事件、结果码），不放业务逻辑。
 4. **不建空模块**：一个服务只在对应阶段启动时才创建，避免空壳目录。
 5. **文档分层（Diátaxis）**：架构 / ADR / 指南 / 运维 / Spec 分目录；权威决策以 [docs/adr/README.md](../adr/README.md) 跳转表与 [traceability.md](../adr/traceability.md) 为准。

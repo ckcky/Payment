@@ -19,11 +19,11 @@ import java.nio.charset.StandardCharsets;
  * {@code timestamp + "." + rawBody}），但 Servlet 输入流只能消费一次。过滤器读完原始 body 后
  * 用本包装器把内容缓存下来，使下游 {@code @RequestBody} 仍能正常反序列化。</p>
  */
-class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
+public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
 
     private final byte[] cachedBody;
 
-    CachedBodyHttpServletRequest(HttpServletRequest request, byte[] cachedBody) {
+    public CachedBodyHttpServletRequest(HttpServletRequest request, byte[] cachedBody) {
         super(request);
         this.cachedBody = cachedBody;
     }

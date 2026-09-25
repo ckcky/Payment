@@ -32,8 +32,8 @@ const STEP_LABEL = {
   order_create: '下单 POST /orders',
   payment_create: '建支付单 POST /payments',
   channel_callback: '渠道回调 POST /mock-channel/callback',
-  refund_create: '退款申请 POST /internal/refunds',
-  refund_resolve: '退款确认 POST /internal/refunds/{id}/resolve',
+  refund_create: '退款申请 POST /internal/payments/refunds',
+  refund_resolve: '退款确认 POST /internal/payments/refunds/{id}/resolve',
   surplus_auto_refund: 'surplus 自动退款',
 };
 // 仅展示有样本的步

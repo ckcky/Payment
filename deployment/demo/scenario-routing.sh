@@ -185,7 +185,7 @@ jget "d['status']"; REFUND_STATUS="$VALUE"
 
 # 等异步回调收敛到终态（UNKNOWN 是渠道在途中间态，不作退出条件）
 for i in $(seq 1 30); do
-  http GET "$PAYMENT_URL/internal/refunds/$PMRF" || true
+  http GET "$PAYMENT_URL/internal/payments/refunds/$PMRF" || true
   jget "d['status']"; REFUND_STATUS="$VALUE"
   case "$REFUND_STATUS" in SUCCEEDED|FAILED) break ;; esac
   sleep 0.2

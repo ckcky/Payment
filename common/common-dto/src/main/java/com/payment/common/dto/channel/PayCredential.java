@@ -1,4 +1,4 @@
-package com.payment.payment.application.channel;
+package com.payment.common.dto.channel;
 
 import java.time.Instant;
 import java.util.Objects;

@@ -4,7 +4,7 @@ import com.payment.common.core.security.SignatureVerifier;
 import com.payment.payment.application.CreatePaymentCommand;
 import com.payment.payment.application.PaymentApplicationService;
 import com.payment.payment.application.PaymentCallbackService;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import java.util.UUID;
 import org.junit.jupiter.api.Nested;

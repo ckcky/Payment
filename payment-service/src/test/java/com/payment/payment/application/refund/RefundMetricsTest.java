@@ -1,0 +1,74 @@
+package com.payment.payment.application.refund;
+
+import com.payment.common.core.observability.BusinessMetrics;
+import com.payment.common.core.observability.MicrometerBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
+import com.payment.payment.domain.Refund;
+import com.payment.payment.domain.RefundStatus;
+import com.payment.payment.application.OrderGateway;
+import com.payment.payment.infra.InMemoryRefundRepository;
+import com.payment.payment.support.RefundTestStack;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * 退款业务指标落地测试（T072）：用 Micrometer 真实落盘并断言计数器增长。
+ */
+class RefundMetricsTest {
+
+    private final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
+    private final RefundTestStack.RecordingPaymentRefundGateway payment =
+            new RefundTestStack.RecordingPaymentRefundGateway();
+    private final RefundTestStack.RecordingLedgerGateway ledger =
+            new RefundTestStack.RecordingLedgerGateway();
+    private final OrderGateway order = new RefundTestStack.RecordingOrderGateway();
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    private final BusinessMetrics metrics = new MicrometerBusinessMetrics(registry);
+    private final StructuredAuditLogger audit = new StructuredAuditLogger();
+
+    private RefundApplicationService appService() {
+        RefundResultProcessor processor = new RefundResultProcessor(refunds, order, ledger,
+                (p, r, o) -> { }, payment, metrics, audit, com.payment.payment.mq.MqTestSupport.off());
+        return new RefundApplicationService(refunds, payment, processor, metrics, audit);
+    }
+
+    private CreateRefundCommand cmd() {
+        return new CreateRefundCommand("order-1", "PM-1", "user-1", 1000L, "CNY", "customer",
+                "idem-1", List.of());
+    }
+
+    @Test
+    void successfulRefundIncrementsCreatedAndSucceeded() {
+        Refund refund = appService().createRefund(cmd());
+
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.SUCCEEDED);
+        assertThat(registry.get("refund.initiated").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("refund.succeeded").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void duplicateRefundIncrementsDuplicateCounterWithoutSecondCreation() {
+        RefundApplicationService service = appService();
+        service.createRefund(cmd());
+        service.createRefund(cmd());
+
+        assertThat(registry.get("refund.duplicate").counter().count()).isEqualTo(1.0);
+        assertThat(registry.get("refund.initiated").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void rejectedRefundIncrementsRejectedCounter() {
+        payment.amount = new com.payment.common.dto.rpc.PaymentAmountQueryResponse(
+                "PM-1", "order-1", "user-1", 1000L, "CNY", "SUCCEEDED", "M001", "ALIPAY");
+
+        Refund refund = appService().createRefund(new CreateRefundCommand(
+                "order-1", "PM-1", "user-1", 1200L, "CNY", "customer", "idem-1", List.of()));
+
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.REJECTED);
+        assertThat(registry.get("refund.rejected").counter().count()).isEqualTo(1.0);
+    }
+}

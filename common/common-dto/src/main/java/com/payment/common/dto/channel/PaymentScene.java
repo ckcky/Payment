@@ -1,4 +1,4 @@
-package com.payment.payment.application.channel;
+package com.payment.common.dto.channel;
 
 /**
  * 支付场景（平台内部统一枚举，spec 030 / FR-101）。

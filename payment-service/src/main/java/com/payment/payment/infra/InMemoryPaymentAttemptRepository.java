@@ -1,7 +1,7 @@
 package com.payment.payment.infra;
 
-import com.payment.payment.application.channel.ChannelAttemptRecorder;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelAttemptRecorder;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
 import java.util.List;

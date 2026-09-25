@@ -152,7 +152,7 @@ async function chainOnce(workerId, iter) {
   }
 
   // spec 019 / ADR-0067：退款由 order-service 驱动（正确入口），payment 仅生成执行单 PMRF。
-  // 旧脚本误打到 payment /internal/refunds（无创建映射 → 404/500），此处修正为 order-service。
+  // 旧脚本误打到 payment /internal/payments/refunds（无创建映射 → 404/500），此处修正为 order-service。
   // surplus 分支（pay2 成功回调已触发 order 层自动退款）不再手动退款，避免超额 409 噪声。
   if (!pay2) {
     const rRefund = await timed('refund_create', () =>
@@ -170,7 +170,7 @@ async function chainOnce(workerId, iter) {
     for (let i = 0; i < 60 &&
          finalStatus !== 'SUCCEEDED' && finalStatus !== 'FAILED' && finalStatus !== 'REJECTED'; i++) {
       await new Promise((r) => setTimeout(r, 250));
-      const rPoll = await request('GET', `${REFUND_URL}/internal/refunds/${pmrf}`);
+      const rPoll = await request('GET', `${REFUND_URL}/internal/payments/refunds/${pmrf}`);
       if (rPoll.status === 200) { try { finalStatus = JSON.parse(rPoll.body).status; } catch (e) {} }
     }
     if (finalStatus === 'FAILED' || finalStatus === 'REJECTED') { recordError('refund_converge:' + finalStatus); return; }

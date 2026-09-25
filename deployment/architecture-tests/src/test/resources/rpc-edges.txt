@@ -9,7 +9,7 @@
 # 已知环：order -> payment 与 payment -> order 并存（backlog #4 / design-review M10 在案，
 # 编排者模式的显式接受成本——它出现在清单里即「可见、可评审」，由本文件守增量）。
 #
-# 口径：caller = 物理拥有客户端的部署单元（com.payment.refund.. 记 payment，015/P3 合并）；
+# 口径：caller = 物理拥有客户端的部署单元（com.payment.payment.. 记 payment，015/P3 合并；
 # target = 注解 name 去 -service 后缀；同一 (caller,target) 下新增**方法**不改本文件
 #（接口形状由 L3 InternalApiSnapshotTest 守卫），新增**客户端类/边**必改本文件。
 
@@ -18,7 +18,7 @@ order -> catalog [com.payment.order.infra.client.CatalogFeignClient]
 order -> fulfillment [com.payment.order.infra.client.FulfillmentFeignClient]
 order -> payment [com.payment.order.infra.client.PaymentFeignClient]
 payment -> ledger [com.payment.payment.infra.client.LedgerFeignClient]
-payment -> ledger [com.payment.refund.infra.client.LedgerFeignClient]
+payment -> ledger [com.payment.payment.infra.client.RefundLedgerFeignClient]
 payment -> order [com.payment.payment.infra.client.OrderFeignClient]
 reconciliation -> ledger [com.payment.reconciliation.audit.infra.LedgerAuditFeignClient]
 reconciliation -> ledger [com.payment.reconciliation.infra.client.LedgerEventFeignClient]

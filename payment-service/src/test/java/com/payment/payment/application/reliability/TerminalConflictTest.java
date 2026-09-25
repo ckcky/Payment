@@ -2,7 +2,7 @@ package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.payment.application.PaymentResultProcessor;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;

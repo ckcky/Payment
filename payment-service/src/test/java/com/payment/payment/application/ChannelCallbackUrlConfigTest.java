@@ -2,11 +2,11 @@ package com.payment.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.payment.payment.application.channel.ChargeRequest;
-import com.payment.payment.application.channel.ChannelResult;
-import com.payment.payment.application.channel.PaymentChannel;
-import com.payment.payment.application.channel.QueryStatusRequest;
-import com.payment.payment.application.channel.RefundRequest;
+import com.payment.channelgateway.application.ChargeRequest;
+import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channelgateway.application.PaymentChannel;
+import com.payment.channelgateway.application.QueryStatusRequest;
+import com.payment.channelgateway.application.RefundRequest;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
