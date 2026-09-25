@@ -8,9 +8,9 @@
  *   ② POST /orders/{orderNo}/payments        order-service    （显式选渠道建支付单，一订单可多支付单）
  *   ③ POST /mock-channel/callback           mock-channel-web （以渠道身份 HMAC 签名转发 payment，
  *                                                              驱动 PROCESSING→SUCCEEDED）
- *   ④ POST /internal/refunds                payment-service（refund 包，ADR-0064）
+ *   ④ POST /internal/payments/refunds                payment-service（refund 包，ADR-0064）
  *                                                              （创建退款，进程内渠道退款，同步 SUCCEEDED）
- *   ⑤ POST /internal/refunds/{refundNo}/resolve  payment-service（权威确认端点，幂等收敛）
+ *   ⑤ POST /internal/payments/refunds/{refundNo}/resolve  payment-service（权威确认端点，幂等收敛）
  *
  * 环境变量：
  *   VUS        并发虚拟用户数（默认 20）
@@ -108,7 +108,7 @@ export default function () {
     reason: 'customer', idempotencyKey: `refund-${uid}`, items: null,
   });
   const t3 = Date.now();
-  const rRefund = http.post(`${REFUND_URL}/internal/refunds`, refundBody, {
+  const rRefund = http.post(`${REFUND_URL}/internal/payments/refunds`, refundBody, {
     headers: { 'Content-Type': 'application/json' },
     tags: { name: 'refund_create' }, timeout: '15s',
   });
@@ -118,7 +118,7 @@ export default function () {
 
   // ⑤ 退款权威确认（幂等收敛端点；ADR-0063：路径用业务单号 refundNo，不用数值 id）
   const t4 = Date.now();
-  const rResolve = http.post(`${REFUND_URL}/internal/refunds/${refund.refundNo}/resolve`,
+  const rResolve = http.post(`${REFUND_URL}/internal/payments/refunds/${refund.refundNo}/resolve`,
     JSON.stringify({ status: 'SUCCEEDED' }), {
       headers: { 'Content-Type': 'application/json' },
       tags: { name: 'refund_resolve' }, timeout: '15s',

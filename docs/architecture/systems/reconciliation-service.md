@@ -35,7 +35,7 @@
 
 ### 3.1 上下游依赖方向
 
-- **上游依赖**：payment-service（读已确认支付事实）、payment-service（读已确认退款事实，`/internal/refunds/confirmed-facts` 已随退款域并入 8084，ADR-0064）、预置/ Mock 渠道账单（CSV fixture）
+- **上游依赖**：payment-service（读已确认支付事实）、payment-service（读已确认退款事实，`/internal/payments/refunds/confirmed-facts` 已随退款域并入 8084，ADR-0064）、预置/ Mock 渠道账单（CSV fixture）
 - **下游依赖**：settlement-service（消费 `settlement-summary` 结算事实，仅读）
 
 - **依赖方式**：跨服务交互一律经公开 REST / Feign RPC 或事件通道，**禁止**直接 SQL 他服务 Schema（Database-per-Service，见 [technical-solution.md §3.1](../technical-solution.md)）。
@@ -424,9 +424,9 @@ stateDiagram-v2
 - 目标服务：`payment-service`（Feign name 解析，Nacos 服务发现；本地默认 `http://localhost:8084`）。
 - 映射为 `PlatformFact(type=PAYMENT)`（FeignPaymentFactsClient.java:22）；payment 侧端点 [ReconciliationFactsController](../../../payment-service/src/main/java/com/payment/payment/api/ReconciliationFactsController.java) 仅返回 `SUCCEEDED` 支付。
 
-**payment-service（退款域）**：`GET /internal/refunds/confirmed-facts`（Feign `RefundFactsFeignClient`）
+**payment-service（退款域）**：`GET /internal/payments/refunds/confirmed-facts`（Feign `RefundFactsFeignClient`）
 - 目标服务：同为 `payment-service`（Feature 015 / ADR-0064 起退款域并入，原 `refund-service` 已从 Nacos 注册表退役），本地默认 `http://localhost:8084`。
-- 映射为 `PlatformFact(type=REFUND)`（FeignRefundFactsClient.java:22）；退款侧端点 [RefundFactsController](../../../payment-service/src/main/java/com/payment/refund/api/RefundFactsController.java) 仅返回已确认退款。
+- 映射为 `PlatformFact(type=REFUND)`（FeignRefundFactsClient.java:22）；退款侧端点 [RefundController](../../../payment-service/src/main/java/com/payment/payment/api/RefundController.java)（spec 038 起由 `RefundController` + `RefundFactsController` 合并，前缀 `/internal/payments/refunds/**`）仅返回已确认退款。
 
 > 两者均为**只读查询**，不触发任何写操作——满足「绝不修改原始事实」硬约束。
 
@@ -466,7 +466,7 @@ sequenceDiagram
     participant C as CSV fixture
     participant DB as reconciliation DB
     R->>P: GET /internal/payments/confirmed-facts (只读)
-    R->>F: GET /internal/refunds/confirmed-facts (只读)
+    R->>F: GET /internal/payments/refunds/confirmed-facts (只读)
     R->>C: load(period)
     R->>R: ReconciliationMatching.match → Match/Difference
     R->>DB: insert(batch) 撞唯一约束则回查

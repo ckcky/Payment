@@ -8,8 +8,9 @@ import org.springframework.core.Ordered;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import com.payment.payment.infra.config.RoutingProperties;
+import com.payment.channelgateway.infra.config.RoutingProperties;
 
+import com.payment.channelgateway.web.ChannelCallbackSignatureFilter;
 /**
  * Web 层配置：注册安全守卫（Feature 009 / ADR-0024 / ADR-0025）。
  *
@@ -35,7 +36,7 @@ public class WebConfig implements WebMvcConfigurer {
     static final String CHANNEL_CALLBACK_PREFIX = "/internal/payments/*";
 
     /** 退款渠道回调的 Servlet 前缀匹配模式（spec 019 / D7）。 */
-    static final String REFUND_CALLBACK_PREFIX = "/internal/refunds/*";
+    static final String REFUND_CALLBACK_PREFIX = "/internal/payments/refunds/*";
 
     private final ResolveAuthorizationInterceptor resolveInterceptor;
     private final InternalServiceAuthInterceptor internalAuthInterceptor;

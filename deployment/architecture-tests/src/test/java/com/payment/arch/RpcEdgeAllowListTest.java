@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <h3>边与端点的口径</h3>
  * <ul>
- *   <li><b>caller</b> = 物理拥有该接口的 Maven 模块（{@code com.payment.refund..} 属 payment-service，
+ *   <li><b>caller</b> = 物理拥有该接口的 Maven 模块（{@code com.payment.payment..} 属 payment-service，
  *       015/P3 合并，故其出站边记在 payment 名下——与部署单元一致，与「服务」口径对齐）；</li>
  *   <li><b>target</b> = 注解 {@code name} 属性去掉 {@code -service} 后缀，映射到九服务之一；
  *       出现未知目标即红（新目标 = 新边 = 必须讨论）；</li>

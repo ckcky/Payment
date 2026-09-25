@@ -11,7 +11,7 @@ import com.payment.payment.application.PaymentPersistence;
 import com.payment.payment.application.PaymentCallbackService;
 import com.payment.payment.application.PaymentResultProcessor;
 import com.payment.payment.application.PaymentUnknownResolutionService;
-import com.payment.payment.application.channel.PaymentChannel;
+import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.application.reliability.ReliabilityConfig;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;

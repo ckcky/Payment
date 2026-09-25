@@ -66,7 +66,7 @@ echo "==> ④ 等待渠道异步回调收敛第一笔退款终态（mock 默认 
 # 故只以 SUCCEEDED/FAILED 作为退出条件；真收敛不了时轮询跑满 6s 后断言失败，正是期望行为。
 FINAL_STATUS="PROCESSING"
 for i in $(seq 1 30); do
-  http GET "$PAYMENT_URL/internal/refunds/$PMRF" || true
+  http GET "$PAYMENT_URL/internal/payments/refunds/$PMRF" || true
   jget "d['status']"; FINAL_STATUS="$VALUE"
   case "$FINAL_STATUS" in
     SUCCEEDED|FAILED) break ;;
@@ -94,7 +94,7 @@ assert_status 409 "超额退款 → 409 AMOUNT_INVARIANT_VIOLATION（refundable=
 echo "==> ⑦ 等第二笔收敛 + 终态核对（订单 PARTIALLY_REFUNDED、TXRF 追踪段可见）"
 # 同 ④：UNKNOWN 是「渠道在途」中间态，不能作为轮询退出条件。
 for i in $(seq 1 30); do
-  http GET "$PAYMENT_URL/internal/refunds/$PMRF2" || true
+  http GET "$PAYMENT_URL/internal/payments/refunds/$PMRF2" || true
   jget "d['status']"; FINAL2="$VALUE"
   case "$FINAL2" in
     SUCCEEDED|FAILED) break ;;

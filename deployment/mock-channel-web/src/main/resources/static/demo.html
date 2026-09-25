@@ -771,7 +771,7 @@ async function pollRefundsOnce() {
   const rows = document.querySelectorAll('#refundRows tr[id^="rf-"]');
   for (const tr of rows) {
     const pmrf = tr.id.slice(3);
-    const r = await api('GET', '/payment/internal/refunds/' + encodeURIComponent(pmrf));
+    const r = await api('GET', '/payment/internal/payments/refunds/' + encodeURIComponent(pmrf));
     if (r.status === 200 && r.data) {
       renderRefundRow(r.data);
       renderRefundStatus(r.data);

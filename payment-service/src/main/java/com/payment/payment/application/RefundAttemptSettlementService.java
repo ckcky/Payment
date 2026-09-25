@@ -1,7 +1,7 @@
 package com.payment.payment.application;
 
-import com.payment.payment.application.channel.ChannelAttemptRecorder;
-import com.payment.payment.application.channel.ChannelResult;
+import com.payment.channelgateway.application.ChannelAttemptRecorder;
+import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
 import com.payment.payment.domain.PaymentAttemptStatus;
@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * 退款尝试收敛服务（fix：与 {@link com.payment.refund.application.RefundResultProcessor} 三路收敛同源）：
+ * 退款尝试收敛服务（fix：与 {@link com.payment.payment.application.refund.RefundResultProcessor} 三路收敛同源）：
  * 退款取得权威终态（同步终态 / 渠道回调 / resolve）时，把对应 REFUND 尝试行
  * （{@code payment_attempts.attempt_type=REFUND}）从 UNKNOWN/ACCEPTED/PENDING 收敛到
  * SUCCEEDED/FAILED——异步受理（UNKNOWN 落库）不再永久滞留。
