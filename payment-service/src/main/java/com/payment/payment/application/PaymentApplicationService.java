@@ -4,10 +4,9 @@ import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.channelgateway.application.ChannelResult;
-import com.payment.channelgateway.application.ChannelRouter;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.common.dto.channel.PayCredential;
@@ -19,7 +18,6 @@ import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.mq.PaymentEventPublisher;
 import java.util.Set;
-import java.util.TreeSet;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -48,8 +46,11 @@ public class PaymentApplicationService {
     private final LedgerPostingGateway ledgerGateway;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
-    private final ChannelRouter channelRouter;
-    private final ChannelRegistry channelRegistry;
+    /**
+     * 渠道网关门面（spec 037 / FR-007 / INV-1）：本类<b>只</b>经它接触渠道网关——
+     * {@code ChannelRegistry} / {@code ChannelRouter} 是网关域私有实现，不得出现在资金动作域。
+     */
+    private final ChannelGateway channelGateway;
     /**
      * spec 030 / FR-103 + tasks Q5 裁决「配置单值」：渠道**异步回调（notify）**地址。
      * 空 = 未配置（沙箱链路会 400，见 {@link #configuredCallbackUrls()}）。
@@ -71,8 +72,7 @@ public class PaymentApplicationService {
                                      LedgerPostingGateway ledgerGateway,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger,
-                                     ChannelRouter channelRouter,
-                                     ChannelRegistry channelRegistry,
+                                     ChannelGateway channelGateway,
                                      ObjectProvider<PaymentEventPublisher> mqProvider) {
         this.paymentRepository = paymentRepository;
         this.paymentPersistence = paymentPersistence;
@@ -81,12 +81,11 @@ public class PaymentApplicationService {
         this.ledgerGateway = ledgerGateway;
         this.metrics = metrics;
         this.auditLogger = auditLogger;
-        this.channelRouter = channelRouter;
-        this.channelRegistry = channelRegistry;
+        this.channelGateway = channelGateway;
         this.mq = mqProvider == null ? null : mqProvider.getIfAvailable();
     }
 
-    /** 兼容构造（不接账本）：空记账网关（测试/账本未接入场景）；选路用恒等路由。 */
+    /** 兼容构造（不接账本）：空记账网关（测试/账本未接入场景）；无注册表、无 Router 的门面。 */
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
                                      PaymentRetryService retryService,
@@ -95,13 +94,16 @@ public class PaymentApplicationService {
                                      StructuredAuditLogger auditLogger) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway,
                 facts -> {
-                }, metrics, auditLogger, null, null, null);
+                }, metrics, auditLogger, ChannelGateway.none(), null);
     }
 
     /**
      * 账本兼容构造（Feature 028 / FR-036）：保留既有 7 参重载签名，内部包装为
      * 「<b>单通道注册表 + 恒等路由</b>」——{@code route()} 恒返回该通道 code，
      * 且显式渠道校验恒通过。既有测试零改动（SC-012）。
+     *
+     * <p>spec 037 / T4：垫片从本类迁入网关域的 {@link ChannelGateway#ofSingleChannel}——
+     * 资金动作域不再自己实现注册表。</p>
      */
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
@@ -112,34 +114,7 @@ public class PaymentApplicationService {
                                      StructuredAuditLogger auditLogger,
                                      PaymentChannel singleChannel) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway, ledgerGateway,
-                metrics, auditLogger, identityRouter(singleChannel), singleChannelRegistry(singleChannel), null);
-    }
-
-    /** 恒等路由：不管上下文如何，恒返回该通道 code（FR-036 兼容垫片）。 */
-    private static ChannelRouter identityRouter(PaymentChannel channel) {
-        return context -> channel.channelCode();
-    }
-
-    /** 单通道注册表：只认该通道，未知码抛 INVALID_ARGUMENT（FR-036 兼容垫片）。 */
-    private static ChannelRegistry singleChannelRegistry(PaymentChannel channel) {
-        String code = channel.channelCode().toUpperCase();
-        Set<String> codes = new TreeSet<>();
-        codes.add(code);
-        return new ChannelRegistry() {
-            @Override
-            public PaymentChannel resolve(String channelCode) {
-                if (channelCode == null || !code.equals(channelCode.trim().toUpperCase())) {
-                    throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
-                            "unknown channelCode '" + channelCode + "'; registered channels: " + codes);
-                }
-                return channel;
-            }
-
-            @Override
-            public Set<String> registeredCodes() {
-                return codes;
-            }
-        };
+                metrics, auditLogger, ChannelGateway.ofSingleChannel(singleChannel), null);
     }
 
     /**
@@ -270,8 +245,8 @@ public class PaymentApplicationService {
      * spec 030 / FR-110（T31）：场景校验——{@code scene != null} 且渠道未声明支持
      * ⇒ {@code 400 INVALID_ARGUMENT}；{@code scene == null} <b>不校验</b>（INV-8 / 零回归）。
      *
-     * <p>{@code channelRegistry == null} 时跳过校验：那是既有兼容构造路径（无注册表），
-     * 且本期编排层不传场景——此处 MUST NOT 因此抛 NPE 破坏既有测试（SC-A-02）。</p>
+     * <p>门面 {@link ChannelGateway#supportedScenes} 返回 {@code null} 时跳过校验：那是既有兼容
+     * 构造路径（无注册表），且本期编排层不传场景——此处 MUST NOT 因此抛 NPE 破坏既有测试（SC-A-02）。</p>
      */
     /**
      * spec 030 / FR-103 + tasks Q5 裁决「配置单值」：把配置的 notify / return 地址装进
@@ -295,14 +270,19 @@ public class PaymentApplicationService {
     }
 
     private void validateSceneIfPresent(PaymentScene scene, String channelCode) {
-        if (scene == null || channelRegistry == null) {
+        if (scene == null) {
             return;
         }
-        PaymentChannel channel = channelRegistry.resolve(channelCode);
-        if (!channel.supportedScenes().contains(scene)) {
+        // spec 037 / T4：能力查询经门面；返回 null 即「无注册表」（既有兼容构造路径）⇒ 跳过校验。
+        // 判据与改造前 channelRegistry == null 逐字等价（NFR-2）。
+        Set<PaymentScene> supported = channelGateway.supportedScenes(channelCode);
+        if (supported == null) {
+            return;
+        }
+        if (!supported.contains(scene)) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
                     "channel " + channelCode + " does not support scene " + scene
-                            + "; supported: " + channel.supportedScenes());
+                            + "; supported: " + supported);
         }
     }
 
@@ -328,13 +308,13 @@ public class PaymentApplicationService {
      * 解析本次支付的最终渠道码（FR-023 / FR-028）。
      *
      * <p>无 Router（兼容构造）时回落到「用调用方给的 code，缺省 MOCK」——保持旧行为；
-     * 有 Router 时走 {@link ChannelRouter#route}（显式优先 / 自动选路 / 可用性判定）。</p>
+     * 有 Router 时走路由（显式优先 / 自动选路 / 可用性判定）。两条分支都由门面
+     * {@link ChannelGateway#route} 承载（spec 037 / FR-007）。</p>
      */
     private String resolveChannelCode(CreatePaymentCommand cmd) {
-        if (channelRouter == null) {
-            return cmd.channelCode() == null || cmd.channelCode().isBlank() ? "MOCK" : cmd.channelCode();
-        }
-        return channelRouter.route(
+        // spec 037 / T4：选路经门面——无 Router 时门面内部回落「用调用方给的 code，缺省 MOCK」，
+        // 与改造前本方法的兼容分支逐字等价（NFR-2）。
+        return channelGateway.route(
                 new RouteContext(cmd.amountMinor(), cmd.currencyCode(), cmd.channelCode()));
     }
 

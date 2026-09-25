@@ -3,9 +3,8 @@ package com.payment.payment.application.refund;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.trace.TraceContext;
-import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.channelgateway.application.ChannelResult;
-import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.payment.application.reliability.ReliabilityConfig;
 import com.payment.payment.domain.PaymentAttempt;
@@ -51,7 +50,8 @@ public class RefundUnknownQueryScheduler {
 
     private final RefundRepository refundRepository;
     private final PaymentAttemptRepository attemptRepository;
-    private final ChannelRegistry channelRegistry;
+    /** 渠道网关门面（spec 037 / FR-007 / INV-1）：按<b>已记录</b>渠道码精确查询，门面不重新选路（INV-6）。 */
+    private final ChannelGateway channelGateway;
     private final RefundResultProcessor resultProcessor;
     private final ReliabilityConfig config;
     private final BusinessMetrics metrics;
@@ -64,13 +64,13 @@ public class RefundUnknownQueryScheduler {
 
     public RefundUnknownQueryScheduler(RefundRepository refundRepository,
                                        PaymentAttemptRepository attemptRepository,
-                                       ChannelRegistry channelRegistry,
+                                       ChannelGateway channelGateway,
                                        RefundResultProcessor resultProcessor,
                                        ReliabilityConfig config,
                                        BusinessMetrics metrics) {
         this.refundRepository = refundRepository;
         this.attemptRepository = attemptRepository;
-        this.channelRegistry = channelRegistry;
+        this.channelGateway = channelGateway;
         this.resultProcessor = resultProcessor;
         this.config = config;
         this.metrics = metrics;
@@ -130,9 +130,11 @@ public class RefundUnknownQueryScheduler {
         QueryStatusRequest queryRequest = new QueryStatusRequest(refund.getPaymentNo(),
                 refund.getTransactionNo(), refund.getIdempotencyKey(), target.channelReference());
         // spec 030 / FR-271：调度线程无入站模态上下文，用**落库的模态**包裹渠道调用
+        // spec 037 / T4：解析与调用都经门面（按 target 记录的渠道码精确查询，不选路）
+        String channelCode = target.channelCode();
         ChannelResult result = DyeContext.callWith(target.mode(), () -> {
             metrics.counter("refund.query", 1.0, "module", MODULE);
-            return target.channel().queryStatus(queryRequest);
+            return channelGateway.query(channelCode, queryRequest);
         });
         if (result.status() == ChannelResult.Status.UNKNOWN) {
             return false; // 渠道无记录 / 仍不明确：保持 UNKNOWN
@@ -144,13 +146,17 @@ public class RefundUnknownQueryScheduler {
     }
 
     /**
-     * 反向路径目标（INV-6 / spec 030 FR-272）：REFUND 尝试行记录的渠道实现 + 模态 + 渠道退款流水号，
+     * 反向路径目标（INV-6 / spec 030 FR-272）：REFUND 尝试行记录的渠道码 + 模态 + 渠道退款流水号，
      * 三者同源——<b>绝不调 Router 重新选路</b>（退款换渠道 = 钱退错地方）。
      *
      * <p>与 {@code ChannelQueryService#resolveRecordedTarget} 同型：取
      * {@code attempt_type=REFUND}、非 PENDING、有渠道码的行，按 id 升序取第一条（最先建）。
      * 找不到记录行时抛 {@code INTERNAL_ERROR}（FR-273：不知道走哪个渠道的退款，问任何渠道都无意义），
      * 由 {@link #scanRound} 的单条容错吸收并计数。</p>
+     *
+     * <p>spec 037 / T4：承载<b>渠道码字符串</b>而非渠道实现——实现由门面在调用时解析；
+     * 且解析的可行性在此刻先验校验，使「渠道码未注册」在渠道调用与 {@code refund.query}
+     * 计数<b>之前</b>就暴露（与改造前 {@code resolve} 的位置逐字等价，NFR-2）。</p>
      */
     private RecordedTarget resolveRecordedTarget(Refund refund) {
         PaymentAttempt attempt = attemptRepository.findByPaymentNo(refund.getPaymentNo()).stream()
@@ -164,12 +170,13 @@ public class RefundUnknownQueryScheduler {
                         com.payment.common.core.error.ErrorCodes.INTERNAL_ERROR,
                         "no recorded refund channel for payment " + refund.getPaymentNo()
                                 + "; refund query must not pick an arbitrary channel"));
-        return new RecordedTarget(channelRegistry.resolve(attempt.getChannelCode()),
+        channelGateway.requireRegistered(attempt.getChannelCode());
+        return new RecordedTarget(attempt.getChannelCode(),
                 attempt.getChannelMode(), attempt.getChannelReference());
     }
 
-    /** 反向路径调用目标：渠道实现 + 落库模态 + 渠道退款流水号（必须同源，见上）。 */
-    private record RecordedTarget(PaymentChannel channel, com.payment.common.core.dye.DyeMode mode,
+    /** 反向路径调用目标：渠道码 + 落库模态 + 渠道退款流水号（必须同源，见上）。 */
+    private record RecordedTarget(String channelCode, com.payment.common.core.dye.DyeMode mode,
                                   String channelReference) {
     }
 

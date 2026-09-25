@@ -5,7 +5,7 @@ import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.channelgateway.application.PaymentChannel;
@@ -14,7 +14,6 @@ import com.payment.channelgateway.application.RefundRequest;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
-import com.payment.channelgateway.application.SingleChannelRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -180,9 +179,10 @@ class ReversePathDyeModeTest {
 
     private static ChannelQueryService queryService(InMemoryPaymentAttemptRepository attempts,
                                                     PaymentChannel channel) {
-        ChannelRegistry registry = new SingleChannelRegistry(channel);
+        // spec 037 / T4：主构造改为接门面（单通道门面 = 改造前的单通道注册表 + 恒等路由）
+        ChannelGateway gateway = ChannelGateway.ofSingleChannel(channel);
         return new ChannelQueryService(new com.payment.payment.infra.InMemoryPaymentRepository(),
-                attempts, registry, null, new ReliabilityConfig(), new NoopBusinessMetrics());
+                attempts, gateway, null, new ReliabilityConfig(), new NoopBusinessMetrics());
     }
 
     /** 触发一次「找不到 attempt 记录」的解析（借 UNKNOWN 支付走 queryRound 无支付可扫，故直接反射调私有方法）。 */
