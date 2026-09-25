@@ -281,8 +281,11 @@ T1 建 channelgateway 包迁 40 个渠道主源码
 
 ## 6. 关键约束（038 专属）
 
-- 037 新增的类（如 ChannelGateway）落在 payment/application/ 下，T1/T4 时**一并搬进
-  channelgateway 或对应新包**，不要留在旧位置。
+- 037 若新增了类（如 T4 的 `ChannelGateway`），它们会落在 `payment/application/` 下。
+  T1/T4 执行时**一并搬进 `channelgateway` 或对应新包**，不要留在旧位置。
+  做法：照 spec §3.1 映射表搬完既有 40 个文件后，再 grep 一次
+  `payment/application/channel`、`payment/infra/channel`、`payment/api`、`payment/web`
+  是否还有渠道件残留，有就一起搬。
 - T5 退款入口收口属公共 API 变更，spec 里已列全 6 个调用方（reconciliation 的 Feign、
   mock-channel-web 的回调代理、E2E、两个 scenario 脚本、demo 页面）。
   **一个都不能漏**，漏了就是运行时 404 而编译不报错。
@@ -386,20 +389,24 @@ T1 SDK 依赖 + WechatPayProperties
   环境变量命名照 spec：PAYMENT_WECHAT_*。
 - 插件落点：038 已合入 → `com.payment.channelgateway.infra.wechat`。
   若 038 未合入才落 `com.payment.payment.infra.channel.wechat`（spec 已写双路径兜底）。
-- **账本必补两行 seed**：渠道维度账户是 seed 行本身，AccountResolver 对 CHANNEL 维度缺户
-  **直接 fail fast**（LEDGER_CHANNEL_UNKNOWN）。每接一家渠道必须在
-  deployment/schema/09-ledger-schema.sql 与 031-ledger-accounting-foundation.sql
-  **同步补两行**：CHANNEL_RECEIVABLE / CHANNEL_FEE_EXPENSE，owner = WECHAT。
-  不补则首笔记账即崩（Stripe 是 id 15/16，照它的格式加 17/18）。
-- 现有 payment/infra/channel/WechatChannelAdapter.java（或迁移后的位置）是老的 MOCK 风格适配器，
-  039 要写成真正的插件。处理好新旧替换，别留下两个 WECHAT 实现。
+- **账本无需补 seed**：WECHAT 的渠道维度账户**已经存在**——
+  `deployment/schema/09-ledger-schema.sql:163,167`（id 8 = CHANNEL_RECEIVABLE owner=WECHAT，
+  id 12 = CHANNEL_FEE_EXPENSE owner=WECHAT），`031-ledger-accounting-foundation.sql:153,157` 同。
+  （对照：STRIPE 才是 id 15/16，是后来补的。）
+  ⚠️ 背景知识：AccountResolver 对 CHANNEL 维度缺户会 **fail fast**（LEDGER_CHANNEL_UNKNOWN），
+  所以接渠道前必须确认账户存在——微信这次已确认存在，不要重复插，插了会主键冲突。
+- **必须处理新旧替换**：现有 `WechatChannelAdapter` 只是 `extends AbstractMockChannelAdapter`
+  （全文 45 行，无协议、无签名、无 SDK，只声明 channelCode=WECHAT + 可配 mock 场景）。
+  038 合入后它位于 `com/payment/channelgateway/infra/WechatChannelAdapter.java`。
+  039 要把它替换成真正的插件，**别留下两个 WECHAT 实现**并存注册。
 - 回调必须带 channelCode；验签不能 return true 了事（这是既有技术债，微信侧不要复制该债）。
 
 ## 6. 完成判据（逐条自查）
 
 - [ ] grep 确认微信插件 5 个类齐全（Plugin / Factory / Gateway / SdkGateway / Properties）
-- [ ] grep -rn "WECHAT" deployment/schema/09-ledger-schema.sql
-      deployment/schema/031-ledger-accounting-foundation.sql  各命中账户 seed 行
+- [ ] grep -n "CHANNEL_RECEIVABLE\|CHANNEL_FEE_EXPENSE" deployment/schema/09-ledger-schema.sql
+      deployment/schema/031-ledger-accounting-foundation.sql  各含 owner='WECHAT' 行
+      （已存在，确认未被误删即可，不要重复插入）
 - [ ] 签名金标准单测通过（与官方 SDK 签名算法对齐）
 - [ ] 回调往返单测通过（验签 + 解密 + 状态映射）
 - [ ] 本地仿真桩四步全链路通过
