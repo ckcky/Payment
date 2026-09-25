@@ -124,8 +124,8 @@ flowchart TB
 
 | 模态 | 含义 | 当前实现 |
 |---|---|---|
-| `MOCK`（缺省） | 走 `AbstractMockChannelAdapter` 的模拟语义（尾数故障注入 / 异步退款推送 / runId 引用） | 三个渠道 Adapter 均支持 |
-| `SANDBOX` | 走**真实渠道协议**（当前仅支付宝） | 仅 `AlipayChannelAdapter`（`supportsRealMode()=true`） |
+| `MOCK`（缺省） | 走**内核统一**模拟语义（金额尾数故障注入 / runId 引用）。既有 Adapter 族经 `AbstractMockChannelAdapter`（另含异步退款推送与 `scenario` 配置），插件族经 `AbstractChannelPlugin`（同步退款） | `ALIPAY` / `DOUYIN` / `MOCK`（Adapter 族）+ `STRIPE` / `WECHAT`（插件族） |
+| `SANDBOX` | 走**真实渠道协议** | `AlipayChannelAdapter`（支付宝沙箱）、`StripeChannelPlugin`（test mode）、`WechatChannelPlugin`（微信支付 V3；`enabled` 默认 `false`，未启用时染色 ⇒ 400） |
 
 - 染色**只决定协议实现**，**不参与选路**（`ChannelRouter` 不读染色上下文，ADR-0073 规则不变）；
 - **反向路径**（退款 / 主动查询 / 超时扫描）没有入口请求，据 `payment_attempts.extra_json` 的 **`channelMode` 落库值还原**模态（经 `PaymentAttempt.getChannelMode()` 只读派生访问器，fail-safe 缺省 `MOCK`），禁止依赖 ThreadLocal、禁止解析渠道引用字符串；

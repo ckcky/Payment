@@ -83,6 +83,14 @@
             <groupId>com.stripe</groupId>
             <artifactId>stripe-java</artifactId>
         </dependency>
+        <!-- spec 039 / FR-002：微信支付官方 SDK（V3 协议：JSON + RSA-SHA256 + 平台证书 + AES-256-GCM）。
+             版本由根 pom dependencyManagement 锁定，此处**不写版本**。
+             ⚠️ INV-7 端口收口：本依赖只允许被 infra/wechat/WechatSdkGateway 一个类 import；
+             其余代码只依赖 WechatGateway 端口（同 Stripe / 支付宝口径）。 -->
+        <dependency>
+            <groupId>com.github.wechatpay-apiv3</groupId>
+            <artifactId>wechatpay-java</artifactId>
+        </dependency>
         <!-- spec 027 / ADR-0071 D13：在途占用过期索引（**仅**作 Redis TTL 标记，绝不参与额度计数）。
              这是对 ADR-0044「payment 不使用 Redis」的显式、限用途反转；Redis 不可用时降级
              NoopLimitExpiryIndex（保守占用、不拦截），故本依赖不构成硬依赖。
