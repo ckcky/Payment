@@ -1,6 +1,6 @@
 package com.payment.payment.application.channel.spi;
 
-import com.payment.payment.application.channel.PaymentScene;
+import com.payment.common.dto.channel.PaymentScene;
 
 import java.util.Set;
 

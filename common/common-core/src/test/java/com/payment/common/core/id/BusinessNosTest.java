@@ -74,4 +74,35 @@ class BusinessNosTest {
         }
         assertEquals(10_000, Set.copyOf(nos).size());
     }
+
+    // ---- spec 037 / FR-001：渠道网关业务单号 channelNo（CH + 雪花） ----
+
+    @Test
+    void channelNo_前缀与校验() {
+        String channelNo = BusinessNos.of(BusinessNoType.CHANNEL);
+        assertTrue(channelNo.startsWith("CH"), "前缀应为 CH，实际=" + channelNo);
+        assertTrue(BusinessNos.isValid(channelNo, BusinessNoType.CHANNEL), "应通过自身类型校验，实际=" + channelNo);
+        assertFalse(BusinessNos.isValid(channelNo, BusinessNoType.PAYMENT), "前缀不匹配不得通过");
+        assertTrue(channelNo.length() >= 20 && channelNo.length() <= 21,
+                "应与 paymentNo 同构（CH + 18~19 位雪花），实际长度=" + channelNo.length());
+    }
+
+    @Test
+    void channelNo_并发生成不重复() throws Exception {
+        int threads = 8, perThread = 1_250;   // 合计 10k
+        Set<String> nos = ConcurrentHashMap.newKeySet();
+        CountDownLatch latch = new CountDownLatch(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        for (int t = 0; t < threads; t++) {
+            pool.submit(() -> {
+                for (int i = 0; i < perThread; i++) {
+                    nos.add(BusinessNos.of(BusinessNoType.CHANNEL));
+                }
+                latch.countDown();
+            });
+        }
+        latch.await();
+        pool.shutdown();
+        assertEquals(threads * perThread, nos.size(), "10k 并发 channelNo 不得重复");
+    }
 }

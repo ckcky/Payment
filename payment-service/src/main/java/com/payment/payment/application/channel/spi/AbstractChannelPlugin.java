@@ -6,7 +6,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.rpc.TransportCode;
 import com.payment.payment.application.channel.ChannelResult;
 import com.payment.payment.application.channel.ChargeRequest;
-import com.payment.payment.application.channel.PaymentScene;
+import com.payment.common.dto.channel.PaymentScene;
 import com.payment.payment.application.channel.QueryStatusRequest;
 import com.payment.payment.application.channel.RefundRequest;
 import org.slf4j.Logger;

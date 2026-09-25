@@ -2,6 +2,7 @@ package com.payment.payment.application.channel;
 
 import com.payment.common.core.rpc.BusinessCode;
 import com.payment.common.core.rpc.TransportCode;
+import com.payment.common.dto.channel.PayCredential;
 import com.payment.payment.domain.PaymentAttemptErrorType;
 
 /**

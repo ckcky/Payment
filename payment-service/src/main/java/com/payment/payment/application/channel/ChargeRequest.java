@@ -1,5 +1,10 @@
 package com.payment.payment.application.channel;
 
+import com.payment.common.dto.channel.CallbackUrls;
+import com.payment.common.dto.channel.Goods;
+import com.payment.common.dto.channel.Payer;
+import com.payment.common.dto.channel.PaymentScene;
+
 import java.time.Instant;
 import java.util.Map;
 

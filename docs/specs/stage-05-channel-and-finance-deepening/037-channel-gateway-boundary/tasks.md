@@ -13,17 +13,17 @@
 
 ## T1　channelNo 业务单号　[FR-001]
 
-- [ ] **红**：`BusinessNosTest` 增加用例——`BusinessNos.of(BusinessNoType.CHANNEL)` 前缀为 `CH`、`isValid` 通过、10k 并发生成不重复
-- [ ] **绿**：`BusinessNoType` 增加 `CHANNEL("CH")`
-- [ ] **重构**：无
-- [ ] 验证：`common-core` 单测全绿
+- [x] **红**：`BusinessNosTest` 增加用例——`BusinessNos.of(BusinessNoType.CHANNEL)` 前缀为 `CH`、`isValid` 通过、10k 并发生成不重复
+- [x] **绿**：`BusinessNoType` 增加 `CHANNEL("CH")`
+- [x] **重构**：无
+- [x] 验证：`common-core` 单测全绿
 
 ## T2　common-dto 渠道网关契约　[FR-003][FR-004][FR-005][FR-006]
 
-- [ ] **红**：新增 `ChannelContractTest`——断言契约位于 `com.payment.common.dto.channel`；`ChannelQueryCommand` 以 `channelNo` 为主键；`ChannelPayNotified` 含 `channelCode`
-- [ ] **绿**：`common/common-dto` 新建 `dto/channel/`：`ChannelPayCommand` / `ChannelRefundCommand` / `ChannelQueryCommand` / `ChannelPayReceipt` / `ChannelRefundReceipt` / `ChannelQuerySnapshot` / `ChannelPayNotified` / `ChannelRefundNotified`
-- [ ] **重构**：`PaymentScene` / `Goods` / `Payer` / `CallbackUrls` 是否下沉 common-dto（拆微服务时可复用性评估）
-- [ ] 验证：`common-dto` 单测全绿
+- [x] **红**：新增 `ChannelContractTest`——断言契约位于 `com.payment.common.dto.channel`；`ChannelQueryCommand` 以 `channelNo` 为主键；`ChannelPayNotified` 含 `channelCode`
+- [x] **绿**：`common/common-dto` 新建 `dto/channel/`：`ChannelPayCommand` / `ChannelRefundCommand` / `ChannelQueryCommand` / `ChannelPayReceipt` / `ChannelRefundReceipt` / `ChannelQuerySnapshot` / `ChannelPayNotified` / `ChannelRefundNotified`
+- [x] **重构**：`PaymentScene` / `Goods` / `Payer` / `CallbackUrls` 是否下沉 common-dto（拆微服务时可复用性评估）
+- [x] 验证：`common-dto` 单测全绿
 
 ## T3　payment_attempts.channel_no 列　[FR-002]
 

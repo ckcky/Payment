@@ -6,7 +6,7 @@ import com.payment.common.core.rpc.BusinessCode;
 import com.payment.common.core.rpc.TransportCode;
 import com.payment.payment.application.channel.ChargeRequest;
 import com.payment.payment.application.channel.ChannelResult;
-import com.payment.payment.application.channel.PayCredential;
+import com.payment.common.dto.channel.PayCredential;
 import com.payment.payment.application.channel.QueryStatusRequest;
 import com.payment.payment.application.channel.RefundRequest;
 import java.time.Instant;
