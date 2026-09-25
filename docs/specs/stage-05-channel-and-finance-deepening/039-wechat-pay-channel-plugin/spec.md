@@ -226,7 +226,7 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 **硬依赖**
 - **038（payment-service 包边界重构）**：决定插件包落点。**建议 038 合入后再开工 039**，否则需二次迁移。
-- **036（Channel 微内核 + 插件化，已合入 master）**：`AbstractChannelPlugin` + `ChannelPluginFactory` SPI + 通用回调端点是本 Feature 的底座。
+- **[036-channel-plugin-microkernel](../036-channel-plugin-microkernel/spec.md)（Channel 微内核 + 插件化，已合入 master）**：`AbstractChannelPlugin` + `ChannelPluginFactory` SPI + 通用回调端点是本 Feature 的底座。其 Stripe 五件套是本 Feature 的**同构参照**。
 
 **软依赖 / ⚠️ 冲突提示**
 - **与 037 T6 重叠**：037 T6 要求「MOCK / WECHAT / ALIPAY / DOUYIN 迁至 `AbstractChannelPlugin`」。

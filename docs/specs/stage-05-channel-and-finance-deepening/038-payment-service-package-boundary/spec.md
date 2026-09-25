@@ -308,7 +308,7 @@ com.payment.refund.infra                 → com.payment.payment.infra
 - `feature/037-channel-gateway-boundary` **当前禁止合入 master**（`channel_no NOT NULL` 已加 DDL 但持久层未映射）。本 Feature **从 master 起分支**，不依赖 037 代码。⚠️ 若 037 先合入，038 需重新对齐其改动。
 
 **软依赖（可并行）**
-- 036（Channel 微内核 + 插件化 + Stripe）已合入 master —— 本 Feature 依赖其**插件目录形态**作为迁移目标结构。
+- [036-channel-plugin-microkernel](../036-channel-plugin-microkernel/spec.md)（Channel 微内核 + 插件化 + Stripe）已合入 master —— 本 Feature 依赖其**插件目录形态**作为迁移目标结构。
 - spec 034（出站失败台账）—— 决定 `posting` 保持独立（FR-008）。
 
 ---

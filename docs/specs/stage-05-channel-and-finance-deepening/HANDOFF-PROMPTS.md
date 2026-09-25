@@ -30,6 +30,8 @@
 
 ```
 docs/specs/stage-05-channel-and-finance-deepening/
+├── 036-channel-plugin-microkernel/        # ✅ 已在 master（回溯补写：代码早于文档合入）
+│   └── spec.md  plan.md  tasks.md  acceptance.md
 ├── 037-channel-gateway-boundary/          # ✅ 已在 master
 │   ├── spec.md  plan.md  tasks.md  acceptance.md
 ├── 038-payment-service-package-boundary/  # ✅ 已在 master
@@ -39,10 +41,13 @@ docs/specs/stage-05-channel-and-finance-deepening/
 └── HANDOFF-PROMPTS.md                     # 本文
 ```
 
-> ✅ **037 / 038 / 039 三套四件套均已在 master**（`5b9ed09` 合入 038/039 + 本文，`5dc8ee8` 补入 037）。
+> ✅ **036 / 037 / 038 / 039 四套四件套均已在 master**。
 > 执行方 `git checkout master && git pull` 即可全部读到，无需从别的分支取回。
 > ⚠️ 但 **037 的「代码」仍在 `feature/037-channel-gateway-boundary` 分支且禁止合入**（持久层未映射 `channel_no`），
 > 文档与代码不同源——执行 037 时必须切到该分支继续，不要从 master 新建分支。
+>
+> **036 / 037 / 038 / 039 是一条链，建议开工前先读 036 建立底座认知**：
+> 036（微内核 + 插件化 + Stripe）→ 037（门面收口 + 存量渠道迁移）→ 038（包级边界）→ 039（微信插件，以 Stripe 为同构参照）。
 
 ---
 
