@@ -16,8 +16,10 @@ import org.springframework.stereotype.Component;
  * <p>保留构造签名的目的很实际：10 个 {@code new MockChannelAdapter(...)} 的测试文件与未指定渠道的
  * 旧脚本<b>零改动</b>——结构重构不该把成本转嫁给调用方。</p>
  *
- * <p>三渠道 {@link AlipayChannelAdapter} / {@link WechatChannelAdapter} / {@link DouyinChannelAdapter}
- * 与本类行为完全一致（FR-013），差别只在身份与各自可配的 scenario。</p>
+ * <p>渠道 {@link AlipayChannelAdapter} / {@link DouyinChannelAdapter}
+ * 与本类行为完全一致（FR-013），差别只在身份与各自可配的 scenario。
+ * （{@code WECHAT} 自 spec 039 起改按插件范式接入，见
+ * {@code com.payment.channelgateway.infra.wechat.WechatChannelPlugin}。）</p>
  */
 @Component
 public class MockChannelAdapter extends AbstractMockChannelAdapter {

@@ -98,6 +98,13 @@
         -->
         <stripe-sdk.version>33.4.2</stripe-sdk.version>
 
+        <!--
+            微信支付官方 SDK（spec 039 / FR-002）：版本在此**唯一**锁定，子模块声明时**不写版本**。
+            ⚠️ INV-7 / ADR-0076 端口收口：本依赖只允许被 infra/wechat/WechatSdkGateway 一个类 import；
+            其余代码只依赖 WechatGateway 端口；将来换纯 JDK 实现（HttpClient + RSA-SHA256）零扩散。
+        -->
+        <wechatpay-sdk.version>0.2.17</wechatpay-sdk.version>
+
         <!-- Micrometer / JUnit 5 / Mockito / AssertJ 版本由 spring-boot-starter-parent 的 BOM 统一管理 -->
     </properties>
 
@@ -174,6 +181,13 @@
                 <groupId>com.stripe</groupId>
                 <artifactId>stripe-java</artifactId>
                 <version>${stripe-sdk.version}</version>
+            </dependency>
+
+            <!-- 微信支付官方 SDK（spec 039）：版本在此**唯一**锁定，子模块声明时**不写版本**。 -->
+            <dependency>
+                <groupId>com.github.wechatpay-apiv3</groupId>
+                <artifactId>wechatpay-java</artifactId>
+                <version>${wechatpay-sdk.version}</version>
             </dependency>
 
             <!-- 本工程内部共享模块（版本随父 POM 0.1.0-SNAPSHOT） -->
