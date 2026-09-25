@@ -28,12 +28,21 @@ import java.util.Map;
  * 渠道网关自己的业务身份是 {@code channelNo}（CH+雪花，spec 037 / FR-001），
  * 它由 {@link ChannelGateway} 一侧铸造并经 {@code payment_attempts.channel_no} 承载，
  * <b>不再经本契约传递数值主键</b>。
+ *
+ * <h3>spec 041：追加 {@code orderNo}</h3>
+ * 平台侧订单号。真实渠道下单本就需要「商户订单号」，此前本契约缺失该字段，
+ * 导致渠道侧无法拼装任何与订单相关的展示信息（收银台链接等），只能由调用方在
+ * 渠道域之外代拼——那正是 spec 041 要消灭的「支付域替渠道域做决定」。
+ * <b>位置刻意放在分量末位</b>：既有 11 参构造点（含 12 个测试文件）零改动即可编译，
+ * 不会因分量错位而静默传错值。
  */
 public record ChargeRequest(String paymentNo, long amountMinor,
                             String currencyCode, String channelCode,
                             PaymentScene scene, Goods goods, CallbackUrls callbackUrls,
                             Instant expireAt, Payer payer, String attach,
-                            Map<String, String> channelExtra) {
+                            Map<String, String> channelExtra,
+                            /** spec 041：平台侧订单号（可空，兼容构造下为 null）。 */
+                            String orderNo) {
 
     /**
      * 兼容构造器（spec 030 前的既有形态）：仅必要字段，扩展字段一律 {@code null}。
@@ -44,6 +53,20 @@ public record ChargeRequest(String paymentNo, long amountMinor,
     public ChargeRequest(String paymentNo, long amountMinor,
                          String currencyCode, String channelCode) {
         this(paymentNo, amountMinor, currencyCode, channelCode,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
+    }
+
+    /**
+     * 兼容构造器（spec 030 / FR-105 的 11 参形态）：无 {@code orderNo}。
+     *
+     * <p>spec 041 引入 {@code orderNo} 前既有调用点（含测试桩）零改动即可编译。</p>
+     */
+    public ChargeRequest(String paymentNo, long amountMinor,
+                         String currencyCode, String channelCode,
+                         PaymentScene scene, Goods goods, CallbackUrls callbackUrls,
+                         Instant expireAt, Payer payer, String attach,
+                         Map<String, String> channelExtra) {
+        this(paymentNo, amountMinor, currencyCode, channelCode, scene, goods, callbackUrls,
+                expireAt, payer, attach, channelExtra, null);
     }
 }

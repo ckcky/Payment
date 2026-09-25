@@ -83,9 +83,9 @@ public final class Api {
                 Map.of("X-Admin-Token", "demo-admin-token"), body);
     }
 
-    /** GET /payments/{ref}。 */
-    public ApiResponse getPayment(String ref) {
-        return get("payment", "/payments/" + ref);
+    /** GET /payments?paymentNo= （spec 041：废除「全数字即主键」双轨寻址）。 */
+    public ApiResponse getPayment(String paymentNo) {
+        return get("payment", "/payments?paymentNo=" + paymentNo);
     }
 
     // ---- 退款（order 发起 / payment 收敛，spec 019）----

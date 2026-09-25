@@ -332,7 +332,7 @@
 
 | ID | 决策 | 理由 | 备选（未采纳） |
 |---|---|---|---|
-| **D1** | 查单**同时保留** `GET /payments/{ref}` 与**新增** `GET /payments`（查询参数式），两者共用 `PaymentRefResolver` | 旧入口有 6 个真实调用点，删除需同步改 demo 页面 + 5 个脚本，属破坏性变更；保留且修正语义成本最低、风险最小。净端点数仍下降（+1 新增 / −2 删除） | 只保留查询参数式、删除 `{ref}`：破坏性变更，改动面更大 |
+| **D1**（**2026-09-26 负责人裁决修订**） | 查单**只保留** `GET /payments?paymentNo=&transactionId=`（查询参数式），**废除** `GET /payments/{ref}` 与 `PaymentRefResolver` | 负责人裁决：双轨寻址是「靠数据形态猜语义」，且实测 6 个调用点全传业务单号、数值 id 分支零调用。已在 `feature/041-payment-flow-layering` 落地（含 `resolve` 路径变量 `{ref}` → `{paymentNo}`） | 保留两者并存：**已否决**（原 D1，2026-09-26 推翻） |
 | **D2** | **不**把 resolve 迁移进 GET | GET 是安全方法，不得有副作用（RFC 7231 §4.2.2）。收敛会改状态/触发记账/写审计，浏览器预取或地址栏回车即可触发资金变更。改用响应提示字段引导 | 在 GET 内自动收敛：**否决** |
 | **D3** | 通用退款端点与 `refund-command` **并存** | 后者承载 ADR-0067 的 TXRF/PMRF 双层互记，合并需改 ADR（人类决策边界） | 合并为单一端点：**留待后续 Feature** |
 | **D4** | 只删 HTTP 端点，**保留** `PaymentRefundService` 类 | 该类被 `LocalPaymentRefundGateway` 真实依赖（→ `createRefund` / `RefundResultProcessor`）。误删会直接断裂通用退款链路 | 连类一起删：**否决**（会导致 FR-010 无法实现） |
@@ -345,6 +345,6 @@
 
 | # | 事项 | 说明 |
 |---|---|---|
-| **Q1** | `GET /payments/{ref}` 是否在后续版本废弃删除 | 本 Feature 保留并修正语义（D1）。是否彻底删除旧入口、改 demo 页面与 5 个脚本，需负责人决定 |
+| ~~**Q1**~~ | ~~`GET /payments/{ref}` 是否在后续版本废弃删除~~ | **2026-09-26 已裁决：废除**。见修订后的 D1；调用方（demo 页面 + 4 处脚本 + e2e `Api.java`）已同步 |
 | **Q2** | 通用退款端点是否需要 `X-Admin-Token` 类管控 | 当前内部鉴权 `return true`（既定裁剪）。若负责人认为普通退款需额外管控，需单开 Feature（涉及鉴权，属 Non-goal NG4） |
 | **Q3** | 是否需新增 ADR | 本 Feature 未新增架构决策（均为既有 ADR 的落实）。若负责人认为「查单双单号」需升格为架构约束，则新建 ADR |

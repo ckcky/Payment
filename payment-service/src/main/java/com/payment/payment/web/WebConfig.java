@@ -25,11 +25,12 @@ import com.payment.channelgateway.web.ChannelCallbackSignatureFilter;
  *       （<b>ADR-0024 / 0034~0037 本期为空实现</b>），回调路径除外。</li>
  * </ul>
  *
- * <p>另启用 {@link MockCashierProperties}（ADR-0048 修订版：mock 收银台跳转开关，默认关闭）
- * 与 {@link RoutingProperties}（Feature 028 / ADR-0073：渠道路由与可用性配置）。</p>
+ * <p>另启用 {@link RoutingProperties}（Feature 028 / ADR-0073：渠道路由与可用性配置）。
+ * （{@code MockCashierProperties} 已于 spec 041 随演示收银台派发策略迁入渠道网关域，
+ * 注册点见 {@code com.payment.channelgateway.infra.config.ChannelGatewayConfig}。）</p>
  */
 @Configuration
-@EnableConfigurationProperties({MockCashierProperties.class, RoutingProperties.class})
+@EnableConfigurationProperties({RoutingProperties.class})
 public class WebConfig implements WebMvcConfigurer {
 
     /** 渠道回调的 Servlet 前缀匹配模式（具体路径由过滤器内部再判定；含支付与退款两条回调链）。 */

@@ -29,7 +29,7 @@ assert_status 201 "选渠道建支付单"
 jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
 [ -n "$PAYMENT_NO" ] || fail "建支付单响应缺少 paymentNo"
 info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
-http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
+http GET "$PAYMENT_URL/payments?paymentNo=$PAYMENT_NO"
 jget "d['status']"; PAY_STATUS="$VALUE"
 
 # cashier 路径兼容（PAYMENT_MOCK_CASHIER_ENABLED=true 时支付停在 PROCESSING）：
@@ -39,7 +39,7 @@ if [ "$PAY_STATUS" = "PROCESSING" ]; then
   http POST "$DEMO_URL/mock-channel/callback" \
     "{\"paymentNo\":\"$PAYMENT_NO\",\"status\":\"SUCCESS\",\"channelReference\":\"refund-demo-$ORDER_NO\",\"amountMinor\":$AMOUNT,\"signMode\":\"VALID\"}"
   assert_status 200 "渠道回调受理"
-  http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
+  http GET "$PAYMENT_URL/payments?paymentNo=$PAYMENT_NO"
   jget "d['status']"; PAY_STATUS="$VALUE"
 fi
 assert_eq "$PAY_STATUS" "SUCCEEDED" "支付 → SUCCEEDED"

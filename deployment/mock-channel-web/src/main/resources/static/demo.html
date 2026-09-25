@@ -802,7 +802,7 @@ async function pollOnce() {
     }
     const pid = o.data.paymentNo || currentPaymentNo;
     if (pid) {
-      const p = await api('GET', '/payment/payments/' + pid);
+      const p = await api('GET', '/payment/payments?paymentNo=' + encodeURIComponent(pid));
       if (p.status === 200 && p.data) {
         document.getElementById('t-paymentStatus').textContent = p.data.status;
         document.getElementById('t-paymentStatus').className = 'v st st-' + p.data.status;

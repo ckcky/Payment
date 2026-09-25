@@ -73,7 +73,7 @@ create_order_and_pay() { # create_order_and_pay <skuId> [channelCode]
 # cashier 路径代渠道补发回调（mock-cashier 开启时支付停在 PROCESSING）
 settle_pending() { # settle_pending <paymentNo> <amountMinor>
   [ -n "$1" ] || return 0
-  http GET "$PAYMENT_URL/payments/$1"
+  http GET "$PAYMENT_URL/payments?paymentNo=$1"
   jget "d['status']"; local st="$VALUE"
   if [ "$st" = "PROCESSING" ]; then
     info "cashier 路径（PROCESSING），代渠道补发签名回调"

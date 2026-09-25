@@ -93,9 +93,9 @@ class PaymentMetricsTest {
         PaymentUnknownResolutionService resolution =
                 new PaymentUnknownResolutionService(payments, processor, metrics, audit);
 
-        boolean resolved = resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
+        Payment resolved = resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
 
-        assertThat(resolved).isTrue();
+        assertThat(resolved.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(registry.get("payment.succeeded").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("payment.unknown.duration").timer().count()).isEqualTo(1);
     }

@@ -84,14 +84,10 @@ public interface ChannelGateway {
      */
     ChannelResult query(String channelCode, DyeMode mode, QueryStatusRequest request);
 
-    /**
-     * 当前请求是否处于 {@code SANDBOX} 染色（FR-013：模态判定内聚在渠道网关域）。
-     *
-     * <p>Payment 侧有需要「按模态分叉」的编排（如 mock 收银台只在 mock 模态下延迟扣款），
-     * 但它<b>不该自己去读染色上下文</b>——那会让「模态是什么」变成两个域各自解释的概念。
-     * 由门面回答，Payment 只消费布尔结论。</p>
-     */
-    boolean isSandboxRequest();
+    // spec 041：原 `isSandboxRequest()` 探针已删除。
+    // 它当时服务于「Payment 侧按模态分叉（mock 收银台要不要延迟扣款）」——但那本身就是
+    // 渠道域的知识，spec 041 已把整段判断下沉为 ChargeDispatchPolicy。
+    // 探针随之成为死代码：留着只会让「Payment 还能问模态」这个错误印象继续存在。
 
     /**
      * 该渠道支持的支付场景。

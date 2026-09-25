@@ -167,7 +167,10 @@ public class ChannelQueryService {
             metrics.counter("channel_timeout", 1.0, "channelCode", channelCode);
         }
         if (result.status() != ChannelResult.Status.UNKNOWN) {
-            return resolution.resolve(String.valueOf(payment.getId()), result);
+            // spec 041 / FR-022：一律按业务单号寻址（数值主键不再出应用服务边界，ADR-0063）。
+            // 收敛服务返回的是**收敛后**的支付单，据此回答「是否已脱离 UNKNOWN」。
+            return resolution.resolve(payment.getPaymentNo(), result).getStatus()
+                    != com.payment.payment.domain.PaymentStatus.UNKNOWN;
         }
         if (payment.getQueryAttempts() >= config.getQueryMaxAttempts()) {
             metrics.counter("payment.query_exhausted", 1.0, "module", MODULE);

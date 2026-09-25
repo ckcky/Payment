@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 @FeignClient(name = "payment-service", configuration = PaymentFeignConfig.class)
 public interface PaymentFeignClient extends PaymentGateway {
 
-    @PostMapping("/payments")
+    /** spec 041：支付创建端点统一为 {@code POST /payments/pay}。 */
+    @PostMapping("/payments/pay")
     @Override
     CreatePaymentResponse createPayment(@RequestBody CreatePaymentRequest request);
 

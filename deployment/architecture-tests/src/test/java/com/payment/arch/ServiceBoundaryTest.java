@@ -615,7 +615,7 @@ class ServiceBoundaryTest {
      * 改造前正是如此：模态包裹散落在退款、主动查询、超时扫描、建单入口四处。</p>
      *
      * <p>037 / T5b 的收口方式是把「模态的<b>施加</b>」收进 {@code ChannelGateway}
-     * （带 {@code DyeMode} 的 {@code refund} / {@code query} 重载 + {@code isSandboxRequest()} 探针），
+     * （带 {@code DyeMode} 的 {@code refund} / {@code query} 重载 + 扣款派发策略 {@code ChargeDispatchPolicy}），
      * Payment 侧只回答「这一笔当初记的是哪种模态」。本规则把该收口钉成构建期事实。</p>
      *
      * <p><b>为什么只禁 {@code DyeContext} 而不是整个 {@code com.payment.common.core.dye} 包</b>：
@@ -668,7 +668,7 @@ class ServiceBoundaryTest {
                 .because("模态（MOCK/SANDBOX）判定 MUST 内聚在渠道网关域（FR-013）；"
                         + "Payment 应用/api 层读染色上下文会让「模态是什么」变成两个域各自解释的概念——"
                         + "改造前模态包裹散落在退款/查询/超时扫描/建单入口四处，正是这种失真"
-                        + "（FR-016 ③；施加点收在 ChannelGateway 的 DyeMode 重载与 isSandboxRequest 探针）");
+                        + "（FR-016 ③；施加点收在 ChannelGateway 的 DyeMode 重载与派发策略——spec 041 起连 isSandboxRequest 探针也已移除，Payment 侧无从询问模态）");
         rule.check(serviceClasses);
     }
 

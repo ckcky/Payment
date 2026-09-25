@@ -2,7 +2,9 @@ package com.payment.channelgateway.application;
 
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
+import com.payment.common.dto.channel.PayCredential;
 import com.payment.common.dto.channel.PaymentScene;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -32,24 +34,49 @@ import java.util.function.Supplier;
 @Component
 public class DefaultChannelGateway implements ChannelGateway {
 
+    /** spec 041：演示收银台截住扣款时给出的受理说明（不进日志正文以外的任何持久化）。 */
+    private static final String DEFERRED_TO_CASHIER = "deferred to demo cashier";
+
     private final ChannelRegistry registry;
     private final ChannelRouter router;
+    /**
+     * 扣款派发策略（spec 041 / FR-021）：{@code null} 表示「无策略」——兼容构造下恒不截住，
+     * 派发行为与改造前逐字一致。生产由 {@code DemoCashierDispatchPolicy} 装配。
+     */
+    private final ChargeDispatchPolicy dispatchPolicy;
 
     /**
-     * 生产装配（Spring 唯一确定地选它）：注入注册表与路由器。
+     * 生产装配（Spring 唯一确定地选它）：注入注册表、路由器与派发策略。
      *
      * <p>{@code router} 允许为 {@code null}（部分兼容配置下无 Router）——缺失时按
      * 「无 Router」处理，与改造前逐字一致。</p>
      */
     @Autowired
-    public DefaultChannelGateway(ChannelRegistry registry, ChannelRouter router) {
+    public DefaultChannelGateway(ChannelRegistry registry, ChannelRouter router,
+                                 ObjectProvider<ChargeDispatchPolicy> dispatchPolicy) {
         this.registry = registry;
         this.router = router;
+        this.dispatchPolicy = dispatchPolicy == null ? null : dispatchPolicy.getIfAvailable();
+    }
+
+    /**
+     * 显式派发策略构造（测试与显式装配用）：不经过 {@code ObjectProvider}。
+     */
+    public DefaultChannelGateway(ChannelRegistry registry, ChannelRouter router,
+                                 ChargeDispatchPolicy dispatchPolicy) {
+        this.registry = registry;
+        this.router = router;
+        this.dispatchPolicy = dispatchPolicy;
+    }
+
+    /** 便捷构造：只有注册表、无 Router、无派发策略（兼容路径的显式写法）。 */
+    public DefaultChannelGateway(ChannelRegistry registry, ChannelRouter router) {
+        this(registry, router, (ChargeDispatchPolicy) null);
     }
 
     /** 便捷构造：只有注册表、无 Router（兼容路径的显式写法）。 */
     public DefaultChannelGateway(ChannelRegistry registry) {
-        this(registry, null);
+        this(registry, null, (ChargeDispatchPolicy) null);
     }
 
     /**
@@ -72,9 +99,30 @@ public class DefaultChannelGateway implements ChannelGateway {
         return requested == null || requested.isBlank() ? "MOCK" : requested;
     }
 
+    /**
+     * 扣款：先经派发策略裁决，再决定是否触达渠道实现（spec 041 / FR-021）。
+     *
+     * <h3>为什么裁决在解析渠道<b>之前</b></h3>
+     * <p>策略返回凭证意味着「平台尚未向渠道发起扣款」。若先解析再让渠道实现自己返回凭证，
+     * 则渠道实现<b>已被触达</b>，与「未发起」自相矛盾（{@code PaymentDeferredChannelTest}
+     * 断言延迟路径下渠道 MUST NOT 被调用）。故顺序固定为：裁决 →（不截住时）解析 → charge。</p>
+     */
     @Override
     public ChannelResult pay(String channelCode, ChargeRequest request) {
+        PayCredential deferred = deferredCredential(request);
+        if (deferred != null) {
+            // 不触达渠道实现：直接给「已受理、买家未付款」的凭证，payment 停 PROCESSING。
+            return ChannelResult.accepted(null, DEFERRED_TO_CASHIER, deferred);
+        }
         return requireRegistry().resolve(channelCode).charge(request);
+    }
+
+    /** 派发策略裁决；无策略（兼容构造）恒返回 {@code null}。 */
+    private PayCredential deferredCredential(ChargeRequest request) {
+        if (dispatchPolicy == null || request == null) {
+            return null;
+        }
+        return dispatchPolicy.deferredCredential(request).orElse(null);
     }
 
     @Override
@@ -95,12 +143,6 @@ public class DefaultChannelGateway implements ChannelGateway {
     @Override
     public ChannelResult query(String channelCode, DyeMode mode, QueryStatusRequest request) {
         return inMode(mode, () -> query(channelCode, request));
-    }
-
-    @Override
-    public boolean isSandboxRequest() {
-        // 模态判定的唯一事实源在网关域（FR-013）；兼容构造下也无需注册表即可回答
-        return DyeContext.isSandbox();
     }
 
     /**
