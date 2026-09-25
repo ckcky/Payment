@@ -29,17 +29,19 @@
 
 -- ---- F1：支付事实（payment 库）----
 -- 注：018 迁移后 payment_attempts.amount_minor / currency_code 为 NOT NULL，注入须显式赋值（否则 1364）。
+-- 注：037 起 payment_attempts.channel_no 为 NOT NULL + UNIQUE（渠道网关业务单号 CH+雪花），
+--     注入须显式赋值（否则 1364）；此处用 CH-AUD-* 形态的确定性占位值，与 channel_reference 区分。
 -- 注：032 起 confirmed-facts(period) 按 DATE(created_at) 过滤（C-20 事实锚）——created_at 必须落在
 --     AUDIT_PERIOD（2026-08-31）内，否则演示事实为空、F2~F7 全部隐身；merchant_id 为 032 匹配键
 --     （G2/G4）与结算口径商户校验（ConfirmedFactGate）的必填锚，统一挂商户 '1'。
 INSERT INTO payment.payment_attempts
-    (payment_no, channel_code, attempt_type, amount_minor, currency_code, requested_at, responded_at, channel_reference, status,
+    (payment_no, channel_no, channel_code, attempt_type, amount_minor, currency_code, requested_at, responded_at, channel_reference, status,
      created_at, updated_at, created_by, updated_by, version)
 VALUES
-    ('PM-AUD-0001', 'MOCK', 'PAYMENT', 10000, 'CNY', '2026-08-31 10:00:00', '2026-08-31 10:00:05', 'CH-AUD-0001', 'SUCCEEDED', '2026-08-31 10:00:00', '2026-08-31 10:00:05', 'audit-fixture', 'audit-fixture', 1),
-    ('PM-AUD-0002', 'MOCK', 'PAYMENT', 25000, 'CNY', '2026-08-31 10:01:00', '2026-08-31 10:01:05', 'CH-AUD-0002', 'SUCCEEDED', '2026-08-31 10:01:00', '2026-08-31 10:01:05', 'audit-fixture', 'audit-fixture', 1),
-    ('PM-AUD-0003', 'MOCK', 'PAYMENT', 8000, 'CNY', '2026-08-31 10:02:00', '2026-08-31 10:02:05', 'CH-AUD-0003', 'SUCCEEDED', '2026-08-31 10:02:00', '2026-08-31 10:02:05', 'audit-fixture', 'audit-fixture', 1)
-ON DUPLICATE KEY UPDATE channel_reference = VALUES(channel_reference), amount_minor = VALUES(amount_minor), currency_code = VALUES(currency_code),
+    ('PM-AUD-0001', 'CH-AUD-PM-0001', 'MOCK', 'PAYMENT', 10000, 'CNY', '2026-08-31 10:00:00', '2026-08-31 10:00:05', 'CH-AUD-0001', 'SUCCEEDED', '2026-08-31 10:00:00', '2026-08-31 10:00:05', 'audit-fixture', 'audit-fixture', 1),
+    ('PM-AUD-0002', 'CH-AUD-PM-0002', 'MOCK', 'PAYMENT', 25000, 'CNY', '2026-08-31 10:01:00', '2026-08-31 10:01:05', 'CH-AUD-0002', 'SUCCEEDED', '2026-08-31 10:01:00', '2026-08-31 10:01:05', 'audit-fixture', 'audit-fixture', 1),
+    ('PM-AUD-0003', 'CH-AUD-PM-0003', 'MOCK', 'PAYMENT', 8000, 'CNY', '2026-08-31 10:02:00', '2026-08-31 10:02:05', 'CH-AUD-0003', 'SUCCEEDED', '2026-08-31 10:02:00', '2026-08-31 10:02:05', 'audit-fixture', 'audit-fixture', 1)
+ON DUPLICATE KEY UPDATE channel_no = VALUES(channel_no), channel_reference = VALUES(channel_reference), amount_minor = VALUES(amount_minor), currency_code = VALUES(currency_code),
     created_at = VALUES(created_at), updated_at = VALUES(updated_at);
 
 INSERT INTO payment.payments
@@ -60,11 +62,11 @@ ON DUPLICATE KEY UPDATE merchant_id = VALUES(merchant_id), created_at = VALUES(c
 
 -- ---- F1：退款事实（RF-AUD-0001，冲 PM-AUD-0001）----
 INSERT INTO payment.payment_attempts
-    (payment_no, channel_code, attempt_type, amount_minor, currency_code, requested_at, responded_at, channel_reference, status,
+    (payment_no, channel_no, channel_code, attempt_type, amount_minor, currency_code, requested_at, responded_at, channel_reference, status,
      created_at, updated_at, created_by, updated_by, version)
 VALUES
-    ('PM-AUD-0001', 'MOCK', 'REFUND', 3000, 'CNY', '2026-08-31 11:00:00', '2026-08-31 11:00:05', 'CH-RF-0001', 'SUCCEEDED', '2026-08-31 11:00:00', '2026-08-31 11:00:05', 'audit-fixture', 'audit-fixture', 1)
-ON DUPLICATE KEY UPDATE channel_reference = VALUES(channel_reference), amount_minor = VALUES(amount_minor), currency_code = VALUES(currency_code),
+    ('PM-AUD-0001', 'CH-AUD-RF-0001', 'MOCK', 'REFUND', 3000, 'CNY', '2026-08-31 11:00:00', '2026-08-31 11:00:05', 'CH-RF-0001', 'SUCCEEDED', '2026-08-31 11:00:00', '2026-08-31 11:00:05', 'audit-fixture', 'audit-fixture', 1)
+ON DUPLICATE KEY UPDATE channel_no = VALUES(channel_no), channel_reference = VALUES(channel_reference), amount_minor = VALUES(amount_minor), currency_code = VALUES(currency_code),
     created_at = VALUES(created_at), updated_at = VALUES(updated_at);
 
 INSERT INTO payment.refunds

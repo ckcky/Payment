@@ -27,10 +27,17 @@
 
 ## T3　payment_attempts.channel_no 列　[FR-002]
 
-- [ ] **红**：`PaymentAttempt` 单测断言 `channelNo` 必填、不可变
-- [ ] **绿**：`03-payment-schema.sql` 加 `channel_no VARCHAR(32)` + UNIQUE；`PaymentAttempt` 实体加字段（含 `rehydrate` 重载）；`ChannelAttemptRecorder` 生成并写入
+- [x] **红**：`PaymentAttempt` 单测断言 `channelNo` 必填、不可变
+- [x] **绿**：`03-payment-schema.sql` 加 `channel_no VARCHAR(32)` + UNIQUE；`PaymentAttempt` 实体加字段（含 `rehydrate` 重载）；`ChannelAttemptRecorder` 生成并写入
 - [ ] **重构**：移除 `ChargeRequest.attemptId`
-- [ ] 验证：`payment-service` 单测全绿；`deployment/demo/reset.sh` 重放建表通过
+- [x] 验证：`payment-service` 单测全绿；`deployment/demo/reset.sh` 重放建表通过
+
+> ⚠️ **`重构` 项未执行（待裁决）**：移除 `ChargeRequest.attemptId` 会让
+> `payment-service/src/test/java/com/payment/payment/contract/ChannelContractCompatTest.java`
+> 的 3 处（构造 2 + 断言 1，`assertThat(req.attemptId()).isEqualTo(7L)`）无法编译——
+> 即「既有单测断言必须改」。按交接提示词 §4「若某个断言必须改，停下报告，不要自己改」，
+> 本项挂起待人类裁决。影响面已实测：`attemptId` 在 main 下**无任何读者**，
+> 仅在 1 处生产构造点（`PaymentApplicationService:211`）与 9 处测试构造点传入。
 
 ## T4　ChannelGateway 门面收口　[FR-007][FR-008][INV-1]
 

@@ -29,6 +29,9 @@ CREATE INDEX idx_payments_txn_seq ON payments (transaction_id, attempt_seq);
 CREATE TABLE payment_attempts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     payment_no VARCHAR(32) NOT NULL,
+    -- spec 037 / FR-001 / FR-002：渠道网关业务单号（CH+雪花），NOT NULL + UNIQUE。
+    -- 与 deployment/schema/03-payment-schema.sql 手工同步（H2 镜像不会自动同步）。
+    channel_no VARCHAR(32) NOT NULL,
     channel_code VARCHAR(32) NOT NULL,
     attempt_type VARCHAR(16) NOT NULL DEFAULT 'PAYMENT',
     amount_minor BIGINT NOT NULL,
@@ -46,6 +49,7 @@ CREATE TABLE payment_attempts (
     responded_at TIMESTAMP,
     version INT NOT NULL DEFAULT 1,
     extra_json TEXT NULL,
+    CONSTRAINT uk_attempts_channel_no UNIQUE (channel_no),
     CONSTRAINT uk_attempts_channel_reference UNIQUE (channel_reference)
 );
 

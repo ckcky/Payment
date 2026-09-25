@@ -3,6 +3,8 @@ package com.payment.payment.domain;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.common.core.id.BusinessNoType;
+import com.payment.common.core.id.BusinessNos;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -34,6 +36,18 @@ public class PaymentAttempt {
     /** 乐观锁并发令牌：由仓储读写，保护并发状态迁移不被覆盖。 */
     private Integer version;
     private final String paymentNo;
+    /**
+     * 渠道网关业务单号（spec 037 / FR-001，落库列 {@code payment_attempts.channel_no}）。
+     *
+     * <p>{@code CH} + 雪花，<b>一次渠道交互一个</b>（与 {@code paymentNo} 同构）。
+     * 它是渠道网关自己的身份，取代了跨域契约里曾经出现的数值主键 {@code attemptId}
+     * ——{@code payment_attempts.id} 是数据库自增主键，把它递给渠道即违反 ADR-0063
+     * （跨系统标识一律业务单号），历史已踩过 C-12 / S21 事故。</p>
+     *
+     * <p><b>不可变</b>：单号一经铸造就是事实，不提供 setter；回读路径由
+     * {@link #rehydrate} 的显式重载原样还原，<b>不重新铸造</b>。</p>
+     */
+    private final String channelNo;
     private final String channelCode;
     /** 尝试类型：PAYMENT（默认）/ REFUND（退款渠道尝试，Feature 016）。 */
     private String attemptType = TYPE_PAYMENT;
@@ -66,13 +80,39 @@ public class PaymentAttempt {
      */
     private Map<String, String> extra;
 
-    public PaymentAttempt(String paymentNo, String channelCode, int retryCount, long amountMinor, String currencyCode) {
+    /**
+     * 全量构造（spec 037 / FR-001）：{@code channelNo} 由渠道网关域在开单时<b>显式铸造</b>。
+     *
+     * <p>{@code channelNo} 必填——缺了它，跨域交互就没有可传递的业务标识（{@code channel_no}
+     * 列也是 {@code NOT NULL}）。</p>
+     */
+    public PaymentAttempt(String paymentNo, String channelNo, String channelCode,
+                          int retryCount, long amountMinor, String currencyCode) {
         this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
+        this.channelNo = Objects.requireNonNull(channelNo, "channelNo");
         this.channelCode = Objects.requireNonNull(channelCode, "channelCode");
         this.amountMinor = amountMinor;
         this.currencyCode = Objects.requireNonNull(currencyCode, "currencyCode");
         this.requestedAt = Instant.now();
         this.retryCount = retryCount;
+    }
+
+    /**
+     * 兼容构造器（spec 037 前的既有 5 参形态）：{@code channelNo} 自动铸造。
+     *
+     * <p>保留是为了让既有调用点（含约 10 处测试夹具）零改动即可编译——与
+     * {@code ChargeRequest} / {@code RefundRequest} 等契约保留兼容构造器同一纪律。
+     * <b>生产写入口</b>（{@code ChannelAttemptRecorderImpl}）走显式构造，让「网关单在哪里铸造」
+     * 在代码上可见。</p>
+     */
+    public PaymentAttempt(String paymentNo, String channelCode, int retryCount,
+                          long amountMinor, String currencyCode) {
+        this(paymentNo, mintChannelNo(), channelCode, retryCount, amountMinor, currencyCode);
+    }
+
+    /** 铸造一个渠道网关业务单号（{@code CH} + 雪花，spec 037 / FR-001）。 */
+    private static String mintChannelNo() {
+        return BusinessNos.of(BusinessNoType.CHANNEL);
     }
 
     /** 退款渠道尝试（Feature 016 / FR-017 第②步）：复用 payment_attempts，channel_reference=渠道退款流水号。 */
@@ -85,39 +125,49 @@ public class PaymentAttempt {
     /**
      * 持久化重建：还原一次渠道交互的完整历史（引用/时间/状态/未知信息），绕过创建期状态机
      * （不改变业务规则）。
+     *
+     * <p><b>spec 037 / FR-001</b>：新增 {@code channelNo} 参数——回读路径 MUST 原样还原持久化的
+     * 网关单号，<b>不得重新铸造</b>（重新铸造会让「同一个网关单」在回读后变成另一个身份）。</p>
      */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
+                                           int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
                                            Integer version, long amountMinor, String currencyCode) {
-        return rehydrate(id, paymentNo, channelCode, retryCount, requestedAt, respondedAt, channelReference,
-                status, failureReason, errorType, version, TYPE_PAYMENT, amountMinor, currencyCode);
+        return rehydrate(id, paymentNo, channelNo, channelCode, retryCount, requestedAt, respondedAt,
+                channelReference, status, failureReason, errorType, version, TYPE_PAYMENT,
+                amountMinor, currencyCode);
     }
 
     /** 全量重建（含尝试类型，Feature 016）。 */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
+                                           int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
-                                           Integer version, String attemptType, long amountMinor, String currencyCode) {
-        return rehydrate(id, paymentNo, channelCode, retryCount, requestedAt, respondedAt, channelReference,
-                status, failureReason, errorType, version, attemptType, amountMinor, currencyCode, null);
+                                           Integer version, String attemptType, long amountMinor,
+                                           String currencyCode) {
+        return rehydrate(id, paymentNo, channelNo, channelCode, retryCount, requestedAt, respondedAt,
+                channelReference, status, failureReason, errorType, version, attemptType,
+                amountMinor, currencyCode, null);
     }
 
     /**
-     * 全量重建（spec 030 / FR-302）：在 {@link #rehydrate} 之上多还原 {@code extra}
+     * 全量重建（spec 030 / FR-302 + spec 037 / FR-001）：还原 {@code channelNo} 与 {@code extra}
      * （渠道扩展属性，含 {@value #CHANNEL_MODE_KEY}）。
      *
-     * <p>保留既有 14 参重载（委托本方法、{@code extra = null}），既有调用点零改动。</p>
+     * <p>本重载是<b>回读路径的权威形态</b>（{@code MybatisPaymentAttemptRepository#toDomain} 使用它）。</p>
      */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
+                                           int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
                                            PaymentAttemptStatus status, String failureReason,
                                            PaymentAttemptErrorType errorType,
                                            Integer version, String attemptType, long amountMinor,
                                            String currencyCode, Map<String, String> extra) {
-        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, retryCount, amountMinor, currencyCode);
+        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelNo, channelCode, retryCount,
+                amountMinor, currencyCode);
         attempt.id = id;
         attempt.attemptType = attemptType == null ? TYPE_PAYMENT : attemptType;
         attempt.requestedAt = requestedAt;
@@ -129,6 +179,45 @@ public class PaymentAttempt {
         attempt.version = version;
         attempt.extra = extra;
         return attempt;
+    }
+
+    // ---- 兼容重载（spec 037 前的签名）：channelNo 自动铸造 ----
+    //
+    // 仅供既有测试夹具使用（约 30 处 rehydrate 调用点零改动）。生产回读路径 MUST 走上面
+    // 带 channelNo 的重载——否则「回读」会变成「重新铸造一个新网关单」。
+
+    /** 兼容重载（13 参）。 */
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+                                           Instant requestedAt, Instant respondedAt, String channelReference,
+                                           PaymentAttemptStatus status, String failureReason,
+                                           PaymentAttemptErrorType errorType,
+                                           Integer version, long amountMinor, String currencyCode) {
+        return rehydrate(id, paymentNo, mintChannelNo(), channelCode, retryCount, requestedAt, respondedAt,
+                channelReference, status, failureReason, errorType, version, amountMinor, currencyCode);
+    }
+
+    /** 兼容重载（14 参，含尝试类型）。 */
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+                                           Instant requestedAt, Instant respondedAt, String channelReference,
+                                           PaymentAttemptStatus status, String failureReason,
+                                           PaymentAttemptErrorType errorType,
+                                           Integer version, String attemptType, long amountMinor,
+                                           String currencyCode) {
+        return rehydrate(id, paymentNo, mintChannelNo(), channelCode, retryCount, requestedAt, respondedAt,
+                channelReference, status, failureReason, errorType, version, attemptType,
+                amountMinor, currencyCode);
+    }
+
+    /** 兼容重载（15 参，含 {@code extra}）。 */
+    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+                                           Instant requestedAt, Instant respondedAt, String channelReference,
+                                           PaymentAttemptStatus status, String failureReason,
+                                           PaymentAttemptErrorType errorType,
+                                           Integer version, String attemptType, long amountMinor,
+                                           String currencyCode, Map<String, String> extra) {
+        return rehydrate(id, paymentNo, mintChannelNo(), channelCode, retryCount, requestedAt, respondedAt,
+                channelReference, status, failureReason, errorType, version, attemptType,
+                amountMinor, currencyCode, extra);
     }
 
     /**
@@ -294,6 +383,11 @@ public class PaymentAttempt {
 
     public String getPaymentNo() {
         return paymentNo;
+    }
+
+    /** 渠道网关业务单号（{@code CH} + 雪花，spec 037 / FR-001）：跨域传递的渠道侧身份。 */
+    public String getChannelNo() {
+        return channelNo;
     }
 
     public String getChannelCode() {

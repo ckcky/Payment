@@ -58,7 +58,9 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
     }
 
     private PaymentAttempt toDomain(PaymentAttemptEntity entity) {
-        return PaymentAttempt.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getChannelCode(),
+        // spec 037 / FR-001：回读路径走显式 channelNo 重载——原样还原持久化的网关单号，不重新铸造。
+        return PaymentAttempt.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getChannelNo(),
+                entity.getChannelCode(),
                 entity.getRetryCount(), entity.getRequestedAt(), entity.getRespondedAt(),
                 entity.getChannelReference(), PaymentAttemptStatus.valueOf(entity.getStatus()),
                 entity.getFailureReason(),
@@ -73,6 +75,8 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
         PaymentAttemptEntity entity = new PaymentAttemptEntity();
         entity.setId(attempt.getId());
         entity.setPaymentNo(attempt.getPaymentNo());
+        // spec 037 / FR-002：channel_no 列 NOT NULL，INSERT / UPDATE 都必须带上（漏了插入即失败）
+        entity.setChannelNo(attempt.getChannelNo());
         entity.setChannelCode(attempt.getChannelCode());
         entity.setAttemptType(attempt.getAttemptType());
         entity.setAmountMinor(attempt.getAmountMinor());

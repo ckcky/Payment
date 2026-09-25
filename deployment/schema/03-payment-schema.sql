@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE TABLE IF NOT EXISTS payment_attempts (
     id BIGINT NOT NULL AUTO_INCREMENT,
     payment_no VARCHAR(32) NOT NULL COMMENT '所属支付单（业务单号 PM+雪花，ADR-0063）',
+    -- spec 037 / FR-001 / FR-002：渠道网关自有业务单号（CH+雪花），取代跨域契约中的数值主键 attemptId
+    -- （payment_attempts.id 是自增主键，递给渠道即违反 ADR-0063；历史已踩 C-12 / S21）。
+    -- 存量不回填（系统未上线，spec 037 / D3）；存量库由 037-payment-attempt-channel-no.sql 就地演进。
+    channel_no VARCHAR(32) NOT NULL COMMENT '渠道网关业务单号 CH+雪花（spec 037 / FR-001）',
     channel_code VARCHAR(32) NOT NULL,
     attempt_type VARCHAR(16) NOT NULL DEFAULT 'PAYMENT' COMMENT '尝试类型 PAYMENT/REFUND（Feature 016 / FR-017）',
     amount_minor BIGINT NOT NULL COMMENT '资金口径：PAYMENT=支付金额；REFUND=所属支付单金额（spec 018 / FR-002）',
@@ -60,6 +64,8 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     PRIMARY KEY (id),
     KEY idx_attempts_payment_no (payment_no),
     KEY idx_attempts_payment_type (payment_no, attempt_type),
+    -- spec 037 / FR-002：网关单号全局唯一（一次渠道交互一个身份）
+    UNIQUE KEY uk_attempts_channel_no (channel_no),
     UNIQUE KEY uk_attempts_channel_reference (channel_reference)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
