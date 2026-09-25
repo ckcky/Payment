@@ -108,6 +108,34 @@ payment:
           connect-timeout-ms: ${PAYMENT_STRIPE_SANDBOX_CONNECT_TIMEOUT_MS:5000}
           # MUST < payment.reliability.timeout(30s)：理由同支付宝沙箱（FR-140）
           read-timeout-ms: ${PAYMENT_STRIPE_SANDBOX_READ_TIMEOUT_MS:10000}
+  # spec 039 / FR-008：微信支付 V3 渠道（真实模式）。前缀 payment.wechat ⇒ env 前缀 PAYMENT_WECHAT_*。
+  # ⚠️ C-1 裁决（FR-016）：enabled **只门控真实模式**，**不**门控渠道注册——插件始终注册
+  #    （与 Stripe 同构）：enabled=false 时 WECHAT 仍出现在 GET /internal/channels（enabled:false），
+  #    MOCK 模态照常可用（scenario-routing.sh 的「已注册 WECHAT」零回归）。
+  #    染色 X-Dye-Tag: SANDBOX 而 enabled=false ⇒ 400，**绝不静默回落 mock**（FR-241 / INV-8）。
+  wechat:
+    enabled: ${PAYMENT_WECHAT_ENABLED:false}
+    api-base-url: ${PAYMENT_WECHAT_API_BASE_URL:https://api.mch.weixin.qq.com}
+    # 以下项 enabled=true 时**启动期强校验**，缺失即拒绝启动并一次列全缺失项（FR-008）。
+    # 凭据一律 env 注入：禁硬编码 / 禁入库 / 禁明文日志（FR-009 / INV-2）。
+    mch-id: ${PAYMENT_WECHAT_MCH_ID:}
+    app-id: ${PAYMENT_WECHAT_APP_ID:}
+    # APIv3 密钥（32 字节，回调 resource 的 AES-256-GCM 解密用）
+    api-v3-key: ${PAYMENT_WECHAT_API_V3_KEY:}
+    # 商户 API 证书序列号（签名 serial_no）
+    merchant-serial-no: ${PAYMENT_WECHAT_MERCHANT_SERIAL_NO:}
+    # 商户私钥：内联 PEM 或文件路径，二选一（enabled=true 时至少配一项）
+    private-key: ${PAYMENT_WECHAT_PRIVATE_KEY:}
+    private-key-path: ${PAYMENT_WECHAT_PRIVATE_KEY_PATH:}
+    # 平台验签材料：平台证书路径 或 平台公钥，二选一（缺失则回调无法验签）
+    platform-cert-path: ${PAYMENT_WECHAT_PLATFORM_CERT_PATH:}
+    platform-public-key: ${PAYMENT_WECHAT_PLATFORM_PUBLIC_KEY:}
+    platform-public-key-id: ${PAYMENT_WECHAT_PLATFORM_PUBLIC_KEY_ID:}
+    # 回调地址（**资金事实的唯一权威来源**）；微信 V3 每个下单请求都带 notify_url。
+    notify-url: ${PAYMENT_WECHAT_NOTIFY_URL:}
+    connect-timeout-ms: ${PAYMENT_WECHAT_CONNECT_TIMEOUT_MS:5000}
+    # MUST < payment.reliability.timeout(30s)：理由同支付宝 / Stripe 沙箱（FR-140）
+    read-timeout-ms: ${PAYMENT_WECHAT_READ_TIMEOUT_MS:10000}
   # 支付渠道路由（Feature 028 / ADR-0073 / FR-031）
   routing:
     # false = 回落旧行为（channelCode 必填，不选路）；灰度开关，可一键退回今天的行为（FR-020①/FR-033）
