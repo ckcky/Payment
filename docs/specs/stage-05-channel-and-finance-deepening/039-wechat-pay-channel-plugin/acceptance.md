@@ -100,9 +100,16 @@ env -u SERVER__PORT -u SERVER__HOST bash deployment/demo/scenario-refund.sh
 空库会让其 `spring-boot:run` 以 exit code 1 退出。按 `demo/reset.sh` 的同一文件清单先重放
 `deployment/schema/[0-9][0-9]-*.sql` + `027-user-payment-limit.sql` / `032-reconciliation-statement.sql` /
 `034-pending-postings.sql`，再起服务（`start-all.sh` 不含建表步骤，属既有缺口，非本 Feature 引入）。
-> 本次实测另遇**陈旧数据卷**：`payment_attempts` 残留 018 归一化前的 `channel_no NOT NULL`（无默认值），
-> 导致建支付单 500 `Field 'channel_no' doesn't have a default value`。处置按 `deployment/README.md`「回滚」节：
-> `docker compose -f deployment/docker-compose.yml down -v` 后重建（`reset.sh` 用 `CREATE TABLE IF NOT EXISTS`，不改造旧表）。
+> 本次实测另遇一次建支付单 500 `Field 'channel_no' doesn't have a default value`。
+> **归因（2026-09-25 复核修正，首稿曾误判为「018 归一化前的遗留列」）**：`channel_no` **不是**历史遗留列，
+> 而是 **Feature 037 的在飞功能列**——`f213cad feat(037): T3 payment_attempts.channel_no 列` 新增的
+> 「渠道网关业务单号 `CH+雪花`」（spec 037 / FR-001），带 `NOT NULL` + `UNIQUE`。
+> 本地 MySQL 是**多 worktree 共用的同一个容器/数据卷**，037 的 worktree 跑过一次
+> `037-payment-attempt-channel-no.sql` 迁移，共享卷便**超前于 master**；master 的代码不写该列 ⇒ 插入失败。
+> 处置按 `deployment/README.md`「回滚」节：`docker compose -f deployment/docker-compose.yml down -v` 后重建
+> （`reset.sh` 用 `CREATE TABLE IF NOT EXISTS`，**不改造已存在的表**，故旧卷必须重建而非重放）。
+> **教训**：并行 worktree 共用一套中间件时，跨分支做 live 验证前 MUST 先确认共享库的 schema 归属，
+> 否则会把「另一条分支的迁移」误判成代码缺陷或历史漂移。
 
 ⚠️ 起服务必须 `env -u SERVER__PORT -u SERVER__HOST`。
 ⚠️ `payment.wechat.enabled` 默认 `false`。按 **C-1 裁决**，此时 WECHAT **仍注册**且 MOCK 可路由（与 Stripe 同构），
