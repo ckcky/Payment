@@ -350,6 +350,18 @@
 
 ## T8　收口
 
-- [ ] 回填 `acceptance.md` 实测结论
-- [ ] 更新 `docs/adr/README.md` 与 `traceability.md`（若新增 ADR）
-- [ ] feature 分支 → `--no-ff` 合入 master
+- [x] 回填 `acceptance.md` 实测结论（SC-001~005 + 回归基线 + NFR-2 核对 + 已登记的有意差异）
+- [x] 更新 `docs/adr/README.md` 与 `traceability.md`（若新增 ADR）——**本 Spec 未新增 ADR，条件不成立**：
+  ADR-0072 / 0073 / 0075 / 0076 已覆盖渠道架构决策，无需新开；ADR 正文按「历史决策留痕」纪律不回改
+- [x] feature 分支 → `--no-ff` 合入 master
+
+### T8 执行记录
+
+- **`spec.md` Status**：`In Development` → `Implemented`（与 038 的收口口径一致）。
+- **全量单测**：`./mvnw -B clean test` = **18 模块 BUILD SUCCESS / 1112 tests / 0F / 0E**
+  （来源核对见 `acceptance.md`；`ServiceBoundaryTest` 18/18 绿）。
+- **一处 Code ≠ Doc 漂移的修正**：`ChannelPlugin` 的类注释仍写着 038 过渡期策略
+  「刻意不做强制迁移」，与 T6 之后的代码事实**相反**。已在 T8 同步更正，并写明
+  「FR-014 与 038 结论相反、经裁决按 FR-014 执行」+「落地方式不是换 extends，
+  而是合并两个功能不等价的基类」——避免后来者读到一段与代码相反的注释。
+  该类注释的原文完整保留在 git 历史中（`git log -p -- .../ChannelPlugin.java`）。

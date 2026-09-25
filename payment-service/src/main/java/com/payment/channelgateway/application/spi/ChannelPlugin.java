@@ -11,10 +11,21 @@ import java.util.Set;
  * <h3>与 {@link PaymentChannel} 的分工</h3>
  * {@code PaymentChannel} 是<b>能力契约</b>（能扣款、能退款、能查询）；
  * 本接口补上<b>插件契约</b>——「你是谁、你能干什么、你的回调怎么翻译」。
- * 区分二者的意义在于：能力契约从第一天就有，插件契约是本次微内核改造新增的。
- * 二者分离让既有渠道（{@code AbstractMockChannelAdapter} 一族）<b>零改动</b>继续工作，
- * 新渠道则按插件范式接入。<b>刻意不做强制迁移</b>——一次性重写 4 个 Adapter
- * 会把「架构演进」变成「全渠道回归测试」，收益不成比例。</p>
+ * 区分二者的意义在于：能力契约从第一天就有，插件契约是微内核改造新增的。
+ *
+ * <p><b>强制迁移已完成（spec 037 / T6 / FR-014，2026-09-25）</b>：本节此前写的是
+ * 「二者分离让既有渠道（{@code AbstractMockChannelAdapter} 一族）<b>零改动</b>继续工作，
+ * 新渠道则按插件范式接入。<b>刻意不做强制迁移</b>」——那是 038 过渡期的策略。
+ * 037 的 FR-014 要求 MOCK / WECHAT / ALIPAY / DOUYIN <b>MUST</b> 迁移，
+ * 两者对「要不要强制迁移」给出了<b>相反</b>结论；经裁决按 FR-014 执行。</p>
+ *
+ * <p><b>落地方式不是「换 extends」，而是合并两个功能不等价的基类</b>：
+ * {@code AbstractMockChannelAdapter} 独有「退款受理 + 异步推送」，{@code AbstractChannelPlugin}
+ * 独有模板方法四步，且 {@code AlipayChannelAdapter} 自己覆写 {@code charge/refund/queryStatus}
+ * 做模态分派——与父类的 {@code final} 直接冲突。故把 mock 能力并入
+ * {@code AbstractChannelPlugin}，令 {@code AbstractMockChannelAdapter} 退化为薄层。
+ * 于是「Adapter 族」与「插件族」不再是两条并行的路，而是<b>同一条路的两个层次</b>：
+ * 全部渠道都是插件，{@code AbstractMockChannelAdapter} 只是「无真实模式」的便捷基类。</p>
  *
  * <h3>自描述取代 instanceof（SPI-01 的核心）</h3>
  * 注册表以前只有一个 {@code channelCode()} 字符串，于是「这个渠道支不支持 H5」
