@@ -82,7 +82,7 @@ class AlipayDualModeTest {
     }
 
     private static ChargeRequest chargeRequest() {
-        return new ChargeRequest("PM001", 1L, 10_00L, "CNY", "ALIPAY",
+        return new ChargeRequest("PM001", 10_00L, "CNY", "ALIPAY",
                 PaymentScene.WEB, Goods.of("测试商品"), new CallbackUrls("https://x/notify", "https://x/return"),
                 Instant.now().plusSeconds(300), null, null, null);
     }
@@ -158,7 +158,7 @@ class AlipayDualModeTest {
     void sandboxChargeRequiresNotifyUrl() {
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
                 AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true);
-        ChargeRequest noNotify = new ChargeRequest("PM001", 1L, 10_00L, "CNY", "ALIPAY",
+        ChargeRequest noNotify = new ChargeRequest("PM001", 10_00L, "CNY", "ALIPAY",
                 PaymentScene.WEB, Goods.of("x"), CallbackUrls.notifyOnly(null), null, null, null, null);
 
         DyeContext.set(DyeMode.SANDBOX);

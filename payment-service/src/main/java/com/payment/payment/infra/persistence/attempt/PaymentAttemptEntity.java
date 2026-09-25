@@ -13,6 +13,13 @@ import java.time.Instant;
 public class PaymentAttemptEntity extends BaseEntity {
 
     private String paymentNo;
+    /**
+     * 渠道网关业务单号（spec 037 / FR-001，列 {@code channel_no}，{@code NOT NULL} + UNIQUE）。
+     *
+     * <p>{@code CH} + 雪花。写侧由渠道层写入口铸造，读侧原样还原——本实体只是搬运列值，
+     * 不参与铸造。</p>
+     */
+    private String channelNo;
     private String channelCode;
     /** 尝试类型：PAYMENT / REFUND（Feature 016 / FR-017，退款渠道尝试复用本表）。 */
     private String attemptType = "PAYMENT";
@@ -45,6 +52,15 @@ public class PaymentAttemptEntity extends BaseEntity {
 
     public void setPaymentNo(String paymentNo) {
         this.paymentNo = paymentNo;
+    }
+
+    /** 渠道网关业务单号（spec 037 / FR-001）。 */
+    public String getChannelNo() {
+        return channelNo;
+    }
+
+    public void setChannelNo(String channelNo) {
+        this.channelNo = channelNo;
     }
 
     public String getChannelCode() {

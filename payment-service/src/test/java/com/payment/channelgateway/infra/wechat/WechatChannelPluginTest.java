@@ -107,7 +107,7 @@ class WechatChannelPluginTest {
     }
 
     private static ChargeRequest charge(PaymentScene scene, Payer payer, String notifyUrl) {
-        return new ChargeRequest("PM001", 1L, 10_00L, "CNY", "WECHAT",
+        return new ChargeRequest("PM001", 10_00L, "CNY", "WECHAT",
                 scene, Goods.of("测试商品"), new CallbackUrls(notifyUrl, null),
                 Instant.now().plusSeconds(300), payer, null, null);
     }

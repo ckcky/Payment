@@ -1,11 +1,10 @@
 package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.BusinessMetrics;
-import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.channelgateway.application.PaymentChannel;
-import com.payment.channelgateway.application.SingleChannelRegistry;
 import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
@@ -30,7 +29,7 @@ import org.springframework.stereotype.Service;
  *
  * <p><b>渠道来源（Feature 028 / FR-024 / INV-6）</b>：本类<b>不持有渠道单例</b>——每次按
  * {@link ChargeRequest#channelCode()}（已由调用方按路由结果或 attempt 记录定好）经
- * {@link ChannelRegistry} 解析。<b>绝不调 Router</b>：重试必须回到原来那个渠道，
+ * {@link ChannelGateway} 精确解析。<b>绝不调 Router</b>：重试必须回到原来那个渠道，
  * 换个渠道重试等于用别人的流水号去扣款。</p>
  */
 @Service
@@ -41,24 +40,24 @@ public class PaymentRetryService {
     private static final String MODULE = "payment";
     public static final String EXHAUSTED_REASON = "RETRY_EXHAUSTED";
 
-    private final ChannelRegistry channelRegistry;
+    private final ChannelGateway channelGateway;
     private final ReliabilityConfig config;
     private final BusinessMetrics metrics;
 
     /** 生产主构造：Spring 必须确定地选它（另有测试用兼容构造，故显式标注）。 */
     @org.springframework.beans.factory.annotation.Autowired
-    public PaymentRetryService(ChannelRegistry channelRegistry, ReliabilityConfig config, BusinessMetrics metrics) {
-        this.channelRegistry = channelRegistry;
+    public PaymentRetryService(ChannelGateway channelGateway, ReliabilityConfig config, BusinessMetrics metrics) {
+        this.channelGateway = channelGateway;
         this.config = config;
         this.metrics = metrics;
     }
 
     /**
      * 兼容构造（Feature 028 / FR-036 / SC-012）：保留既有「单通道」签名，
-     * 内部包装为「单通道注册表」——既有测试零改动。
+     * 内部包装为「单通道门面」——既有测试零改动。
      */
     public PaymentRetryService(PaymentChannel singleChannel, ReliabilityConfig config, BusinessMetrics metrics) {
-        this(new SingleChannelRegistry(singleChannel), config, metrics);
+        this(ChannelGateway.ofSingleChannel(singleChannel), config, metrics);
     }
 
     /**
@@ -76,8 +75,10 @@ public class PaymentRetryService {
      * 改 reason 或重放次数而被抹掉。</p>
      */
     public RetryOutcome chargeWithRetry(ChargeRequest request) {
-        PaymentChannel channel = channelRegistry.resolve(channelCodeOf(request));
-        ChannelResult result = channel.charge(request);
+        // spec 037 / T4：解析与调用都经门面。渠道码先算好（含兼容路径回落唯一注册渠道），
+        // 再交给门面按该码精确解析——门面不选路，重放必然回到同一个渠道（INV-6 / ADR-0014）。
+        String channelCode = channelCodeOf(request);
+        ChannelResult result = channelGateway.pay(channelCode, request);
         int retries = 0;
         while (result.retryable() && (retries + 1) < config.getRetryMaxAttempts()) {
             Duration backoff = backoffFor(retries);
@@ -85,7 +86,7 @@ public class PaymentRetryService {
                     result.transportCode(), retries + 1, backoff.toMillis(), result.reason());
             sleep(backoff);
             metrics.counter("payment.retry", 1.0, "module", MODULE);
-            result = channel.charge(request); // 同一 attempt 重放，幂等键不变（ADR-0014）
+            result = channelGateway.pay(channelCode, request); // 同一 attempt 重放，幂等键不变（ADR-0014）
             retries++;
         }
         if (result.retryable()) {
@@ -113,7 +114,7 @@ public class PaymentRetryService {
         if (code != null && !code.isBlank()) {
             return code;
         }
-        java.util.Set<String> registered = channelRegistry.registeredCodes();
+        java.util.Set<String> registered = channelGateway.registeredChannelCodes();
         if (registered.size() == 1) {
             return registered.iterator().next();
         }

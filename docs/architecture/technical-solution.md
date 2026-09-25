@@ -430,9 +430,11 @@ sequenceDiagram
 
 渠道超时/断连/响应不完整时，Payment/Refund **进入 UNKNOWN**（不是失败别名）。收敛路径：主动查询接口、后续回调、对账、人工处理；在未收敛前**不得重复执行不可确认的资金动作**。
 
-**支付宝异步通知端点（spec 030 / FR-201~FR-213，✅ 已实现）**：`POST /internal/channels/alipay/notify` 走**三段式校验**——① 验签（RSA2，失败 ⇒ **403** 且**不触达**收敛，INV-10）→ ② 渠道引用归属（防串号）→ ③ 金额 / 币种。响应体 **MUST 恰好**为纯文本 `success`；校验失败返回非 `success` 触发渠道重试，并留下**三件套**（不推进 + 指标 `payment.notify_rejected` + `FINANCIAL_AUDIT`），**缺一不可**。收敛**复用**既有 `PaymentCallbackService.handleCallback`（终态吸收 / 乱序 / 幂等），**不新建链路**。状态映射与查询路径同口径（`WAIT_BUYER_PAY` ⇒ UNKNOWN **不推进**）。
+**渠道回调端点（spec 030 / FR-201~FR-213；spec 037 / FR-015 收敛为通用插件端点，✅ 已实现）**：`POST /internal/channels/{channelCode}/callback`（支付宝 = `/internal/channels/ALIPAY/callback`）走**三段式校验**——① 验签 + 身份（RSA2 + `app_id`，失败 ⇒ **403** 且**不触达**收敛，INV-10）→ ② 渠道引用归属（防串号）→ ③ 金额 / 币种。①②③ 的**解析**由渠道插件 `parseCallback` 承担，**业务校验**由 `DefaultPaymentNotifyPort` 承担，**模态包裹**由 `ChannelCallbackHandler` 承担。响应体 **MUST 恰好**为纯文本 `success`；校验失败返回非 `success` 触发渠道重试，并留下**三件套**（不推进 + 指标 `payment.notify_rejected` + `FINANCIAL_AUDIT`），**缺一不可**。收敛**复用**既有 `PaymentCallbackService.handleCallback`（终态吸收 / 乱序 / 幂等），**不新建链路**。状态映射与查询路径同口径（`WAIT_BUYER_PAY` ⇒ UNKNOWN **不推进**）。
 
-> 两条回调路径（JSON `/internal/payments/{no}/channel-callback` 与支付宝 notify）**收敛语义一致**，差异仅在报文形态与验签层位（SC-B2-06，`PaymentCallbackPathParityTest` 锁定）。
+> 原支付宝专属端点 `POST /internal/channels/alipay/notify`（`AlipayNotifyController`）已于 spec 037 / T6 删除，回调统一走通用端点——036 登记的 TD-1（回调双轨）就此关闭。端点细节见 `systems/payment-service.md` §6.11.1。
+
+> 两条回调路径（JSON `/internal/payments/{no}/channel-callback` 与通用插件端点）**收敛语义一致**，差异仅在报文形态与验签层位（SC-B2-06，`PaymentCallbackPathParityTest` 锁定）。
 
 > **决策记录（Feature 003 / ADR 集合 `docs/adr/0003-payment-reliability-decisions.md`）**：
 > - 超时进 UNKNOWN、主动查询收敛、有限重试、终态冲突策略（迟到成功不覆盖已失败）已 **Accept**（ADR-0003/0004/0005/0007）。

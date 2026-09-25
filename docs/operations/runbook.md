@@ -184,13 +184,15 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 # 例：cloudflared（无需注册即可拿临时域名）
 cloudflared tunnel --url http://127.0.0.1:8084
 # 输出形如 https://xxxx.trycloudflare.com
-export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/alipay/notify
+export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/ALIPAY/callback
 export PAYMENT_CHANNEL_RETURN_URL=https://xxxx.trycloudflare.com/cashier/return
 ```
 
 ⛔ **穿透的风险（必须先读）**：穿透等于把 payment-service 暴露到公网。当前 `/internal/**` 鉴权
-（ADR-0024）与 JSON 回调验签（ADR-0025）仍为**空实现**，仅本次新增的支付宝 notify 端点自带真实
-RSA2 验签（spec 030）。因此：
+（ADR-0024）与 JSON 回调验签（ADR-0025）仍为**空实现**，仅渠道回调端点
+`POST /internal/channels/{channelCode}/callback` 的**支付宝通道**自带真实 RSA2 验签
+（`AlipayChannelAdapter#parseCallback`，spec 030；端点自 spec 037 / FR-015 起由支付宝专属端点
+`/internal/channels/alipay/notify` 收敛为通用端点，上面的 `NOTIFY_URL` 已同步）。因此：
 
 - **只在临时演示时开启，用完立即关闭**穿透与 `PAYMENT_ALIPAY_SANDBOX_ENABLED`；
 - 演示期间不要在同一实例上跑真实资金数据；

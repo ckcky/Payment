@@ -1,7 +1,5 @@
 package com.payment.payment.application;
 
-import com.payment.common.core.dye.DyeContext;
-import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
@@ -11,11 +9,10 @@ import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
 import com.payment.channelgateway.application.ChannelAttemptRecorder;
-import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.RefundRequest;
-import com.payment.channelgateway.application.SingleChannelRegistry;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptRepository;
@@ -33,7 +30,7 @@ import org.springframework.stereotype.Service;
  *
  * <p><b>反向路径按记录解析（Feature 028 / FR-024 / INV-6）</b>：退款渠道 MUST 取自被退支付单的
  * <b>生效支付渠道</b>（该 {@code payment_no} 下 {@code attempt_type=PAYMENT} 且 {@code SUCCEEDED}
- * 那一行的 {@code channel_code}），经 {@link ChannelRegistry} 解析出渠道实现——
+ * 那一行的 {@code channel_code}），经 {@link ChannelGateway} 精确解析出渠道实现——
  * <b>绝不调用 Router</b>。资金安全红线：退款换渠道 = 钱退错地方。</p>
  */
 @Service
@@ -41,7 +38,11 @@ public class PaymentRefundService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository attemptRepository;
-    private final ChannelRegistry channelRegistry;
+    /**
+     * 渠道网关门面（spec 037 / FR-007 / INV-1）：反向路径同样只经门面——按<b>已记录</b>的
+     * 渠道码精确解析，门面内部<b>不</b>重新选路（INV-6）。
+     */
+    private final ChannelGateway channelGateway;
     private final ChannelAttemptRecorder attemptRecorder;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
@@ -50,12 +51,12 @@ public class PaymentRefundService {
     @org.springframework.beans.factory.annotation.Autowired
     public PaymentRefundService(PaymentRepository paymentRepository,
                                 PaymentAttemptRepository attemptRepository,
-                                ChannelRegistry channelRegistry,
+                                ChannelGateway channelGateway,
                                 ChannelAttemptRecorder attemptRecorder,
                                 BusinessMetrics metrics,
                                 StructuredAuditLogger auditLogger) {        this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
-        this.channelRegistry = channelRegistry;
+        this.channelGateway = channelGateway;
         this.attemptRecorder = attemptRecorder;
         // 退款业务指标（refund.*）由拥有退款生命周期的 refund-service 记录；支付侧退款尝试
         // 仅是渠道透传（不迁移支付领域状态），故此处只注入、不记录。
@@ -75,7 +76,7 @@ public class PaymentRefundService {
                                 BusinessMetrics metrics,
                                 StructuredAuditLogger auditLogger) {
         this(paymentRepository, attemptRepository,
-                new SingleChannelRegistry(singleChannel),
+                ChannelGateway.ofSingleChannel(singleChannel),
                 ChannelAttemptRecorders.of(attemptRepository), metrics, auditLogger);
     }
 
@@ -98,16 +99,18 @@ public class PaymentRefundService {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "payment not refundable in status " + payment.getStatus());
         }
-        // INV-6 / FR-024：渠道取自被退支付单的生效支付渠道，经注册表解析——不调 Router、不硬编码
+        // INV-6 / FR-024：渠道取自被退支付单的生效支付渠道，经门面精确解析——不调 Router、不硬编码
         PaymentAttempt effective = resolveEffectiveAttempt(request.paymentNo());
         String channelCode = effective.getChannelCode();
-        PaymentChannel channel = channelRegistry.resolve(channelCode);
         // spec 030 / FR-153（T64）：退款是<b>反向路径</b>——没有入站 HTTP 请求，染色 ThreadLocal 为空。
         // 必须用<b>落库的模态</b>（生效 attempt 行的 channelMode）包裹渠道调用；
         // 不包裹的话，沙箱支付单的退款会退化成走 mock 渠道——原渠道的钱根本没退。
-        ChannelResult result = DyeContext.callWith(effective.getChannelMode(),
-                () -> channel.refund(new RefundRequest(request.paymentNo(), request.refundNo(),
-                        request.amountMinor(), request.currencyCode(), channelCode)));
+        // spec 037 / T4：解析与调用都收进门面（`refund` 按 request.channelCode() 精确解析）。
+        // spec 037 / T5b（FR-013）：模态的**施加**也收进门面（网关域）——本类只把
+        // 「这一笔当初记的是哪种模态」交给门面，不再自己读染色上下文。
+        ChannelResult result = channelGateway.refund(channelCode, effective.getChannelMode(),
+                new RefundRequest(request.paymentNo(), request.refundNo(),
+                        request.amountMinor(), request.currencyCode(), channelCode));
         // D2（spec 018）：REFUND 尝试记所属支付单金额（payment 金额），而非退款金额（request.amountMinor）
         recordRefundChannelAttempt(payment, request, channelCode, result);
         String mappedStatus = switch (result.status()) {

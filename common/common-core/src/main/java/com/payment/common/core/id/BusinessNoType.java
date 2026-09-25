@@ -17,6 +17,8 @@ public enum BusinessNoType {
     ORDER_ITEM("OI"),
     /** 支付单 */
     PAYMENT("PM"),
+    /** 渠道网关单（spec 037 / FR-001：渠道网关自有业务单号 channelNo，取代跨域契约中的数值主键 attemptId） */
+    CHANNEL("CH"),
     /** 交易层退款单（spec 019 / ADR-0067：order transaction 层驱动退款的退款单） */
     TRANSACTION_REFUND("TXRF"),
     /** 支付层退款执行单（spec 019 / ADR-0067：payment-service 退款执行单，替代 RF 新增） */

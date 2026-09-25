@@ -42,7 +42,11 @@ done
 # user_limit_usage / limit_operations）**不在** 03-payment-schema.sql 里，只存在于本文件。
 # 它是三位数命名，落不进上面的 [0-9][0-9]-*.sql 全量循环 ⇒ 漏放会导致演示控制台
 # 「用户限额」三个 section 全部 BadSqlGrammarException（2026-09-25 实测复现）。
-for f in 027-user-payment-limit.sql 032-reconciliation-statement.sql 034-pending-postings.sql; do
+# 037-payment-attempt-channel-no.sql 同理必须登记：payment_attempts 表在存量卷里已存在，
+# 03-payment-schema.sql 走 CREATE TABLE IF NOT EXISTS ⇒ 不会补列；漏放则 channel_no 缺失，
+# 而列是 NOT NULL ⇒ 所有 payment_attempts 插入失败（这正是 037 原 WIP 被废弃的直接原因）。
+for f in 027-user-payment-limit.sql 032-reconciliation-statement.sql 034-pending-postings.sql \
+         037-payment-attempt-channel-no.sql; do
   db_mysql < "$SCHEMA_DIR/$f"
   echo "    migrated $f"
 done

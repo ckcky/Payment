@@ -163,9 +163,25 @@ class PaymentAutoRefundServiceTest {
                 new RefundApplicationService(refunds, new LocalPaymentRefundGateway(paymentRefundService),
                         processor, new NoopBusinessMetrics(), new StructuredAuditLogger()),
                 metrics);
-        // 注入监听：模拟渠道延迟推送权威结果（真实渠道走 HTTP 回调端点，同一收敛路径）
-        channel.setRefundResultListener(new com.payment.payment.application.refund.MockRefundResultBridge(
-                new com.payment.payment.application.refund.RefundRpcCallbackService(refunds, processor)));
+        // 注入监听：模拟渠道延迟推送权威结果（真实渠道走 HTTP 回调端点，同一收敛路径）。
+        // spec 037 / T5：推送目标由 RefundResultListener 改为 Payment 定义的 PaymentNotifyPort（FR-012 / INV-2）。
+        com.payment.payment.application.refund.RefundRpcCallbackService refundCallback =
+                new com.payment.payment.application.refund.RefundRpcCallbackService(refunds, processor);
+        channel.setPaymentNotifyPort(new com.payment.payment.application.PaymentNotifyPort() {
+            @Override
+            public com.payment.payment.application.PayNotifyOutcome onChannelPayResult(
+                    com.payment.common.dto.channel.ChannelPayNotified notified) {
+                throw new UnsupportedOperationException("refund-only test double");
+            }
+
+            @Override
+            public void onChannelRefundResult(
+                    com.payment.common.dto.channel.ChannelRefundNotified notified) {
+                refundCallback.handleChannelCallback(notified.refundNo(),
+                        com.payment.channelgateway.application.ChannelResult.fromNotified(
+                                notified.status(), notified.channelTransactionId(), notified.reason()));
+            }
+        });
 
         RefundCommandResponse response = service.refundByOrder(command(payment.getPaymentNo()));
 

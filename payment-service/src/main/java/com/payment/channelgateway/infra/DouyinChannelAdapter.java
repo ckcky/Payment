@@ -1,14 +1,19 @@
 package com.payment.channelgateway.infra;
 
+import com.payment.channelgateway.application.spi.ChannelPluginDescriptor;
+import com.payment.common.dto.channel.PaymentScene;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+
+import java.util.Set;
 
 /**
  * 抖音支付渠道 Adapter（Feature 028 / FR-010，ADR-0072）。
  *
  * <p>本类只声明「<b>身份 + 差异</b>」：身份 {@code DOUYIN}，差异是可独立配置的 mock 场景。
- * 所有横切行为均由 {@link AbstractMockChannelAdapter} 承载，<b>不得覆写</b>。</p>
+ * 所有横切行为均由 {@link AbstractMockChannelAdapter} 承载，<b>不得覆写</b>；
+ * spec 037 / T6 起它同时是渠道插件（FR-014）。</p>
  *
  * <p><b>默认 {@code enabled=false}（FR-031）</b>：自动选路不会挑到本渠道；
  * 但显式指定仍按其执行（FR-020②/L3：{@code enabled} 语义是「别自动挑我」，不是「禁止使用」）。</p>
@@ -17,6 +22,18 @@ import org.springframework.stereotype.Component;
 public class DouyinChannelAdapter extends AbstractMockChannelAdapter {
 
     public static final String CODE = "DOUYIN";
+
+    /** 纯 mock 渠道的全部场景都是本地模拟，故声明全支持。 */
+    private static final Set<PaymentScene> SUPPORTED_SCENES = Set.of(PaymentScene.values());
+
+    /** 插件自描述：无回调路径（结果由进程内推送送达，与 MOCK 同族）。 */
+    private static final ChannelPluginDescriptor DESCRIPTOR =
+            ChannelPluginDescriptor.withoutCallback(CODE, "抖音支付（本地模拟）", SUPPORTED_SCENES, false);
+
+    @Override
+    public ChannelPluginDescriptor descriptor() {
+        return DESCRIPTOR;
+    }
 
     @Override
     public String channelCode() {

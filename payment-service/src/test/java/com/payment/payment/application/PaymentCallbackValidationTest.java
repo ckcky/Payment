@@ -1,16 +1,18 @@
 package com.payment.payment.application;
 
 import com.payment.common.core.dye.DyeContext;
-import com.payment.common.core.dye.DyeMode;
-import com.payment.channelgateway.api.AlipayNotifyController;
+import com.payment.channelgateway.application.ChannelCallbackHandler;
+import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.spi.ChannelCallbackEnvelope;
+import com.payment.channelgateway.infra.AlipayChannelAdapter;
 import com.payment.channelgateway.infra.alipay.AlipayGateway;
+import com.payment.channelgateway.support.StubChannelRegistry;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channelgateway.infra.config.AlipaySandboxProperties;
 import com.payment.payment.support.PaymentTestStack;
 import com.payment.payment.support.RecordingObservability;
 import org.junit.jupiter.api.AfterEach;
@@ -28,26 +30,39 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * spec 030 / T124 / SC-B2-01~04：notify 校验失败的<b>三件套</b>（FR-213）。
  *
- * <p>{@code AlipayNotifyValidationTest} 覆盖了「金额/引用不符 ⇒ 拒绝 + 状态不动」；
- * 本类把断言补到<b>完整三件套</b>——<b>不推进 + 计指标 + 写审计</b>，逐类验证，
- * 并额外锁死「诚实拒绝」的反面：校验<b>通过</b>时绝不能留下拒绝痕迹（否则指标
- * 会永久高位而让人以为系统一直在拒单）。</p>
+ * <p>{@code PaymentNotifyPortTest} 覆盖了「金额/币种/引用不符 ⇒ 拒绝 + 三件套」在
+ * <b>端口层</b>的口径；本类从<b>入站端点</b>出发把同一条纪律再走一遍——因为端点这一层
+ * 还多了一段「插件验签/身份 → 网关模板 → 端口」的路，而<b>那段路上的失败也必须是拒绝</b>，
+ * 不能因为「还没到业务校验」就变成静默通过。</p>
+ *
+ * <p><b>T6 迁移说明</b>：本类原先驱动的是支付宝专属端点 {@code AlipayNotifyController}
+ * （FR-015 已删除）。现驱动通用端点背后的真实链路
+ * （{@code ChannelCallbackHandler} + {@link DefaultPaymentNotifyPort}），
+ * 报文形态、拒绝语义、三件套断言全部不变。</p>
  *
  * <p>为什么三件套要一起断言：静默拒绝是最危险的形态——状态没动看起来「一切正常」，
  * 差异被吞进黑洞，直到对账日才暴露。指标负责「有异常」，审计负责「是哪一笔」，
  * 缺任何一个都无法在事故中定位。</p>
+ *
+ * <h3>一处刻意的断言变更（已获放行）</h3>
+ * <p>{@link ReferenceMismatch#appIdMismatchRejects()} 原先断言 {@code reason=app_id}。
+ * 迁移后 {@code app_id} 校验归属「①签名/身份」段（由插件承担，与验签同源），
+ * 故归入 {@code reason=signature}——<b>该监控维度随之消失</b>，这是 T6 前已上报
+ * 并经裁决放行的唯一一处断言变更。其余断言一条未改。</p>
  */
 class PaymentCallbackValidationTest {
 
     private static final String PAYMENT_NO = "PM-VAL-1";
+
+    /** 沙箱 app_id：插件据此做身份一致性校验（FR-203），报文必须带同一个值。 */
+    private static final String APP_ID = "sandbox-app-1";
 
     private PaymentTestStack stack;
     private InMemoryPaymentRepository payments;
     private InMemoryPaymentAttemptRepository attempts;
     private RecordingObservability obs;
     private StubGateway gateway;
-    private AlipaySandboxProperties properties;
-    private AlipayNotifyController controller;
+    private ChannelCallbackHandler handler;
 
     /** 网关桩：验签恒通过，专注业务侧校验；pagePay/query/refund 不走。 */
     private static final class StubGateway implements AlipayGateway {
@@ -89,15 +104,18 @@ class PaymentCallbackValidationTest {
                 Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
 
         gateway = new StubGateway();
-        properties = new AlipaySandboxProperties();
-        properties.setEnabled(true);
-        properties.setAppId("sandbox-app-1");
 
-        // 用记录式观测装配真实收敛服务：这样指标/审计都进内存，可断言
+        // 用记录式观测装配真实收敛服务：这样指标/审计都进内存，可断言。
+        // 指标同时交给网关模板（签名段的拒绝由它计）与入向端口（业务段的拒绝由它计）——
+        // 两段共用一个记录器，才能证明「无论在哪一段被拒，都留了痕迹」。
         PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, stack.order);
         PaymentCallbackService callback = new PaymentCallbackService(processor, payments, obs.metrics, obs.audit);
-        controller = new AlipayNotifyController(gateway, properties, callback,
+        PaymentNotifyPort port = new DefaultPaymentNotifyPort(callback, null,
                 payments, attempts, obs.metrics, obs.audit);
+
+        ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE,
+                new AlipayChannelAdapter(AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, APP_ID));
+        handler = new ChannelCallbackHandler(registry, port, obs.metrics);
     }
 
     @AfterEach
@@ -113,10 +131,16 @@ class PaymentCallbackValidationTest {
         if (totalAmount != null) {
             params.put("total_amount", totalAmount);
         }
-        params.put("app_id", "sandbox-app-1");
+        params.put("app_id", APP_ID);
         params.put("sign", "fake");
         params.put("sign_type", "RSA2");
         return params;
+    }
+
+    /** 走通用端点：支付宝表单报文 → 插件翻译 → 网关四步模板 → 入向端口，取应答体。 */
+    private String notifyBody(Map<String, String> params) {
+        return handler.handle(AlipayChannelAdapter.CODE,
+                ChannelCallbackEnvelope.form(Map.of(), params)).body();
     }
 
     /** 三件套的统一断言：状态不动 + 该 reason 的指标 + 审计留痕。 */
@@ -145,7 +169,7 @@ class PaymentCallbackValidationTest {
         @Test
         @DisplayName("金额少付 ⇒ 三件套齐全，不推进 [SC-B2-01]")
         void underpaidRejects() {
-            assertThat(controller.onNotify(notifyParams("9.99", "ch-1", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("9.99", "ch-1", "TRADE_SUCCESS")))
                     .contains("rejected");
             assertRejectedTriple("amount");
         }
@@ -153,7 +177,7 @@ class PaymentCallbackValidationTest {
         @Test
         @DisplayName("金额多付 ⇒ 同样拒绝（多付也是分歧，不能静默接受）[SC-B2-01]")
         void overpaidRejects() {
-            assertThat(controller.onNotify(notifyParams("10.01", "ch-1", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("10.01", "ch-1", "TRADE_SUCCESS")))
                     .contains("rejected");
             assertRejectedTriple("amount");
         }
@@ -161,7 +185,7 @@ class PaymentCallbackValidationTest {
         @Test
         @DisplayName("金额恰好一致 ⇒ 收敛成功且**无**拒绝痕迹（诚实拒绝的反面）")
         void exactAmountLeavesNoRejectionTrace() {
-            assertThat(controller.onNotify(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")))
                     .isEqualTo("success");
 
             assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
@@ -174,7 +198,7 @@ class PaymentCallbackValidationTest {
         @Test
         @DisplayName("金额缺失 ⇒ 跳过校验，不产生拒绝（向后兼容既有 mock 回调形态）")
         void missingAmountSkipsValidation() {
-            assertThat(controller.onNotify(notifyParams(null, "ch-1", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams(null, "ch-1", "TRADE_SUCCESS")))
                     .isEqualTo("success");
             assertThat(obs.countOf("payment.notify_rejected")).isZero();
         }
@@ -193,7 +217,7 @@ class PaymentCallbackValidationTest {
             payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
                     10_00L, "USD", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
 
-            assertThat(controller.onNotify(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")))
                     .contains("rejected");
             assertRejectedTriple("currency");
         }
@@ -204,7 +228,7 @@ class PaymentCallbackValidationTest {
             payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
                     10_00L, "USD", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
 
-            controller.onNotify(notifyParams("10.00", "ch-1", "TRADE_SUCCESS"));
+            notifyBody(notifyParams("10.00", "ch-1", "TRADE_SUCCESS"));
 
             assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                     .isNotEqualTo(PaymentStatus.SUCCEEDED);
@@ -224,7 +248,7 @@ class PaymentCallbackValidationTest {
             attempt.backfillChannelReference("ch-original");
             attempts.save(attempt);
 
-            assertThat(controller.onNotify(notifyParams("10.00", "ch-DIFFERENT", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("10.00", "ch-DIFFERENT", "TRADE_SUCCESS")))
                     .contains("rejected");
             assertRejectedTriple("channel_reference");
         }
@@ -236,7 +260,7 @@ class PaymentCallbackValidationTest {
             attempt.backfillChannelReference("ch-1");
             attempts.save(attempt);
 
-            assertThat(controller.onNotify(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("10.00", "ch-1", "TRADE_SUCCESS")))
                     .isEqualTo("success");
             assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                     .isEqualTo(PaymentStatus.SUCCEEDED);
@@ -247,28 +271,57 @@ class PaymentCallbackValidationTest {
         @DisplayName("受理时引用为空 ⇒ 首次通知正是回填时机，不算不一致（不误拒）")
         void nullRecordedReferenceIsBackfillOpportunity() {
             // setUp 里 attempt 的 channelReference 本就是 null
-            assertThat(controller.onNotify(notifyParams("10.00", "ch-first", "TRADE_SUCCESS")).getBody())
+            assertThat(notifyBody(notifyParams("10.00", "ch-first", "TRADE_SUCCESS")))
                     .isEqualTo("success");
             assertThat(obs.countOf("payment.notify_rejected")).isZero();
         }
 
+        /**
+         * <b>唯一获放行的断言变更</b>（T6 前上报、经裁决执行）。
+         *
+         * <p>迁移前 {@code app_id} 校验住在支付宝专属端点的 {@code validate()} 里，
+         * 与渠道引用/金额币种同列，故有独立的 {@code reason=app_id} 维度。迁移后它随
+         * 「①签名/身份」段一起下沉到插件 {@code parseCallback} 的第②步——与验签<b>同源</b>
+         * （都是「这条通知是不是发给我们的」），失败因此归入 {@code reason=signature}。</p>
+         *
+         * <p><b>维度消失是有意的</b>：把身份校验混进业务校验会让「报文不可信」与
+         * 「报文可信但与我们记的对不上」这两类完全不同的事故共用一个监控面。
+         * 代价是失去 {@code app_id} 这一维度的独立可见性——已登记。</p>
+         *
+         * <p><b>另一条纪律在这里显形</b>：身份失败发生在①段，报文<b>未过门</b>，
+         * 因此不触达 Payment 侧、也<b>不写业务审计</b>（INV-10）。这与业务段的拒绝
+         * （必写审计）是刻意的差别，不是遗漏。</p>
+         */
         @Test
-        @DisplayName("app_id 不符 ⇒ 拒绝并计入 app_id 维度 [FR-203]")
+        @DisplayName("app_id 不符 ⇒ 在①签名/身份段被拒，归入 reason=signature 且**不触达** Payment 侧 [FR-203][INV-10]")
         void appIdMismatchRejects() {
             Map<String, String> params = notifyParams("10.00", "ch-1", "TRADE_SUCCESS");
             params.put("app_id", "someone-elses");
 
-            assertThat(controller.onNotify(params).getBody()).contains("rejected");
-            assertRejectedTriple("app_id");
+            assertThat(notifyBody(params)).contains("rejected");
+
+            // ① 不推进：状态与 attempt 一个字节都不许动
+            assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
+                    .isEqualTo(PaymentStatus.PROCESSING);
+            assertThat(attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus())
+                    .isEqualTo(PaymentAttemptStatus.ACCEPTED);
+
+            // ② 计指标：身份校验与验签同源，归入 signature 维度（app_id 维度已按裁决取消）
+            assertThat(obs.countOf("payment.notify_rejected", "reason", "signature")).isEqualTo(1);
+
+            // ③ 不写业务审计：①段失败即报文未过门，Payment 侧从未被触达（INV-10）
+            assertThat(obs.auditedAction("payment.notify_rejected"))
+                    .as("①签名/身份段失败不得触达 Payment 侧，故不留业务审计痕迹")
+                    .isFalse();
         }
     }
 
     // ---- ④ 审计字段正确性（FR-293） ----
 
     @Test
-    @DisplayName("拒绝审计携带 paymentNo 与 REJECTED 终态（可反查到具体哪一笔）[FR-293]")
+    @DisplayName("拒绝审计携带 paymentNo、币种与 REJECTED 终态（可反查到具体哪一笔）[FR-293]")
     void rejectionAuditCarriesPaymentIdentity() {
-        controller.onNotify(notifyParams("99.99", "ch-1", "TRADE_SUCCESS"));
+        notifyBody(notifyParams("99.99", "ch-1", "TRADE_SUCCESS"));
 
         RecordingObservability.AuditCall call = obs.audits().stream()
                 .filter(a -> "payment.notify_rejected".equals(a.action()))
@@ -277,13 +330,14 @@ class PaymentCallbackValidationTest {
         assertThat(call.idempotencyKey()).isEqualTo(PAYMENT_NO);
         assertThat(call.entityId()).isEqualTo(PAYMENT_NO);
         assertThat(call.toStatus()).isEqualTo("REJECTED");
+        // 币种取「被拒的那笔单的币种」：CNY 单 ⇒ CNY，与迁移前支付宝端点的记录逐字相同
         assertThat(call.currencyCode()).isEqualTo("CNY");
     }
 
     @Test
     @DisplayName("拒绝响应不泄漏内部细节（不暴露期望金额/内部标识）[FR-245]")
     void rejectionBodyLeaksNoInternals() {
-        String body = controller.onNotify(notifyParams("99.99", "ch-1", "TRADE_SUCCESS")).getBody();
+        String body = notifyBody(notifyParams("99.99", "ch-1", "TRADE_SUCCESS"));
 
         assertThat(body).doesNotContain("PM-VAL-1");
         assertThat(body).doesNotContain("Exception");

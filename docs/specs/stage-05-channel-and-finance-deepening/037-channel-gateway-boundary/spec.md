@@ -2,7 +2,7 @@
 
 **Feature**：037　**标题**：Channel Gateway Boundary（渠道网关作为进程内微服务边界）
 **版本**：v1.0（Draft）　**日期**：2026-09-25
-> **Status**: In Development <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
+> **Status**: Implemented <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
 **前置**：036（Channel 微内核 + 插件化 + Stripe 沙箱，代码已合入 master，本 Spec 为其边界收口）
 **输入权威**：[Constitution §Governance / §Architecture](../../../../.specify/memory/constitution.md)、
 [ADR-0063 跨系统标识](../../../adr/)、[ADR-0072 两层职责](../../../adr/)

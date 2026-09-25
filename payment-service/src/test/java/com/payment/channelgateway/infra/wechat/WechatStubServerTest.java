@@ -249,7 +249,7 @@ class WechatStubServerTest {
         WechatChannelPlugin plugin = new WechatChannelPlugin(new WechatSdkGateway(props), props);
 
         ChannelResult result = plugin.charge(new ChargeRequest(
-                "PM002", 2L, 100L, "CNY", "WECHAT", PaymentScene.JSAPI, Goods.of("测试商品"),
+                "PM002", 100L, "CNY", "WECHAT", PaymentScene.JSAPI, Goods.of("测试商品"),
                 new CallbackUrls(NOTIFY, null), Instant.now().plusSeconds(300),
                 com.payment.common.dto.channel.Payer.of("openid-test-1"), null, null));
 
@@ -291,7 +291,7 @@ class WechatStubServerTest {
     }
 
     private static ChargeRequest nativeCharge(String paymentNo, long amountMinor) {
-        return new ChargeRequest(paymentNo, 1L, amountMinor, "CNY", "WECHAT",
+        return new ChargeRequest(paymentNo, amountMinor, "CNY", "WECHAT",
                 PaymentScene.NATIVE, Goods.of("测试商品"), new CallbackUrls(NOTIFY, null),
                 Instant.now().plusSeconds(300), null, null, null);
     }

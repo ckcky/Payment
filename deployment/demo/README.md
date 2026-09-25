@@ -179,7 +179,7 @@ PAYMENT_ALIPAY_SANDBOX_ENABLED=true \
 PAYMENT_ALIPAY_SANDBOX_APP_ID=<沙箱应用 appId> \
 PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY=<应用私钥> \
 PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥> \
-PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay/notify \
+PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/ALIPAY/callback \
   bash deployment/start-all.sh
 ```
 
@@ -206,7 +206,7 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
   对应的 payment-service 变量：
 
   ```bash
-  export PAYMENT_CHANNEL_NOTIFY_URL=https://chance-eligibly-mutiny.ngrok-free.dev/internal/channels/alipay/notify
+  export PAYMENT_CHANNEL_NOTIFY_URL=https://chance-eligibly-mutiny.ngrok-free.dev/internal/channels/ALIPAY/callback
   export PAYMENT_CHANNEL_RETURN_URL=https://chance-eligibly-mutiny.ngrok-free.dev/cashier/return
   ```
 
@@ -233,7 +233,7 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
 
   ```bash
   curl -s --noproxy '*' -X POST -d 'out_trade_no=probe' \
-    https://chance-eligibly-mutiny.ngrok-free.dev/internal/channels/alipay/notify
+    https://chance-eligibly-mutiny.ngrok-free.dev/internal/channels/ALIPAY/callback
   ```
 
   ⚠️ 探针**必须带 `-d`（或显式 `Content-Type: application/x-www-form-urlencoded`）**。
@@ -256,7 +256,7 @@ PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay
 - **支付宝沙箱动线**：下单 → 建 `ALIPAY` 支付单（`X-Dye-Tag: SANDBOX`）→ `charge` 真实调 `alipay.trade.page.pay`
   拿回**自动提交表单 HTML**（`PayCredential.FORM_HTML`，⚠️ **不是 URL** —— 详见下方「沙箱收银台怎么付」）→
   浏览器打开**支付宝沙箱收银台** → 用沙箱买家账号付款 →
-  支付宝异步通知打到 `POST /internal/channels/alipay/notify` → 三段式校验（验签 → 渠道引用/金额/币种 → 收敛）
+  支付宝异步通知打到 `POST /internal/channels/ALIPAY/callback` → 三段式校验（验签 → 渠道引用/金额/币种 → 收敛）
   通过后收敛 `SUCCEEDED`，订单 `PAID`。沙箱下单后 `charge` 阶段 payment 停 `PROCESSING`（凭证待支付，INV-6）。
 
 ### 沙箱收银台怎么付（⚠️ 踩坑高发区）
