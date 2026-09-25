@@ -30,12 +30,13 @@ class ChannelContractCompatTest {
     // ---------- 兼容构造器：旧参个数可用，扩展字段为 null ----------
 
     @Test
-    @DisplayName("ChargeRequest 5 参兼容构造：扩展字段全部 null")
+    @DisplayName("ChargeRequest 4 参兼容构造：扩展字段全部 null")
     void chargeRequestLegacyConstructorLeavesExtensionsNull() {
-        ChargeRequest req = new ChargeRequest("PM1", 7L, 12_345L, "CNY", "MOCK");
+        ChargeRequest req = new ChargeRequest("PM1", 12_345L, "CNY", "MOCK");
 
         assertThat(req.paymentNo()).isEqualTo("PM1");
-        assertThat(req.attemptId()).isEqualTo(7L);
+        // spec 037 / T3 重构：attemptId 分量已移除（ADR-0063 禁止数值主键进跨域契约），
+        // 原 assertThat(req.attemptId()).isEqualTo(7L) 随字段一并删除。
         assertThat(req.amountMinor()).isEqualTo(12_345L);
         assertThat(req.currencyCode()).isEqualTo("CNY");
         assertThat(req.channelCode()).isEqualTo("MOCK");
@@ -49,10 +50,10 @@ class ChannelContractCompatTest {
     }
 
     @Test
-    @DisplayName("ChargeRequest 12 参构造：可携带全部扩展字段")
+    @DisplayName("ChargeRequest 11 参构造：可携带全部扩展字段")
     void chargeRequestFullConstructorCarriesExtensions() {
         Instant expire = Instant.parse("2026-09-20T00:00:00Z");
-        ChargeRequest req = new ChargeRequest("PM1", 7L, 100L, "CNY", "ALIPAY",
+        ChargeRequest req = new ChargeRequest("PM1", 100L, "CNY", "ALIPAY",
                 null, null, null, expire, null, "attach-1",
                 Map.of("subject", "测试商品"));
 

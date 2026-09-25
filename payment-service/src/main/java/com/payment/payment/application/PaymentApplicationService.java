@@ -171,7 +171,8 @@ public class PaymentApplicationService {
         }
 
         // spec 030 / FR-110（T31）：构造 ChargeRequest 时填充扩展字段。
-        // 兼容构造器只给 5 参，此处按 12 参全参构造（场景 / 商品 / 回调地址 / 有效期 / 付款人）。
+        // 兼容构造器只给 4 参，此处按 11 参全参构造（场景 / 商品 / 回调地址 / 有效期 / 付款人）。
+        // spec 037 / T3：原第 2 个分量 attemptId（自增主键）已移除——跨域契约只带业务单号（ADR-0063）。
         // 场景校验 MUST 在调 charge **之前**（INV-8：不静默降级）。
         PaymentScene scene = null; // spec 030 本期：编排层不推导默认场景（tasks Q7 / 零回归）
         validateSceneIfPresent(scene, routedChannelCode);
@@ -184,7 +185,7 @@ public class PaymentApplicationService {
         // 重试期间不落库，最终结果与重试次数一次性写入。
         PaymentRetryService.RetryOutcome outcome = retryService.chargeWithRetry(
                 new ChargeRequest(pending.payment().getPaymentNo(),
-                        pending.attempt().getId(), cmd.amountMinor(), cmd.currencyCode(),
+                        cmd.amountMinor(), cmd.currencyCode(),
                         routedChannelCode,
                         scene, null, callbackUrls, null, null, null, null));
         ChannelResult result = outcome.result();

@@ -66,7 +66,7 @@ class ChannelGatewayTest {
         StubChannel channel = new StubChannel(CODE);
         ChannelGateway gateway = new DefaultChannelGateway(new SingleChannelRegistry(channel));
 
-        ChargeRequest request = new ChargeRequest("PM1", 1L, 100L, "CNY", CODE);
+        ChargeRequest request = new ChargeRequest("PM1", 100L, "CNY", CODE);
         ChannelResult result = gateway.pay(CODE, request);
 
         assertThat(result.status()).isEqualTo(ChannelResult.Status.SUCCESS);
@@ -106,7 +106,7 @@ class ChannelGatewayTest {
         ChannelGateway gateway =
                 new DefaultChannelGateway(new SingleChannelRegistry(new StubChannel(CODE)));
 
-        assertThatThrownBy(() -> gateway.pay("UNKNOWN", new ChargeRequest("PM1", 1L, 100L, "CNY", "UNKNOWN")))
+        assertThatThrownBy(() -> gateway.pay("UNKNOWN", new ChargeRequest("PM1", 100L, "CNY", "UNKNOWN")))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("UNKNOWN");
     }

@@ -90,7 +90,7 @@ class AlipaySandboxChargeTest {
     }
 
     private static ChargeRequest charge(long amountMinor) {
-        return new ChargeRequest("PM030", 1L, amountMinor, "CNY", "ALIPAY",
+        return new ChargeRequest("PM030", amountMinor, "CNY", "ALIPAY",
                 PaymentScene.WEB, Goods.of("沙箱测试商品"),
                 new CallbackUrls("https://demo/notify", "https://demo/return"),
                 Instant.parse("2026-09-20T12:00:00Z"), null, null, new HashMap<>());

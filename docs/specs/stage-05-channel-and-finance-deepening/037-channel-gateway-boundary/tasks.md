@@ -50,15 +50,21 @@
 
 - [x] **红**：`PaymentAttempt` 单测断言 `channelNo` 必填、不可变
 - [x] **绿**：`03-payment-schema.sql` 加 `channel_no VARCHAR(32)` + UNIQUE；`PaymentAttempt` 实体加字段（含 `rehydrate` 重载）；`ChannelAttemptRecorder` 生成并写入
-- [ ] **重构**：移除 `ChargeRequest.attemptId`
+- [x] **重构**：移除 `ChargeRequest.attemptId`
 - [x] 验证：`payment-service` 单测全绿；`deployment/demo/reset.sh` 重放建表通过
 
-> ⚠️ **`重构` 项未执行（待裁决）**：移除 `ChargeRequest.attemptId` 会让
-> `payment-service/src/test/java/com/payment/payment/contract/ChannelContractCompatTest.java`
-> 的 3 处（构造 2 + 断言 1，`assertThat(req.attemptId()).isEqualTo(7L)`）无法编译——
-> 即「既有单测断言必须改」。按交接提示词 §4「若某个断言必须改，停下报告，不要自己改」，
-> 本项挂起待人类裁决。影响面已实测：`attemptId` 在 main 下**无任何读者**，
-> 仅在 1 处生产构造点（`PaymentApplicationService:211`）与 9 处测试构造点传入。
+> ✅ **`重构` 项已执行**（2026-09-25，人类裁决「放行：删字段 + 同步改那 1 处断言」）。
+> `ChargeRequest` 由 12 分量收为 **11 分量**（`Long attemptId` 移除），兼容构造器由 5 参收为 4 参。
+> 同步改动 11 个构造点（1 生产 + 10 测试）与 `ChannelContractCompatTest` 的
+> 1 处断言（`assertThat(req.attemptId()).isEqualTo(7L)` 随字段删除，已就地注明原因）。
+> 这正是 NFR-2 的**唯一一次经批准的例外**：该断言的全部内容就是「兼容构造器把第 2 个参数
+> 存进了 attemptId」，字段消失后断言无处可依。
+> 顺带清掉 `ChargeRequest.java` 里**重复了 4 行的 import 块**（既有笔误）。
+>
+> ⚠️ spec 完成判据写的是 `grep attemptId ChargeRequest.java 为空`——实际有 **2 处 javadoc** 命中
+> （记录「为什么移除」），非代码引用。刻意保留：删掉理由比留一条 grep 假阳性更糟。
+> 另有 25 处 `attemptId` 分布在 `Payment.start(Long)` / `PaymentPersistence.applyAndPersist` /
+> `ChannelAttemptRecorder.require` 等**内部数值 ID** 语义处，不属跨域契约，不动。
 
 ## T4　ChannelGateway 门面收口　[FR-007][FR-008][INV-1]
 

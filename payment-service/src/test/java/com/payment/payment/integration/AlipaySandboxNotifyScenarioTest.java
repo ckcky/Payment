@@ -140,7 +140,7 @@ class AlipaySandboxNotifyScenarioTest {
 
     /** 构造一笔真实的沙箱下单请求（含 notifyUrl —— 沙箱下单的硬前提）。 */
     private ChargeRequest chargeRequest() {
-        return new ChargeRequest(PAYMENT_NO, 10L, 10_00L, "CNY", "ALIPAY",
+        return new ChargeRequest(PAYMENT_NO, 10_00L, "CNY", "ALIPAY",
                 PaymentScene.WEB, null, CallbackUrls.notifyOnly(NOTIFY_URL),
                 Instant.now().plusSeconds(1800), null, null, null);
     }
