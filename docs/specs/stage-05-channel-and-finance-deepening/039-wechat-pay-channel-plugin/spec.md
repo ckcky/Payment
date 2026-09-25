@@ -243,7 +243,7 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 - [038-payment-service-package-boundary](../038-payment-service-package-boundary/spec.md) — 决定插件包落点
 - [037-channel-gateway-boundary](../037-channel-gateway-boundary/spec.md) — 渠道网关边界收口（WECHAT 迁移重叠，见 §12）。
-  ⚠️ 其**代码**仍在 `feature/037-channel-gateway-boundary` 分支且禁止合入；文档已在 master。
+  ⚠️ 其原 WIP 分支已删除（2026-09-25），**代码尚未实现**；文档在 master，实现留待执行方从 master 新建分支做。
 - [payment-service System Design](../../../architecture/systems/payment-service.md) — L0，渠道清单需在完成后同步
 - 微信支付《支付验收指引》`pay.weixin.qq.com/wiki/doc/api/native_sl.php?chapter=23_1`
 - 微信支付 APIv3《开发必要参数说明》`pay.weixin.qq.com/doc/v3/merchant/4013070756`

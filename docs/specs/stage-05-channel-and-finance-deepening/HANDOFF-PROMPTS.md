@@ -10,7 +10,7 @@
 
 | # | Spec | 分支 | 状态 | 剩余工作 | 依赖 |
 |---|---|---|---|---|---|
-| A | **037** 渠道网关边界收口 | `feature/037-channel-gateway-boundary` | **WIP，禁止合入** | T3 剩余 + T4~T8 | 无（最先做） |
+| A | **037** 渠道网关边界收口 | 待建 `feature/037-...`（**原 WIP 分支已删**） | Spec 四件套已在 master | **T1~T8 全部重做** | 无（最先做） |
 | B | **038** payment-service 包边界重构 | 待建 `feature/038-...` | Spec 四件套已完成 | T1~T9 全部 | **037 已合入 master** |
 | C | **039** 微信支付渠道插件 | 待建 `feature/039-...` | Spec 四件套已完成 | T1~T8 全部 | **038 已合入 master** |
 
@@ -43,8 +43,12 @@ docs/specs/stage-05-channel-and-finance-deepening/
 
 > ✅ **036 / 037 / 038 / 039 四套四件套均已在 master**。
 > 执行方 `git checkout master && git pull` 即可全部读到，无需从别的分支取回。
-> ⚠️ 但 **037 的「代码」仍在 `feature/037-channel-gateway-boundary` 分支且禁止合入**（持久层未映射 `channel_no`），
-> 文档与代码不同源——执行 037 时必须切到该分支继续，不要从 master 新建分支。
+> ⚠️ **037 的原 WIP 分支 `feature/037-channel-gateway-boundary` 已删除**（2026-09-25）。
+> 该分支曾有 T1~T3 的代码成果（35 文件 +968/−31：CHANNEL 单号、common-dto 15 个契约类、
+> `PaymentAttempt.channelNo`、`channel_no` DDL），因持久层未映射 `channel_no` 而禁止合入，现整体作废。
+> 已留恢复锚点 **tag `archive/037-wip-t1t3`**（本地），需要参考时：
+>   `git show archive/037-wip-t1t3 --stat` 或 `git checkout -b feature/037-archive archive/037-wip-t1t3`
+> ⇒ **执行 037 请从 master 新建分支，按其 spec 的 T1~T8 从头做**，不要去找那个分支。
 >
 > **036 / 037 / 038 / 039 是一条链，建议开工前先读 036 建立底座认知**：
 > 036（微内核 + 插件化 + Stripe）→ 037（门面收口 + 存量渠道迁移）→ 038（包级边界）→ 039（微信插件，以 Stripe 为同构参照）。
@@ -115,46 +119,45 @@ docs/specs/stage-05-channel-and-finance-deepening/
 
 ---
 
-## 2. 提示词 A — 037 续完（渠道网关边界收口）
+## 2. 提示词 A — 037 渠道网关边界收口（从零实现 T1~T8）
 
 ```text
-你是一个 Java / Spring Cloud 项目的执行工程师。请完成 PaymentArch 项目的 Spec 037
-「渠道网关边界收口」的剩余开发。
+你是一个 Java / Spring Cloud 项目的执行工程师。请按 PaymentArch 项目的 Spec 037
+「渠道网关边界收口」完成开发。
 
-## 0. 起始状态（已核实，不要重做）
+## 0. 起始状态（已核实）
 
 项目根：C:\Users\user\Desktop\GoProj\PaymentArch
 
-git checkout feature/037-channel-gateway-boundary
-git pull --ff-only   # 若失败先停下报告
+从 master 新建分支，T1~T8 全部从头实现：
+  git checkout master && git pull --ff-only
+  git checkout -b feature/037-channel-gateway-boundary
 
-该分支相对 master 已改 39 个文件（+968 / -31），HEAD commit message 标注了
-「禁止合入 master」。已完成与未完成的边界如下：
+⚠️ 历史上曾有一条同名 WIP 分支，做过 T1~T3 但因「持久层未映射 channel_no」被禁止合入，
+   现已删除。其代码成果保留在本地 tag `archive/037-wip-t1t3`，**仅供参考、不要直接合并**：
+     git show archive/037-wip-t1t3 --stat
+     git checkout -b feature/037-archive archive/037-wip-t1t3   # 如需查看
+   ⚠️ 该 tag 的内容是**半成品**且含禁止合入的缺陷（`03-payment-schema.sql` 加了
+   channel_no NOT NULL 但持久层没写该列，合进去所有 payment_attempts 插入都会失败）。
+   你要做的是**按 spec 从头实现**，可以参考它的设计思路，但不要照抄一个有缺陷的中间态。
 
-【已完成，且测试已绿，不要重做】
-- T1  BusinessNoType 增加 CHANNEL("CH")；BusinessNosTest 绿 8/8
-- T2  common/common-dto 新建 com.payment.common.dto.channel 包共 15 个契约 record
-      （ChannelPayCommand / ChannelRefundCommand / ChannelQueryCommand /
-       ChannelPayReceipt / ChannelRefundReceipt / ChannelQuerySnapshot /
-       ChannelPayNotified / ChannelRefundNotified / ChannelPayStatus /
-       ChannelRefundStatus / Goods / Payer / CallbackUrls / PaymentScene / PayCredential）
-      ；ChannelContractTest 绿 9/9；payment-service 367 全绿
-- T3 一半
-      · 03-payment-schema.sql 加 channel_no VARCHAR(32) NOT NULL + UNIQUE KEY uk_attempts_channel_no
-      · PaymentAttempt 实体加 final String channelNo（6 参构造显式传，5 参兼容构造自动生成）
-      · PaymentAttemptChannelNoTest 绿 7/7
+【当前 master 基线状态（实测）】
+- `03-payment-schema.sql` **没有** channel_no 列（原 WIP 的 DDL 未合入）
+- `PaymentAttempt` 实体**没有** channelNo 字段
+- `common-dto` 下**没有** `com.payment.common.dto.channel` 包
+- `BusinessNoType` **没有** CHANNEL 枚举
+⇒ 即：037 的一切都还没落地，T1 起做。
 
-【未完成，这才是你要做的】
-- T3 剩余：持久化层没有映射 channel_no —— 这是当前禁止合入的唯一原因
-      · PaymentAttemptEntity 无 channelNo 字段（实测只有 paymentNo/channelCode/attemptType/
-        amountMinor/currencyCode/requestedAt/respondedAt/channelReference/status/failureReason/
-        retryCount/errorType/extraJson）
-      · MybatisPaymentAttemptRepository 的 INSERT / UPDATE 未含 channel_no 列
-      · 结果：DDL 是 NOT NULL 而持久层不写该列 ⇒ 所有 payment_attempts 插入失败
-      · PaymentAttempt.rehydrate(...) 的调用点需一并传 channelNo（Payment.java 1 处、
-        PaymentAttempt.java 6 处、MybatisPaymentAttemptRepository.java 1 处、测试若干处）
-      · 移除 ChargeRequest.attemptId（已被 channelNo 取代）
-- T4~T8：一行没动
+【特别注意 T3（原 WIP 栽在这里）】
+T3 要求给 payment_attempts 加 channel_no。必须**同时**做齐三件事，缺一件就会让
+所有 payment_attempts 插入失败：
+  ① 03-payment-schema.sql 加列（channel_no VARCHAR(32) NOT NULL + UNIQUE KEY uk_attempts_channel_no）
+  ② PaymentAttempt 实体加 final String channelNo
+  ③ **持久化层映射**：PaymentAttemptEntity 加字段 +
+     MybatisPaymentAttemptRepository 的 INSERT / UPDATE 补 channel_no 列 +
+     PaymentAttempt.rehydrate(...) 各调用点传参
+原 WIP 只做了 ①② 漏了 ③ —— 这是它被废弃的直接原因，你不要重蹈覆辙。
+另需移除 ChargeRequest.attemptId（被 channelNo 取代）。
 
 ## 1. 你必读的文件（按顺序）
 
@@ -199,8 +202,8 @@ T3 剩余 → T4 → T5 → T6 → T7 → T8
 
 ## 6. 收口
 
-全部绿了之后，去掉 commit message 里的「禁止合入」标记，把 feature/037-channel-gateway-boundary
-以 --no-ff 合入 master 并 push。合入前再跑一次全量单测。
+全部绿了之后（**尤其确认 T3 的持久化层映射已齐**），把 feature/037-channel-gateway-boundary
+以 --no-ff 合入 master 并 push。合入前再跑一次全量单测 + 一次 deployment/demo/reset.sh 建表。
 ```
 
 ---
