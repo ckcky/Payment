@@ -8,14 +8,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.Signature;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -47,11 +40,9 @@ class WechatCallbackParseTest {
     private static String platformPublicKeyPem;
 
     @BeforeAll
-    static void generatePlatformKeyPair() throws Exception {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
-        platformKeyPair = generator.generateKeyPair();
-        platformPublicKeyPem = toPem("PUBLIC KEY", platformKeyPair.getPublic().getEncoded());
+    static void generatePlatformKeyPair() {
+        platformKeyPair = WechatTestSupport.rsaKeyPair();
+        platformPublicKeyPem = WechatTestSupport.toPem("PUBLIC KEY", platformKeyPair.getPublic().getEncoded());
     }
 
     private static WechatChannelPlugin plugin() {
@@ -67,21 +58,15 @@ class WechatCallbackParseTest {
     }
 
     /** 构造一条合法通知的原始体（密文 = AES-256-GCM(明文)）。 */
-    private static String notificationBody(String plaintext) throws Exception {
-        String ciphertext = encrypt(plaintext);
-        return "{\"id\":\"EV-20260925-1\",\"create_time\":\"2026-09-25T17:00:00+08:00\","
-                + "\"event_type\":\"TRANSACTION.SUCCESS\",\"resource_type\":\"encrypt-resource\","
-                + "\"summary\":\"支付成功\","
-                + "\"resource\":{\"original_type\":\"transaction\",\"algorithm\":\"AEAD_AES_256_GCM\","
-                + "\"ciphertext\":\"" + ciphertext + "\","
-                + "\"associated_data\":\"" + ASSOCIATED_DATA + "\","
-                + "\"nonce\":\"" + RESOURCE_NONCE + "\"}}";
+    private static String notificationBody(String plaintext) {
+        return WechatTestSupport.notificationBody(API_V3_KEY, RESOURCE_NONCE, ASSOCIATED_DATA, plaintext);
     }
 
-    private static ChannelCallbackEnvelope envelope(String body, String serialOverride) throws Exception {
+    private static ChannelCallbackEnvelope envelope(String body, String serialOverride) {
         String timestamp = "1789000000";
         String nonce = "NONCE1234567890";
-        String signature = sign(timestamp + "\n" + nonce + "\n" + body + "\n");
+        String signature = WechatTestSupport.rsaSignBase64(platformKeyPair.getPrivate(),
+                timestamp + "\n" + nonce + "\n" + body + "\n");
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("wechatpay-timestamp", timestamp);
         headers.put("wechatpay-nonce", nonce);
@@ -209,32 +194,5 @@ class WechatCallbackParseTest {
     @DisplayName("回调应答体为微信期望的 {code:SUCCESS,message:成功} [FR-007]")
     void ackBodyMatchesWechatExpectation() {
         assertThat(plugin().callbackAckBody()).isEqualTo("{\"code\":\"SUCCESS\",\"message\":\"成功\"}");
-    }
-
-    // ---- 测试辅助 ----
-
-    private static String encrypt(String plaintext) throws Exception {
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(API_V3_KEY.getBytes(StandardCharsets.UTF_8), "AES"),
-                new GCMParameterSpec(128, RESOURCE_NONCE.getBytes(StandardCharsets.UTF_8)));
-        cipher.updateAAD(ASSOCIATED_DATA.getBytes(StandardCharsets.UTF_8));
-        return Base64.getEncoder().encodeToString(cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    private static String sign(String message) throws Exception {
-        Signature signer = Signature.getInstance("SHA256withRSA");
-        signer.initSign(platformKeyPair.getPrivate());
-        signer.update(message.getBytes(StandardCharsets.UTF_8));
-        return Base64.getEncoder().encodeToString(signer.sign());
-    }
-
-    /** 生成 PEM（X.509 SubjectPublicKeyInfo，64 字符换行）。 */
-    private static String toPem(String type, byte[] der) {
-        String base64 = Base64.getEncoder().encodeToString(der);
-        StringBuilder sb = new StringBuilder("-----BEGIN ").append(type).append("-----\n");
-        for (int i = 0; i < base64.length(); i += 64) {
-            sb.append(base64, i, Math.min(i + 64, base64.length())).append('\n');
-        }
-        return sb.append("-----END ").append(type).append("-----").toString();
     }
 }

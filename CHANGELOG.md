@@ -6,6 +6,25 @@
 
 ---
 
+## [2026-09-25] feat(039)：微信支付渠道插件——WECHAT 由 Adapter 族迁入插件族（微信 V3：请求签名 / 回调验签解密 / 四步全链路），**含删除旧 Adapter 与 mock 口径收窄**
+
+**性质**：Feature 039 实现落地（stage-05）。WECHAT 从「Adapter 族」（`AbstractMockChannelAdapter` 子类）迁移为「插件族」（`AbstractChannelPlugin` 子类），与 `StripeChannelPlugin` 同构，落实 Payment ≠ Channel 的插件化微内核。**零新增微服务、零新增中间件、零内核改动**（SC-002 零改动判据通过）；无破坏性公共 API 变更。
+
+- **SDK 依赖唯一锁定**：根 `pom.xml` 以 `wechatpay-sdk.version = 0.2.17` 锁定 `com.github.wechatpay-apiv3:wechatpay-java`（`dependencyManagement`），`payment-service` 子模块**不写版本**——避免多模块版本漂移。
+- **新增 `channelgateway/infra/wechat/**`（6 类 + 端口）**：`WechatPayProperties`（`@ConfigurationProperties(prefix="payment.wechat")`，`@PostConstruct` 强校验：`enabled=true` 且缺项 ⇒ **一次列全**后拒绝启动）、`WechatPaySigner`（V3 基串 + `Authorization` 头 + JSAPI `paySign`）、`WechatGateway`（**渠道端口**，隔离 SDK 类型）、`WechatSdkGateway`（**全仓唯一** import `com.wechat.pay.*` 的类，INV-7）、`WechatChannelPlugin`（`descriptor()` + `isRealModeEnabled()` + `doRealCharge`/`doRealRefund`/`doRealQuery`/`parseCallback`）、`WechatChannelPluginFactory`（**无条件** `@Component`）。
+- **删除 `channelgateway/infra/WechatChannelAdapter.java`（INV-8）**：同一 `channelCode` 走 Adapter 族与插件族两路注册，会被 `SpringChannelRegistry.put()` 以重复键**结构性拒绝**——迁移必须同批删除，不能并存。
+- **签名实现的关键裁决（FR-011）**：**不用** SDK `WechatPay2Credential#getAuthorization`（其 `timestamp`/`nonce` 不可注入 ⇒ 无法构造固定向量做金标准断言）——改为**自建基串 + 自装头**，RSA 运算交 SDK `RSASigner`。金标准以三层替代：① 基串逐字节字面量 ② 公钥验签 ③ **与官方 SDK 交叉校验**（取 SDK 的 `timestamp`/`nonce` 用本方基串重签，签名须逐字节相同——PKCS#1 v1.5 确定性 ⇒ 相等 ⟺ 基串相等）。
+- **验签/解密改用 JDK 原语**：SDK 的 `RSAVerifier.verify(String,String,String)` 与 `AeadAesCipher.decrypt(byte[],byte[],byte[])` **参数序无文档**，风险高于收益 ⇒ 验签用 JDK `Signature`、解密用 JDK `Cipher("AES/GCM/NoPadding")`，SDK 只承担 `PemUtil` 与 `RSASigner`。**顺序不可颠倒**（INV-5）：先验签后解密，由两条互补断言钉死（篡改签名报 `signature`、签名正确但篡改密文报 `decrypt`）。
+- **金额口径（INV-4）**：微信 V3 `amount.total` 用**分**，平台 `amountMinor` 同为分 ⇒ **直接透传**，全链路无 `*100` / `/100`。
+- **`enabled` 语义（C-1 裁决，与 Stripe 同构）**：`enabled` **只门控真实模式**（`isRealModeEnabled()`），**不门控注册** —— `enabled=false` 时 WECHAT **仍注册**且 MOCK 可路由（`GET /internal/channels` 显示 `enabled:false`）；染色 SANDBOX 而 `enabled=false` ⇒ **400 硬失败，绝不静默回落 mock**（INV-2）。
+- **配置与凭据**：新增 `payment.wechat` 段（`mch-id`/`app-id`/`api-v3-key`/`merchant-serial-no`/`private-key(-path)`/`platform-cert-path`/`platform-public-key(-id)`/`notify-url`/超时），env 前缀 `PAYMENT_WECHAT_*`；**凭据默认全空**（缺省即「未开启」，不误连真实渠道），**私钥禁入 git**（FR-009 / INV-1）。
+- **测试（净增 61 个 `Wechat*` 用例，全绿）**：`WechatPayPropertiesTest` 11 · `WechatSdkGatewaySignatureTest` 6（含 2 条 SDK 交叉校验）· `WechatSdkGatewayAmountTest` 12 · `WechatChannelPluginTest` 16（含反射断言工厂无 `Conditional*` 注解）· `WechatCallbackParseTest` 9 · `WechatStubServerTest` 7。**密钥一律运行时生成**；**不引 WireMock**——仿真桩用 JDK 内置 `com.sun.net.httpserver.HttpServer`（只监听 `127.0.0.1` 随机端口，`apiBaseUrl` 指过去 ⇒ 测试全程不触达微信网络，无网 CI 亦成立），并断言「桩收到的 `Authorization` 可用商户公钥验签」。
+- **沙箱结论（留档 `acceptance.md`）**：微信支付**无可用沙箱**——V3 沙箱端点实测 **404**；V2 沙箱（`xdc/apiv2sandbox`）只覆盖**付款码支付**，官方明示「下单接口暂不支持」。横向：支付宝沙箱 ✅ · Stripe test mode ✅ · **微信 ❌**。故真实协议正确性由「金标准单测 + 回调往返单测 + 本地仿真桩全链路」三层替代覆盖（SC-003/004/005）。
+- **⚠️ 已知变更（mock 口径收窄，C-4）**：① `application.yml` 的 `payment.channel.adapters.WECHAT.scenario` 迁移后**成为死配置**（内核 `AbstractChannelPlugin` 只保留「金额尾数注入」一套 mock，**不得**为兼容而在插件内自写 mock，违反 FR-010/D7）；② WECHAT 的 mock **退款由异步（`refund-async`）变为同步成功**——演示脚本若依赖异步时序需按同步重写断言。
+- **文档同步**：`systems/payment-service.md` §4.1 双模态表同步（MOCK 行区分 Adapter 族/插件族，SANDBOX 行补 `StripeChannelPlugin`/`WechatChannelPlugin`，**顺带修正既有漂移**）；**ADR 正文不回改**（历史决策留痕）。
+
+---
+
 ## [2026-09-25] feat(038)：payment-service 包边界重构——消灭 `com.payment.refund` 顶层包 + 新建 `com.payment.channelgateway` 渠道网关域 + 退款端点收口（**含破坏性变更**）
 
 **性质**：Feature 038 实现落地（**纯结构重构，行为零变化**：不动状态机、不动表结构、不改契约字段名、不改记账口径）。一级包由「payment / refund / posting」收敛为「payment（资金动作域）/ channelgateway（渠道网关域）/ posting（跨切面）」，落实 Payment ≠ Channel 的物理边界，为 037 的门面/回调分层提供**包级门禁落点**。
