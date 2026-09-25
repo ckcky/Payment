@@ -30,16 +30,19 @@
 
 ```
 docs/specs/stage-05-channel-and-finance-deepening/
-├── 037-channel-gateway-boundary/          # ⚠️ 只在 feature/037-* 分支上，master 没有
+├── 037-channel-gateway-boundary/          # ✅ 已在 master
 │   ├── spec.md  plan.md  tasks.md  acceptance.md
-├── 038-payment-service-package-boundary/  # 在 docs/038-039-specs 分支，master 也没有
+├── 038-payment-service-package-boundary/  # ✅ 已在 master
 │   └── spec.md  plan.md  tasks.md  acceptance.md
-├── 039-wechat-pay-channel-plugin/         # 同上
+├── 039-wechat-pay-channel-plugin/         # ✅ 已在 master
 │   └── spec.md  plan.md  tasks.md  acceptance.md
 └── HANDOFF-PROMPTS.md                     # 本文
 ```
 
-> ⚠️ **038 / 039 的四件套尚未合入 master**。执行方开工前必须先 `git checkout docs/038-039-specs` 或把这两个目录 cherry-pick 到自己的工作分支，否则读不到 spec。
+> ✅ **037 / 038 / 039 三套四件套均已在 master**（`5b9ed09` 合入 038/039 + 本文，`5dc8ee8` 补入 037）。
+> 执行方 `git checkout master && git pull` 即可全部读到，无需从别的分支取回。
+> ⚠️ 但 **037 的「代码」仍在 `feature/037-channel-gateway-boundary` 分支且禁止合入**（持久层未映射 `channel_no`），
+> 文档与代码不同源——执行 037 时必须切到该分支继续，不要从 master 新建分支。
 
 ---
 
@@ -215,9 +218,8 @@ T3 剩余 → T4 → T5 → T6 → T7 → T8
   git checkout master && git pull --ff-only
   git checkout -b feature/038-payment-service-package-boundary
 
-038 的 Spec 四件套在分支 docs/038-039-specs 上（master 没有），先取回：
-  git checkout docs/038-039-specs -- \
-    docs/specs/stage-05-channel-and-finance-deepening/038-payment-service-package-boundary
+038 的 Spec 四件套已在 master，直接可读：
+  docs/specs/stage-05-channel-and-finance-deepening/038-payment-service-package-boundary/
 
 ## 1. 为什么做这件事（背景，帮你判断边界）
 
@@ -327,11 +329,9 @@ T1 建 channelgateway 包迁 40 个渠道主源码
   git log --oneline -5 master   # 应能看到 038 的 merge commit
 若 038 未合入，停下报告，不要开工。
 
-建分支并取回 Spec 四件套（master 上没有）：
+建分支（039 四件套已在 master 上，直接可读）：
   git checkout master && git pull --ff-only
   git checkout -b feature/039-wechat-pay-channel-plugin
-  git checkout docs/038-039-specs -- \
-    docs/specs/stage-05-channel-and-finance-deepening/039-wechat-pay-channel-plugin
 
 ## 1. 最重要的一条结论：微信沙箱**实测不可用**，不要再去试
 

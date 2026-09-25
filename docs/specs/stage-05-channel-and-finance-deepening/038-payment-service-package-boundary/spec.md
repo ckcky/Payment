@@ -318,6 +318,6 @@ com.payment.refund.infra                 → com.payment.payment.infra
 - [ADR-0072 两层职责](../../../adr/) — `Payment` / `PaymentAttempt` 分层
 - [ADR-0063 跨系统标识](../../../adr/) — 业务单号纪律（037 相关，本 Feature 不触碰）
 - [payment-service System Design](../../../architecture/systems/payment-service.md) — L0，FR-011 需同步端点清单
-- 037-channel-gateway-boundary — 渠道网关边界收口（本 Feature 为其提供包级门禁落点）。
-  ⚠️ 该 Spec 尚在 `feature/037-channel-gateway-boundary` 分支、**未合入 master**，故此处不给出相对链接。
+- [037-channel-gateway-boundary](../037-channel-gateway-boundary/spec.md) — 渠道网关边界收口（本 Feature 为其提供包级门禁落点）。
+  ⚠️ 其**代码**仍在 `feature/037-channel-gateway-boundary` 分支且禁止合入（持久层未映射 `channel_no`）；文档已在 master。
 - [Constitution §Governance](../../../../.specify/memory/constitution.md) — 公共 API 变更属人类决策边界
