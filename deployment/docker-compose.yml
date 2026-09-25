@@ -351,7 +351,7 @@ services:
       #     export PAYMENT_ALIPAY_SANDBOX_APP_ID=<沙箱 appId>
       #     export PAYMENT_ALIPAY_SANDBOX_APP_PRIVATE_KEY=<应用私钥>
       #     export PAYMENT_ALIPAY_SANDBOX_ALIPAY_PUBLIC_KEY=<支付宝公钥>
-      #     export PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/alipay/notify
+      #     export PAYMENT_CHANNEL_NOTIFY_URL=https://<公网可达域名>/internal/channels/ALIPAY/callback
       #   enabled=true 而三项密钥缺失 ⇒ payment-service **启动期 FAIL FAST** 并列出全部缺失项（FR-134）。
       #   PAYMENT_CHANNEL_NOTIFY_URL（FR-103 / tasks Q5「配置单值」）：notify 是资金事实的唯一权威
       #       来源；缺失 ⇒ 沙箱 charge 直接 400 INVALID_ARGUMENT（INV-8，**不静默回落 mock**）。

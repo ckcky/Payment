@@ -56,12 +56,13 @@ class ServiceBoundaryTest {
      * 见 spec 038 §4 非目标与 acceptance TD-4 / TD-5。</p>
      *
      * <p><b>037 / T5 已收口 1 个</b>：{@code ChannelPluginCallbackController} 改造后只剩
-     * 「收报文、交网关」（依赖全部落在渠道网关域内），已从白名单移除。剩余 3 个：</p>
+     * 「收报文、交网关」（依赖全部落在渠道网关域内），已从白名单移除。</p>
+     *
+     * <p><b>037 / T6 已收口第 2 个</b>：{@code AlipayNotifyController} 按 FR-015 删除，
+     * 回调统一走通用端点——它的解析职责下沉到 {@code AlipayChannelAdapter.parseCallback}，
+     * 业务校验归 {@code DefaultPaymentNotifyPort}，模态包裹归 {@code ChannelCallbackHandler}，
+     * 三处都不在「渠道域反向依赖 payment 应用层」这条线上。剩余 2 个：</p>
      * <ul>
-     *   <li>{@code AlipayNotifyController} —— 专属端点，其删除归 <b>T6</b>（FR-015）；
-     *       但删除会改动既有断言（{@code PaymentCallbackValidationTest#appIdMismatchRejects}
-     *       断言 {@code reason=app_id} 维度，而通用端点按设计把渠道私有身份校验交给插件、
-     *       不产生该维度），与 NFR-2 冲突，故<b>暂停并上报</b>；</li>
      *   <li>{@code ChannelCallbackController} —— {@code /internal/payments/{paymentNo}/channel-callback}，
      *       是<b>平台内部</b>的 mock 回调入口（非渠道协议），返回 Payment 的 API DTO
      *       （{@code PaymentResponse}）；其归属需要一次独立裁决（移回 {@code payment.api}
@@ -74,8 +75,7 @@ class ServiceBoundaryTest {
      * <p>白名单按<b>全限定类名</b>逐条列出而非整包放行：新增任何反向依赖都会立即变红。</p>
      */
     private static final String LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES =
-            "com\\.payment\\.channelgateway\\.api\\.AlipayNotifyController"
-                    + "|com\\.payment\\.channelgateway\\.api\\.ChannelCallbackController"
+            "com\\.payment\\.channelgateway\\.api\\.ChannelCallbackController"
                     + "|com\\.payment\\.channelgateway\\.web\\.ChannelCallbackSignatureFilter";
 
     /**
@@ -509,7 +509,8 @@ class ServiceBoundaryTest {
      *
      * <p><b>既有违规不静默放宽</b>：038 之前就存在的反向依赖按 spec 038 T6 的要求<b>登记为技术债</b>
      * 并在此逐条白名单化（见 {@link #LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES}），收口归 037。
-     * 037 / T5 已收口其中 1 个（{@code ChannelPluginCallbackController}）。</p>
+     * 037 / T5 已收口其中 1 个（{@code ChannelPluginCallbackController}），
+     * T6 又收口 1 个（{@code AlipayNotifyController} 按 FR-015 删除）。</p>
      *
      * <p><b>唯一例外是入向端口</b>：{@code PaymentNotifyPort}（及其返回类型 {@code PayNotifyOutcome}）
      * 由 Payment 定义并实现，渠道网关域<b>必须</b>依赖它才能把回调结果交给 Payment

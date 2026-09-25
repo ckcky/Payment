@@ -1,17 +1,22 @@
 package com.payment.payment.application;
 
 import com.payment.common.core.dye.DyeContext;
-import com.payment.channelgateway.api.AlipayNotifyController;
+import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.channelgateway.api.dto.ChannelCallbackRequest;
-import com.payment.channelgateway.infra.alipay.AlipayGateway;
+import com.payment.channelgateway.application.ChannelCallbackHandler;
+import com.payment.channelgateway.application.ChannelRegistry;
 import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channelgateway.application.spi.ChannelCallbackEnvelope;
+import com.payment.channelgateway.infra.AlipayChannelAdapter;
+import com.payment.channelgateway.infra.alipay.AlipayGateway;
+import com.payment.channelgateway.support.StubChannelRegistry;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channelgateway.infra.config.AlipaySandboxProperties;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,10 +37,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li><b>JSON 路径</b>：{@code POST /internal/payments/{no}/channel-callback}，
  *       验签在 {@code ChannelCallbackSignatureFilter}（过滤器层，未过则不触达 Controller）；
  *       报文是结构化 JSON，映射由 {@link ChannelCallbackRequest#toResult()} 完成；</li>
- *   <li><b>notify 路径</b>：{@code POST /internal/channels/alipay/notify}，
- *       验签在 {@link AlipayNotifyController} 内（三段式第一步）；报文是表单，
- *       映射由 controller 的 {@code toChannelResult} 完成。</li>
+ *   <li><b>notify 路径</b>：{@code POST /internal/channels/ALIPAY/callback}，
+ *       验签在支付宝插件内（{@code ChannelPlugin#parseCallback} 四步第一步）；
+ *       报文是表单，映射由插件的 {@code parseCallback} 完成。</li>
  * </ul>
+ *
+ * <p><b>T6 迁移说明</b>：notify 路径原先走支付宝专属端点 {@code AlipayNotifyController}
+ * （FR-015 已删除），现走<b>通用端点</b>{@code ChannelPluginCallbackController} →
+ * {@code ChannelCallbackHandler} 四步模板 → {@link PaymentNotifyPort}。
+ * 本类因此装配的不再是那个专属 Controller，而是通用端点背后的真实链路——
+ * <b>断言一条未改</b>：SC-B2-06 要锁的是「两条路收敛到同一处」，
+ * 而这件事在迁移前后是同一个事实，只是入口换了名字。</p>
  *
  * <p><b>三条必须一致的不变量</b>（这正是 SC-B2-06 怕的东西：两条路各自演化后语义分叉）：
  * <ol>
@@ -52,10 +64,13 @@ class PaymentCallbackPathParityTest {
 
     private static final String PAYMENT_NO = "PM-PARITY-1";
 
+    /** 沙箱 app_id：插件据此做身份一致性校验（FR-203），报文必须带同一个值。 */
+    private static final String APP_ID = "sandbox-app-1";
+
     private PaymentTestStack stack;
     private InMemoryPaymentRepository payments;
     private InMemoryPaymentAttemptRepository attempts;
-    private AlipayNotifyController notifyController;
+    private ChannelCallbackHandler handler;
 
     /** 网关桩：验签恒通过（本类只比收敛语义，不比验签）。 */
     private static final class StubGateway implements AlipayGateway {
@@ -89,12 +104,14 @@ class PaymentCallbackPathParityTest {
         attempts = stack.attempts;
         resetPayment();
 
-        AlipaySandboxProperties properties = new AlipaySandboxProperties();
-        properties.setEnabled(true);
-        properties.setAppId("sandbox-app-1");
-        notifyController = new AlipayNotifyController(new StubGateway(), properties, stack.callback,
-                payments, attempts, new com.payment.common.core.observability.NoopBusinessMetrics(),
-                new com.payment.common.core.observability.StructuredAuditLogger());
+        // notify 路径的真实链路（T6 迁移后它的唯一入口）：
+        // ALIPAY 插件（验签桩恒通过）→ 网关域四步模板 → Payment 入向端口 → 既有收敛链路
+        AlipayChannelAdapter adapter = new AlipayChannelAdapter(
+                AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true, APP_ID);
+        ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE, adapter);
+        PaymentNotifyPort port = new DefaultPaymentNotifyPort(stack.callback, null,
+                payments, attempts, new NoopBusinessMetrics(), new StructuredAuditLogger());
+        handler = new ChannelCallbackHandler(registry, port, new NoopBusinessMetrics());
     }
 
     @AfterEach
@@ -121,15 +138,21 @@ class PaymentCallbackPathParityTest {
         stack.callback.handleCallback(PAYMENT_NO, request.toResult());
     }
 
-    /** notify 路径：表单报文经 controller 全链路。 */
+    /**
+     * notify 路径：支付宝表单报文经<b>通用端点</b>全链路。
+     *
+     * <p>与旧专属端点的对应关系：验签（插件 parseCallback ①）、身份（②）、
+     * 报文翻译（④）合并在插件里一次完成；业务校验（引用/金额/币种）在
+     * {@code DefaultPaymentNotifyPort}；收敛仍在同一 {@code handleCallback}。</p>
+     */
     private void viaNotifyPath(String tradeStatus) {
         Map<String, String> params = new HashMap<>();
         params.put("out_trade_no", PAYMENT_NO);
         params.put("trade_status", tradeStatus);
         params.put("trade_no", "ch-1");
         params.put("total_amount", "10.00");
-        params.put("app_id", "sandbox-app-1");
-        notifyController.onNotify(params);
+        params.put("app_id", APP_ID);
+        handler.handle(AlipayChannelAdapter.CODE, ChannelCallbackEnvelope.form(Map.of(), params));
     }
 
     // ---- ① 成功语义一致 ----
@@ -246,8 +269,8 @@ class PaymentCallbackPathParityTest {
         params.put("trade_status", "TRADE_SUCCESS");
         params.put("trade_no", "ch-1");
         params.put("total_amount", "99.99"); // 应付款 10.00
-        params.put("app_id", "sandbox-app-1");
-        notifyController.onNotify(params);
+        params.put("app_id", APP_ID);
+        handler.handle(AlipayChannelAdapter.CODE, ChannelCallbackEnvelope.form(Map.of(), params));
 
         Payment after = payments.findByPaymentNo(PAYMENT_NO).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(statusBefore);

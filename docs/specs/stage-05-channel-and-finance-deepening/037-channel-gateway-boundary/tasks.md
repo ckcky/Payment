@@ -197,89 +197,119 @@
 
 ## T6　存量渠道迁移　[FR-014][FR-015]
 
-- [ ] **红**：断言 5 家渠道全部 `extends AbstractChannelPlugin`
-- [ ] **绿**：MOCK / WECHAT / ALIPAY / DOUYIN 迁至 `AbstractChannelPlugin`
-- [ ] **重构**：删除 `AlipayNotifyController` 及其 2 个测试，回调统一走通用端点
-- [ ] 验证：`payment-service` 单测全绿
+- [x] **红**：断言 5 家渠道全部 `extends AbstractChannelPlugin`
+- [x] **绿**：MOCK / WECHAT / ALIPAY / DOUYIN 迁至 `AbstractChannelPlugin`
+- [x] **重构**：删除 `AlipayNotifyController` 及其 2 个测试，回调统一走通用端点
+- [x] 验证：`payment-service` 单测全绿（482 tests / 0F / 0E）
 
-> 🛑 **停工上报（2026-09-25）：T6 未执行，触发「既有断言必须改」停工条件。**
+> 🛑 **停工上报（首轮 2026-09-25）→ ✅ 已裁决执行。**
 >
-> **事实**：`AlipayNotifyController` 被 **4 个**既有测试类作为被测对象或载体
-> （`com.payment.payment.api.AlipayNotifyControllerTest`、`...api.AlipayNotifyValidationTest`、
-> `...application.PaymentCallbackPathParityTest`、`...application.PaymentCallbackValidationTest`）。
-> 其中 `PaymentCallbackValidationTest#appIdMismatchRejects` 断言
-> **`payment.notify_rejected` 的 `reason=app_id` 维度必须 +1**。
-> 而通用插件端点**按设计**把渠道私有身份校验（支付宝 `app_id`）交给插件（属「①签名/身份」段），
-> 签名失败统一走 `reason=signature`——**该断言在迁移后无处可依**。
+> 首轮上报的两条阻塞在复核后被证明**已被 039 合入化解**：WECHAT 已由 039 一步到位迁为插件
+> （`WechatChannelPlugin extends AbstractChannelPlugin`），`MockChannelAdapter.java`
+> 由 039 改好后已随 `git merge origin/master`（`6aa6123`，零冲突）进入本分支。
 >
-> **为什么不能「顺手改掉」**：这正是用户纪律里写明的停工条件
-> （「既有单测断言必须零变化（NFR-2）。若某个断言必须改，停下报告，不要自己改」），
-> 且 FR-015 与 NFR-2 在此**直接冲突**——两条都是本 Spec 的硬约束。
+> **裁决：(b) 完整执行 FR-014 + FR-015**——放行改 `appIdMismatchRejects` 这 1 条断言
+> （接受 `app_id` 监控维度消失），并接受「两个基类能力合并」的重构。
 >
-> **另有两项同类阻塞**（同一批断言载体）：
-> - `PaymentCallbackPathParityTest` 的「两条路径」前提在删除专属端点后不再成立
->   （需要重写成「通用插件端点 vs 平台内部 JSON 端点」并重建 ALIPAY 插件桩）；
-> - 删除 `AlipayChannelAdapter`（ALIPAY 迁插件必然结果）会波及
->   `channelgateway/infra/alipay` 下的 `AlipayDualModeTest` / `AlipaySandboxChargeTest`
->   / `AlipayAmountConversionTest` 的装配方式。
->
-> **另外**：WECHAT 已被 **spec 039** 一步到位迁为插件（`WechatChannelPlugin`），
-> 且 039 已改动 `MockChannelAdapter.java`（T6 的目标文件之一）与
-> `docs/architecture/systems/payment-service.md`（T8 的目标文件）——两条线在此**必然撞车**。
->
-> ---
->
-> ### 🔴 复核后的补充证据（2026-09-25 第二轮，两条更硬的事实）
->
-> **① FR-014 与 038 的既有设计意图直接冲突。**
-> `ChannelPlugin` / `AbstractChannelPlugin` 都是 **038**（commit `793019c`）引入的。
-> `ChannelPlugin` 的类注释原文写着：
-> > 「二者分离让既有渠道（`AbstractMockChannelAdapter` 一族）**零改动**继续工作，
-> > 新渠道则按插件范式接入。**刻意不做强制迁移**——一次性重写 4 个 Adapter
-> > 会把『架构演进』变成『全渠道回归测试』，收益不成比例。」
->
-> 而 FR-014 要求「MOCK / WECHAT / ALIPAY / DOUYIN 四家 **MUST** 迁移」。
-> 两者对「要不要强制迁移」给出了**相反**的结论，且都是白纸黑字的硬约束。
-> 这正落在用户纪律的停工条件「发现 Code ≠ System Design 漂移 / Spec 与代码事实冲突」。
->
-> **② 「迁移」不是换基类，而是合并两个功能不等价的基类。**
-> 逐项比对 `AbstractMockChannelAdapter`（`implements PaymentChannel`）与
-> `AbstractChannelPlugin`（`implements ChannelPlugin`）：
->
-> | 能力 | `AbstractMockChannelAdapter` | `AbstractChannelPlugin` |
-> |---|---|---|
-> | 金额尾数确定性故障注入（spec 022） | 有 | 有（口径重复一份） |
-> | 每实例独立 `runId` | 有 | 有（口径重复一份） |
-> | **退款「受理 + 异步推送」**（`scheduleRefundPush` → `PaymentNotifyPort`） | **有** | **无** |
-> | `mock-scenario` 严格枚举解析（ADR-0049） | 有 | 无（改用 `isRealModeEnabled`） |
-> | 模板方法四步（能力校验 / 模态门控 / 模态分派 / 异常兜底） | **无** | **有** |
-> | `parseCallback` / `callbackAckBody` | 无 | 有 |
->
-> 也就是说：若把 MOCK 直接改 `extends AbstractChannelPlugin`，**mock 退款异步推送链路
-> 会立刻断掉**——那是 E2E 演示（`demo/scenario-refund.sh`）与 spec 019/D7 的核心链路。
-> 要保住它，就得把 `scheduleRefundPush` 一并搬进 `AbstractChannelPlugin`（或让新基类同时
-> 具备两套能力）。**这是一次有行为影响的架构合并，不是 FR-014 假设的机械迁移**，
-> 且 `AbstractMockChannelAdapter` 刚在 T5 被改过（注入点换 `PaymentNotifyPort`），
-> 叠加改动会显著放大回归面。
->
-> **③ 成本复核（修正首轮上报的估计）**：真正「断言内容必须改」的**只有 1 条**
-> ——`PaymentCallbackValidationTest#appIdMismatchRejects`（`reason=app_id`）。
-> 其余 `reason=amount` / `currency` / `channel_reference` 三类断言**可原样保留**，
-> 因为 T5 已把这套校验逐字迁入 `DefaultPaymentNotifyPort.validate()`，指标维度不变。
-> 四个测试类的主要成本是**装配方式改写**（`new AlipayNotifyController(...)` +
-> `onNotify(form)` → `new ChannelCallbackHandler(...)` + `handle("ALIPAY", envelope)`），
-> 而非断言改写。
->
-> **需要裁决**：
-> - **(a) 收窄 T6**：只做 ALIPAY / DOUYIN 的插件化；**保留** `AlipayNotifyController`
->   （FR-015 不执行）与 `AbstractMockChannelAdapter`（MOCK 不迁移）→ **零断言变更、零 039 撞车**；
-> - **(b) 完整执行 FR-014 + FR-015**：放行改 `appIdMismatchRejects` 这 1 条断言
->   （接受 `app_id` 监控维度消失），并接受「两个基类能力合并」的重构
->   + 与 039 在 `MockChannelAdapter.java` 上的合并冲突；
-> - **(c) 本轮跳过 T6**：先合入已完成的 T5 / T5b / T7，T6 待 039 合入 master 后单独排期
->   （届时 WECHAT 已就位、撞车面消失）。
->
-> **未获裁决前不执行 T6。**
+> 首轮与第二轮的完整证据链（含「迁移不是换基类，而是合并两个功能不等价的基类」的逐项比对表、
+> FR-014 与 038 `ChannelPlugin` 类注释「刻意不做强制迁移」的设计意图冲突记录）
+> 保留在 git 历史中（`git log -p -- <本文件>`），此处只留结论，不再重复。
+
+### T6 执行记录
+
+#### T6a　两个基类能力合并（`AbstractChannelPlugin` 吸收 mock 能力）
+
+**技术根因**（首轮上报已识别，本轮验证成立）：`AbstractMockChannelAdapter` 与
+`AbstractChannelPlugin` **功能不等价**，且 `AlipayChannelAdapter` **自己覆写**
+`charge` / `refund` / `queryStatus` 做模态分派——与父类的 `final` 直接冲突。
+这才是「存量渠道无法迁移」的真正根因，不是「换个 `extends`」那么简单。
+
+**解法**：把 mock 能力并入 `AbstractChannelPlugin` 的 `doMockXxx` 钩子，让
+`AbstractMockChannelAdapter` 退化为薄层，三个 Adapter **零改动**地（间接）成为插件。
+
+| 动作 | 落点 |
+|---|---|
+| `Scenario` 枚举（`SUCCESS`/`FAILURE`/`TIMEOUT`/`TRANSPORT_ERROR`/`BUSINESS_UNKNOWN`）移入 | `AbstractChannelPlugin`（**保留原异常消息** `invalid payment.channel.mock-scenario: '…'`） |
+| 退款「受理 + 异步推送」（`scheduleRefundPush` → `PaymentNotifyPort`）上移 | `AbstractChannelPlugin`（线程名 `channel-refund-pusher`） |
+| `doMockCharge` / `doMockRefund` / `doMockQuery` 按 `scenario` 分派（**尾数确定性注入优先**） | `AbstractChannelPlugin` |
+| `requireSceneSupported` 改读 `supportedScenes()`（可覆写）而非 `descriptor().supportedScenes()`（静态） | `AbstractChannelPlugin`——支付宝单 Adapter 双模态的能力**随模态变化**，用静态描述符会在 mock 路径误拒 |
+| 三个 `doRealXxx` 抛 `unreachable`、`isRealModeEnabled()` 恒 `false` | `AbstractMockChannelAdapter`（285 行 → 约 100 行薄层） |
+| `descriptor()`：mock 全集场景 + 无回调挂载点 | `MockChannelAdapter` / `DouyinChannelAdapter` |
+| `descriptor()`：`supportedScenes` 取**全集** + `CALLBACK_PATH="ALIPAY"` + 状态常量 | `AlipayChannelAdapter` |
+
+#### T6b　`AlipayChannelAdapter` 迁为插件范式
+
+- **删除**自实现的 `charge` / `refund` / `queryStatus` 覆写（模态分派收归内核第 ③ 步）；
+- `sandboxCharge` / `sandboxRefund` / `sandboxQuery` → `doRealCharge` / `doRealRefund` / `doRealQuery`（`@Override`）；
+- **删除** `requireSandboxEnabled()`——FR-241 / INV-8 的硬失败由内核门控
+  `requireRealModeIfSandboxRequested` 统一给出，其措辞**恰好包含**既有断言要的
+  `refusing to silently fall back to mock`（故 `AlipaySandboxChargeTest` 零改动通过）；
+- `isRealModeEnabled()` = `sandboxGateway != null && sandboxEnabled`；
+- 新增第 4 个构造 `(Scenario, AlipayGateway, boolean sandboxEnabled, String sandboxAppId)`。
+
+#### T6c　回调翻译下沉（`parseCallback`，FR-015）
+
+`parseCallback` 四步（顺序不可换）：① `sandboxGateway.verifyNotify` 验签 →
+② `app_id` 一致性（FR-203）→ ③ `out_trade_no` 定位 → ④ `trade_status` 映射 +
+`total_amount` 译成「分」（禁 double，INV-1）。
+
+- **T6c 红→绿实测**：首次红阶段报 `no suitable constructor found for AlipayChannelAdapter(...,String)`
+  ——这是**预期的红**（4 参构造尚未添加），非缺陷；
+- **新建** `AlipayCallbackParseTest` **14/14**（状态映射 5 + 金额翻译 3 + 身份定位 4 + 协议面 2）；
+- **新建** `ChannelPluginMigrationTest` **3/3**（四家 `isAssignableFrom` + 自描述 + 回调挂载点）。
+
+#### T6d　删除专属端点 + 三个测试类改写
+
+**删除（`git rm`）**：`channelgateway/api/AlipayNotifyController.java`、
+`payment/api/AlipayNotifyControllerTest.java`、`payment/api/AlipayNotifyValidationTest.java`。
+
+**改写 3 个既有测试类**——装配从 `new AlipayNotifyController(...)` + `onNotify(form)`
+改为 `new ChannelCallbackHandler(...)` + `handle("ALIPAY", ChannelCallbackEnvelope.form(...))`：
+
+| 测试类 | 断言变化 |
+|---|---|
+| `PaymentCallbackPathParityTest`（10） | **零** |
+| `PaymentCallbackValidationTest`（12） | 仅 `appIdMismatchRejects` 1 条（`reason=app_id` → `reason=signature`，**已裁决放行**） |
+| `AlipaySandboxNotifyScenarioTest`（8） | 应答断言由 `ResponseEntity` 的 HTTP 码 + body 改为 `ChannelCallbackAck`（`signatureVerified` + body）——**同一事实的两层表达**；映射本身由新增的 `ChannelPluginCallbackControllerTest` 钉住 |
+
+**新增** `ChannelPluginCallbackControllerTest`（**8/8**）：补回 `AlipayNotifyControllerTest`
+删除后丢失的 **HTTP 适配层**覆盖（表单解析 / UTF-8 解码 / 头名小写 /
+验签失败 ⇒ 403 且**不触达** Payment 侧 / 未注册渠道不伪装成 200/403），
+并显式钉住「JSON 报文不再被 415 拒绝」这条**有意变化**。
+
+**登记的两处有意差异**：
+
+1. `AlipayNotifyControllerTest#jsonContentTypeIsRejected` 的「415」断言随测试类删除
+   ——通用端点**刻意不限制 content-type**（要同时承载表单协议的支付宝与 JSON 协议的 Stripe）；
+2. `app_id` 失败归入 `reason=signature`（而非 `app_id`）——设计上 `app_id` 属「①签名/身份」段，
+   与验签**同源**，失败即「报文未过门」。
+
+**审计币种口径合并（一处未在上报中预告、但为保住既有断言而必须做的改动）**：
+两条拒绝路径的审计币种原先不一致——支付宝端点写死 `"CNY"`、通用端口写 `null`。
+合并后取**被拒支付单自己的币种**：对 CNY 单与支付宝路径的既有记录**逐字相同**
+（`PaymentCallbackValidationTest#rejectionAuditCarriesPaymentIdentity` 的
+`currencyCode().isEqualTo("CNY")` **零变化**通过），且任何币种下记录的都是事实
+（写死 `CNY` 在「币种不符」场景下恰好是最误导的一种记录）。
+落点：`DefaultPaymentNotifyPort#reject`（顺带把支付单的加载提到调用方，避免为填审计再查一次库）。
+
+**ArchUnit 白名单同步**：移除 `LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES` 中的
+`AlipayNotifyController` 条目（**4 → 2**；T5 已收口 `ChannelPluginCallbackController`）。
+
+#### T6 实测
+
+| 命令 | 结果 |
+|---|---|
+| T6a/T6b 定向 | 67 tests / 0F / 0E |
+| T6c 定向（含组合跑） | 56 tests / 0F / 0E |
+| `./mvnw -B clean test -pl payment-service -am` | **482 tests / 0F / 0E / BUILD SUCCESS** |
+
+> ⚠️ **计数陷阱（本 T 再次踩到）**：`target/surefire-reports/` 会残留**已删除类**的旧 XML
+> ——本次见到 `AlipayNotifyControllerTest`（5）与 `AlipayNotifyValidationTest`（10）仍在列，
+> 直接把目录加总会得到**虚高且含幽灵用例**的数字。
+> **计数一律以 `./mvnw -B clean test` 为准。**
+
+**净变化核对**：上轮 475（T6a/T6b 全量）+ 14（T6c 新增 `AlipayCallbackParseTest`）
+− 15（删除的两个专属端点测试类）+ 8（新增 `ChannelPluginCallbackControllerTest`）= **482** ✓
 
 ## T7　ArchUnit 门禁　[FR-016]
 

@@ -6,6 +6,25 @@
 
 ---
 
+## [2026-09-25] feat(037)：渠道网关边界收口——出向只经 `ChannelGateway` 门面 + 入向只经 `PaymentNotifyPort` + 存量渠道迁入插件族 + 删除支付宝专属回调端点（**含破坏性端点变更**）
+
+**性质**：Feature 037 实现落地（stage-05）。把渠道网关做成**进程内微服务**：Payment → Channel 的**出向**只经 `ChannelGateway` 门面，Channel → Payment 的**入向**只经 Payment 定义并实现的 `PaymentNotifyPort`，跨域类型一律走 `common-dto`。**零新增微服务、零新增中间件**；破坏性变更 1 处（端点，见下）。
+
+- **出向门面收口（T4 / FR-007）**：Payment 侧 5 个消费点（建单 / 退款 / 主动查询 / 超时扫描 / 重试）全部改走 `ChannelGateway`；`ChannelRegistry` / `ChannelRouter` / `ChannelPlugin` 三件套在 Payment 应用层与接入层的直接依赖清零。
+- **入向端口归位（T5 / FR-010~FR-012）**：新增 `payment/application/PaymentNotifyPort`（**Payment 定义 + 实现**）与 `DefaultPaymentNotifyPort`，取代定义在渠道包、实现在退款应用服务的反向形态 `RefundResultListener` / `MockRefundResultBridge`（**已删除**）。原写在 `ChannelPluginCallbackController.validate()` 里的 Payment 业务校验（查单 / 验渠道引用归属 / 验金额币种）**逐字迁入**该实现，拒绝三件套（不推进 + 计指标 + 写审计）口径不变。
+- **回调两层收口（T5 / FR-009 / INV-5）**：新增渠道网关域的 `ChannelCallbackHandler`（`handle` 为 `final` 的四步模板：① 按 `channelCode` 精确寻址选插件（INV-6，绝不重新路由）→ ② 验签 + 身份（失败 ⇒ 403 且**不触达** Payment 侧，INV-10）→ ③ 报文转换 → ④ 内核统一封装跨域事件并经 `PaymentNotifyPort` 通知）。`ChannelPluginCallbackController` 收口为「收报文、交网关」，不再依赖任何 Payment 侧类型。
+- **模态判定内聚（T5b / FR-013）**：`ChannelGateway` 新增带 `DyeMode` 的 `refund` / `query` 重载与 `isSandboxRequest()` 探针；Payment 侧不再读 `DyeContext`（改造前模态包裹散落在退款 / 主动查询 / 超时扫描 / 建单入口四处）。
+- **存量渠道迁入插件族（T6 / FR-014）**：`AbstractMockChannelAdapter` 的 mock 能力（金额尾数确定性故障注入、每实例 `runId`、**退款受理 + 异步推送** `scheduleRefundPush`）并入 `AbstractChannelPlugin`，`AbstractMockChannelAdapter` 退化为薄层（三个 `doRealXxx` 抛 `unreachable`）；MOCK / ALIPAY / DOUYIN 三家**零改动**地（间接）成为插件（WECHAT 已由 039 先行迁入）。`AlipayChannelAdapter` 不再自实现模态分派——它与父类 `final` 的冲突正是「存量渠道无法迁移」的技术根因，现改为提供三个真实模式原语（`doRealCharge` / `doRealRefund` / `doRealQuery`）+ `parseCallback` + `callbackAckBody`。
+- **⚠️ 破坏性变更（端点）**：删除支付宝专属端点 `POST /internal/channels/alipay/notify`（`AlipayNotifyController`），回调统一走通用插件端点 **`POST /internal/channels/{channelCode}/callback`**（支付宝 = `/internal/channels/ALIPAY/callback`）。**部署侧必须同步**：`PAYMENT_CHANNEL_NOTIFY_URL` 改指向新路径（`deployment/start-all.sh` / `start-container.sh` / `docker-compose.yml` / `demo/README.md` / `demo/start-tunnel.sh` / `docs/operations/runbook.md` 已同步）；**支付宝沙箱后台的异步通知地址需手工改**。
+- **⚠️ 变更（监控维度）**：身份校验（`app_id`）从业务校验段下沉到插件的「①签名/身份」段，与验签**同源** ⇒ 拒绝指标由 `reason=app_id` 归入 `reason=signature`，**`app_id` 维度消失**（已裁决放行）。
+- **有意保留的行为差异**：通用端点**不限制 content-type**（要同时承载表单协议的支付宝与 JSON 协议的 Stripe），故非表单请求不再被 415 拒绝，而是原样交给插件；`AlipayNotifyControllerTest#jsonContentTypeIsRejected` 随该类删除。
+- **审计币种口径合并**：两条拒绝路径的审计币种原先不一致（支付宝端点写死 `"CNY"`、通用端口写 `null`），合并后取**被拒支付单自己的币种**——对 CNY 单与既有记录逐字相同（既有断言零变化），且任何币种下记录的都是事实（写死 `CNY` 在「币种不符」场景下恰好是最误导的一种）。
+- **ArchUnit 门禁（T7 / FR-016）**：新增 2 条规则（Payment 应用/api 层禁依赖渠道网关内部件；`DyeContext` 仅限渠道网关域），038 登记的 4 条反向依赖白名单降至 **2 条**（`ChannelPluginCallbackController` 于 T5、`AlipayNotifyController` 于 T6 先后移除；余 `ChannelCallbackController` 与 `ChannelCallbackSignatureFilter`，属独立裁决项）。
+- **测试**：`payment-service` **482 个用例全绿**（净变化 = 删 15（专属端点两个测试类）− 增 8（通用端点 HTTP 适配层 `ChannelPluginCallbackControllerTest`）+ T6c 新增 14（`AlipayCallbackParseTest`））。
+- **文档同步**：`systems/payment-service.md`（§6.11.1 端点表重写 + 模块分层图按生成器重出）、`technical-solution.md` §4.3.2、`operations/runbook.md`、部署脚本与 demo 文档；**ADR 正文不回改**（历史决策留痕）。
+
+---
+
 ## [2026-09-25] feat(039)：微信支付渠道插件——WECHAT 由 Adapter 族迁入插件族（微信 V3：请求签名 / 回调验签解密 / 四步全链路），**含删除旧 Adapter 与 mock 口径收窄**
 
 **性质**：Feature 039 实现落地（stage-05）。WECHAT 从「Adapter 族」（`AbstractMockChannelAdapter` 子类）迁移为「插件族」（`AbstractChannelPlugin` 子类），与 `StripeChannelPlugin` 同构，落实 Payment ≠ Channel 的插件化微内核。**零新增微服务、零新增中间件、零内核改动**（SC-002 零改动判据通过）；无破坏性公共 API 变更。

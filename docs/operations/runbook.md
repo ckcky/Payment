@@ -184,7 +184,7 @@ merchant-service (8081)、catalog-service (8082)（无下游依赖，任意时�
 # 例：cloudflared（无需注册即可拿临时域名）
 cloudflared tunnel --url http://127.0.0.1:8084
 # 输出形如 https://xxxx.trycloudflare.com
-export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/alipay/notify
+export PAYMENT_CHANNEL_NOTIFY_URL=https://xxxx.trycloudflare.com/internal/channels/ALIPAY/callback
 export PAYMENT_CHANNEL_RETURN_URL=https://xxxx.trycloudflare.com/cashier/return
 ```
 

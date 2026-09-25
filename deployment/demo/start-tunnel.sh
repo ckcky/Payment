@@ -4,7 +4,7 @@
 #
 # 为什么需要它（spec 030 / FR-103 / Q5）：
 #   notify 是资金事实的唯一权威来源。支付宝沙箱在公网，回调 MUST 能打到本机
-#   POST /internal/channels/alipay/notify；否则**即使买家付款成功**，支付单也会
+#   POST /internal/channels/ALIPAY/callback；否则**即使买家付款成功**，支付单也会
 #   一直停 PROCESSING（INV-6：渠道受理 ≠ 买家已付款）。详见 runbook §4.4。
 #
 # 用法：
@@ -34,15 +34,15 @@ fi
 
 echo "==> 被穿透端口：${PORT}（宿主 payment-service）"
 echo "==> 固定域名  ：https://${DOMAIN}"
-echo "==> 回调地址  ：https://${DOMAIN}/internal/channels/alipay/notify"
+echo "==> 回调地址  ：https://${DOMAIN}/internal/channels/ALIPAY/callback"
 echo
 echo "    请确认 payment-service 的环境变量与之匹配："
-echo "      export PAYMENT_CHANNEL_NOTIFY_URL=https://${DOMAIN}/internal/channels/alipay/notify"
+echo "      export PAYMENT_CHANNEL_NOTIFY_URL=https://${DOMAIN}/internal/channels/ALIPAY/callback"
 echo "      export PAYMENT_CHANNEL_RETURN_URL=https://${DOMAIN}/cashier/return"
 echo
 echo "    验证隧道是否真通（返回 403 = 已打到 payment-service，空报文验签必然失败，这是对的）："
 echo "      curl -s --noproxy '*' -X POST -d 'out_trade_no=probe' \\"
-echo "        https://${DOMAIN}/internal/channels/alipay/notify"
+echo "        https://${DOMAIN}/internal/channels/ALIPAY/callback"
 echo
 echo "==> 启动隧道（前台常驻，Ctrl-C 停止）..."
 echo

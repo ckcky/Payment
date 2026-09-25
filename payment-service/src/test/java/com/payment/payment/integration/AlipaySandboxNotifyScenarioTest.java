@@ -2,21 +2,28 @@ package com.payment.payment.integration;
 
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
-import com.payment.channelgateway.api.AlipayNotifyController;
-import com.payment.channelgateway.infra.alipay.AlipayGateway;
+import com.payment.common.core.observability.NoopBusinessMetrics;
+import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.channel.CallbackUrls;
-import com.payment.channelgateway.application.ChannelResult;
-import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.common.dto.channel.PayCredential;
 import com.payment.common.dto.channel.PaymentScene;
+import com.payment.channelgateway.application.ChannelCallbackAck;
+import com.payment.channelgateway.application.ChannelCallbackHandler;
+import com.payment.channelgateway.application.ChannelRegistry;
+import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channelgateway.application.ChargeRequest;
+import com.payment.channelgateway.application.spi.ChannelCallbackEnvelope;
+import com.payment.channelgateway.infra.AlipayChannelAdapter;
+import com.payment.channelgateway.infra.alipay.AlipayGateway;
+import com.payment.channelgateway.support.StubChannelRegistry;
+import com.payment.payment.application.DefaultPaymentNotifyPort;
+import com.payment.payment.application.PaymentNotifyPort;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentAttemptStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channelgateway.infra.AlipayChannelAdapter;
-import com.payment.channelgateway.infra.config.AlipaySandboxProperties;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,22 +53,37 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <pre>
  *   ① 建单：payment=PROCESSING + attempt（stamp SANDBOX）
  *   ② 染色 SANDBOX 下单：adapter.charge → accepted + FORM_HTML 凭证，payment 仍 PROCESSING（INV-6）
- *   ③ 支付宝推 notify（TRADE_SUCCESS，金额一致）→ 200 "success"
+ *   ③ 支付宝推 notify（TRADE_SUCCESS，金额一致）→ 应答 success
  *   ④ 收敛：payment=SUCCEEDED，attempt=SUCCEEDED，通知 order
  * </pre>
+ *
+ * <h3>T6 迁移说明（断言口径的<b>唯一</b>变化）</h3>
+ * <p>③ 原先打的是支付宝专属端点 {@code POST /internal/channels/alipay/notify}
+ * （{@code AlipayNotifyController}，FR-015 已删除），现打<b>通用端点</b>
+ * {@code POST /internal/channels/ALIPAY/callback}。本类因此驱动
+ * {@link ChannelCallbackHandler}（通用端点背后的四步模板）而非那个 Controller。</p>
+ *
+ * <p>由此带来的断言口径变化只有一处：应答断言从 {@code ResponseEntity} 的
+ * HTTP 状态码 + body，改为网关域的 {@link ChannelCallbackAck}（{@code signatureVerified} + body）。
+ * 两者是<b>同一事实的两层表达</b>——{@code signatureVerified()==false} 正是端点映射出 403 的
+ * 唯一依据（INV-10：验签失败不触达任何状态推进），映射本身由
+ * {@code ChannelPluginCallbackControllerTest} 单独钉住，本类专注「链路走得通」。</p>
  */
 class AlipaySandboxNotifyScenarioTest {
 
     private static final String PAYMENT_NO = "PM-SCENARIO-1";
-    private static final String NOTIFY_URL = "http://localhost:8084/internal/channels/alipay/notify";
+
+    /** 回调地址：T6 起统一为通用端点（路径段即渠道码，INV-6 精确寻址）。 */
+    private static final String NOTIFY_URL = "http://localhost:8084/internal/channels/ALIPAY/callback";
+
+    private static final String APP_ID = "sandbox-app-1";
 
     private PaymentTestStack stack;
     private InMemoryPaymentRepository payments;
     private InMemoryPaymentAttemptRepository attempts;
     private ScriptedGateway gateway;
-    private AlipaySandboxProperties properties;
     private AlipayChannelAdapter adapter;
-    private AlipayNotifyController notifyController;
+    private ChannelCallbackHandler handler;
 
     /**
      * 脚本化支付宝网关：按脚本演绎「下单返回自动提交表单 HTML」与「验签通过」，
@@ -123,14 +145,14 @@ class AlipaySandboxNotifyScenarioTest {
                 Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
 
         gateway = new ScriptedGateway();
-        properties = new AlipaySandboxProperties();
-        properties.setEnabled(true);
-        properties.setAppId("sandbox-app-1");
+        adapter = new AlipayChannelAdapter(
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, APP_ID);
 
-        adapter = new AlipayChannelAdapter(AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
-        notifyController = new AlipayNotifyController(gateway, properties, stack.callback,
-                payments, attempts, new com.payment.common.core.observability.NoopBusinessMetrics(),
-                new com.payment.common.core.observability.StructuredAuditLogger());
+        // 通用端点背后的真实链路：注册表（精确寻址 INV-6）→ 四步模板 → Payment 入向端口
+        ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE, adapter);
+        PaymentNotifyPort port = new DefaultPaymentNotifyPort(stack.callback, null,
+                payments, attempts, new NoopBusinessMetrics(), new StructuredAuditLogger());
+        handler = new ChannelCallbackHandler(registry, port, new NoopBusinessMetrics());
     }
 
     @AfterEach
@@ -152,10 +174,16 @@ class AlipaySandboxNotifyScenarioTest {
         params.put("trade_status", tradeStatus);
         params.put("trade_no", "ch-scenario-1");
         params.put("total_amount", "10.00");
-        params.put("app_id", "sandbox-app-1");
+        params.put("app_id", APP_ID);
         params.put("sign", "fake");
         params.put("sign_type", "RSA2");
         return params;
+    }
+
+    /** 支付宝把表单报文推到通用回调端点（渠道网关域四步模板的入口）。 */
+    private ChannelCallbackAck notify(String tradeStatus) {
+        return handler.handle(AlipayChannelAdapter.CODE,
+                ChannelCallbackEnvelope.form(Map.of(), notifyParams(tradeStatus)));
     }
 
     // ---- 完整动线 ----
@@ -182,11 +210,11 @@ class AlipaySandboxNotifyScenarioTest {
                 .isEqualTo(PaymentStatus.PROCESSING);
 
         // ③ 支付宝推 notify（金额一致）
-        var response = notifyController.onNotify(notifyParams("TRADE_SUCCESS"));
+        ChannelCallbackAck ack = notify("TRADE_SUCCESS");
 
         // ④ 收敛
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).as("响应体必须恰好是 success").isEqualTo("success");
+        assertThat(ack.signatureVerified()).as("验签必须通过，否则端点会返回 403").isTrue();
+        assertThat(ack.body()).as("响应体必须恰好是 success").isEqualTo("success");
         assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                 .as("权威回调到达后才落终态")
                 .isEqualTo(PaymentStatus.SUCCEEDED);
@@ -221,9 +249,11 @@ class AlipaySandboxNotifyScenarioTest {
         Map<String, String> params = notifyParams("TRADE_SUCCESS");
         params.put("sign", "wrong-signature");
 
-        var response = notifyController.onNotify(params);
+        ChannelCallbackAck ack = handler.handle(AlipayChannelAdapter.CODE,
+                ChannelCallbackEnvelope.form(Map.of(), params));
 
-        assertThat(response.getStatusCode().value()).isEqualTo(403);
+        // signatureVerified()==false 是端点映射出 HTTP 403 的唯一依据（INV-10）
+        assertThat(ack.signatureVerified()).as("验签未通过").isFalse();
         assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                 .as("验签失败必须一个字节状态都不动")
                 .isEqualTo(PaymentStatus.PROCESSING);
@@ -236,9 +266,10 @@ class AlipaySandboxNotifyScenarioTest {
         Map<String, String> params = notifyParams("TRADE_SUCCESS");
         params.put("total_amount", "0.01"); // 篡改成一分钱
 
-        var response = notifyController.onNotify(params);
+        ChannelCallbackAck ack = handler.handle(AlipayChannelAdapter.CODE,
+                ChannelCallbackEnvelope.form(Map.of(), params));
 
-        assertThat(response.getBody()).contains("rejected");
+        assertThat(ack.body()).contains("rejected");
         assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.PROCESSING);
         assertThat(stack.order.succeededRequests).isEmpty();
@@ -247,7 +278,7 @@ class AlipaySandboxNotifyScenarioTest {
     @Test
     @DisplayName("动线③买家未付款：WAIT_BUYER_PAY 不推进，payment 停 UNKNOWN 待收敛 [FR-204][CB-10]")
     void waitBuyerPayDoesNotComplete() {
-        notifyController.onNotify(notifyParams("WAIT_BUYER_PAY"));
+        notify("WAIT_BUYER_PAY");
 
         PaymentStatus status = payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus();
         assertThat(status).isNotEqualTo(PaymentStatus.SUCCEEDED);
@@ -258,7 +289,7 @@ class AlipaySandboxNotifyScenarioTest {
     @Test
     @DisplayName("动线④交易关闭：TRADE_CLOSED 收敛 FAILED，不误报成功")
     void tradeClosedEndsAsFailed() {
-        notifyController.onNotify(notifyParams("TRADE_CLOSED"));
+        notify("TRADE_CLOSED");
 
         assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.FAILED);

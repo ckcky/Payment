@@ -47,12 +47,15 @@ import java.util.Map;
  * 再按 content-type 决定是否需要解析成表单。若改用 {@code @RequestParam}，
  * 容器会先消费 body，JSON 形态的渠道将拿不到原始报文。</p>
  *
- * <h3>与既有端点的关系（迁移中状态）</h3>
+ * <h3>与既有端点的关系</h3>
  * <ul>
  *   <li>{@link ChannelCallbackController}（{@code /internal/payments/{paymentNo}/channel-callback}）：
  *       <b>平台内部</b>的 mock 回调入口，非渠道协议，保持不动；</li>
- *   <li>{@code AlipayNotifyController}：支付宝专属端点，既有测试与联调脚本依赖它，
- *       迁移到本端点后再删除。两条路径并存是<b>刻意登记的技术债</b>，见《Channel 域架构评估》。</li>
+ *   <li>支付宝专属端点 {@code AlipayNotifyController}（{@code /internal/channels/alipay/notify}）
+ *       已于 <b>T6（FR-015）删除</b>——「专属端点 / 通用端点」双轨并存的技术债（036 TD-1）就此关闭。
+ *       它的解析职责下沉到 {@code AlipayChannelAdapter#parseCallback}，
+ *       业务校验归 {@code DefaultPaymentNotifyPort}，模态包裹归 {@code ChannelCallbackHandler}。
+ *       自此<b>回调只有本端点一条路</b>，不再有「哪条路径才是权威」的歧义。</li>
  * </ul>
  */
 @RestController

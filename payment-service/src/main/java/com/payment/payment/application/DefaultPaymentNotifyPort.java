@@ -26,6 +26,12 @@ import org.springframework.stereotype.Service;
  * 异常分档（{@code processing_error} / {@code unexpected_error}）<b>完全同口径</b>——
  * 这是 NFR-2 意义上的机械搬迁，不是重新设计。</p>
  *
+ * <h3>与支付宝专属端点合并时的<b>唯一</b>口径分歧（T6）</h3>
+ * <p>T6 把支付宝 notify 路径也收进本端口后，两条拒绝路径的<b>审计币种</b>不一致：
+ * 专属端点写死 {@code "CNY"}，本端口写 {@code null}。合并后取「被拒支付单自己的币种」——
+ * 对 CNY 单与专属端点的既有记录逐字相同（既有断言零变化），且任何币种下记录的都是事实。
+ * 详见 {@link #reject}。</p>
+ *
  * <h3>退款侧</h3>
  * <p>{@link #onChannelRefundResult(ChannelRefundNotified)} 取代了 {@code RefundResultListener}
  * 的 {@code MockRefundResultBridge} 实现（FR-012）：接口定义权归 Payment，渠道网关只依赖接口。
@@ -70,9 +76,15 @@ public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
         String paymentNo = notified.paymentNo();
         String channelCode = notified.channelCode();
         try {
-            String rejection = validate(notified);
+            Payment payment = paymentRepository.findByPaymentNo(paymentNo).orElse(null);
+            if (payment == null) {
+                // 找不到支付单：可能是往期数据或串号。交由下面的 catch 记日志 + 非 success 响应
+                throw BizException.of(ErrorCodes.NOT_FOUND,
+                        "payment not found for callback: " + paymentNo);
+            }
+            String rejection = validate(notified, payment);
             if (rejection != null) {
-                reject(paymentNo, rejection);
+                reject(payment, rejection);
                 return PayNotifyOutcome.rejected(rejection);
             }
             // 收敛复用既有链路（终态吸收 + 乱序保护 + 幂等，全部由它保证）
@@ -101,18 +113,15 @@ public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
      * <p>口径与迁移前的 {@code ChannelPluginCallbackController#validate} 逐字一致；
      * 渠道私有的身份校验（如支付宝 {@code app_id}）不在这里——那属于「①签名/身份」段，
      * 由渠道插件负责。</p>
+     *
+     * @param payment 已加载的支付单（由调用方加载一次并传入：拒绝审计也要用到它的币种，
+     *                在校验里再查一次库只是为了多一次未必命中的读）
      */
-    private String validate(ChannelPayNotified notified) {
-        Payment payment = paymentRepository.findByPaymentNo(notified.paymentNo()).orElse(null);
-        if (payment == null) {
-            throw BizException.of(ErrorCodes.NOT_FOUND,
-                    "payment not found for callback: " + notified.paymentNo());
-        }
-
+    private String validate(ChannelPayNotified notified, Payment payment) {
         // ---- ② Channel Reference Validation ----
         String channelReference = notified.channelTransactionId();
         if (channelReference != null && !channelReference.isBlank()) {
-            String refRejection = validateChannelReference(notified.paymentNo(), channelReference);
+            String refRejection = validateChannelReference(payment.getPaymentNo(), channelReference);
             if (refRejection != null) {
                 return refRejection;
             }
@@ -150,10 +159,23 @@ public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
         return null;
     }
 
-    /** 校验失败的三件套（FR-213）：不推进状态 + 计指标 + 写审计，缺一不可。 */
-    private void reject(String paymentNo, String reason) {
+    /**
+     * 校验失败的三件套（FR-213）：不推进状态 + 计指标 + 写审计，缺一不可。
+     *
+     * <p><b>审计的币种取「被拒的那笔单的币种」</b>——这是 T6 把两条拒绝路径合并成一条时
+     * 的<b>一致性选择</b>，不是随手填的值。合并前的两种记录方式都不对：</p>
+     * <ul>
+     *   <li>支付宝专属端点写死 {@code "CNY"}——在「币种不符」这个场景下，
+     *       记录恰好是最误导的一种（平台单是 USD，审计却说 CNY）；</li>
+     *   <li>通用端点写 {@code null}——资金面分歧的审计里缺了币种，跨币种对账时无法自证。</li>
+     * </ul>
+     * <p>取支付单自己的币种两者兼得：对 CNY 单与支付宝路径的既有记录逐字相同，
+     * 且任何币种下记录的都是事实。</p>
+     */
+    private void reject(Payment payment, String reason) {
+        String paymentNo = payment.getPaymentNo();
         metrics.counter("payment.notify_rejected", 1.0, "module", MODULE, "reason", classify(reason));
-        auditLogger.audit("payment.notify_rejected", paymentNo, null, null,
+        auditLogger.audit("payment.notify_rejected", paymentNo, null, payment.getCurrencyCode(),
                 "NOTIFY_RECEIVED", "REJECTED", "payment", paymentNo);
         log.warn("channel callback rejected paymentNo={} reason={}", paymentNo, reason);
     }

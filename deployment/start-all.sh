@@ -129,7 +129,7 @@ if [ "${PAYMENT_ALIPAY_SANDBOX_ENABLED:-false}" = "true" ]; then
     echo "  notify 是资金事实的唯一权威来源（FR-103 / Q5）；缺失时沙箱下单必然 400 INVALID_ARGUMENT。"
     echo "  本地演示请先用内网穿透拿到公网域名，例如："
     echo "      ngrok http 8084"
-    echo "      export PAYMENT_CHANNEL_NOTIFY_URL=https://<ngrok-域名>/internal/channels/alipay/notify"
+    echo "      export PAYMENT_CHANNEL_NOTIFY_URL=https://<ngrok-域名>/internal/channels/ALIPAY/callback"
     exit 1
   fi
   echo "    已开启支付宝沙箱渠道（enabled=true，gateway=${PAYMENT_ALIPAY_SANDBOX_GATEWAY_URL:-默认沙箱网关}）"
