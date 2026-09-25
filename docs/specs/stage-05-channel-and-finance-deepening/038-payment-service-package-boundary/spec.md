@@ -319,10 +319,10 @@ com.payment.refund.infra                 → com.payment.payment.infra
 ## 12. 依赖（Dependencies）
 
 **硬依赖（不做完无法开始）**
-- `feature/037-channel-gateway-boundary` **当前禁止合入 master**（`channel_no NOT NULL` 已加 DDL 但持久层未映射）。本 Feature **从 master 起分支**，不依赖 037 代码。⚠️ 若 037 先合入，038 需重新对齐其改动。
+- **037 原 WIP 分支已于 2026-09-25 删除**（曾因 `channel_no NOT NULL` 已加 DDL 但持久层未映射而禁止合入），其半成品保留在本地 tag `archive/037-wip-t1t3` 作参考。本 Feature **从 master 起分支**，不依赖 037 代码。⚠️ 若 037 先合入，038 需重新对齐其改动。
 
 **软依赖（可并行）**
-- 036（Channel 微内核 + 插件化 + Stripe）已合入 master —— 本 Feature 依赖其**插件目录形态**作为迁移目标结构。
+- [036-channel-plugin-microkernel](../036-channel-plugin-microkernel/spec.md)（Channel 微内核 + 插件化 + Stripe）已合入 master —— 本 Feature 依赖其**插件目录形态**作为迁移目标结构。
 - spec 034（出站失败台账）—— 决定 `posting` 保持独立（FR-008）。
 
 ---
@@ -332,6 +332,6 @@ com.payment.refund.infra                 → com.payment.payment.infra
 - [ADR-0072 两层职责](../../../adr/) — `Payment` / `PaymentAttempt` 分层
 - [ADR-0063 跨系统标识](../../../adr/) — 业务单号纪律（037 相关，本 Feature 不触碰）
 - [payment-service System Design](../../../architecture/systems/payment-service.md) — L0，FR-011 需同步端点清单
-- 037-channel-gateway-boundary — 渠道网关边界收口（本 Feature 为其提供包级门禁落点）。
-  ⚠️ 该 Spec 尚在 `feature/037-channel-gateway-boundary` 分支、**未合入 master**，故此处不给出相对链接。
+- [037-channel-gateway-boundary](../037-channel-gateway-boundary/spec.md) — 渠道网关边界收口（本 Feature 为其提供包级门禁落点）。
+  ⚠️ 其原 WIP 分支已删除（2026-09-25），**代码尚未实现**；文档在 master，实现留待执行方从 master 新建分支做。
 - [Constitution §Governance](../../../../.specify/memory/constitution.md) — 公共 API 变更属人类决策边界

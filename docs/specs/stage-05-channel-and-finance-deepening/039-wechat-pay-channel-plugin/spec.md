@@ -226,7 +226,7 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 **硬依赖**
 - **038（payment-service 包边界重构）**：决定插件包落点。**建议 038 合入后再开工 039**，否则需二次迁移。
-- **036（Channel 微内核 + 插件化，已合入 master）**：`AbstractChannelPlugin` + `ChannelPluginFactory` SPI + 通用回调端点是本 Feature 的底座。
+- **[036-channel-plugin-microkernel](../036-channel-plugin-microkernel/spec.md)（Channel 微内核 + 插件化，已合入 master）**：`AbstractChannelPlugin` + `ChannelPluginFactory` SPI + 通用回调端点是本 Feature 的底座。其 Stripe 五件套是本 Feature 的**同构参照**。
 
 **软依赖 / ⚠️ 冲突提示**
 - **与 037 T6 重叠**：037 T6 要求「MOCK / WECHAT / ALIPAY / DOUYIN 迁至 `AbstractChannelPlugin`」。
@@ -242,8 +242,8 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 ## 13. 相关文档（Related Documents）
 
 - [038-payment-service-package-boundary](../038-payment-service-package-boundary/spec.md) — 决定插件包落点
-- 037-channel-gateway-boundary — 渠道网关边界收口（WECHAT 迁移重叠，见 §12）。
-  ⚠️ 该 Spec 尚在 `feature/037-channel-gateway-boundary` 分支、**未合入 master**，故此处不给出相对链接。
+- [037-channel-gateway-boundary](../037-channel-gateway-boundary/spec.md) — 渠道网关边界收口（WECHAT 迁移重叠，见 §12）。
+  ⚠️ 其原 WIP 分支已删除（2026-09-25），**代码尚未实现**；文档在 master，实现留待执行方从 master 新建分支做。
 - [payment-service System Design](../../../architecture/systems/payment-service.md) — L0，渠道清单需在完成后同步
 - 微信支付《支付验收指引》`pay.weixin.qq.com/wiki/doc/api/native_sl.php?chapter=23_1`
 - 微信支付 APIv3《开发必要参数说明》`pay.weixin.qq.com/doc/v3/merchant/4013070756`
