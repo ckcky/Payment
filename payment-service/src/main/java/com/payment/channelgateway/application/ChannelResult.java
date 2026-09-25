@@ -2,10 +2,11 @@ package com.payment.channelgateway.application;
 
 import com.payment.common.core.rpc.BusinessCode;
 import com.payment.common.core.rpc.TransportCode;
+import com.payment.common.dto.channel.ChannelPayStatus;
+import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.common.dto.channel.PayCredential;
 import com.payment.payment.domain.PaymentAttemptErrorType;
 
-import com.payment.common.dto.channel.PayCredential;
 /**
  * 渠道交互结果：成功 / 失败 / 未知（超时、断连或不完整响应）。
  *
@@ -112,6 +113,46 @@ public record ChannelResult(Status status, String channelReference, String reaso
     /** 超时快捷方式：等价于 {@code transportFailure(TransportCode.TIMEOUT, reason)}。 */
     public static ChannelResult timeout(String reason) {
         return transportFailure(TransportCode.TIMEOUT, reason);
+    }
+
+    /**
+     * 跨域入向事件 → 网关域结果（spec 037 / T5 / FR-010）。
+     *
+     * <p>渠道网关把翻译产物封成 {@code common-dto} 的入向事件交给 Payment
+     * （{@code PaymentNotifyPort}），Payment 侧的端口实现再用本工厂把它翻译回网关域结果，
+     * 交给既有的收敛链路（{@code PaymentCallbackService} / {@code RefundRpcCallbackService}）。
+     * 跨域契约因此不必携带任何网关域类型（SC-004），而收敛链路一行不改。</p>
+     *
+     * <p><b>{@code UNKNOWN} 也保留渠道流水号</b>：受理阶段渠道常还没给流水号，首次
+     * UNKNOWN 通知正是回填时机（{@code backfillChannelReference}），丢掉它等于把这条
+     * 观测链断掉——后续主动查询拿不到渠道交易号就永远收敛不了。</p>
+     *
+     * @param status           跨域口径的三档结论
+     * @param channelReference 渠道交易号（{@code payment_attempts.channel_reference}；未读到为 {@code null}）
+     * @param reason           失败/无结论原因
+     */
+    public static ChannelResult fromNotified(ChannelPayStatus status, String channelReference, String reason) {
+        return switch (status) {
+            case SUCCESS -> success(channelReference);
+            case FAILURE -> businessFailure(channelReference, reason);
+            case UNKNOWN -> unknownKeepingReference(channelReference, reason);
+        };
+    }
+
+    /** 退款侧同构工厂（{@link ChannelRefundStatus} 与 {@link ChannelPayStatus} 刻意不合并）。 */
+    public static ChannelResult fromNotified(ChannelRefundStatus status, String channelReference, String reason) {
+        return switch (status) {
+            case SUCCESS -> success(channelReference);
+            case FAILURE -> businessFailure(channelReference, reason);
+            case UNKNOWN -> unknownKeepingReference(channelReference, reason);
+        };
+    }
+
+    private static ChannelResult unknownKeepingReference(String channelReference, String reason) {
+        ChannelResult base = businessUnknown(reason);
+        return channelReference == null ? base
+                : new ChannelResult(base.status(), channelReference, base.reason(),
+                        base.transportCode(), base.businessCode(), null);
     }
 
     private static ChannelResult of(TransportCode transport, BusinessCode business,

@@ -1,6 +1,6 @@
 package com.payment.payment.api;
 
-import com.payment.common.core.dye.DyeContext;
+import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.common.dto.rpc.CreatePaymentResponse;
 import com.payment.payment.api.dto.PaymentResponse;
@@ -11,6 +11,7 @@ import com.payment.payment.application.PaymentUnknownResolutionService;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.web.MockCashierProperties;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,13 +31,37 @@ public class PaymentController {
     private final PaymentApplicationService applicationService;
     private final PaymentUnknownResolutionService resolutionService;
     private final MockCashierProperties mockCashier;
+    private final ChannelGateway channelGateway;
 
+    /**
+     * 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。
+     *
+     * <p>与 {@code PaymentApplicationService} / {@code PaymentPersistence} 同惯例——
+     * 一旦类里出现第二个构造器，Spring 就不再能「唯一确定」用哪个，
+     * 不标注 {@code @Autowired} 会直接报 {@code No default constructor found}，
+     * 让<b>所有</b>加载本 Controller 的 Spring 测试连锁失败。</p>
+     */
+    @Autowired
     public PaymentController(PaymentApplicationService applicationService,
                              PaymentUnknownResolutionService resolutionService,
-                             MockCashierProperties mockCashier) {
+                             MockCashierProperties mockCashier,
+                             ChannelGateway channelGateway) {
         this.applicationService = applicationService;
         this.resolutionService = resolutionService;
         this.mockCashier = mockCashier;
+        this.channelGateway = channelGateway;
+    }
+
+    /**
+     * 兼容构造（既有单测零改动）：模态探针回落为无注册表的门面（{@link ChannelGateway#none()}）。
+     *
+     * <p>本类只从门面取「当前是不是沙箱染色」这一个布尔，与注册表无关，
+     * 故兼容构造在语义上<b>完全正确</b>，不是「假装能跑」的垫片。</p>
+     */
+    public PaymentController(PaymentApplicationService applicationService,
+                             PaymentUnknownResolutionService resolutionService,
+                             MockCashierProperties mockCashier) {
+        this(applicationService, resolutionService, mockCashier, ChannelGateway.none());
     }
 
     /**
@@ -53,7 +78,8 @@ public class PaymentController {
         // spec 030 / FR-167（T44）：**染色唯一消费点**。
         // mock-cashier 语义收窄为「仅对 mock 模态生效」——沙箱**不延迟**：
         // 延迟就不调 charge，不调 charge 就拿不到凭证，沙箱闭环直接断掉。
-        boolean defer = mockCashier.isEnabled() && !DyeContext.isSandbox();
+        // spec 037 / T5b（FR-013）：模态判定经门面（网关域）回答，本类不再自己读染色上下文。
+        boolean defer = mockCashier.isEnabled() && !channelGateway.isSandboxRequest();
         PaymentApplicationService.RoutedPayment routed =
                 applicationService.createPaymentIntentWithRouting(command, defer);
         Payment payment = routed.payment();

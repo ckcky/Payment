@@ -1,5 +1,6 @@
 package com.payment.channelgateway.application;
 
+import com.payment.common.core.dye.DyeMode;
 import com.payment.common.dto.channel.PaymentScene;
 
 import java.util.Set;
@@ -58,6 +59,39 @@ public interface ChannelGateway {
 
     /** 主动查询：按<b>已记录</b>的渠道码精确解析渠道实现后调用（INV-6，同样禁止重新选路）。 */
     ChannelResult query(String channelCode, QueryStatusRequest request);
+
+    /**
+     * 退款（<b>指定模态</b>）：与 {@link #refund(String, RefundRequest)} 同语义，
+     * 额外把「本次调用按哪种模态走」交给门面<b>在网关域内施加</b>（FR-013）。
+     *
+     * <h3>为什么模态要经门面传，而不是调用方自己包染色上下文</h3>
+     * <p>反向路径（退款 / 主动查询 / 超时扫描）没有入站 HTTP 请求，染色 ThreadLocal 为空，
+     * 必须用 {@code payment_attempts.extra_json} 里<b>落库的模态</b>包裹渠道调用——
+     * 不包裹的话，沙箱支付单的退款会退化成走 mock 渠道，<b>原渠道的钱根本没退</b>。
+     * 改造前这段包裹散落在 Payment 侧的三个类里（各自 {@code DyeContext.callWith}），
+     * 等于把「模态怎么判定」这个渠道域的知识漏给了 Payment。收进门面后，
+     * Payment 只回答「这一笔当初记的是哪种模态」，<b>怎么用</b>由网关域决定。</p>
+     *
+     * <p>{@code mode == null} ⇒ 不施加额外模态（沿用当前染色上下文）。</p>
+     *
+     * @param mode 本次调用应使用的模态（通常取自 attempt 行的落库值）；{@code null} 表示不覆盖
+     */
+    ChannelResult refund(String channelCode, DyeMode mode, RefundRequest request);
+
+    /**
+     * 主动查询（<b>指定模态</b>）：语义同 {@link #query(String, QueryStatusRequest)}，
+     * 模态施加规则同 {@link #refund(String, DyeMode, RefundRequest)}。
+     */
+    ChannelResult query(String channelCode, DyeMode mode, QueryStatusRequest request);
+
+    /**
+     * 当前请求是否处于 {@code SANDBOX} 染色（FR-013：模态判定内聚在渠道网关域）。
+     *
+     * <p>Payment 侧有需要「按模态分叉」的编排（如 mock 收银台只在 mock 模态下延迟扣款），
+     * 但它<b>不该自己去读染色上下文</b>——那会让「模态是什么」变成两个域各自解释的概念。
+     * 由门面回答，Payment 只消费布尔结论。</p>
+     */
+    boolean isSandboxRequest();
 
     /**
      * 该渠道支持的支付场景。

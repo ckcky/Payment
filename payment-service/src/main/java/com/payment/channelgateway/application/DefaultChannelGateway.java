@@ -1,10 +1,13 @@
 package com.payment.channelgateway.application;
 
+import com.payment.common.core.dye.DyeContext;
+import com.payment.common.core.dye.DyeMode;
 import com.payment.common.dto.channel.PaymentScene;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 渠道网关门面实现（spec 037 / FR-007 / FR-008）。
@@ -82,6 +85,33 @@ public class DefaultChannelGateway implements ChannelGateway {
     @Override
     public ChannelResult query(String channelCode, QueryStatusRequest request) {
         return requireRegistry().resolve(channelCode).queryStatus(request);
+    }
+
+    @Override
+    public ChannelResult refund(String channelCode, DyeMode mode, RefundRequest request) {
+        return inMode(mode, () -> refund(channelCode, request));
+    }
+
+    @Override
+    public ChannelResult query(String channelCode, DyeMode mode, QueryStatusRequest request) {
+        return inMode(mode, () -> query(channelCode, request));
+    }
+
+    @Override
+    public boolean isSandboxRequest() {
+        // 模态判定的唯一事实源在网关域（FR-013）；兼容构造下也无需注册表即可回答
+        return DyeContext.isSandbox();
+    }
+
+    /**
+     * 在指定模态下执行渠道调用（FR-013：模态判定的施加点收在网关域）。
+     *
+     * <p>{@code mode == null} ⇒ 不施加（沿用当前染色）。{@code DyeContext.callWith} 用
+     * try/finally 恢复原值且<b>不吞异常</b>，故与改造前 Payment 侧自己包裹的语义逐字一致
+     * （NFR-2）。</p>
+     */
+    private static <T> T inMode(DyeMode mode, Supplier<T> call) {
+        return mode == null ? call.get() : DyeContext.callWith(mode, call);
     }
 
     @Override

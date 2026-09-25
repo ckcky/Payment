@@ -1,7 +1,5 @@
 package com.payment.payment.application;
 
-import com.payment.common.core.dye.DyeContext;
-import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
@@ -108,10 +106,11 @@ public class PaymentRefundService {
         // 必须用<b>落库的模态</b>（生效 attempt 行的 channelMode）包裹渠道调用；
         // 不包裹的话，沙箱支付单的退款会退化成走 mock 渠道——原渠道的钱根本没退。
         // spec 037 / T4：解析与调用都收进门面（`refund` 按 request.channelCode() 精确解析）。
-        ChannelResult result = DyeContext.callWith(effective.getChannelMode(),
-                () -> channelGateway.refund(channelCode,
-                        new RefundRequest(request.paymentNo(), request.refundNo(),
-                                request.amountMinor(), request.currencyCode(), channelCode)));
+        // spec 037 / T5b（FR-013）：模态的**施加**也收进门面（网关域）——本类只把
+        // 「这一笔当初记的是哪种模态」交给门面，不再自己读染色上下文。
+        ChannelResult result = channelGateway.refund(channelCode, effective.getChannelMode(),
+                new RefundRequest(request.paymentNo(), request.refundNo(),
+                        request.amountMinor(), request.currencyCode(), channelCode));
         // D2（spec 018）：REFUND 尝试记所属支付单金额（payment 金额），而非退款金额（request.amountMinor）
         recordRefundChannelAttempt(payment, request, channelCode, result);
         String mappedStatus = switch (result.status()) {

@@ -1,5 +1,6 @@
 package com.payment.arch;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -11,6 +12,9 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleName;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,18 +51,71 @@ class ServiceBoundaryTest {
     /**
      * spec 038 / FR-009 ① 的<b>显式白名单</b>——已登记的既有反向依赖（技术债，不静默放宽）。
      *
-     * <p>这 4 个类在 038 之前就依赖 {@code com.payment.payment} 的应用/接入层，是「渠道回调分层」
-     * 尚未收口的证据：回调端点直接调用 {@code PaymentCallbackService} / {@code PaymentApplicationService}，
-     * 过滤器复用 {@code payment.web} 的请求体包装器。它们的收口属于 <b>037</b>（门面 / {@code PaymentNotifyPort} /
-     * 回调分层），见 spec 038 §4 非目标与 acceptance TD-4 / TD-5。</p>
+     * <p>这些类在 038 之前就依赖 {@code com.payment.payment} 的应用/接入层，是「渠道回调分层」
+     * 尚未收口的证据。它们的收口属于 <b>037</b>（门面 / {@code PaymentNotifyPort} / 回调分层），
+     * 见 spec 038 §4 非目标与 acceptance TD-4 / TD-5。</p>
+     *
+     * <p><b>037 / T5 已收口 1 个</b>：{@code ChannelPluginCallbackController} 改造后只剩
+     * 「收报文、交网关」（依赖全部落在渠道网关域内），已从白名单移除。剩余 3 个：</p>
+     * <ul>
+     *   <li>{@code AlipayNotifyController} —— 专属端点，其删除归 <b>T6</b>（FR-015）；
+     *       但删除会改动既有断言（{@code PaymentCallbackValidationTest#appIdMismatchRejects}
+     *       断言 {@code reason=app_id} 维度，而通用端点按设计把渠道私有身份校验交给插件、
+     *       不产生该维度），与 NFR-2 冲突，故<b>暂停并上报</b>；</li>
+     *   <li>{@code ChannelCallbackController} —— {@code /internal/payments/{paymentNo}/channel-callback}，
+     *       是<b>平台内部</b>的 mock 回调入口（非渠道协议），返回 Payment 的 API DTO
+     *       （{@code PaymentResponse}）；其归属需要一次独立裁决（移回 {@code payment.api}
+     *       还是改契约），不属本 Spec 的机械收口范围；</li>
+     *   <li>{@code ChannelCallbackSignatureFilter} —— 复用 {@code payment.web} 的请求体包装器
+     *       {@code CachedBodyHttpServletRequest}；要解除依赖需先决定该包装器的归属，
+     *       同样是一次独立裁决。</li>
+     * </ul>
      *
      * <p>白名单按<b>全限定类名</b>逐条列出而非整包放行：新增任何反向依赖都会立即变红。</p>
      */
     private static final String LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES =
             "com\\.payment\\.channelgateway\\.api\\.AlipayNotifyController"
                     + "|com\\.payment\\.channelgateway\\.api\\.ChannelCallbackController"
-                    + "|com\\.payment\\.channelgateway\\.api\\.ChannelPluginCallbackController"
                     + "|com\\.payment\\.channelgateway\\.web\\.ChannelCallbackSignatureFilter";
+
+    /**
+     * spec 037 / FR-016 ② 的<b>唯一例外</b>：{@code PaymentNotifyPort} 是 Payment 定义并实现的
+     * <b>入向端口</b>，渠道网关域<b>必须</b>依赖它（否则「渠道 → Payment 只经该端口」无从成立）。
+     * {@code PayNotifyOutcome} 是它的返回类型，同属例外。
+     *
+     * <p><b>为什么按「全限定名前缀」而不是简单类名匹配</b>：{@code PayNotifyOutcome.Status}
+     * 是嵌套枚举，其简单类名是 {@code Status}——按简单类名写就得额外枚举每个嵌套类型，
+     * 漏一个就出现「外层豁免了、嵌套没豁免」的假红（本轮实测就踩到：{@code switch} 上
+     * 嵌套枚举会生成 8 条 {@code ordinal()/values()/字段访问} 依赖）。前缀匹配一次覆盖
+     * 外层与全部嵌套类型，且不会顺带放过任何其它类。</p>
+     *
+     * <p>例外<b>只覆盖这两个类型的子树</b>（不是整包放行）：渠道网关域若依赖 payment 的
+     * 其它任何应用/接入层类型，规则立即变红。</p>
+     */
+    private static final DescribedPredicate<JavaClass> INBOUND_PORT_EXCEPTION =
+            new DescribedPredicate<>("Payment 定义的入向端口（PaymentNotifyPort / PayNotifyOutcome 及其嵌套类型）") {
+                @Override
+                public boolean test(JavaClass input) {
+                    String name = input.getName();
+                    return name.equals("com.payment.payment.application.PaymentNotifyPort")
+                            || name.startsWith("com.payment.payment.application.PayNotifyOutcome");
+                }
+            };
+
+    /** payment 的<b>应用/接入/Web 层实现</b>（入向端口除外）——渠道网关域不得编译期依赖。 */
+    private static final DescribedPredicate<JavaClass> FORBIDDEN_PAYMENT_LAYERS =
+            resideInAnyPackage("com.payment.payment.application..",
+                            "com.payment.payment.api..",
+                            "com.payment.payment.web..")
+                    .and(not(INBOUND_PORT_EXCEPTION));
+
+    /** spec 037 / FR-016 ① 的禁用目标：渠道网关的<b>内部件</b>（Payment 侧不得触达）。 */
+    private static final DescribedPredicate<JavaClass> CHANNEL_GATEWAY_INTERNALS =
+            simpleName("ChannelRegistry").or(simpleName("ChannelRouter")).or(simpleName("ChannelPlugin"));
+
+    /** spec 037 / FR-013 / FR-016 ③ 的禁用目标：染色上下文（模态判定的事实源）。 */
+    private static final DescribedPredicate<JavaClass> DYE_CONTEXT =
+            resideInAnyPackage("com.payment.common.core.dye").and(simpleName("DyeContext"));
 
     private static JavaClasses serviceClasses;
 
@@ -450,9 +507,13 @@ class ServiceBoundaryTest {
      * {@code PaymentCallbackService} / {@code PaymentApplicationService}，就不再是「可独立演进的
      * 进程内微服务边界」，而是资金域的一个内嵌实现——038 建立的包边界当场失效。</p>
      *
-     * <p><b>既有违规不静默放宽</b>：4 个类（3 个回调 Controller + 1 个验签过滤器）在 038 之前
-     * 就存在该依赖，按 spec 038 T6 的要求<b>登记为技术债</b>并在此逐条白名单化
-     * （见 {@link #LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES}），收口归 037。</p>
+     * <p><b>既有违规不静默放宽</b>：038 之前就存在的反向依赖按 spec 038 T6 的要求<b>登记为技术债</b>
+     * 并在此逐条白名单化（见 {@link #LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES}），收口归 037。
+     * 037 / T5 已收口其中 1 个（{@code ChannelPluginCallbackController}）。</p>
+     *
+     * <p><b>唯一例外是入向端口</b>：{@code PaymentNotifyPort}（及其返回类型 {@code PayNotifyOutcome}）
+     * 由 Payment 定义并实现，渠道网关域<b>必须</b>依赖它才能把回调结果交给 Payment
+     * （FR-010 / FR-016 ② 的括号例外）。例外按简单类名逐个列出，不是整包放行。</p>
      *
      * <p><b>防空转阳性对照</b>：先证明两侧都真有类，否则否定式规则恒通过。</p>
      */
@@ -474,13 +535,139 @@ class ServiceBoundaryTest {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.payment.channelgateway..")
                 .and().haveNameNotMatching(LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES)
-                .should().dependOnClassesThat().resideInAnyPackage(
-                        "com.payment.payment.application..",
-                        "com.payment.payment.api..",
-                        "com.payment.payment.web..")
+                .should().dependOnClassesThat(FORBIDDEN_PAYMENT_LAYERS)
                 .because("依赖方向必须是 payment → channelgateway；反向依赖 payment 的应用/接入层会把"
                         + "渠道网关域绑死在资金域实现上，进程内微服务边界失效"
-                        + "（FR-009 ① / INV-1；白名单见 LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES，收口归 037）");
+                        + "（FR-009 ① / FR-016 ② / INV-1、INV-2；唯一例外是 Payment 定义的入向端口 "
+                        + "PaymentNotifyPort / PayNotifyOutcome；白名单见 LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES）");
+        rule.check(serviceClasses);
+    }
+
+    /**
+     * FR-016 ①（spec 037 / T7）：<b>Payment 的应用层与接入层不得触达渠道网关的内部件</b>。
+     *
+     * <p>038 的 {@link #channelRoutingAbstractionMustNotDependOnChannelInfrastructure()} 只约束了
+     * <b>反方向</b>（{@code payment.application} 不得依赖 {@code channelgateway.infra}）——
+     * 于是「Payment 侧直接持有 {@code ChannelRegistry} / {@code ChannelRouter} / {@code ChannelPlugin}」
+     * 这条<b>正方向的越界</b>长期没有门禁兜底：只要它们恰好落在
+     * {@code channelgateway.application}（而非 {@code .infra}），规则就看不见。</p>
+     *
+     * <p>而这正是 spec 037 §1.1 记录的现状：改造前 Payment 侧有 9 个类直接依赖这三件套。
+     * T4 用门面把它们全部收口，本规则把「收口」变成<b>不可回退</b>的构建期事实——
+     * 否则下一次「顺手 resolve 一下」就会悄悄把内部结构重新泄出去。</p>
+     *
+     * <p><b>为什么只禁这三件套而不是整个 {@code channelgateway.application}</b>：Payment
+     * <b>必须</b>依赖 {@code ChannelGateway}（门面）与 {@code ChannelResult}（结果值类型），
+     * 它们就在同一个包里。禁整包等于禁掉合法的边界调用。被禁的是「内部结构」：
+     * 注册表（怎么找实现）、路由器（怎么选渠道）、插件契约（渠道长什么样）。</p>
+     *
+     * <p><b>防空转阳性对照</b>：先证明①被检主体真有类；②被禁目标在导入的字节码里真实存在
+     * （否则 {@code noClasses…should().dependOnClassesThat(…)} 恒通过）；③Payment 侧确实
+     * 「能够」依赖它们（同进程同 classpath，不存在「想依赖也依赖不到」的伪安全）。</p>
+     */
+    @Test
+    void paymentApplicationAndApiMustNotReachChannelGatewayInternals() {
+        long paymentAppAndApiClasses = serviceClasses.stream()
+                .filter(c -> c.getPackageName().startsWith("com.payment.payment.application")
+                        || c.getPackageName().startsWith("com.payment.payment.api"))
+                .count();
+        assertThat(paymentAppAndApiClasses)
+                .as("com.payment.payment.application.. / .api.. 必须有类，否则本规则空转"
+                        + "（FR-016 ① 防空转对照）")
+                .isGreaterThan(20L);
+
+        long internalsPresent = serviceClasses.stream()
+                .filter(CHANNEL_GATEWAY_INTERNALS)
+                .count();
+        assertThat(internalsPresent)
+                .as("渠道网关内部件（ChannelRegistry / ChannelRouter / ChannelPlugin）必须真实存在，"
+                        + "否则被禁目标不存在、规则恒通过（FR-016 ① 防空转对照）")
+                .isEqualTo(3L);
+
+        // ③ 同一 classpath 内可命中：网关域自己就在用这三件套（证明依赖是「够得着」的）
+        long gatewayOwnUsers = serviceClasses.stream()
+                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway."))
+                .filter(c -> c.getDirectDependenciesFromSelf().stream()
+                        .anyMatch(d -> CHANNEL_GATEWAY_INTERNALS.test(d.getTargetClass())))
+                .count();
+        assertThat(gatewayOwnUsers)
+                .as("渠道网关域必须有类真的在用这三件套，证明它们在本 classpath 内可被依赖"
+                        + "（FR-016 ① 防空转对照：若不可命中，规则是伪安全）")
+                .isGreaterThan(0L);
+
+        ArchRule rule = noClasses()
+                .that().resideInAnyPackage("com.payment.payment.application..",
+                        "com.payment.payment.api..")
+                .should().dependOnClassesThat(CHANNEL_GATEWAY_INTERNALS)
+                .because("Payment 侧 MUST 只经 ChannelGateway 门面调用渠道网关（FR-007 / INV-1 / SC-002）；"
+                        + "直接依赖 ChannelRegistry / ChannelRouter / ChannelPlugin 会让渠道网关的内部结构"
+                        + "对 Payment 透明——改内核要动 Payment，进程内微服务边界失效（FR-016 ①）");
+        rule.check(serviceClasses);
+    }
+
+    /**
+     * FR-013 / FR-016 ③（spec 037 / T7）：<b>模态判定内聚在渠道网关域</b>——
+     * Payment 的应用层与接入层不得读取染色上下文 {@code DyeContext}。
+     *
+     * <p>染色回答的是「这次调用走 mock 还是真实沙箱」，是<b>渠道协议实现的选择</b>；
+     * 它一旦散进 Payment 的编排层，就出现两个域各自解释「模态是什么」的局面——
+     * 改造前正是如此：模态包裹散落在退款、主动查询、超时扫描、建单入口四处。</p>
+     *
+     * <p>037 / T5b 的收口方式是把「模态的<b>施加</b>」收进 {@code ChannelGateway}
+     * （带 {@code DyeMode} 的 {@code refund} / {@code query} 重载 + {@code isSandboxRequest()} 探针），
+     * Payment 侧只回答「这一笔当初记的是哪种模态」。本规则把该收口钉成构建期事实。</p>
+     *
+     * <p><b>为什么只禁 {@code DyeContext} 而不是整个 {@code com.payment.common.core.dye} 包</b>：
+     * {@code DyeMode} 是<b>值类型</b>，{@code payment.domain.PaymentAttempt#getChannelMode()}
+     * 就返回它（落库模态的只读派生访问器），禁整包会连领域模型一起禁掉。
+     * 要禁的是「谁去读 ThreadLocal 上的当前染色」这个<b>判定动作</b>。</p>
+     *
+     * <p><b>覆盖面说明（与 FR-016 ③ 字面的差异，已上报）</b>：本规则的 {@code that()} 覆盖
+     * {@code payment.application..} 与 {@code payment.api..}——这是 FR-013 的原文口径
+     * （「{@code DyeContext} 不得在 Payment <b>应用/api 层</b>被读取」）。FR-016 ③ 的措辞
+     * 更宽（「仅限渠道网关域」），但那会要求把 {@code payment.infra} 的两个写入口实现
+     * （{@code ChannelAttemptRecorderImpl}、{@code InMemoryPaymentAttemptRepository}）
+     * 也搬出 payment 域——那是一次<b>独立的服务边界裁决</b>，不属本 Spec 的机械收口范围，
+     * 故本轮按 FR-013 口径落地并登记为后续项。</p>
+     *
+     * <p><b>防空转阳性对照</b>：先证明①被检主体真有类；②渠道网关域确实有类在读它
+     * （证明该依赖在导入的字节码模型里「可命中」）。</p>
+     *
+     * <p><b>为什么不断言 {@code DyeContext} 本身「存在于导入的类集里」</b>：本模块只按目录导入
+     * 各<b>服务</b>的 {@code target/classes}，{@code common-core} 不在其中——{@code DyeContext}
+     * 在 ArchUnit 的模型里是<b>桩类</b>（stub，带全限定名但无成员）。断言它「存在」必然为假；
+     * 而依赖本身（{@code 渠道网关类 → DyeContext}）照样被建模，故用「网关域读者数 &gt; 0」
+     * 作为可命中性的证据。</p>
+     */
+    @Test
+    void dyeContextMustStayInsideChannelGatewayDomain() {
+        long paymentAppAndApiClasses = serviceClasses.stream()
+                .filter(c -> c.getPackageName().startsWith("com.payment.payment.application")
+                        || c.getPackageName().startsWith("com.payment.payment.api"))
+                .count();
+        assertThat(paymentAppAndApiClasses)
+                .as("com.payment.payment.application.. / .api.. 必须有类，否则本规则空转"
+                        + "（FR-013 防空转对照）")
+                .isGreaterThan(20L);
+
+        long gatewayDyeReaders = serviceClasses.stream()
+                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway."))
+                .filter(c -> c.getDirectDependenciesFromSelf().stream()
+                        .anyMatch(d -> DYE_CONTEXT.test(d.getTargetClass())))
+                .count();
+        assertThat(gatewayDyeReaders)
+                .as("渠道网关域必须有类真的在读 DyeContext（模态判定的施加点），"
+                        + "否则被禁目标不可命中、规则是伪安全（FR-013 防空转对照）")
+                .isGreaterThan(0L);
+
+        ArchRule rule = noClasses()
+                .that().resideInAnyPackage("com.payment.payment.application..",
+                        "com.payment.payment.api..")
+                .should().dependOnClassesThat(DYE_CONTEXT)
+                .because("模态（MOCK/SANDBOX）判定 MUST 内聚在渠道网关域（FR-013）；"
+                        + "Payment 应用/api 层读染色上下文会让「模态是什么」变成两个域各自解释的概念——"
+                        + "改造前模态包裹散落在退款/查询/超时扫描/建单入口四处，正是这种失真"
+                        + "（FR-016 ③；施加点收在 ChannelGateway 的 DyeMode 重载与 isSandboxRequest 探针）");
         rule.check(serviceClasses);
     }
 

@@ -17,7 +17,14 @@ import java.time.Instant;
  * <p>{@code null} = 渠道报文未携带金额，<b>不等于</b> 0 元。Payment 据此<b>跳过</b>金额校验
  * 而不是放行一个 {@code 0}（沿用 {@code ParsedCallback.NotifiedAmount} 的既有纪律）。</p>
  *
- * @param channelNo            渠道网关业务单号（{@code CH} + 雪花，FR-001），<b>必填</b>
+ * <h3>{@code channelNo} 为什么可空（spec 037 / T5 修订）</h3>
+ * <p>入向通知的<b>寻址键</b>是 {@code paymentNo}——渠道只会给商户订单号，它不认识平台侧的
+ * 网关单号。网关单号（{@code CH}+雪花）是<b>平台侧</b>标识，权威值在
+ * {@code payment_attempts.channel_no}；回调这一刻反查它，只是为了填一个下游不消费的字段，
+ * 却要多一次未必成功的读库。故入向契约上该字段可空，<b>出向契约</b>
+ * （{@link ChannelPayCommand} 等）仍强制必填。{@code channelCode} 才是入向必需的路由身份（FR-006）。</p>
+ *
+ * @param channelNo            渠道网关业务单号（{@code CH} + 雪花，FR-001）；入向可空，见上
  * @param paymentNo            平台支付单号（{@code PM} + 雪花），事件寻址键
  * @param channelCode          渠道编号（FR-006，<b>必填</b>）
  * @param status               渠道侧支付结论（三档，含 UNKNOWN）
@@ -33,7 +40,6 @@ public record ChannelPayNotified(String channelNo, String paymentNo, String chan
                                  Instant occurredAt) {
 
     public ChannelPayNotified {
-        requireText(channelNo, "channelNo");
         requireText(paymentNo, "paymentNo");
         requireText(channelCode, "channelCode");
         if (status == null) {

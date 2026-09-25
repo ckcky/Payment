@@ -1,6 +1,5 @@
 package com.payment.payment.application.reliability;
 
-import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.payment.application.PaymentUnknownResolutionService;
@@ -143,16 +142,16 @@ public class ChannelQueryService {
                 payment.getTransactionId(), payment.getIdempotencyKey(), target.channelReference());
         // spec 030 / FR-271（T61）：反向路径没有入站请求，ThreadLocal 为空——
         // 必须用**落库的模态**包裹渠道调用，否则沙箱单会退化成 mock 查询。
+        // spec 037 / T5b（FR-013）：模态的**施加**已收进门面（网关域），本类只回答
+        // 「这一笔当初记的是哪种模态」，不再自己读染色上下文。
         // spec 035 §5.2 / A-03：渠道出站调用进 channel_request{channelCode,result}；
         // 渠道契约（PaymentChannel javadoc）规定超时/断连/不完整响应 MUST 映射 UNKNOWN，
         // 故 UNKNOWN 结果与通信异常均计入 channel_timeout{channelCode}（唯一可观测代理，目录已注明）。
         String channelCode = target.channelCode();
+        metrics.counter("payment.query", 1.0, "module", MODULE);
         ChannelResult result;
         try {
-            result = DyeContext.callWith(target.mode(), () -> {
-                metrics.counter("payment.query", 1.0, "module", MODULE);
-                return channelGateway.query(channelCode, queryRequest);
-            });
+            result = channelGateway.query(channelCode, target.mode(), queryRequest);
         } catch (RuntimeException ex) {
             metrics.counter("channel_request", 1.0, "channelCode", channelCode, "result", "exception");
             metrics.counter("channel_timeout", 1.0, "channelCode", channelCode);

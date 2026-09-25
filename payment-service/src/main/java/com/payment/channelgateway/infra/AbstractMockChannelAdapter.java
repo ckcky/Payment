@@ -6,7 +6,10 @@ import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.channelgateway.application.RefundRequest;
-import com.payment.channelgateway.application.RefundResultListener;
+import com.payment.common.dto.channel.ChannelRefundNotified;
+import com.payment.common.dto.channel.ChannelRefundStatus;
+import com.payment.payment.application.PaymentNotifyPort;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -24,7 +27,7 @@ import org.springframework.beans.factory.annotation.Value;
  *   <caption>基类承载的横切行为</caption>
  *   <tr><th>#</th><th>行为</th><th>出处</th></tr>
  *   <tr><td>1</td><td>金额尾数确定性故障注入（11→超时 / 12→无结论 / 15→业务拒绝）</td><td>spec 022 / T429</td></tr>
- *   <tr><td>2</td><td>退款「受理 + 异步推送」（{@link RefundResultListener}）</td><td>spec 019 / D7</td></tr>
+ *   <tr><td>2</td><td>退款「受理 + 异步推送」（{@link PaymentNotifyPort}）</td><td>spec 019 / D7；spec 037 / T5 改为入向端口</td></tr>
  *   <tr><td>3</td><td>每 Adapter <b>实例独立</b> {@code runId}（UUID 派生）</td><td>ADR-0072 / FR-012</td></tr>
  *   <tr><td>4</td><td>{@code mock-scenario} 严格枚举解析（坏值 FAIL FAST，不做容错）</td><td>ADR-0049 第 2 条</td></tr>
  * </table>
@@ -67,7 +70,7 @@ public abstract class AbstractMockChannelAdapter implements PaymentChannel {
                 return t;
             });
     /** 退款结果推送目标（Spring 装配；纯单元测试可不注入——注入后才有异步推送）。 */
-    private volatile RefundResultListener refundResultListener;
+    private volatile PaymentNotifyPort paymentNotifyPort;
     /**
      * 每次 JVM 启动生成的运行级唯一前缀：渠道引用在 {@code payment_attempts.channel_reference}
      * 上有唯一约束兜底（重复回调映射同一渠道交互），但 Mock 引用由本类客户端生成。
@@ -143,10 +146,16 @@ public abstract class AbstractMockChannelAdapter implements PaymentChannel {
         this.queryResult = queryResult;
     }
 
-    /** 注入退款结果推送目标（Spring 装配；未注入时异步模式退化为纯受理、不推送）。 */
+    /**
+     * 注入退款结果推送目标（Spring 装配；未注入时异步模式退化为纯受理、不推送）。
+     *
+     * <p>spec 037 / T5：目标类型由 {@code RefundResultListener}（定义在渠道包）改为
+     * {@link PaymentNotifyPort}（Payment 定义 + 实现，FR-012 / INV-2）——
+     * 渠道侧不再掌握「退款怎么收敛」的接口定义权。</p>
+     */
     @Autowired(required = false)
-    public void setRefundResultListener(RefundResultListener refundResultListener) {
-        this.refundResultListener = refundResultListener;
+    public void setPaymentNotifyPort(PaymentNotifyPort paymentNotifyPort) {
+        this.paymentNotifyPort = paymentNotifyPort;
     }
 
     /**
@@ -237,19 +246,36 @@ public abstract class AbstractMockChannelAdapter implements PaymentChannel {
 
     /** 受理后延迟推送权威退款结果（SUCCESS 场景推成功，FAILURE 场景推业务拒绝；无监听器则跳过）。 */
     private void scheduleRefundPush(String refundNo, String ref) {
-        if (refundResultListener == null) {
+        if (paymentNotifyPort == null) {
             return;
         }
         refundPusher.schedule(() -> {
-            RefundResultListener listener = refundResultListener;
-            if (listener == null) {
+            PaymentNotifyPort port = paymentNotifyPort;
+            if (port == null) {
                 return;
             }
             ChannelResult finalResult = scenario == Scenario.FAILURE
                     ? ChannelResult.businessFailure(ref, "mock refund declined")
                     : ChannelResult.success(ref);
-            listener.onChannelRefundResult(refundNo, finalResult);
+            port.onChannelRefundResult(toRefundNotified(refundNo, finalResult));
         }, refundAsyncDelayMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 网关域结果 → 跨域入向事件（spec 037 / T5 / FR-010）。
+     *
+     * <p>进程内 Mock 的「推送」与真实渠道的 HTTP 回调走同一入向端口（{@link PaymentNotifyPort}），
+     * 语义等价、不留双路径。{@code channelNo} 留空：推送这一刻只有 {@code refundNo}
+     * （入向寻址键），网关单号的权威值在 {@code payment_attempts.channel_no}。</p>
+     */
+    private ChannelRefundNotified toRefundNotified(String refundNo, ChannelResult result) {
+        return new ChannelRefundNotified(null, refundNo, channelCode(),
+                switch (result.status()) {
+                    case SUCCESS -> ChannelRefundStatus.SUCCESS;
+                    case FAILURE -> ChannelRefundStatus.FAILURE;
+                    case UNKNOWN -> ChannelRefundStatus.UNKNOWN;
+                },
+                result.channelReference(), null, null, result.reason(), Instant.now());
     }
 
     @Override

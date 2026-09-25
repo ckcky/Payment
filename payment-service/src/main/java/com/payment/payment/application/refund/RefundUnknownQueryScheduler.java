@@ -1,6 +1,5 @@
 package com.payment.payment.application.refund;
 
-import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.trace.TraceContext;
 import com.payment.channelgateway.application.ChannelGateway;
@@ -131,11 +130,10 @@ public class RefundUnknownQueryScheduler {
                 refund.getTransactionNo(), refund.getIdempotencyKey(), target.channelReference());
         // spec 030 / FR-271：调度线程无入站模态上下文，用**落库的模态**包裹渠道调用
         // spec 037 / T4：解析与调用都经门面（按 target 记录的渠道码精确查询，不选路）
+        // spec 037 / T5b（FR-013）：模态的**施加**收进门面（网关域），本类不再读染色上下文
         String channelCode = target.channelCode();
-        ChannelResult result = DyeContext.callWith(target.mode(), () -> {
-            metrics.counter("refund.query", 1.0, "module", MODULE);
-            return channelGateway.query(channelCode, queryRequest);
-        });
+        metrics.counter("refund.query", 1.0, "module", MODULE);
+        ChannelResult result = channelGateway.query(channelCode, target.mode(), queryRequest);
         if (result.status() == ChannelResult.Status.UNKNOWN) {
             return false; // 渠道无记录 / 仍不明确：保持 UNKNOWN
         }

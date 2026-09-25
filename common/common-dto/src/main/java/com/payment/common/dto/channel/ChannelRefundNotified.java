@@ -15,7 +15,12 @@ import java.time.Instant;
  *
  * <h3>FR-006：MUST 携带 {@code channelCode}</h3>
  *
- * @param channelNo            渠道网关业务单号（{@code CH} + 雪花，FR-001），<b>必填</b>
+ * <p>{@code channelNo} 可空的理由与 {@link ChannelPayNotified} 相同：入向寻址键是
+ * {@code refundNo}，网关单号的权威值在 {@code payment_attempts.channel_no}；
+ * 进程内 Mock 渠道的异步推送在推送时刻只知道 {@code refundNo}，强制必填只会逼出
+ * 「编一个值」或「多一次未必成功的反查」。</p>
+ *
+ * @param channelNo            渠道网关业务单号（{@code CH} + 雪花，FR-001）；入向可空，见上
  * @param refundNo             退款单号（{@code PMRF}/{@code TXRF} + 雪花），事件寻址键
  * @param channelCode          渠道编号（FR-006，<b>必填</b>）
  * @param status               渠道侧退款结论（三档，含 UNKNOWN）
@@ -31,7 +36,6 @@ public record ChannelRefundNotified(String channelNo, String refundNo, String ch
                                     Instant occurredAt) {
 
     public ChannelRefundNotified {
-        requireText(channelNo, "channelNo");
         requireText(refundNo, "refundNo");
         requireText(channelCode, "channelCode");
         if (status == null) {
