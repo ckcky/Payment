@@ -9,12 +9,14 @@
 ## 1. 目标形态
 
 ```
-com.payment.channelgateway.infra.wechat/          （038 未合入时：com.payment.payment.infra.channel.wechat）
+com.payment.channelgateway.infra.wechat/          （038 已合入 master @ 0a81b29，落点确定）
 ├── WechatChannelPlugin.java          extends AbstractChannelPlugin  —— 只填差异
-├── WechatChannelPluginFactory.java   SPI 注册（Spring Bean + ServiceLoader）
+├── WechatChannelPluginFactory.java   Spring @Component 注册（照 Stripe，不用 ServiceLoader）
 ├── WechatGateway.java                渠道端口（领域侧契约）
 ├── WechatSdkGateway.java             V3 SDK 封装（签名 / HTTP / 验签 / 解密）
 └── WechatPayProperties.java          env 注入 + enabled 门控 + 启动期强校验
+
+同批删除：com.payment.channelgateway.infra.WechatChannelAdapter（同 channelCode 不可两路注册）
 ```
 
 **与 Stripe 插件同构**（`infra/channel/stripe/` 五件套一一对应）——这是刻意的设计复用，
@@ -55,6 +57,9 @@ Payment 域 → ChannelGateway(037) → ChannelRegistry → WechatChannelPlugin(
 | **R4** 凭据误落盘 | 泄露 | FR-009 + 启动期校验；提交前 `git status` 复核无证书/密钥文件 |
 | **R5** 与 037 T6 撞车 | WECHAT 被两个分支各迁一次 | 037 执行时 MUST 跳过 WECHAT（spec §12） |
 | **R6** SDK 版本不兼容 | 编译/运行时错 | 固定 `0.2.17`；载入后先跑一个 smoke 单测确认类可用 |
+| **R7（C-1）** 误把 `enabled` 当注册门控（加 `@ConditionalOnProperty`） | `scenario-routing.sh` 的「已注册 WECHAT」与 S2/S3/S5/S6 全红；MOCK 模态消失 | 按裁决 C-1：`enabled` **只门控真实模式**（FR-016）；T7 把 `scenario-routing.sh` 列为必过验收 |
+| **R8（C-2）** 忘记删除 `WechatChannelAdapter` | 同 `channelCode` 两路注册 ⇒ 启动期结构性错误，或路由选了 A 实际调用 B | FR-001 / INV-8；T3 显式 `git rm`；断言渠道清单无重复码 |
+| **R9（C-4）** 迁移后 mock 口径静默变化（丢 `adapters.WECHAT.scenario` 配置场景、退款 mock 由异步变同步） | 演示行为与改造前不一致却无人知 | 接受为**有意收窄**；MUST 在 `acceptance.md` 登记；MUST NOT 在插件内自写 mock 兼容（违反 FR-010 / D7） |
 
 ---
 
@@ -64,7 +69,7 @@ Payment 域 → ChannelGateway(037) → ChannelRegistry → WechatChannelPlugin(
 |---|---|---|---|
 | T1 | 引入 SDK 依赖 + `WechatPayProperties`（env + 门控 + 强校验） | 无 | R6 / R4 |
 | T2 | `WechatSdkGateway`：V3 签名 + HTTP（用本地生成的测试密钥对） | T1 | R1 / R2 |
-| T3 | `WechatChannelPlugin` + `WechatChannelPluginFactory`：`descriptor` + `isRealModeEnabled` + 三个 `doRealXxx` | T2 | R2 |
+| T3 | `WechatChannelPlugin` + `WechatChannelPluginFactory`（Spring `@Component`）：`descriptor` + `isRealModeEnabled` + 三个 `doRealXxx`；**并删除旧 `WechatChannelAdapter`** | T2 | R2 / **C-2 / C-3** |
 | T4 | `parseCallback`：V3 通知验签 + AES-256-GCM 解密 | T2 | **R3** |
 | T5 | 本地仿真桩 + 四步全链路（下单 / 查询 / 退款 / 回调） | T3、T4 | R1 |
 | T6 | 全量单测零回归 + L0 文档同步 | T1~T5 | — |

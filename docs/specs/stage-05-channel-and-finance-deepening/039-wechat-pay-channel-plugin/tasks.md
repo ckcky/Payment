@@ -2,7 +2,9 @@
 
 **对应 Spec**：[spec.md](spec.md)｜**Plan**：[plan.md](plan.md)
 **推进方式**：TDD（红 → 绿 → 重构）；**串行**执行 T1→T7
-**前置**：038 已合入（决定插件包落点）；037 执行时 **MUST 跳过 WECHAT**（见 spec §12）
+**前置**：038 **已合入** master @ `0a81b29`（决定插件包落点）；036 已合入。
+**开工前必读**：spec §3.1「开工前裁决」——C-1~C-4 四项已由负责人裁决，**执行方 MUST 按裁决执行，不得按 spec 原文**。
+**037 执行时 MUST 跳过 WECHAT**（见 spec §12）
 
 **验证命令（每步结束跑）**：
 
@@ -35,14 +37,16 @@
 - [ ] **红→绿**：金额单位测试 —— `amountMinor` 直传微信 `amount.total`，**禁止**任何 `*100` / `/100`
 - [ ] 复核：本地生成的测试密钥对**不进 git**（放 `src/test/resources` 的 gitignore 路径或运行时生成）
 
-## T3　`WechatChannelPlugin` + Factory　[FR-001][FR-003][FR-010]
+## T3　`WechatChannelPlugin` + Factory（含删除旧 Adapter）　[FR-001][FR-003][FR-010][FR-015][FR-016][INV-8]
 
 - [ ] **红**：`WechatChannelPluginDescriptorTest` —— `channelCode()=WECHAT`；`supportedScenes() ⊇ {NATIVE, JSAPI, H5, MINI_PROGRAM}`；`supportsRealMode()` 受 `enabled` 门控
 - [ ] **绿**：`WechatChannelPlugin extends AbstractChannelPlugin`，只实现 `descriptor()` + `isRealModeEnabled()` + `doRealCharge` / `doRealRefund` / `doRealQuery`
-- [ ] **绿**：`WechatChannelPluginFactory` 同时注册为 Spring Bean 与 `ServiceLoader` SPI
-- [ ] **红**：断言插件内**无**自写 mock 语义（MOCK 全交内核，INV-7 / D7）
+- [ ] **绿（C-3 裁决）**：`WechatChannelPluginFactory` **照 `StripeChannelPluginFactory` 只注册为 Spring `@Component`**；**不**新建 `META-INF/services/…ChannelPluginFactory`
+- [ ] **绿（C-2 裁决 / INV-8）**：`git rm payment-service/src/main/java/com/payment/channelgateway/infra/WechatChannelAdapter.java`——同 `channelCode` 两路注册会触发结构性错误
 - [ ] **绿**：`WechatGateway` 渠道端口（领域侧契约，隔离 SDK 类型）
-- [ ] 复核：`enabled=false` 时渠道不注册、不出现在 `GET /internal/channels`
+- [ ] **红**：断言插件内**无**自写 mock 语义（MOCK 全交内核，FR-010 / D7）
+- [ ] **红（C-1 裁决 / FR-016）**：`enabled=false` 时插件**仍注册**且 MOCK 可路由 —— 断言 `GET /internal/channels` 含 `WECHAT` 且 `enabled:false`（**不得**加 `@ConditionalOnProperty`）
+- [ ] 复核：`application.yml` 的 `adapters.WECHAT.scenario` 迁移后为死配置，按 C-4 在 acceptance 登记
 
 ## T4　`parseCallback`：验签 + 解密　[FR-007][FR-014][INV-5]
 
@@ -66,12 +70,13 @@
 - [ ] `CHANGELOG.md` 记一笔
 - [ ] **ADR 正文不回改**（历史决策留痕）
 
-## T7　起全链路验证　[SC-008]
+## T7　起全链路验证　[SC-006][SC-008]
 
 - [ ] `deployment/start-all.sh`（先确认 Docker Desktop Running）
 - [ ] `deployment/demo/reset.sh`
 - [ ] `deployment/demo/scenario-refund.sh` 通过；演示控制台三层退款单逐层可见
-- [ ] 确认 WECHAT 渠道在 `enabled=false` 时不注册、不误触真实扣款
+- [ ] ⭐ `deployment/demo/scenario-routing.sh` **必须通过** —— 其 S2/S3/S5/S6 与 `assert_contains "$REGISTERED" "WECHAT"` 是 C-1 裁决的验收证据（WECHAT 删 Adapter 改插件后仍须可路由）
+- [ ] 确认 WECHAT 在 `enabled=false` 时**仍注册**（`GET /internal/channels` 显示 `enabled:false`）、MOCK 可路由、**不误触真实扣款**
 - [ ] ⚠️ 起服务必须 `env -u SERVER__PORT -u SERVER__HOST`
 
 ## T8　收口

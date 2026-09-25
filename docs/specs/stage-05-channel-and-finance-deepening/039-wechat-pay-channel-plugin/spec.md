@@ -17,8 +17,8 @@
 
 | # | 【现状】 | 证据 |
 |---|---|---|
-| 1 | `WechatChannelAdapter` 只是 `extends AbstractMockChannelAdapter`，**无真实协议、无签名、无 SDK**；只声明 `channelCode()=WECHAT` + 可配 mock 场景 | `payment-service/src/main/java/com/payment/payment/infra/channel/WechatChannelAdapter.java`（全文 45 行） |
-| 2 | 036 已建立微内核 + 插件化，但**只有 Stripe 一家**走 `AbstractChannelPlugin` | `payment-service/.../infra/channel/stripe/`（5 个类）；grep `extends AbstractChannelPlugin` 单命中 |
+| 1 | `WechatChannelAdapter` 只是 `extends AbstractMockChannelAdapter`，**无真实协议、无签名、无 SDK**；只声明 `channelCode()=WECHAT` + 可配 mock 场景 | `payment-service/src/main/java/com/payment/channelgateway/infra/WechatChannelAdapter.java`（全文 45 行） |
+| 2 | 036 已建立微内核 + 插件化，但**只有 Stripe 一家**走 `AbstractChannelPlugin` | `payment-service/src/main/java/com/payment/channelgateway/infra/stripe/`（5 个类）；grep `extends AbstractChannelPlugin` 单命中 |
 | 3 | 微信支付是国内主流渠道，本项目（电商支付平台）**缺真实接入** | — |
 
 ```java
@@ -56,11 +56,13 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 | # | 【现状】 | 证据 |
 |---|---|---|
-| 5 | `AbstractChannelPlugin` 模板方法：`charge`/`refund`/`queryStatus` 三个入口 `final`，四步（能力校验 → 模态门控 → 模态分派 → 异常兜底）；子类只需 `descriptor()` + `isRealModeEnabled()` + `doRealCharge`/`doRealRefund`/`doRealQuery` | `application/channel/spi/AbstractChannelPlugin.java` |
-| 6 | `ChannelPlugin` 有默认钩子：`channelCode()`、`supportedScenes()`、`supportsRealMode()`、`acceptsCallback()`、`parseCallback(ChannelCallbackEnvelope)`、`callbackAckBody()` | `application/channel/spi/ChannelPlugin.java:36-88` |
-| 7 | `PaymentScene` 枚举：`WEB` / `H5` / `NATIVE` / `JSAPI` / `MINI_PROGRAM` / `APP` | `common/common-dto/.../channel/PaymentScene.java:37-47` |
+| 5 | `AbstractChannelPlugin` 模板方法：`charge`/`refund`/`queryStatus` 三个入口 `final`，四步（能力校验 → 模态门控 → 模态分派 → 异常兜底）；子类只需 `descriptor()` + `isRealModeEnabled()` + `doRealCharge`/`doRealRefund`/`doRealQuery` | `channelgateway/application/spi/AbstractChannelPlugin.java` |
+| 6 | `ChannelPlugin` 有默认钩子：`channelCode()`、`supportedScenes()`、`supportsRealMode()`、`acceptsCallback()`、`parseCallback(ChannelCallbackEnvelope)`、`callbackAckBody()` | `channelgateway/application/spi/ChannelPlugin.java` |
+| 7 | `PaymentScene` 枚举：`WEB` / `H5` / `NATIVE` / `JSAPI` / `MINI_PROGRAM` / `APP` | `common/common-dto/src/main/java/com/payment/common/dto/channel/PaymentScene.java` |
 | 8 | **WECHAT 账本账户已存在**：`CHANNEL_RECEIVABLE` owner=WECHAT、`CHANNEL_FEE_EXPENSE` owner=WECHAT | `deployment/schema/09-ledger-schema.sql:163,167`；`031-ledger-accounting-foundation.sql:153,157` |
-| 9 | Stripe 是同构参照实现：`StripeChannelPlugin` / `StripeChannelPluginFactory` / `StripeGateway`（渠道端口）/ `StripeSdkGateway`（SDK 封装）/ `StripeSandboxProperties`（env + `enabled` 门控 + 启动期强校验） | `infra/channel/stripe/` |
+| 9 | Stripe 是同构参照实现：`StripeChannelPlugin` / `StripeChannelPluginFactory` / `StripeGateway`（渠道端口）/ `StripeSdkGateway`（SDK 封装）/ `StripeSandboxProperties`（env + `enabled` 门控 + 启动期强校验） | `channelgateway/infra/stripe/` |
+| 10 | **渠道注册的既有纪律（038 后）**：`SpringChannelRegistry` 构造注入 `List<PaymentChannel>` **与** 插件工厂两路合并；**同一 `channelCode` 出现两次即结构性错误**（`ChannelPluginFactoryLocator` 启动期失败）。⇒ WECHAT 迁移时 MUST 删除旧 `WechatChannelAdapter`，否则 code 撞车 | `channelgateway/infra/SpringChannelRegistry.java`、`channelgateway/infra/ChannelPluginFactoryLocator.java` |
+| 11 | **`enabled` 的既有语义是「门控真实模式」，不是「门控注册」**：`StripeChannelPluginFactory` 为无条件 `@Component`（始终注册）；`enabled=false` 时插件仍在 `GET /internal/channels` 中出现，`enabled:false`，MOCK 模态照常可用 | `channelgateway/infra/stripe/StripeChannelPluginFactory.java`、`StripeSandboxProperties.java:37` |
 
 ---
 
@@ -78,14 +80,30 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 ## 3. 范围（Scope）
 
-- **新增插件包**：`com.payment.channelgateway.infra.wechat`（038 合入后的路径）。
-  ⚠️ 若 038 未合入，先落 `com.payment.payment.infra.channel.wechat`，038 合并时随之迁移。
-- **依赖**：`com.github.wechatpay-apiv3:wechatpay-java:0.2.17`（Maven Central `maven-metadata.xml` 最高版本，lastUpdated 2025-04-14）。
+- **新增插件包**：`com.payment.channelgateway.infra.wechat`（038 已合入 master @ `0a81b29`，落点确定）。
+- **删除旧实现**：`com.payment.channelgateway.infra.WechatChannelAdapter`（`extends AbstractMockChannelAdapter`）。
+  **理由（硬性）**：新旧实现同 `channelCode = WECHAT`，两路注册会在 `ChannelPluginFactoryLocator` / `SpringChannelRegistry` 触发「同码重复」结构性错误。MOCK 模态由内核 `AbstractChannelPlugin` 统一提供，删除不损失 mock 能力。
+- **依赖**：`com.github.wechatpay-apiv3:wechatpay-java:0.2.17`（Maven Central `maven-metadata.xml` 实测最高版本，`lastUpdated=20250414`）。
 - **账本**：**无需补 seed**——WECHAT 账户已存在（§1.3 #8）。⚠️ 漏补会触发 `LEDGER_CHANNEL_UNKNOWN` fail-fast，此处已核实。
 - **回调端点**：复用既有通用端点 `POST /internal/channels/WECHAT/callback`，**不新增微信专属 Controller**。
 - **是否动 schema**：**否**（渠道模态沿用 `payment_attempts.extra_json` 的 `channelMode` 键）。
 - **是否动公共 API**：**否**。
 - **是否动状态机**：**否**。
+
+### 3.1 开工前裁决（2026-09-25，负责人裁决，已回写）
+
+> 038 合入后（master @ `0a81b29`）对代码事实复验，发现 4 处 spec 原文与既有实现 / demo 断言冲突。
+> 以下为负责人逐项裁决结果，**执行方 MUST 按裁决执行，不得按 spec 原文**。
+
+| # | 冲突（实测证据） | 裁决 |
+|---|---|---|
+| **C-1** 🔴 | spec 原文 US3 / SC-001 / SC-006 要求「`enabled=false` ⇒ 渠道**不注册**、不出现在 `GET /internal/channels`」。但：① 既有 Stripe 模式是**无条件 `@Component` 始终注册**，`enabled` 只门控 `isRealModeEnabled()`；② `deployment/demo/scenario-routing.sh:107` **硬断言** `assert_contains "$REGISTERED" "WECHAT" "已注册 WECHAT"`，且 `enabled` 默认 `false`；③ WECHAT 的 MOCK 模态也挂在插件上，不注册会连带废掉，与 FR-010 自相矛盾 | **走 Stripe 同构**：插件**始终注册**，`enabled` **只门控真实模式**。US3 / SC-001 / SC-006 已按此改写（见 FR-016）。MOCK 模态与 `scenario-routing.sh` 保持零回归 |
+| **C-2** 🟠 | spec 原文 FR-001 / tasks T3 **未提及**删除旧 `WechatChannelAdapter`。新旧实现同 `channelCode = WECHAT`，两路注册会触发 `ChannelPluginFactoryLocator` 的结构性错误（同码重复） | FR-001 / §3 / tasks T3 已补「MUST 删除 `infra/WechatChannelAdapter.java`」。影响面已核实很小：**无任何测试实例化该类**（测试里的 WECHAT 均为字符串 / stub） |
+| **C-3** 🟡 | tasks T3 原文「同时注册为 Spring Bean 与 ServiceLoader SPI」。但 Stripe **只有** `@Component`，`src/main/resources` 下**没有** `META-INF/services/…ChannelPluginFactory`（该通道是给外部 jar 的） | 新增 FR-015：**仅** Spring `@Component`；tasks T3 已改 |
+| **C-4** 🟡 | mock 口径会**静默变化**：`AbstractMockChannelAdapter` 有**两套** mock（① `payment.channel.adapters.<CODE>.scenario` 配置驱动 ② 金额尾数注入 11/12/15），且退款走 `refund-async`（异步）；内核 `AbstractChannelPlugin` **只有** ②，且 `doMockRefund` 是**同步成功** | 接受为**有意的口径收窄**（与 Stripe 一致）：迁移后 `application.yml` 的 `adapters.WECHAT.scenario` 成为死配置，WECHAT 的 mock 退款由异步变同步。MUST 在 `acceptance.md` 登记为已知变更，**不得**为兼容而在插件内自写 mock（违反 FR-010 / D7） |
+
+> **C-1 的连带影响**：`enabled=false` 时 WECHAT 仍在渠道清单里 —— 这是**刻意的**（Stripe 亦然），
+> 因为「未启用真实模式」与「渠道不存在」是两件事；混淆会让 MOCK 演示失去一个渠道。
 
 ---
 
@@ -108,7 +126,7 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 |---|---|---|
 | US1 | 支付平台开发 | 配好 env 凭据 → 下单选 WECHAT + `NATIVE` 场景 → 拿到真实 `code_url`，可生成二维码 |
 | US2 | 支付平台开发 | 下单选 `JSAPI` 场景（带 `payer.openid`）→ 拿到 `prepay_id`，可拼前端唤起参数 |
-| US3 | 运维 | 未配凭据（`enabled=false`）→ WECHAT 渠道**不注册**、不读密钥、不出现在 `/internal/channels` |
+| US3 | 运维 | 未配凭据（`enabled=false`）→ WECHAT 渠道**仍注册**（MOCK 模态可用，`GET /internal/channels` 显示 `enabled:false`），但**不读取任何凭据 env**；染 SANDBOX 一律 400 硬失败 |
 | US4 | 资金正确性负责人 | 渠道超时 / SDK 抛异常 → 归一化为 `UNKNOWN`（可重试），**绝不臆断成败** |
 | US5 | 资金正确性负责人 | 收到微信回调 → **先验签 → 再 AES-256-GCM 解密 → 再处理**；验签失败一律拒绝 |
 | US6 | 支付平台开发 | 染色 SANDBOX 但 `enabled=false` → **硬失败**，绝不静默回落 mock |
@@ -129,7 +147,7 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 | ID | 需求 |
 |---|---|
-| FR-001 | 系统 MUST 新增插件包 `com.payment.channelgateway.infra.wechat`，含 5 个类：`WechatChannelPlugin`（`extends AbstractChannelPlugin`）、`WechatChannelPluginFactory`（SPI 注册）、`WechatGateway`（渠道端口）、`WechatSdkGateway`（V3 SDK 封装）、`WechatPayProperties`（配置 + 门控） |
+| FR-001 | 系统 MUST 新增插件包 `com.payment.channelgateway.infra.wechat`，含 5 个类：`WechatChannelPlugin`（`extends AbstractChannelPlugin`）、`WechatChannelPluginFactory`（**照 Stripe 模式注册为 Spring Bean**）、`WechatGateway`（渠道端口）、`WechatSdkGateway`（V3 SDK 封装）、`WechatPayProperties`（配置 + 门控）。同时 MUST **删除** `com.payment.channelgateway.infra.WechatChannelAdapter`（同 `channelCode` 两路注册会触发结构性错误，见 §3 / INV-8） |
 | FR-002 | `payment-service/pom.xml` MUST 增加 `com.github.wechatpay-apiv3:wechatpay-java:0.2.17`；SDK 引用 MUST 收口在 `wechat` 插件包内（对齐既有 SDK 收口门禁） |
 | FR-003 | `descriptor()` MUST 自描述：`channelCode = WECHAT`；`supportedScenes ⊇ {NATIVE, JSAPI, H5, MINI_PROGRAM}`；`supportsRealMode = true`（受 `enabled` 门控）；`acceptsCallback = true` |
 | FR-004 | `doRealCharge` MUST 支持：`NATIVE` → `POST /v3/pay/transactions/native` 取 `code_url`；`JSAPI` → `POST /v3/pay/transactions/jsapi` 取 `prepay_id`；`H5` → `/v3/pay/transactions/h5` 取 `h5_url`。金额一律用**分（int）**，与平台 `amountMinor` 直接对应 |
@@ -143,6 +161,8 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 | FR-012 | MUST 提供**本地微信仿真桩**（WireMock 或自建测试 Controller），模拟 V3 响应（`code_url` / `prepay_id` / 查询 / 退款受理 / 回调通知），使插件全链路**不依赖微信网络**即可走通 |
 | FR-013 | 渠道模态 MUST 写入 `payment_attempts.extra_json` 的 `channelMode` 键（既有纪律，不新增列）；归属判定恒读 `channel_code` 列 |
 | FR-014 | 回调 MUST 复用既有通用端点 `POST /internal/channels/WECHAT/callback`，**不得**新增微信专属 Controller |
+| FR-015 | `WechatChannelPluginFactory` MUST 照 `StripeChannelPluginFactory` 模式**仅注册为 Spring `@Component`**；**MUST NOT** 额外声明 `META-INF/services/…ChannelPluginFactory`（该 ServiceLoader 通道是给**外部 jar 插件**用的，同进程双路注册冗余且会与 Spring 侧同码冲突） |
+| FR-016 | `enabled` MUST 只门控**真实模式**，**MUST NOT** 门控渠道注册：`enabled=false` 时插件仍在 `GET /internal/channels` 中出现（`enabled:false`），MOCK 模态 MUST 照常可用（保证 `scenario-routing.sh` 的 WECHAT 断言零回归） |
 
 ---
 
@@ -157,6 +177,7 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 | INV-5 | 回调处理顺序 MUST 为「验签 → 解密 → 业务」，不可颠倒 | 未验签就解密 = 接受伪造通知 | FR-007 + 单测 |
 | INV-6 | 接入微信 MUST 对内核 / `application` / `api` / `domain` **零改动** | 需改内核即插件化不成立 | SC-002 |
 | INV-7 | 微信交易状态映射 MUST 符合 §8；`USERPAYING` / `NOTPAY` 一律判 `UNKNOWN` 不判失败 | 误判失败 → 用户已付款却订单被关 | 单测钉死 |
+| INV-8 | 同一 `channelCode = WECHAT` MUST 全局唯一注册（**MUST NOT** 同时存在 `WechatChannelAdapter` 与 `WechatChannelPlugin`） | 两路注册 ⇒ 启动期结构性错误，或路由选了 A 实际调用 B 的幽灵缺陷 | FR-001 + 启动期校验（既有） |
 
 ---
 
@@ -210,12 +231,12 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 
 | ID | 验收标准 | 验证方式 |
 |---|---|---|
-| SC-001 | `WECHAT` 注册为 `AbstractChannelPlugin` 插件；`enabled=false` 时不注册 | 单测断言 `WechatChannelPluginFactory` 产出 + `descriptor()` 字段 |
-| SC-002 | **零改动判据**：`git diff --stat` 中 `AbstractChannelPlugin` / `ChannelPlugin` / `ChannelPluginFactory` 内核**零改动**；`application` / `api` / `domain` **零改动**；改动仅限 `infra/wechat/**` + `pom.xml` + 配置 | `git diff --stat` 人工核对 |
+| SC-001 | `WECHAT` 注册为 `AbstractChannelPlugin` 插件；**始终注册**（与 Stripe 同构，`enabled` 不门控注册）；`enabled=false` 时真实模式未启用 | 单测断言 `WechatChannelPluginFactory` 产出 + `descriptor()` 字段 |
+| SC-002 | **零改动判据**：`git diff --stat` 中 `AbstractChannelPlugin` / `ChannelPlugin` / `ChannelPluginFactory` 内核**零改动**；`application` / `api` / `domain` **零改动**；改动仅限 `infra/wechat/**` + `pom.xml` + 配置 + **删除 `infra/WechatChannelAdapter.java`** | `git diff --stat` 人工核对 |
 | SC-003 | **签名金标准**：固定密钥 + 固定 `timestamp` / `nonce` 下，`Authorization` 头签名串逐字节一致 | 单测（固定向量） |
 | SC-004 | **回调往返**：本地生成密钥对 → 构造 V3 通知（加密 + 签名）→ 插件验签 + 解密 → 断言解析结果与原文一致；验签失败用例能触发拒绝 | 单测 |
 | SC-005 | **仿真桩全链路**：不依赖微信网络，走通「下单（NATIVE/JSAPI）→ 查询 → 退款 → 回调」四步 | 集成测试（WireMock / 自建桩） |
-| SC-006 | `enabled=false` 时：渠道不注册、路由不选中、不读取任何密钥 env | 单测 + 启动日志断言 |
+| SC-006 | `enabled=false` 时：渠道**仍注册且可路由**（MOCK 模态；`scenario-routing.sh` 的「已注册 WECHAT」与 S2/S3/S5/S6 断言 MUST 继续通过）、**不读取任何凭据 env**、染 SANDBOX ⇒ 400 硬失败 | 单测 + `GET /internal/channels` 断言 + 启动日志断言 |
 | SC-007 | `enabled=true` 且 env 缺项时：**启动期拒绝启动** | 单测断言 `@PostConstruct` 抛错 |
 | SC-008 | 全量单测零回归 + 全链路 demo 场景通过 | 见 `acceptance.md` 回归基线 |
 | SC-009 | **沙箱结论留档**：`acceptance.md`「沙箱实测」章节保留 §1.2 四条证据，注明「V3 无沙箱、V2 沙箱不支持下单 ⇒ 不用于本渠道验证」 | 文档核对 |
@@ -225,13 +246,13 @@ public class WechatChannelAdapter extends AbstractMockChannelAdapter {
 ## 12. 依赖（Dependencies）
 
 **硬依赖**
-- **038（payment-service 包边界重构）**：决定插件包落点。**建议 038 合入后再开工 039**，否则需二次迁移。
+- **038（payment-service 包边界重构）**：决定插件包落点。**已合入 master**（`0a81b29`，2026-09-25）⇒ 落点 `com.payment.channelgateway.infra.wechat` 确定，无二次迁移风险。
 - **[036-channel-plugin-microkernel](../036-channel-plugin-microkernel/spec.md)（Channel 微内核 + 插件化，已合入 master）**：`AbstractChannelPlugin` + `ChannelPluginFactory` SPI + 通用回调端点是本 Feature 的底座。其 Stripe 五件套是本 Feature 的**同构参照**。
 
 **软依赖 / ⚠️ 冲突提示**
 - **与 037 T6 重叠**：037 T6 要求「MOCK / WECHAT / ALIPAY / DOUYIN 迁至 `AbstractChannelPlugin`」。
   **本 Feature 把 WECHAT 一步到位写成 `AbstractChannelPlugin` 插件包** ⇒ **037 T6 中 WECHAT 的部分被本 Feature 取代**；MOCK / ALIPAY / DOUYIN 仍归 037。
-  执行 037 时 MUST 跳过 WECHAT，避免两个分支撞车。
+  **037 执行方 MUST 跳过 WECHAT**（本 Feature 已删除 `WechatChannelAdapter`，037 若再迁一次会撞空）；反之若 037 先做，本 Feature 需重新对齐。
 
 **外部依赖（本 Feature 不获取）**
 - 真实联调需：**企业资质**商户号 `mchid`、已绑定 `appid`、商户 API 证书（含序列号）、APIv3 密钥、微信支付平台证书 / 公钥。
