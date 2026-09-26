@@ -1,4 +1,4 @@
-package com.payment.payment.domain;
+package com.payment.channelgateway.domain;
 
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
@@ -18,7 +18,7 @@ import java.util.Objects;
  * 与 {@link Payment} 一致，终态（SUCCEEDED/FAILED）吸收迟到的冲突结果（返回 {@code false}），
  * 以支持乱序/重复回调的幂等处理。</p>
  */
-public class PaymentAttempt {
+public class ChannelOrder {
 
     /** 尝试类型（Feature 016 / FR-017）：支付尝试；退款尝试（复用本表，channel_reference=渠道退款流水号）。 */
     public static final String TYPE_PAYMENT = "PAYMENT";
@@ -27,7 +27,7 @@ public class PaymentAttempt {
     /**
      * {@code extra} 中承载渠道模态的键（spec 030 / FR-151）。
      *
-     * <p>落库列 {@code payment_attempts.extra_json}（TEXT 存 JSON）。写入侧与读取侧
+     * <p>落库列 {@code channel_orders.extra_json}（TEXT 存 JSON）。写入侧与读取侧
      * <b>MUST 共用本常量</b>，避免两侧拼写漂移导致「写进去读不出来」。</p>
      */
     public static final String CHANNEL_MODE_KEY = "channelMode";
@@ -37,11 +37,11 @@ public class PaymentAttempt {
     private Integer version;
     private final String paymentNo;
     /**
-     * 渠道网关业务单号（spec 037 / FR-001，落库列 {@code payment_attempts.channel_no}）。
+     * 渠道网关业务单号（spec 037 / FR-001，落库列 {@code channel_orders.channel_no}）。
      *
      * <p>{@code CH} + 雪花，<b>一次渠道交互一个</b>（与 {@code paymentNo} 同构）。
      * 它是渠道网关自己的身份，取代了跨域契约里曾经出现的数值主键 {@code attemptId}
-     * ——{@code payment_attempts.id} 是数据库自增主键，把它递给渠道即违反 ADR-0063
+     * ——{@code channel_orders.id} 是数据库自增主键，把它递给渠道即违反 ADR-0063
      * （跨系统标识一律业务单号），历史已踩过 C-12 / S21 事故。</p>
      *
      * <p><b>不可变</b>：单号一经铸造就是事实，不提供 setter；回读路径由
@@ -54,14 +54,14 @@ public class PaymentAttempt {
     private Instant requestedAt;
     private Instant respondedAt;
     private String channelReference;
-    private PaymentAttemptStatus status = PaymentAttemptStatus.PENDING;
+    private ChannelOrderStatus status = ChannelOrderStatus.PENDING;
     private String failureReason;
     private int retryCount;
     /**
      * 最后一次失败的错误分类（由双响应码派生，供观测排障；<b>不参与重试判定</b>，ADR-0012）。
      * 重试判定只看通信响应码 {@code TransportCode}。
      */
-    private PaymentAttemptErrorType errorType;
+    private ChannelOrderErrorType errorType;
     /**
      * 本次渠道交互的资金口径（spec 018 / US1 / D2）：金额（最小货币单位）与币种。
      * PAYMENT 尝试记支付单金额；REFUND 尝试记所属支付单金额（非退款金额）。
@@ -86,7 +86,7 @@ public class PaymentAttempt {
      * <p>{@code channelNo} 必填——缺了它，跨域交互就没有可传递的业务标识（{@code channel_no}
      * 列也是 {@code NOT NULL}）。</p>
      */
-    public PaymentAttempt(String paymentNo, String channelNo, String channelCode,
+    public ChannelOrder(String paymentNo, String channelNo, String channelCode,
                           int retryCount, long amountMinor, String currencyCode) {
         this.paymentNo = Objects.requireNonNull(paymentNo, "paymentNo");
         this.channelNo = Objects.requireNonNull(channelNo, "channelNo");
@@ -102,10 +102,10 @@ public class PaymentAttempt {
      *
      * <p>保留是为了让既有调用点（含约 10 处测试夹具）零改动即可编译——与
      * {@code ChargeRequest} / {@code RefundRequest} 等契约保留兼容构造器同一纪律。
-     * <b>生产写入口</b>（{@code ChannelAttemptRecorderImpl}）走显式构造，让「网关单在哪里铸造」
+     * <b>生产写入口</b>（{@code ChannelOrderServiceImpl}）走显式构造，让「网关单在哪里铸造」
      * 在代码上可见。</p>
      */
-    public PaymentAttempt(String paymentNo, String channelCode, int retryCount,
+    public ChannelOrder(String paymentNo, String channelCode, int retryCount,
                           long amountMinor, String currencyCode) {
         this(paymentNo, mintChannelNo(), channelCode, retryCount, amountMinor, currencyCode);
     }
@@ -115,9 +115,9 @@ public class PaymentAttempt {
         return BusinessNos.of(BusinessNoType.CHANNEL);
     }
 
-    /** 退款渠道尝试（Feature 016 / FR-017 第②步）：复用 payment_attempts，channel_reference=渠道退款流水号。 */
-    public static PaymentAttempt refundAttempt(String paymentNo, String channelCode, long amountMinor, String currencyCode) {
-        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelCode, 0, amountMinor, currencyCode);
+    /** 退款渠道尝试（Feature 016 / FR-017 第②步）：复用 channel_orders，channel_reference=渠道退款流水号。 */
+    public static ChannelOrder refundAttempt(String paymentNo, String channelCode, long amountMinor, String currencyCode) {
+        ChannelOrder attempt = new ChannelOrder(paymentNo, channelCode, 0, amountMinor, currencyCode);
         attempt.attemptType = TYPE_REFUND;
         return attempt;
     }
@@ -129,11 +129,11 @@ public class PaymentAttempt {
      * <p><b>spec 037 / FR-001</b>：新增 {@code channelNo} 参数——回读路径 MUST 原样还原持久化的
      * 网关单号，<b>不得重新铸造</b>（重新铸造会让「同一个网关单」在回读后变成另一个身份）。</p>
      */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
+    public static ChannelOrder rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
                                            int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType,
+                                           ChannelOrderStatus status, String failureReason,
+                                           ChannelOrderErrorType errorType,
                                            Integer version, long amountMinor, String currencyCode) {
         return rehydrate(id, paymentNo, channelNo, channelCode, retryCount, requestedAt, respondedAt,
                 channelReference, status, failureReason, errorType, version, TYPE_PAYMENT,
@@ -141,11 +141,11 @@ public class PaymentAttempt {
     }
 
     /** 全量重建（含尝试类型，Feature 016）。 */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
+    public static ChannelOrder rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
                                            int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType,
+                                           ChannelOrderStatus status, String failureReason,
+                                           ChannelOrderErrorType errorType,
                                            Integer version, String attemptType, long amountMinor,
                                            String currencyCode) {
         return rehydrate(id, paymentNo, channelNo, channelCode, retryCount, requestedAt, respondedAt,
@@ -157,16 +157,16 @@ public class PaymentAttempt {
      * 全量重建（spec 030 / FR-302 + spec 037 / FR-001）：还原 {@code channelNo} 与 {@code extra}
      * （渠道扩展属性，含 {@value #CHANNEL_MODE_KEY}）。
      *
-     * <p>本重载是<b>回读路径的权威形态</b>（{@code MybatisPaymentAttemptRepository#toDomain} 使用它）。</p>
+     * <p>本重载是<b>回读路径的权威形态</b>（{@code MybatisChannelOrderRepository#toDomain} 使用它）。</p>
      */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
+    public static ChannelOrder rehydrate(Long id, String paymentNo, String channelNo, String channelCode,
                                            int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType,
+                                           ChannelOrderStatus status, String failureReason,
+                                           ChannelOrderErrorType errorType,
                                            Integer version, String attemptType, long amountMinor,
                                            String currencyCode, Map<String, String> extra) {
-        PaymentAttempt attempt = new PaymentAttempt(paymentNo, channelNo, channelCode, retryCount,
+        ChannelOrder attempt = new ChannelOrder(paymentNo, channelNo, channelCode, retryCount,
                 amountMinor, currencyCode);
         attempt.id = id;
         attempt.attemptType = attemptType == null ? TYPE_PAYMENT : attemptType;
@@ -187,20 +187,20 @@ public class PaymentAttempt {
     // 带 channelNo 的重载——否则「回读」会变成「重新铸造一个新网关单」。
 
     /** 兼容重载（13 参）。 */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+    public static ChannelOrder rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType,
+                                           ChannelOrderStatus status, String failureReason,
+                                           ChannelOrderErrorType errorType,
                                            Integer version, long amountMinor, String currencyCode) {
         return rehydrate(id, paymentNo, mintChannelNo(), channelCode, retryCount, requestedAt, respondedAt,
                 channelReference, status, failureReason, errorType, version, amountMinor, currencyCode);
     }
 
     /** 兼容重载（14 参，含尝试类型）。 */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+    public static ChannelOrder rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType,
+                                           ChannelOrderStatus status, String failureReason,
+                                           ChannelOrderErrorType errorType,
                                            Integer version, String attemptType, long amountMinor,
                                            String currencyCode) {
         return rehydrate(id, paymentNo, mintChannelNo(), channelCode, retryCount, requestedAt, respondedAt,
@@ -209,10 +209,10 @@ public class PaymentAttempt {
     }
 
     /** 兼容重载（15 参，含 {@code extra}）。 */
-    public static PaymentAttempt rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
+    public static ChannelOrder rehydrate(Long id, String paymentNo, String channelCode, int retryCount,
                                            Instant requestedAt, Instant respondedAt, String channelReference,
-                                           PaymentAttemptStatus status, String failureReason,
-                                           PaymentAttemptErrorType errorType,
+                                           ChannelOrderStatus status, String failureReason,
+                                           ChannelOrderErrorType errorType,
                                            Integer version, String attemptType, long amountMinor,
                                            String currencyCode, Map<String, String> extra) {
         return rehydrate(id, paymentNo, mintChannelNo(), channelCode, retryCount, requestedAt, respondedAt,
@@ -276,12 +276,12 @@ public class PaymentAttempt {
 
     /** PENDING → ACCEPTED，记录渠道引用与响应时间；非 PENDING 时吸收（返回 false）。 */
     public boolean accept(String channelReference) {
-        if (status != PaymentAttemptStatus.PENDING) {
+        if (status != ChannelOrderStatus.PENDING) {
             return false;
         }
         this.channelReference = channelReference;
         this.respondedAt = Instant.now();
-        this.status = PaymentAttemptStatus.ACCEPTED;
+        this.status = ChannelOrderStatus.ACCEPTED;
         return true;
     }
 
@@ -294,8 +294,8 @@ public class PaymentAttempt {
         if (channelReference == null || this.channelReference != null) {
             return false;
         }
-        if (status != PaymentAttemptStatus.PENDING && status != PaymentAttemptStatus.ACCEPTED
-                && status != PaymentAttemptStatus.UNKNOWN) {
+        if (status != ChannelOrderStatus.PENDING && status != ChannelOrderStatus.ACCEPTED
+                && status != ChannelOrderStatus.UNKNOWN) {
             return false;
         }
         this.channelReference = channelReference;
@@ -311,8 +311,8 @@ public class PaymentAttempt {
      * （如 mock 的 "awaiting async callback"）不是终态事实，成功后残留会误导查询方（fix）。</p>
      */
     public boolean succeed() {
-        boolean changed = transitionTo(PaymentAttemptStatus.SUCCEEDED, "succeed",
-                PaymentAttemptStatus.PENDING, PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
+        boolean changed = transitionTo(ChannelOrderStatus.SUCCEEDED, "succeed",
+                ChannelOrderStatus.PENDING, ChannelOrderStatus.ACCEPTED, ChannelOrderStatus.UNKNOWN);
         if (changed) {
             this.failureReason = null;
         }
@@ -321,8 +321,8 @@ public class PaymentAttempt {
 
     /** ACCEPTED/UNKNOWN/PENDING → FAILED（权威收敛语义同 {@link #succeed()}）；终态冲突吸收（返回 false）。 */
     public boolean fail(String reason) {
-        boolean changed = transitionTo(PaymentAttemptStatus.FAILED, "fail",
-                PaymentAttemptStatus.PENDING, PaymentAttemptStatus.ACCEPTED, PaymentAttemptStatus.UNKNOWN);
+        boolean changed = transitionTo(ChannelOrderStatus.FAILED, "fail",
+                ChannelOrderStatus.PENDING, ChannelOrderStatus.ACCEPTED, ChannelOrderStatus.UNKNOWN);
         if (changed) {
             this.failureReason = reason;
         }
@@ -331,26 +331,26 @@ public class PaymentAttempt {
 
     /** PENDING/ACCEPTED → UNKNOWN（超时/无响应）；终态冲突吸收（返回 false）。 */
     public boolean markUnknown(String reason) {
-        if (status == PaymentAttemptStatus.UNKNOWN) {
+        if (status == ChannelOrderStatus.UNKNOWN) {
             return false;
         }
-        if (status == PaymentAttemptStatus.SUCCEEDED || status == PaymentAttemptStatus.FAILED) {
+        if (status == ChannelOrderStatus.SUCCEEDED || status == ChannelOrderStatus.FAILED) {
             return false; // 迟到未知结果，终态不覆盖
         }
-        if (status != PaymentAttemptStatus.PENDING && status != PaymentAttemptStatus.ACCEPTED) {
+        if (status != ChannelOrderStatus.PENDING && status != ChannelOrderStatus.ACCEPTED) {
             throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
                     "illegal markUnknown from " + this.status);
         }
-        this.status = PaymentAttemptStatus.UNKNOWN;
+        this.status = ChannelOrderStatus.UNKNOWN;
         this.failureReason = reason;
         return true;
     }
 
-    private boolean transitionTo(PaymentAttemptStatus target, String op, PaymentAttemptStatus... from) {
+    private boolean transitionTo(ChannelOrderStatus target, String op, ChannelOrderStatus... from) {
         if (status == target) {
             return false;
         }
-        for (PaymentAttemptStatus s : from) {
+        for (ChannelOrderStatus s : from) {
             if (status == s) {
                 this.status = target;
                 return true;
@@ -358,7 +358,7 @@ public class PaymentAttempt {
         }
         // 终态吸收迟到冲突结果（SUCCEEDED/FAILED 均不可被覆盖）；
         // PENDING 只能经权威结果收敛终态（见 succeed/fail 的 PENDING 来源态）。
-        if (status == PaymentAttemptStatus.SUCCEEDED || status == PaymentAttemptStatus.FAILED) {
+        if (status == ChannelOrderStatus.SUCCEEDED || status == ChannelOrderStatus.FAILED) {
             return false;
         }
         throw BizException.of(ErrorCodes.STATE_TRANSITION_VIOLATION,
@@ -421,7 +421,7 @@ public class PaymentAttempt {
         return channelReference;
     }
 
-    public PaymentAttemptStatus getStatus() {
+    public ChannelOrderStatus getStatus() {
         return status;
     }
 
@@ -438,11 +438,11 @@ public class PaymentAttempt {
         this.retryCount++;
     }
 
-    public PaymentAttemptErrorType getErrorType() {
+    public ChannelOrderErrorType getErrorType() {
         return errorType;
     }
 
-    public void setErrorType(PaymentAttemptErrorType errorType) {
+    public void setErrorType(ChannelOrderErrorType errorType) {
         this.errorType = errorType;
     }
 }

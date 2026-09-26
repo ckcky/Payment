@@ -2,8 +2,8 @@ package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.time.Instant;
@@ -25,12 +25,12 @@ public class TimeoutScanner {
     private static final String TIMEOUT_REASON = "TIMEOUT";
 
     private final PaymentRepository paymentRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
     private final BusinessMetrics metrics;
     private final ReliabilityConfig config;
 
     public TimeoutScanner(PaymentRepository paymentRepository,
-                          PaymentAttemptRepository attemptRepository,
+                          ChannelOrderRepository attemptRepository,
                           BusinessMetrics metrics,
                           ReliabilityConfig config) {
         this.paymentRepository = paymentRepository;
@@ -47,7 +47,7 @@ public class TimeoutScanner {
             if (payment.getCurrentAttemptId() == null) {
                 continue;
             }
-            PaymentAttempt attempt = attemptRepository.findById(payment.getCurrentAttemptId()).orElse(null);
+            ChannelOrder attempt = attemptRepository.findById(payment.getCurrentAttemptId()).orElse(null);
             if (attempt == null) {
                 continue;
             }

@@ -5,7 +5,7 @@ import com.payment.common.core.rpc.TransportCode;
 import com.payment.common.dto.channel.ChannelPayStatus;
 import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.common.dto.channel.PayCredential;
-import com.payment.payment.domain.PaymentAttemptErrorType;
+import com.payment.channelgateway.domain.ChannelOrderErrorType;
 
 /**
  * 渠道交互结果：成功 / 失败 / 未知（超时、断连或不完整响应）。
@@ -128,7 +128,7 @@ public record ChannelResult(Status status, String channelReference, String reaso
      * 观测链断掉——后续主动查询拿不到渠道交易号就永远收敛不了。</p>
      *
      * @param status           跨域口径的三档结论
-     * @param channelReference 渠道交易号（{@code payment_attempts.channel_reference}；未读到为 {@code null}）
+     * @param channelReference 渠道交易号（{@code channel_orders.channel_reference}；未读到为 {@code null}）
      * @param reason           失败/无结论原因
      */
     public static ChannelResult fromNotified(ChannelPayStatus status, String channelReference, String reason) {
@@ -172,18 +172,18 @@ public record ChannelResult(Status status, String channelReference, String reaso
 
     /**
      * 错误分类（由双响应码派生，供落库观测）：
-     * 通信失败 → {@link PaymentAttemptErrorType#TRANSIENT}（可重试，重试耗尽后仍记此值）；
-     * 业务明确拒绝 → {@link PaymentAttemptErrorType#HARD}；
-     * 业务无结论 → {@link PaymentAttemptErrorType#UNKNOWN}；成功时为 {@code null}。
+     * 通信失败 → {@link ChannelOrderErrorType#TRANSIENT}（可重试，重试耗尽后仍记此值）；
+     * 业务明确拒绝 → {@link ChannelOrderErrorType#HARD}；
+     * 业务无结论 → {@link ChannelOrderErrorType#UNKNOWN}；成功时为 {@code null}。
      */
-    public PaymentAttemptErrorType errorType() {
+    public ChannelOrderErrorType errorType() {
         if (!transportCode.isSuccess()) {
-            return PaymentAttemptErrorType.TRANSIENT;
+            return ChannelOrderErrorType.TRANSIENT;
         }
         if (businessCode.isSuccess()) {
             return null;
         }
-        return businessCode.isConclusive() ? PaymentAttemptErrorType.HARD : PaymentAttemptErrorType.UNKNOWN;
+        return businessCode.isConclusive() ? ChannelOrderErrorType.HARD : ChannelOrderErrorType.UNKNOWN;
     }
 
     /** 是否可重试：<b>只看通信响应码</b>，非 SUCCESS 即重试（ADR-0012）。 */

@@ -3,9 +3,9 @@ package com.payment.payment.application.refund;
 import com.payment.channelgateway.application.ChannelResult;
 
 /**
- * refund 域 → payment 域的退款尝试收敛端口（fix：payment_attempts 的 REFUND 行状态同步）：
+ * refund 域 → payment 域的退款尝试收敛端口（fix：channel_orders 的 REFUND 行状态同步）：
  * 退款结果在<b>任一收敛路径</b>（同步受理终态 / 异步渠道回调 / resolve 人工裁定）取得权威终态时，
- * 把 payment 域对应的 REFUND 尝试行（{@code payment_attempts.attempt_type=REFUND}）从
+ * 把 payment 域对应的 REFUND 尝试行（{@code channel_orders.attempt_type=REFUND}）从
  * UNKNOWN/ACCEPTED/PENDING 收敛到 SUCCEEDED/FAILED——与退款单状态同源同路，不留双路径。
  *
  * <p>背景：019 之前尝试行只在渠道调用瞬间落一次状态，异步受理（UNKNOWN）后回调到达时

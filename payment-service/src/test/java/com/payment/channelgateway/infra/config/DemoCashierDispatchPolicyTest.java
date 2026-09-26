@@ -28,7 +28,7 @@ class DemoCashierDispatchPolicyTest {
 
     private static ChargeRequest request(String channelCode) {
         return new ChargeRequest("PM-test", 9900L, "CNY", channelCode,
-                null, null, null, null, null, null, null, "order-9");
+                null, null, null, null, null, null, "order-9");
     }
 
     @Test

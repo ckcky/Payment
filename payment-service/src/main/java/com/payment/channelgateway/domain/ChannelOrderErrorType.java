@@ -1,4 +1,4 @@
-package com.payment.payment.domain;
+package com.payment.channelgateway.domain;
 
 /**
  * 渠道尝试的错误分类（spec US3 / FR-005~FR-007 / ADR-0012）：本次失败属于哪一类。
@@ -7,7 +7,7 @@ package com.payment.payment.domain;
  * （非 {@code SUCCESS} 即重试，见 {@code ChannelResult#retryable()}）。本枚举用于落库观测与排障，
  * 由双响应码派生（见 {@code ChannelResult#errorType()}）。</p>
  */
-public enum PaymentAttemptErrorType {
+public enum ChannelOrderErrorType {
     /**
      * 通信失败：通信响应码非 {@code SUCCESS}（超时 / 断连 / 5xx / 协议错误）。
      * 幂等可重试；重试耗尽后仍记此值，支付进 UNKNOWN（FR-007）。

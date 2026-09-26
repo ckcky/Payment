@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>为什么必须钉住：如果染色渗进选路，就会出现「为了测沙箱而染色，结果订单被路由到了
  * 支付宝——哪怕运营只是想走 MOCK」这种与业务意图无关的副作用。渠道归属是业务事实
- * （落在 {@code payment_attempts.channel_code} 列），不能由排障开关改写。</p>
+ * （落在 {@code channel_orders.channel_code} 列），不能由排障开关改写。</p>
  *
  * <p>断言方式：对<b>同一组</b> {@link RouteContext}，分别在未染色 / 显式 MOCK / SANDBOX
  * 下选路，要求三次结果<b>逐一相同</b>——既覆盖「只表达支付意图」的自动选路（US2），

@@ -8,7 +8,6 @@ import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.rpc.BusinessCode;
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.common.dto.channel.Goods;
 import com.payment.common.dto.channel.PayCredential;
 import com.payment.common.dto.channel.Payer;
@@ -106,10 +105,13 @@ class WechatChannelPluginTest {
         return new WechatChannelPlugin(gateway, properties);
     }
 
-    private static ChargeRequest charge(PaymentScene scene, Payer payer, String notifyUrl) {
+    /**
+     * 构造微信下单请求（spec 041：回调地址不再经请求下发，改由插件读自己的配置）。
+     */
+    private static ChargeRequest charge(PaymentScene scene, Payer payer) {
         return new ChargeRequest("PM001", 10_00L, "CNY", "WECHAT",
-                scene, Goods.of("测试商品"), new CallbackUrls(notifyUrl, null),
-                Instant.now().plusSeconds(300), payer, null, null);
+                scene, Goods.of("测试商品"),
+                Instant.now().plusSeconds(300), payer, null, null, null);
     }
 
     // ---- FR-003：描述符自描述 ----
@@ -142,7 +144,7 @@ class WechatChannelPluginTest {
         assertThat(plugin.channelCode()).isEqualTo("WECHAT"); // 仍注册
 
         DyeContext.clear(); // 未染色 ⇒ MOCK
-        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null, NOTIFY));
+        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null));
 
         assertThat(result.status()).isEqualTo(ChannelResult.Status.SUCCESS);
         assertThat(result.hasCredential()).isFalse();  // mock 不产凭证
@@ -156,7 +158,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(properties(false), gateway);
 
         DyeContext.set(DyeMode.SANDBOX);
-        assertThatThrownBy(() -> plugin.charge(charge(PaymentScene.NATIVE, null, NOTIFY)))
+        assertThatThrownBy(() -> plugin.charge(charge(PaymentScene.NATIVE, null)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("refusing to silently fall back to mock");
         assertThat(gateway.prepayCalls).isZero();
@@ -209,7 +211,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(properties(true), gateway);
 
         DyeContext.set(DyeMode.SANDBOX);
-        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null, NOTIFY));
+        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null));
 
         assertThat(gateway.prepayCalls).isEqualTo(1);
         assertThat(result.status()).isEqualTo(ChannelResult.Status.UNKNOWN); // 受理 ≠ 成功
@@ -226,12 +228,12 @@ class WechatChannelPluginTest {
         DyeContext.set(DyeMode.SANDBOX);
 
         gateway.prepayResult = WechatGateway.PrepayResult.ok("https://wx.tenpay.com/cgi-bin/mmpayweb-bin/checkmweb?x=1");
-        ChannelResult h5 = plugin.charge(charge(PaymentScene.H5, null, NOTIFY));
+        ChannelResult h5 = plugin.charge(charge(PaymentScene.H5, null));
         assertThat(h5.credential().kind()).isEqualTo(PayCredential.Kind.H5_URL);
         assertThat(h5.credential().isRedirectFamily()).isTrue();
 
         gateway.prepayResult = WechatGateway.PrepayResult.ok("wx201410272009395522657a690389285100");
-        ChannelResult jsapi = plugin.charge(charge(PaymentScene.JSAPI, Payer.of("openid-1"), NOTIFY));
+        ChannelResult jsapi = plugin.charge(charge(PaymentScene.JSAPI, Payer.of("openid-1")));
         assertThat(jsapi.credential().kind()).isEqualTo(PayCredential.Kind.JSAPI_PARAMS);
         assertThat(jsapi.credential().payload()).isEqualTo(gateway.jsapiParams);
         // openid 被透传给网关（JSAPI 必填）
@@ -246,7 +248,7 @@ class WechatChannelPluginTest {
         DyeContext.set(DyeMode.SANDBOX);
 
         gateway.prepayResult = WechatGateway.PrepayResult.ok("prepay-id-1");
-        ChannelResult result = plugin.charge(charge(PaymentScene.MINI_PROGRAM, Payer.of("openid-2"), NOTIFY));
+        ChannelResult result = plugin.charge(charge(PaymentScene.MINI_PROGRAM, Payer.of("openid-2")));
 
         assertThat(result.credential().kind()).isEqualTo(PayCredential.Kind.JSAPI_PARAMS);
         assertThat(gateway.lastPrepay.scene()).isEqualTo(PaymentScene.MINI_PROGRAM);
@@ -263,7 +265,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(props, new StubGateway());
 
         DyeContext.set(DyeMode.SANDBOX);
-        assertThatThrownBy(() -> plugin.charge(charge(PaymentScene.NATIVE, null, null)))
+        assertThatThrownBy(() -> plugin.charge(charge(PaymentScene.NATIVE, null)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("notifyUrl");
     }
@@ -274,7 +276,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(properties(true), new StubGateway());
 
         DyeContext.set(DyeMode.SANDBOX);
-        assertThatThrownBy(() -> plugin.charge(charge(PaymentScene.JSAPI, null, NOTIFY)))
+        assertThatThrownBy(() -> plugin.charge(charge(PaymentScene.JSAPI, null)))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("openid");
     }
@@ -285,7 +287,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(properties(true), new StubGateway());
 
         DyeContext.set(DyeMode.SANDBOX);
-        ChannelResult result = plugin.charge(charge(null, null, NOTIFY));
+        ChannelResult result = plugin.charge(charge(null, null));
 
         assertThat(result.status()).isEqualTo(ChannelResult.Status.FAILURE);
         assertThat(result.businessCode()).isEqualTo(BusinessCode.INVALID_REQUEST);
@@ -312,7 +314,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(properties(true), gateway);
 
         DyeContext.set(DyeMode.SANDBOX);
-        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null, NOTIFY));
+        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null));
 
         assertThat(result.status()).isEqualTo(ChannelResult.Status.FAILURE);
         assertThat(result.retryable()).isFalse();
@@ -327,7 +329,7 @@ class WechatChannelPluginTest {
         WechatChannelPlugin plugin = plugin(properties(true), gateway);
 
         DyeContext.set(DyeMode.SANDBOX);
-        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null, NOTIFY));
+        ChannelResult result = plugin.charge(charge(PaymentScene.NATIVE, null));
 
         assertThat(result.retryable()).isTrue();
         assertThat(result.hasCredential()).isFalse();

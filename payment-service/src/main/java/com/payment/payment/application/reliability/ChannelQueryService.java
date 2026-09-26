@@ -8,9 +8,9 @@ import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.util.Comparator;
@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
  * 幂等与「最多一次」由支付状态机 + 收敛服务保证；乐观锁由仓储保护并发。</p>
  *
  * <p><b>反向路径按记录解析（Feature 028 / FR-024 / INV-6）</b>：查询渠道 MUST 取自该支付单
- * 已记录的 {@code payment_attempts.channel_code}，经 {@link ChannelGateway} 精确查询——
+ * 已记录的 {@code channel_orders.channel_code}，经 {@link ChannelGateway} 精确查询——
  * <b>绝不调 Router</b>。若用 Router 重新选路，UNKNOWN 支付可能被换个渠道去问，
  * 那等于去问一个从未受理过这笔交易的渠道（必然查不到，或更糟：查到别人的交易）。</p>
  */
@@ -44,7 +44,7 @@ public class ChannelQueryService {
             org.slf4j.LoggerFactory.getLogger(ChannelQueryService.class);
 
     private final PaymentRepository paymentRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
     /** 渠道网关门面（spec 037 / FR-007 / INV-1）：按<b>已记录</b>渠道码精确查询，门面不重新选路（INV-6）。 */
     private final ChannelGateway channelGateway;
     private final PaymentUnknownResolutionService resolution;
@@ -54,7 +54,7 @@ public class ChannelQueryService {
     /** 生产主构造：Spring 必须确定地选它（另有测试用兼容构造，故显式标注）。 */
     @org.springframework.beans.factory.annotation.Autowired
     public ChannelQueryService(PaymentRepository paymentRepository,
-                               PaymentAttemptRepository attemptRepository,
+                               ChannelOrderRepository attemptRepository,
                                ChannelGateway channelGateway,
                                PaymentUnknownResolutionService resolution,
                                ReliabilityConfig config,
@@ -216,7 +216,7 @@ public class ChannelQueryService {
      * 于是「查哪个渠道」这个决定变得不可复现。现按 {@code id} 升序取第一条（最先建的那次交互）。</p>
      *
      * <p><b>模态取自同一行</b>（FR-154）：{@code extra_json} 的 {@code channelMode} 键，
-     * 经 {@link PaymentAttempt#getChannelMode()} 读取（四类坏数据一律 {@link DyeMode#MOCK}）。</p>
+     * 经 {@link ChannelOrder#getChannelMode()} 读取（四类坏数据一律 {@link DyeMode#MOCK}）。</p>
      *
      * <p>找不到记录行时抛 {@code INTERNAL_ERROR}（FR-273）——不回落默认渠道，因为
      * 「不知道这单走的哪个渠道」时去问任何一个渠道都是无意义甚至有害的
@@ -227,12 +227,12 @@ public class ChannelQueryService {
         if (attemptRepository == null) {
             return new RecordedTarget(fallbackChannelCode, DyeMode.MOCK, null);
         }
-        PaymentAttempt attempt = attemptRepository.findByPaymentNo(payment.getPaymentNo()).stream()
-                .filter(a -> PaymentAttempt.TYPE_PAYMENT.equals(a.getAttemptType()))
-                .filter(a -> a.getStatus() != PaymentAttemptStatus.PENDING)
+        ChannelOrder attempt = attemptRepository.findByPaymentNo(payment.getPaymentNo()).stream()
+                .filter(a -> ChannelOrder.TYPE_PAYMENT.equals(a.getAttemptType()))
+                .filter(a -> a.getStatus() != ChannelOrderStatus.PENDING)
                 .filter(a -> a.getChannelCode() != null && !a.getChannelCode().isBlank())
                 // 确定性排序：同一支付单多条 attempt 时恒取 id 最小（最先建）的那条
-                .sorted(Comparator.comparing(PaymentAttempt::getId,
+                .sorted(Comparator.comparing(ChannelOrder::getId,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .findFirst()
                 .orElseThrow(() -> com.payment.common.core.error.BizException.of(

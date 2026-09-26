@@ -45,8 +45,12 @@ done
 # 037-payment-attempt-channel-no.sql 同理必须登记：payment_attempts 表在存量卷里已存在，
 # 03-payment-schema.sql 走 CREATE TABLE IF NOT EXISTS ⇒ 不会补列；漏放则 channel_no 缺失，
 # 而列是 NOT NULL ⇒ 所有 payment_attempts 插入失败（这正是 037 原 WIP 被废弃的直接原因）。
+# 041-channel-orders-rename.sql 同理必须登记：spec 041 把渠道单表正名为 channel_orders，
+# 而 03-payment-schema.sql 仍按历史形态建 payment_attempts（改动它会连带破坏 016 / 037
+# 这些按旧表名写的迁移）⇒ 漏放则库里没有 channel_orders，渠道单的所有读写全部报
+# UnknownTable。MUST 排在其余 payment 表迁移之后。
 for f in 027-user-payment-limit.sql 032-reconciliation-statement.sql 034-pending-postings.sql \
-         037-payment-attempt-channel-no.sql; do
+         037-payment-attempt-channel-no.sql 041-channel-orders-rename.sql; do
   db_mysql < "$SCHEMA_DIR/$f"
   echo "    migrated $f"
 done

@@ -3,7 +3,7 @@
 #
 # 前置：服务已启动（start-all.sh）；mock 收银台开启（默认）。
 #
-# **断言口径（与 acceptance.md 一致）**：渠道归属一律读 `payment_attempts.channel_code`
+# **断言口径（与 acceptance.md 一致）**：渠道归属一律读 `channel_orders.channel_code`
 # **列**，不以渠道引用的字符串形态作为验收标准。引用前缀只承载排障可读性。
 # （注意：`payments` 表**没有** channel_code 列——渠道身份记在尝试行上。）
 #
@@ -27,8 +27,8 @@ set_channel_status() { # set_channel_status <CODE> <UP|DEGRADED|DOWN>
   assert_status 200 "渠道 $1 → $2"
 }
 
-# 读 payment_attempts.channel_code 列（权威口径），按 attempt_type 过滤取最新一条。
-# 经 /demo/trace?orderId=<orderNo> 查库（该端点已暴露 payment_attempts 全列）。
+# 读 channel_orders.channel_code 列（权威口径），按 attempt_type 过滤取最新一条。
+# 经 /demo/trace?orderId=<orderNo> 查库（该端点已暴露 channel_orders 全列）。
 #
 # 注意：本函数**只向 stdout 输出渠道码**，其余一切（含 http() 的调用日志）一律重定向到
 # stderr —— 否则 `$(attempt_channel_of ...)` 会把日志行一并捕获进变量，断言必然失败。
@@ -43,7 +43,7 @@ except Exception:
     print(''); sys.exit(0)
 rows=[]
 for s in d.get('sections',[]):
-    if s.get('table')=='payment_attempts':
+    if s.get('table')=='channel_orders':
         rows=s.get('rows') or []
 want='$type'; pn='$want_pn'
 hits=[r for r in rows if str(r.get('attempt_type'))==want and (not pn or str(r.get('payment_no'))==pn)]
@@ -119,14 +119,14 @@ assert_status 201 "S1 建支付单（不传渠道）"
 ORDER_NO_S1="$ORDER_NO"; PAYMENT_NO_S1="$PAYMENT_NO"
 settle_pending "$PAYMENT_NO_S1" "$AMOUNT"
 AT1="$(attempt_channel_of "$ORDER_NO_S1" PAYMENT "$PAYMENT_NO_S1")"
-assert_eq "$AT1" "ALIPAY" "S1 payment_attempts.channel_code == ALIPAY（auto 选路生效）"
+assert_eq "$AT1" "ALIPAY" "S1 channel_orders.channel_code == ALIPAY（auto 选路生效）"
 
 echo "==> S2 显式指定 WECHAT → Router 零干预"
 create_order_and_pay "$SKU_ID" "WECHAT"
 assert_status 201 "S2 建支付单（显式 WECHAT）"
 ORDER_NO_S2="$ORDER_NO"; PAYMENT_NO_S2="$PAYMENT_NO"
 AT2="$(attempt_channel_of "$ORDER_NO_S2" PAYMENT "$PAYMENT_NO_S2")"
-assert_eq "$AT2" "WECHAT" "S2 payment_attempts.channel_code == WECHAT（显式优先，未被 auto 覆盖）"
+assert_eq "$AT2" "WECHAT" "S2 channel_orders.channel_code == WECHAT（显式优先，未被 auto 覆盖）"
 settle_pending "$PAYMENT_NO_S2" "$AMOUNT"
 
 echo "==> S3 自动避开停用渠道（ALIPAY=DOWN）→ 自动落 WECHAT"
@@ -140,7 +140,7 @@ create_order_and_pay "$SKU_ID"
 assert_status 201 "S3 建支付单（不传渠道，ALIPAY 已 DOWN）"
 ORDER_NO_S3="$ORDER_NO"; PAYMENT_NO_S3="$PAYMENT_NO"
 AT3="$(attempt_channel_of "$ORDER_NO_S3" PAYMENT "$PAYMENT_NO_S3")"
-assert_eq "$AT3" "WECHAT" "S3 payment_attempts.channel_code == WECHAT（自动绕开 DOWN 渠道）"
+assert_eq "$AT3" "WECHAT" "S3 channel_orders.channel_code == WECHAT（自动绕开 DOWN 渠道）"
 settle_pending "$PAYMENT_NO_S3" "$AMOUNT"
 
 echo "==> S4 显式指定 DOWN 渠道 → 409 CHANNEL_UNAVAILABLE，且不落 payment_attempt"
@@ -154,7 +154,7 @@ HAS_ATTEMPT="$(echo "$BODY" | python -c "
 import json,sys
 try: d=json.load(sys.stdin)
 except Exception: print('False'); sys.exit(0)
-print(any(s.get('table')=='payment_attempts' and s.get('rows') for s in d.get('sections',[])))
+print(any(s.get('table')=='channel_orders' and s.get('rows') for s in d.get('sections',[])))
 " 2>/dev/null)"
 assert_eq "$HAS_ATTEMPT" "False" "S4 未落 payment_attempt（拒绝发生在选路阶段，无部分写入）"
 

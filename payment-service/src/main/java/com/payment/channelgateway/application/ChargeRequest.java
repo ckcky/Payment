@@ -1,6 +1,5 @@
 package com.payment.channelgateway.application;
 
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.common.dto.channel.Goods;
 import com.payment.common.dto.channel.Payer;
 import com.payment.common.dto.channel.PaymentScene;
@@ -22,23 +21,25 @@ import java.util.Map;
  * 键名用渠道原生参数名，便于排障时与渠道文档 / 报文逐项比对。</p>
  *
  * <h3>spec 037 / T3 重构：移除 {@code attemptId}</h3>
- * 原第 2 个分量 {@code Long attemptId} 是 {@code payment_attempts.id}（数据库自增主键），
+ * 原第 2 个分量 {@code Long attemptId} 是 {@code channel_orders.id}（数据库自增主键），
  * 它出现在跨域契约里<b>本身违反 ADR-0063</b>（「跨系统标识一律业务单号，禁止数值 ID」），
  * 且历史已踩 C-12 / S21（把平台侧单号当渠道侧单号传）。
  * 渠道网关自己的业务身份是 {@code channelNo}（CH+雪花，spec 037 / FR-001），
- * 它由 {@link ChannelGateway} 一侧铸造并经 {@code payment_attempts.channel_no} 承载，
- * <b>不再经本契约传递数值主键</b>。
+ * 它由渠道单承载，<b>不再经本契约传递数值主键</b>。
  *
- * <h3>spec 041：追加 {@code orderNo}</h3>
- * 平台侧订单号。真实渠道下单本就需要「商户订单号」，此前本契约缺失该字段，
- * 导致渠道侧无法拼装任何与订单相关的展示信息（收银台链接等），只能由调用方在
- * 渠道域之外代拼——那正是 spec 041 要消灭的「支付域替渠道域做决定」。
- * <b>位置刻意放在分量末位</b>：既有 11 参构造点（含 12 个测试文件）零改动即可编译，
- * 不会因分量错位而静默传错值。
+ * <h3>spec 041：追加 {@code orderNo}，移除 {@code callbackUrls}</h3>
+ * <ul>
+ *   <li><b>追加 {@code orderNo}</b>：真实渠道下单本就需要「商户订单号」，此前本契约缺失该字段，
+ *       导致渠道侧无法拼装任何与订单相关的展示信息。</li>
+ *   <li><b>移除 {@code callbackUrls}</b>：回调地址是<b>渠道协议自己的事</b>——通知地址怎么写、
+ *       要不要拼单号、跳回地址是否必需，每家渠道都不同（支付宝要 notify+return、
+ *       Stripe 只认 return、微信只要 notify）。此前由 payment 层读全局配置拼好再下发，
+ *       等于让资金动作域替渠道域决定协议细节。<b>spec 041 起由各渠道 plugin 读自己的配置自行拼装</b>。</li>
+ * </ul>
  */
 public record ChargeRequest(String paymentNo, long amountMinor,
                             String currencyCode, String channelCode,
-                            PaymentScene scene, Goods goods, CallbackUrls callbackUrls,
+                            PaymentScene scene, Goods goods,
                             Instant expireAt, Payer payer, String attach,
                             Map<String, String> channelExtra,
                             /** spec 041：平台侧订单号（可空，兼容构造下为 null）。 */
@@ -53,20 +54,22 @@ public record ChargeRequest(String paymentNo, long amountMinor,
     public ChargeRequest(String paymentNo, long amountMinor,
                          String currencyCode, String channelCode) {
         this(paymentNo, amountMinor, currencyCode, channelCode,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 
     /**
-     * 兼容构造器（spec 030 / FR-105 的 11 参形态）：无 {@code orderNo}。
+     * 兼容构造器（spec 030 / FR-105 的 10 参形态）：无 {@code orderNo}、无 {@code callbackUrls}。
      *
-     * <p>spec 041 引入 {@code orderNo} 前既有调用点（含测试桩）零改动即可编译。</p>
+     * <p>spec 041 移除 {@code callbackUrls} 前，既有 11 参构造点形如
+     * {@code (…, scene, goods, callbackUrls, expireAt, payer, attach, extra)}。
+     * 该形态<b>已随 spec 041 一并删除</b>——回调地址不再是平台侧下发的入参。</p>
      */
     public ChargeRequest(String paymentNo, long amountMinor,
                          String currencyCode, String channelCode,
-                         PaymentScene scene, Goods goods, CallbackUrls callbackUrls,
+                         PaymentScene scene, Goods goods,
                          Instant expireAt, Payer payer, String attach,
                          Map<String, String> channelExtra) {
-        this(paymentNo, amountMinor, currencyCode, channelCode, scene, goods, callbackUrls,
+        this(paymentNo, amountMinor, currencyCode, channelCode, scene, goods,
                 expireAt, payer, attach, channelExtra, null);
     }
 }

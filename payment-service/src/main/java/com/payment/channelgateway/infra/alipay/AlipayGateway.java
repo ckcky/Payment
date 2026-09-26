@@ -64,7 +64,7 @@ public interface AlipayGateway {
      * 交易查询（{@code alipay.trade.query}）：按平台单号或渠道交易号定位原交易。
      *
      * @param outTradeNo          平台支付单号（与 {@code tradeNo} 至少给一个）
-     * @param channelTransactionId 渠道交易号（即 {@code payment_attempts.channel_reference}）
+     * @param channelTransactionId 渠道交易号（即 {@code channel_orders.channel_reference}）
      * @return 查询结果
      */
     QueryResult query(String outTradeNo, String channelTransactionId);

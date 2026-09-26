@@ -10,10 +10,10 @@ import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.channelgateway.application.RefundRequest;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import java.time.Instant;
@@ -59,7 +59,7 @@ class ChannelQueryTest {
     private static final class Harness {
 
         final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-        final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+        final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
         final PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
         final StubChannel channel = new StubChannel();
         final ReliabilityConfig config = new ReliabilityConfig();
@@ -78,8 +78,8 @@ class ChannelQueryTest {
             Payment payment = Payment.rehydrate(paymentId, "PM-" + paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
                     100, "CNY", "idem-" + paymentId, PaymentStatus.UNKNOWN, attemptId, null, 0, null, 0, 1, "M001");
             payments.save(payment);
-            attempts.save(PaymentAttempt.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
-                    Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
+            attempts.save(ChannelOrder.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
+                    Instant.now().minusSeconds(60), null, null, ChannelOrderStatus.ACCEPTED,
                     null, null, 0, 0L, "CNY"));
             return payment;
         }

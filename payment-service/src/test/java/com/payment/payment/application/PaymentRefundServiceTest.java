@@ -9,9 +9,9 @@ import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.channelgateway.infra.MockChannelAdapter;
 import org.junit.jupiter.api.Test;
@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PaymentRefundServiceTest {
 
     private final InMemoryPaymentRepository repository = new InMemoryPaymentRepository();
-    private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
 
     private PaymentRefundService service(MockChannelAdapter channel) {
         return new PaymentRefundService(repository, attempts, channel, new NoopBusinessMetrics(),
@@ -40,9 +40,9 @@ class PaymentRefundServiceTest {
         // Feature 028 / FR-005 / INV-6：退款渠道取自被退支付单的**生效支付渠道**记录
         // （attempt_type=PAYMENT 且 SUCCEEDED 的 channel_code），所以必须先落这条支付尝试。
         // 用 id=1 会被 INNER 内存仓储的 idGen 自增覆盖，故不显式给 id。
-        PaymentAttempt paid = PaymentAttempt.rehydrate(null, saved.getPaymentNo(), "MOCK", 0,
-                java.time.Instant.now(), java.time.Instant.now(), "mock-ref", PaymentAttemptStatus.SUCCEEDED,
-                null, null, 0, PaymentAttempt.TYPE_PAYMENT, 100, "CNY");
+        ChannelOrder paid = ChannelOrder.rehydrate(null, saved.getPaymentNo(), "MOCK", 0,
+                java.time.Instant.now(), java.time.Instant.now(), "mock-ref", ChannelOrderStatus.SUCCEEDED,
+                null, null, 0, ChannelOrder.TYPE_PAYMENT, 100, "CNY");
         attempts.save(paid);
         return saved;
     }
@@ -82,13 +82,13 @@ class PaymentRefundServiceTest {
         // Feature 016 / FR-017 ②：退款渠道尝试落库（attempt_type=REFUND，channel_reference=渠道退款流水号）
         // Feature 028：PAYMENT 尝试（生效支付渠道）之外新增 1 条 REFUND 尝试，共 2 条
         assertThat(attempts.findByPaymentNo(payment.getPaymentNo())).hasSize(2);
-        PaymentAttempt attempt = attempts.findByPaymentNo(payment.getPaymentNo()).stream()
-                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType()))
+        ChannelOrder attempt = attempts.findByPaymentNo(payment.getPaymentNo()).stream()
+                .filter(a -> ChannelOrder.TYPE_REFUND.equals(a.getAttemptType()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(attempt.getAttemptType()).isEqualTo(PaymentAttempt.TYPE_REFUND);
+        assertThat(attempt.getAttemptType()).isEqualTo(ChannelOrder.TYPE_REFUND);
         assertThat(attempt.getChannelReference()).isEqualTo(response.channelReference());
-        assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(attempt.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
         // spec 018 / US1 / D2：REFUND 尝试记所属支付单金额（100），而非退款金额（50）
         assertThat(attempt.getAmountMinor()).isEqualTo(100);
         assertThat(attempt.getCurrencyCode()).isEqualTo("CNY");

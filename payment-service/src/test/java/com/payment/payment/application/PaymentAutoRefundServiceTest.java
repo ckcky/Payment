@@ -12,10 +12,10 @@ import com.payment.common.dto.rpc.RefundCommandRequest;
 import com.payment.common.dto.rpc.RefundCommandResponse;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.channelgateway.infra.MockChannelAdapter;
 import com.payment.payment.application.refund.RefundApplicationService;
@@ -37,7 +37,7 @@ import org.junit.jupiter.api.Test;
 class PaymentAutoRefundServiceTest {
 
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-    private final InMemoryPaymentAttemptRepository paymentAttempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository paymentAttempts = new InMemoryChannelOrderRepository();
     private final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
     private final RefundTestStack refundFakes = new RefundTestStack();
     private final BusinessMetrics metrics = new NoopBusinessMetrics();
@@ -50,9 +50,9 @@ class PaymentAutoRefundServiceTest {
         payments.save(payment);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         // Feature 028 / FR-005 / INV-6：退款渠道取自被退支付单的**生效支付渠道**记录，先落这条 PAYMENT 尝试。
-        paymentAttempts.save(PaymentAttempt.rehydrate(null, payment.getPaymentNo(), "MOCK", 0,
-                java.time.Instant.now(), java.time.Instant.now(), "mock-ref", PaymentAttemptStatus.SUCCEEDED,
-                null, null, 0, PaymentAttempt.TYPE_PAYMENT, 100, "CNY"));
+        paymentAttempts.save(ChannelOrder.rehydrate(null, payment.getPaymentNo(), "MOCK", 0,
+                java.time.Instant.now(), java.time.Instant.now(), "mock-ref", ChannelOrderStatus.SUCCEEDED,
+                null, null, 0, ChannelOrder.TYPE_PAYMENT, 100, "CNY"));
         return payment;
     }
 
@@ -93,7 +93,7 @@ class PaymentAutoRefundServiceTest {
         // Feature 028：PAYMENT 尝试（生效支付渠道）之外新增 1 条 REFUND 尝试，共 2 条
         assertThat(paymentAttempts.findByPaymentNo(payment.getPaymentNo())).hasSize(2);
         assertThat(paymentAttempts.findByPaymentNo(payment.getPaymentNo()).stream()
-                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType())).count())
+                .filter(a -> ChannelOrder.TYPE_REFUND.equals(a.getAttemptType())).count())
                 .isEqualTo(1);
         // 支付单保留 SUCCEEDED，不回滚
         assertThat(payments.findByPaymentNo(payment.getPaymentNo()).orElseThrow().getStatus())
@@ -202,11 +202,11 @@ class PaymentAutoRefundServiceTest {
         assertThat(refundFakes.order.refundNotifications.get(0).transactionRefundNo()).isEqualTo("TXRF-AR-1");
         assertThat(refundFakes.order.refundNotifications.get(0).paymentRefundNo()).isEqualTo(response.refundNo());
         // fix：异步受理落 UNKNOWN 的 REFUND 尝试行，随回调权威结果收敛 SUCCEEDED（不再永久滞留 UNKNOWN）
-        PaymentAttempt refundAttempt = paymentAttempts.findByPaymentNo(payment.getPaymentNo()).stream()
-                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType()))
+        ChannelOrder refundAttempt = paymentAttempts.findByPaymentNo(payment.getPaymentNo()).stream()
+                .filter(a -> ChannelOrder.TYPE_REFUND.equals(a.getAttemptType()))
                 .reduce((first, second) -> second)
                 .orElseThrow();
-        assertThat(refundAttempt.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(refundAttempt.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
         assertThat(refundAttempt.getChannelReference()).startsWith("mock-refund-ref-");
     }
 }

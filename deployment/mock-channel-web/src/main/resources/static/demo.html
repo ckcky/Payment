@@ -136,9 +136,9 @@
             </table>
 
             <div class="pa-disc" style="margin-top:16px">
-              <button class="pa-disc__head" type="button"><span class="caret">›</span><span>退款渠道尝试（payment_attempts）</span><span class="cnt">Feature 016</span></button>
+              <button class="pa-disc__head" type="button"><span class="caret">›</span><span>退款渠道尝试（channel_orders）</span><span class="cnt">Feature 016</span></button>
               <div class="pa-disc__body"><div>
-                <div class="pa-note" style="padding:4px 12px 8px">调渠道后落 payment_attempts（attempt_type=REFUND），channel_reference 即真实渠道退款流水号。REJECTED 在调渠道前被拒，无尝试记录，属预期。</div>
+                <div class="pa-note" style="padding:4px 12px 8px">调渠道后落 channel_orders（attempt_type=REFUND），channel_reference 即真实渠道退款流水号。REJECTED 在调渠道前被拒，无尝试记录，属预期。</div>
                 <table class="pa-table">
                   <thead><tr><th>payment_no</th><th>类型</th><th>渠道</th><th>channel_reference</th><th>状态</th></tr></thead>
                   <tbody id="refundAttemptRows"><tr><td colspan="5" style="color:var(--pa-ink-3)">（尚无退款渠道尝试）</td></tr></tbody>
@@ -299,7 +299,7 @@ function openSandboxCredential() {
 const REFUND_TERMINAL = ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED', 'REJECTED', 'CLOSED'];
 
 /* ---- 全链路 DB：9 张表按 5 个域分组（默认折叠，组头显示行数）---- */
-/** 退款分组改为「表名 + 标签」双判据：渠道层退款尝试的表名是 payment_attempts(REFUND)，
+/** 退款分组改为「表名 + 标签」双判据：渠道层退款尝试的表名是 channel_orders(REFUND)，
  *  纯按表名匹配会同时落进「支付」组（重复展示），按标签里的「退款」归类才唯一。 */
 const isRefundSection = (s) => /refund|退款/i.test((s.table || '') + ' ' + (s.label || ''));
 const DOMAINS = [

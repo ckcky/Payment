@@ -18,7 +18,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         // spec 027 / ADR-0071：限额子域三表 Mapper 与支付域同库，须一并扫描
         "com.payment.payment.limit.infra.persistence",
         // spec 034：出站失败台账 pending_postings Mapper
-        "com.payment.posting.infra.persistence"})
+        "com.payment.posting.infra.persistence",
+        // spec 041：渠道单 channel_orders 的 Mapper（随 ChannelOrder 从 payment 域迁入渠道网关域，
+        // 包路径从 com.payment.payment.infra.persistence.attempt 变为本包）。
+        // ⚠️ 顶层包新增/搬迁时**MUST**在此登记：漏登记不会编译报错，而是启动即
+        // NoSuchBeanDefinitionException: ChannelOrderMapper（本类是全仓唯一 MapperScan 声明点）。
+        "com.payment.channelgateway.infra.persistence"})
 public class PaymentApplication {
 
     public static void main(String[] args) {

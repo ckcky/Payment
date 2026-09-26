@@ -2,8 +2,8 @@ package com.payment.payment.application;
 
 import com.payment.payment.api.dto.PaymentFactResponse;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import org.junit.jupiter.api.Test;
 
@@ -17,13 +17,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PaymentFactsServiceTest {
 
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-    private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
 
     @Test
     void confirmedFactsReturnsOnlySucceededPayments() {
         Payment succeeded = new Payment("txn-1", "order-1", "user-1", 100, "CNY", "idem-1");
         succeeded = payments.save(succeeded);
-        PaymentAttempt attempt = new PaymentAttempt(succeeded.getPaymentNo(), "mock", 0,
+        ChannelOrder attempt = new ChannelOrder(succeeded.getPaymentNo(), "mock", 0,
                 succeeded.getAmountMinor(), succeeded.getCurrencyCode());
         attempt = attempts.save(attempt);
         attempt.accept("channel-ref-1");
@@ -34,7 +34,7 @@ class PaymentFactsServiceTest {
 
         Payment failed = new Payment("txn-2", "order-2", "user-1", 200, "CNY", "idem-2");
         failed = payments.save(failed);
-        PaymentAttempt failedAttempt = new PaymentAttempt(failed.getPaymentNo(), "mock", 0,
+        ChannelOrder failedAttempt = new ChannelOrder(failed.getPaymentNo(), "mock", 0,
                 failed.getAmountMinor(), failed.getCurrencyCode());
         failedAttempt = attempts.save(failedAttempt);
         failed.start(failedAttempt.getId());

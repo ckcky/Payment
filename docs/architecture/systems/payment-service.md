@@ -14,7 +14,7 @@
 
 ## 1. 职责（Responsibility）
 
-**payment 支付层**：支付意图、支付金额/币种、幂等键、支付状态机、渠道结果应用、回调幂等、UNKNOWN 收敛、支付成功回写订单/交易（RPC）、对账支付事实抽取、支付指令编排（含记账）、**渠道凭证到 `payUrl` 的出参**（spec 030）；**channelAttempt 渠道层**：渠道交互生命周期（`PaymentAttempt`）、渠道实现族、渠道身份与注册表（spec 028）、**统一渠道契约**（spec 030 / ADR-0075）、**渠道模态（mock / 真实）的落库与分流**（spec 030 / ADR-0076）
+**payment 支付层**：支付意图、支付金额/币种、幂等键、支付状态机、渠道结果应用、回调幂等、UNKNOWN 收敛、支付成功回写订单/交易（RPC）、对账支付事实抽取、支付指令编排（含记账）、**渠道凭证到 `payUrl` 的出参**（spec 030）；**channelgateway 渠道网关层**：**渠道单**（`ChannelOrder`，表 `channel_orders`——原 `PaymentAttempt` / `payment_attempts`，spec 041 随域迁入并正名）的开单 / 收敛 / 落库，**唯一写入口 `ChannelOrderService`**（spec 041：payment 层不再写该表、两侧事务已拆分，终态偏差由主动查询 / 超时扫描 / 对账收敛）、渠道回执的两个入向端点、渠道实现族、渠道身份与注册表（spec 028）、**统一渠道契约**（spec 030 / ADR-0075）、**渠道模态（mock / 真实）的落库与分流**（spec 030 / ADR-0076）、**扣款派发策略**（spec 041 / `ChargeDispatchPolicy`：演示收银台裁决收在渠道侧）
 
 ### 1.1 技术指标（`[目标]`，待确认）
 

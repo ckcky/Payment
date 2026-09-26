@@ -6,9 +6,9 @@ import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.payment.application.reliability.ReliabilityConfig;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.Refund;
 import com.payment.payment.domain.RefundRepository;
 import com.payment.payment.domain.RefundStatus;
@@ -48,7 +48,7 @@ public class RefundUnknownQueryScheduler {
     private static final String MODULE = "refund";
 
     private final RefundRepository refundRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
     /** 渠道网关门面（spec 037 / FR-007 / INV-1）：按<b>已记录</b>渠道码精确查询，门面不重新选路（INV-6）。 */
     private final ChannelGateway channelGateway;
     private final RefundResultProcessor resultProcessor;
@@ -62,7 +62,7 @@ public class RefundUnknownQueryScheduler {
     private final Map<String, Boolean> exhaustedReported = new ConcurrentHashMap<>();
 
     public RefundUnknownQueryScheduler(RefundRepository refundRepository,
-                                       PaymentAttemptRepository attemptRepository,
+                                       ChannelOrderRepository attemptRepository,
                                        ChannelGateway channelGateway,
                                        RefundResultProcessor resultProcessor,
                                        ReliabilityConfig config,
@@ -157,11 +157,11 @@ public class RefundUnknownQueryScheduler {
      * 计数<b>之前</b>就暴露（与改造前 {@code resolve} 的位置逐字等价，NFR-2）。</p>
      */
     private RecordedTarget resolveRecordedTarget(Refund refund) {
-        PaymentAttempt attempt = attemptRepository.findByPaymentNo(refund.getPaymentNo()).stream()
-                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType()))
-                .filter(a -> a.getStatus() != PaymentAttemptStatus.PENDING)
+        ChannelOrder attempt = attemptRepository.findByPaymentNo(refund.getPaymentNo()).stream()
+                .filter(a -> ChannelOrder.TYPE_REFUND.equals(a.getAttemptType()))
+                .filter(a -> a.getStatus() != ChannelOrderStatus.PENDING)
                 .filter(a -> a.getChannelCode() != null && !a.getChannelCode().isBlank())
-                .sorted(Comparator.comparing(PaymentAttempt::getId,
+                .sorted(Comparator.comparing(ChannelOrder::getId,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .findFirst()
                 .orElseThrow(() -> com.payment.common.core.error.BizException.of(

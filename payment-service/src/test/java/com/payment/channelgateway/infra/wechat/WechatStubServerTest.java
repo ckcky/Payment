@@ -9,7 +9,6 @@ import com.payment.channelgateway.application.spi.ParsedCallback;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.rpc.BusinessCode;
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.common.dto.channel.Goods;
 import com.payment.common.dto.channel.PayCredential;
 import com.payment.common.dto.channel.PaymentScene;
@@ -250,8 +249,8 @@ class WechatStubServerTest {
 
         ChannelResult result = plugin.charge(new ChargeRequest(
                 "PM002", 100L, "CNY", "WECHAT", PaymentScene.JSAPI, Goods.of("测试商品"),
-                new CallbackUrls(NOTIFY, null), Instant.now().plusSeconds(300),
-                com.payment.common.dto.channel.Payer.of("openid-test-1"), null, null));
+                Instant.now().plusSeconds(300),
+                com.payment.common.dto.channel.Payer.of("openid-test-1"), null, null, null));
 
         assertThat(result.credential().kind()).isEqualTo(PayCredential.Kind.JSAPI_PARAMS);
         assertThat(result.credential().payload()).contains("\"package\":\"prepay_id=wx-prepay-stub-0001\"");
@@ -292,8 +291,8 @@ class WechatStubServerTest {
 
     private static ChargeRequest nativeCharge(String paymentNo, long amountMinor) {
         return new ChargeRequest(paymentNo, amountMinor, "CNY", "WECHAT",
-                PaymentScene.NATIVE, Goods.of("测试商品"), new CallbackUrls(NOTIFY, null),
-                Instant.now().plusSeconds(300), null, null, null);
+                PaymentScene.NATIVE, Goods.of("测试商品"),
+                Instant.now().plusSeconds(300), null, null, null, null);
     }
 
     private static ChannelCallbackEnvelope signedNotification() {

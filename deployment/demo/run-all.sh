@@ -34,7 +34,7 @@ bash "$HERE/scenario-audit.sh"
 # spec 029：Redis 事务消息通道（D1~D6；需 payment-redis 容器可访问）
 bash "$HERE/scenario-mq.sh"
 bash "$HERE/scenario-reconciliation.sh"
-# spec 028：渠道路由六场景（S1~S6；断言读 payment_attempts.channel_code 列）
+# spec 028：渠道路由六场景（S1~S6；断言读 channel_orders.channel_code 列）
 bash "$HERE/scenario-routing.sh"
 bash "$HERE/scenario-refund.sh"
 # UNKNOWN 路径需 payment-service 以 BUSINESS_UNKNOWN 场景运行（构造期注入，ADR-0049）

@@ -8,15 +8,16 @@ import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
-import com.payment.channelgateway.application.ChannelAttemptRecorder;
+import com.payment.channelgateway.application.ChannelOrderService;
+import com.payment.channelgateway.application.ChannelOrderServices;
 import com.payment.channelgateway.application.ChannelGateway;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.RefundRequest;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.util.List;
@@ -37,27 +38,27 @@ import org.springframework.stereotype.Service;
 public class PaymentRefundService {
 
     private final PaymentRepository paymentRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
     /**
      * 渠道网关门面（spec 037 / FR-007 / INV-1）：反向路径同样只经门面——按<b>已记录</b>的
      * 渠道码精确解析，门面内部<b>不</b>重新选路（INV-6）。
      */
     private final ChannelGateway channelGateway;
-    private final ChannelAttemptRecorder attemptRecorder;
+    private final ChannelOrderService channelOrderService;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
     /** 生产主构造：Spring 必须确定地选它（另有测试用兼容构造，故显式标注）。 */
     @org.springframework.beans.factory.annotation.Autowired
     public PaymentRefundService(PaymentRepository paymentRepository,
-                                PaymentAttemptRepository attemptRepository,
+                                ChannelOrderRepository attemptRepository,
                                 ChannelGateway channelGateway,
-                                ChannelAttemptRecorder attemptRecorder,
+                                ChannelOrderService channelOrderService,
                                 BusinessMetrics metrics,
                                 StructuredAuditLogger auditLogger) {        this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
         this.channelGateway = channelGateway;
-        this.attemptRecorder = attemptRecorder;
+        this.channelOrderService = channelOrderService;
         // 退款业务指标（refund.*）由拥有退款生命周期的 refund-service 记录；支付侧退款尝试
         // 仅是渠道透传（不迁移支付领域状态），故此处只注入、不记录。
         this.metrics = metrics;
@@ -68,16 +69,16 @@ public class PaymentRefundService {
      * 兼容构造（Feature 028 / FR-036 / SC-012）：保留既有「单通道」签名，
      * 内部包装为「单通道注册表 + 仓储兼作写入口」——既有测试零改动。
      *
-     * <p>{@code attemptRepository} 同时充当 {@link ChannelAttemptRecorder}（内存实现两者兼备）。</p>
+     * <p>{@code attemptRepository} 同时充当 {@link ChannelOrderService}（内存实现两者兼备）。</p>
      */
     public PaymentRefundService(PaymentRepository paymentRepository,
-                                PaymentAttemptRepository attemptRepository,
+                                ChannelOrderRepository attemptRepository,
                                 PaymentChannel singleChannel,
                                 BusinessMetrics metrics,
                                 StructuredAuditLogger auditLogger) {
         this(paymentRepository, attemptRepository,
                 ChannelGateway.ofSingleChannel(singleChannel),
-                ChannelAttemptRecorders.of(attemptRepository), metrics, auditLogger);
+                ChannelOrderServices.of(attemptRepository), metrics, auditLogger);
     }
 
     public PaymentAmountQueryResponse queryAmount(PaymentAmountQueryRequest request) {
@@ -85,7 +86,7 @@ public class PaymentRefundService {
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + request.paymentNo()));
         // spec 031 §9：REFUND 记账事件需 merchantId + 生效渠道码——资格查询顺带带出事实；
         // 宽松解析（无生效 attempt 不抛），拒绝路径的查询不应因记账槽位缺事实而失败。
-        PaymentAttempt effective = payment.getStatus() == PaymentStatus.SUCCEEDED
+        ChannelOrder effective = payment.getStatus() == PaymentStatus.SUCCEEDED
                 ? findEffectiveAttempt(payment.getPaymentNo()) : null;
         return new PaymentAmountQueryResponse(payment.getPaymentNo(), payment.getOrderNo(), payment.getUserId(),
                 payment.getAmountMinor(), payment.getCurrencyCode(), payment.getStatus().name(),
@@ -100,7 +101,7 @@ public class PaymentRefundService {
                     "payment not refundable in status " + payment.getStatus());
         }
         // INV-6 / FR-024：渠道取自被退支付单的生效支付渠道，经门面精确解析——不调 Router、不硬编码
-        PaymentAttempt effective = resolveEffectiveAttempt(request.paymentNo());
+        ChannelOrder effective = resolveEffectiveAttempt(request.paymentNo());
         String channelCode = effective.getChannelCode();
         // spec 030 / FR-153（T64）：退款是<b>反向路径</b>——没有入站 HTTP 请求，染色 ThreadLocal 为空。
         // 必须用<b>落库的模态</b>（生效 attempt 行的 channelMode）包裹渠道调用；
@@ -143,8 +144,8 @@ public class PaymentRefundService {
      * <p><b>确定性排序（同 FR-272）</b>：多条 SUCCEEDED attempt 时恒取 {@code id} 最小者，
      * 避免「退到哪个渠道」取决于数据库返回顺序。</p>
      */
-    private PaymentAttempt resolveEffectiveAttempt(String paymentNo) {
-        PaymentAttempt effective = findEffectiveAttempt(paymentNo);
+    private ChannelOrder resolveEffectiveAttempt(String paymentNo) {
+        ChannelOrder effective = findEffectiveAttempt(paymentNo);
         if (effective == null) {
             throw BizException.of(ErrorCodes.INTERNAL_ERROR,
                     "no effective payment channel for payment " + paymentNo
@@ -154,26 +155,26 @@ public class PaymentRefundService {
     }
 
     /** 生效支付 attempt 的宽松查找：找不到返回 null（是否 fail-fast 由调用方按场景决定）。 */
-    private PaymentAttempt findEffectiveAttempt(String paymentNo) {
-        List<PaymentAttempt> attempts = attemptRepository.findByPaymentNo(paymentNo);
+    private ChannelOrder findEffectiveAttempt(String paymentNo) {
+        List<ChannelOrder> attempts = attemptRepository.findByPaymentNo(paymentNo);
         return attempts.stream()
-                .filter(a -> PaymentAttempt.TYPE_PAYMENT.equals(a.getAttemptType()))
-                .filter(a -> a.getStatus() == PaymentAttemptStatus.SUCCEEDED)
+                .filter(a -> ChannelOrder.TYPE_PAYMENT.equals(a.getAttemptType()))
+                .filter(a -> a.getStatus() == ChannelOrderStatus.SUCCEEDED)
                 .filter(a -> a.getChannelCode() != null && !a.getChannelCode().isBlank())
-                .sorted(java.util.Comparator.comparing(PaymentAttempt::getId,
+                .sorted(java.util.Comparator.comparing(ChannelOrder::getId,
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
                 .findFirst()
                 .orElse(null);
     }
 
     /**
-     * 退款渠道尝试落库（Feature 016 / FR-017 第②步 / N4 修复）：复用 {@code payment_attempts}
+     * 退款渠道尝试落库（Feature 016 / FR-017 第②步 / N4 修复）：复用 {@code channel_orders}
      * 落一条 REFUND 类型尝试（payment_no 关联 + channel_reference = 渠道退款流水号，唯一约束兜底），
      * 对账退款事实据此取得真实渠道退款流水号（废弃 {@code refund-{id}} 合成引用）。
      * 渠道引用重复（重试/幂等重放）按唯一约束吸收，不影响退款结果回传。
      *
      * <p><b>Feature 028 / FR-005</b>：{@code channelCode} 取自生效支付渠道（消除 S5 硬编码
-     * {@code "mock"}）；attempt 写操作经渠道层端口 {@link ChannelAttemptRecorder}（INV-5）。</p>
+     * {@code "mock"}）；attempt 写操作经渠道层端口 {@link ChannelOrderService}（INV-5）。</p>
      */
     private void recordRefundChannelAttempt(Payment payment, RefundAttemptRequest request,
                                             String channelCode, ChannelResult result) {
@@ -181,7 +182,7 @@ public class PaymentRefundService {
         // payment 层只交出资金口径（D2：所属支付单金额，而非退款金额）与权威渠道结果，
         // 不再自己 new / converge / save attempt，也不再自己 catch 重复键——
         // 「重复键意味着什么」需要渠道引用的语义，只有渠道层能答（无条件吸收正是 F5 的伪装来源）。
-        attemptRecorder.recordRefundAttempt(request.paymentNo(), channelCode,
+        channelOrderService.recordRefundAttempt(request.paymentNo(), channelCode,
                 payment.getAmountMinor(), payment.getCurrencyCode(), result);
     }
 }

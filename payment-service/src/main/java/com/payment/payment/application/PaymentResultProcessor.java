@@ -6,10 +6,10 @@ import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.PaymentSucceededRequest;
-import com.payment.channelgateway.application.ChannelAttemptRecorder;
+import com.payment.channelgateway.application.ChannelOrderService;
+import com.payment.channelgateway.domain.ChannelOrder;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.mq.PaymentEventPublisher;
 import org.slf4j.Logger;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  * 保证通知与记账只在支付真正迁移为成功时执行一次。
  *
  * <p>Feature 016（ADR-0054）职责归位：payment 退回<b>能力提供方</b>——支付成功后编排完成
- * 自身支付指令（渠道结果落 {@code payment_attempts} + 记账 {@code ledgerGateway.postPaymentCapture}），
+ * 自身支付指令（渠道结果落 {@code channel_orders} + 记账 {@code ledgerGateway.postPaymentCapture}），
  * 业务侧扇出<b>仅通知 order-service</b>（order 为业务编排者，由其 transaction 层判定正常/surplus
  * 并驱动履约 / 自动退款）。payment MUST NOT 直调 FulfillmentGateway 或 AutoRefundGateway。</p>
  */
@@ -34,7 +34,7 @@ public class PaymentResultProcessor {
     private static final Logger log = LoggerFactory.getLogger(PaymentResultProcessor.class);
 
     private final PaymentRepository paymentRepository;
-    private final ChannelAttemptRecorder attemptRecorder;
+    private final ChannelOrderService channelOrderService;
     private final OrderGateway orderGateway;
     private final LedgerPostingGateway ledgerGateway;
     private final BusinessMetrics metrics;
@@ -54,43 +54,43 @@ public class PaymentResultProcessor {
     /** 生产主构造：Spring 必须唯一确定地选它（另有测试用兼容构造，故显式标注）。 */
     @Autowired
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
                                   LimitSettlementHook limitSettlement,
                                   ObjectProvider<PaymentEventPublisher> mqProvider) {
-        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics,
+        this(paymentRepository, channelOrderService, orderGateway, ledgerGateway, metrics,
                 new StructuredAuditLogger(), limitSettlement,
                 mqProvider == null ? null : mqProvider.getIfAvailable());
     }
 
     /** 显式指定审计器（测试场景可捕获 FINANCIAL_AUDIT；生产走默认构造）。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
                                   StructuredAuditLogger auditLogger) {
-        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics, auditLogger,
+        this(paymentRepository, channelOrderService, orderGateway, ledgerGateway, metrics, auditLogger,
                 LimitSettlementHook.noop(), null);
     }
 
     /** 全参构造：显式给出额度结算钩子（spec 027）。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
                                   StructuredAuditLogger auditLogger,
                                   LimitSettlementHook limitSettlement) {
-        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics, auditLogger,
+        this(paymentRepository, channelOrderService, orderGateway, ledgerGateway, metrics, auditLogger,
                 limitSettlement, null);
     }
 
     /** 全参构造（含 MQ 发布器，spec 029）。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics,
@@ -98,7 +98,7 @@ public class PaymentResultProcessor {
                                   LimitSettlementHook limitSettlement,
                                   PaymentEventPublisher mq) {
         this.paymentRepository = paymentRepository;
-        this.attemptRecorder = attemptRecorder;
+        this.channelOrderService = channelOrderService;
         this.orderGateway = orderGateway;
         this.ledgerGateway = ledgerGateway;
         this.metrics = metrics;
@@ -111,13 +111,13 @@ public class PaymentResultProcessor {
      * 兼容构造（Feature 028 / FR-036）：仅接「按 attempt 写」的渠道层端口兜底实现，
      * 保持既有「无账本 / 无指标」重载签名语义——既有测试零改动（SC-012）。
      *
-     * <p>{@code InMemoryPaymentAttemptRepository} 已直接实现 {@link ChannelAttemptRecorder}，
+     * <p>{@code InMemoryChannelOrderRepository} 已直接实现 {@link ChannelOrderService}，
      * 故既有测试传仓储即可匹配本构造，无需额外的仓储重载（避免重载歧义）。</p>
      */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway) {
-        this(paymentRepository, attemptRecorder, orderGateway,
+        this(paymentRepository, channelOrderService, orderGateway,
                 facts -> {
                 },
                 new NoopBusinessMetrics());
@@ -125,19 +125,19 @@ public class PaymentResultProcessor {
 
     /** 兼容构造：显式指定记账网关（测试场景），指标用空实现。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway) {
-        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, new NoopBusinessMetrics());
+        this(paymentRepository, channelOrderService, orderGateway, ledgerGateway, new NoopBusinessMetrics());
     }
 
     /** 兼容构造：显式指定记账网关与指标（测试场景），审计器取默认实现。 */
     public PaymentResultProcessor(PaymentRepository paymentRepository,
-                                  ChannelAttemptRecorder attemptRecorder,
+                                  ChannelOrderService channelOrderService,
                                   OrderGateway orderGateway,
                                   LedgerPostingGateway ledgerGateway,
                                   BusinessMetrics metrics) {
-        this(paymentRepository, attemptRecorder, orderGateway, ledgerGateway, metrics,
+        this(paymentRepository, channelOrderService, orderGateway, ledgerGateway, metrics,
                 new StructuredAuditLogger(), LimitSettlementHook.noop());
     }
 
@@ -145,13 +145,14 @@ public class PaymentResultProcessor {
     public boolean applyAndNotify(String paymentNo, ChannelResult result) {
         Payment payment = paymentRepository.findByPaymentNo(paymentNo)
                 .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentNo));
-        PaymentAttempt attempt = attemptRecorder.require(payment.getCurrentAttemptId());
-        // Feature 028 / FR-004：先收敛 attempt（渠道层）→ 再推进 payment（payment 层），
-        // 顺序与拆分前一致（plan §B4 风险点）。
-        attemptRecorder.converge(attempt, result);
+        // spec 041：渠道单在**渠道侧**一个事务内收敛（载入 → 收敛 → 落库）；payment 侧不再
+        // require / converge / save 三步编排渠道单——那是渠道域的生命周期。
+        // 顺序不变：渠道事实先成形，payment 终态再反映它（plan §B4 风险点）。
+        // retries=0：回调路径没有「请求内重试轮次」这回事（重试只发生在同步 charge 路径）。
+        // 返回收敛后的渠道单：后续记账要用的渠道码就在它上面（回调报文不带渠道码）。
+        ChannelOrder channelOrder = channelOrderService.converge(payment.getCurrentAttemptId(), result, 0);
         boolean changed = PaymentResultApplier.applyPayment(payment, result);
         paymentRepository.save(payment);
-        attemptRecorder.save(attempt);
         // spec 034 §6.3 / T18（C-23）：CLOSED 上的渠道迟到成功——终态吸收不变（Payment 不复活，
         // R-3），但「渠道已收款」事实必须告知 order 追回：计数 + late=true 通知，
         // order 既有 ORDER_NOT_PAYABLE surplus 分支自动原路退回（不改 order 判断逻辑）。
@@ -212,7 +213,7 @@ public class PaymentResultProcessor {
             // 分支产生的 REFUND 冲正记账由 reconciliation 差异处置发现与处置）。
             if (changed) {
                 ledgerGateway.postPaymentCapture(new LedgerPostingGateway.PaymentCaptureFacts(
-                        payment.getPaymentNo(), payment.getMerchantId(), attempt.getChannelCode(),
+                        payment.getPaymentNo(), payment.getMerchantId(), channelOrder.getChannelCode(),
                         payment.getAmountMinor(), 0L, 0L, payment.getCurrencyCode()));
             }
         }

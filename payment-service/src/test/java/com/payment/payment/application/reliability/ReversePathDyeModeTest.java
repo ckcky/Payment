@@ -11,9 +11,9 @@ import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.channelgateway.application.RefundRequest;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * spec 030 / Phase 6：反向路径（主动查询 / 退款）的<b>自足性</b>。
  *
- * <p>反向路径没有入站 HTTP 请求 ⇒ 染色 ThreadLocal 为空 ⇒ 只能靠 {@code payment_attempts}
+ * <p>反向路径没有入站 HTTP 请求 ⇒ 染色 ThreadLocal 为空 ⇒ 只能靠 {@code channel_orders}
  * 落库的 {@code channelMode} 还原模态。本测试锁死三件事：
  * <ol>
  *   <li>渠道调用<b>被落库模态包裹</b>（FR-271 / FR-153）；</li>
@@ -85,10 +85,10 @@ class ReversePathDyeModeTest {
     @DisplayName("查询：SANDBOX 单在 ThreadLocal 为空时仍以 SANDBOX 调用渠道 [FR-271]")
     void queryUsesRecordedSandboxMode() {
         RecordingChannel channel = new RecordingChannel("ALIPAY");
-        InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-        PaymentAttempt attempt = PaymentAttempt.rehydrate(10L, "PM-1", "ALIPAY", 0, null, null,
-                "ch-txn-1", PaymentAttemptStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY",
-                java.util.Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX"));
+        InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
+        ChannelOrder attempt = ChannelOrder.rehydrate(10L, "PM-1", "ALIPAY", 0, null, null,
+                "ch-txn-1", ChannelOrderStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY",
+                java.util.Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX"));
         attempts.save(attempt);
 
         // ThreadLocal 为空（反向路径的真实形态）
@@ -111,10 +111,10 @@ class ReversePathDyeModeTest {
     @DisplayName("查询：请求必须带渠道交易号（attempt.channel_reference），不是平台交易号 [FR-270]")
     void queryCarriesChannelTransactionId() {
         RecordingChannel channel = new RecordingChannel("ALIPAY");
-        InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-        attempts.save(PaymentAttempt.rehydrate(10L, "PM-1", "ALIPAY", 0, null, null,
-                "ch-txn-1", PaymentAttemptStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY",
-                java.util.Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
+        InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
+        attempts.save(ChannelOrder.rehydrate(10L, "PM-1", "ALIPAY", 0, null, null,
+                "ch-txn-1", ChannelOrderStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY",
+                java.util.Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX")));
 
         channel.queryStatus(new QueryStatusRequest("PM-1", "txn-platform", "idem-1", "ch-txn-1"));
 
@@ -128,22 +128,22 @@ class ReversePathDyeModeTest {
     @Test
     @DisplayName("多条 attempt 时取 id 最小者：解析结果可复现，不依赖返回顺序 [FR-272]")
     void resolveIsDeterministic() {
-        InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+        InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
         // 故意「倒序」插入：后插的 id 更大
-        PaymentAttempt second = PaymentAttempt.rehydrate(20L, "PM-1", "WECHAT", 0, null, null,
-                "ch-b", PaymentAttemptStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY", null);
-        PaymentAttempt first = PaymentAttempt.rehydrate(10L, "PM-1", "ALIPAY", 0, null, null,
-                "ch-a", PaymentAttemptStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY", null);
+        ChannelOrder second = ChannelOrder.rehydrate(20L, "PM-1", "WECHAT", 0, null, null,
+                "ch-b", ChannelOrderStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY", null);
+        ChannelOrder first = ChannelOrder.rehydrate(10L, "PM-1", "ALIPAY", 0, null, null,
+                "ch-a", ChannelOrderStatus.ACCEPTED, null, null, 1, "PAYMENT", 1000L, "CNY", null);
         attempts.save(second);
         attempts.save(first);
 
         // findByPaymentNo 内部按 map 迭代顺序，顺序不保证；解析侧排序后才确定
-        java.util.Comparator<PaymentAttempt> byId =
-                java.util.Comparator.comparing(PaymentAttempt::getId,
+        java.util.Comparator<ChannelOrder> byId =
+                java.util.Comparator.comparing(ChannelOrder::getId,
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
-        PaymentAttempt chosen = attempts.findByPaymentNo("PM-1").stream()
-                .filter(a -> PaymentAttempt.TYPE_PAYMENT.equals(a.getAttemptType()))
-                .filter(a -> a.getStatus() != PaymentAttemptStatus.PENDING)
+        ChannelOrder chosen = attempts.findByPaymentNo("PM-1").stream()
+                .filter(a -> ChannelOrder.TYPE_PAYMENT.equals(a.getAttemptType()))
+                .filter(a -> a.getStatus() != ChannelOrderStatus.PENDING)
                 .sorted(byId)
                 .findFirst().orElseThrow();
 
@@ -156,7 +156,7 @@ class ReversePathDyeModeTest {
     @Test
     @DisplayName("无记录渠道 ⇒ INTERNAL_ERROR，绝不回落默认渠道 [FR-273]")
     void noRecordedChannelThrows() {
-        InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+        InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
         ChannelQueryService service = queryService(attempts, new RecordingChannel("ALIPAY"));
 
         assertThatThrownBy(() -> invokeResolveForMissingPayment(service))
@@ -177,7 +177,7 @@ class ReversePathDyeModeTest {
         }
     }
 
-    private static ChannelQueryService queryService(InMemoryPaymentAttemptRepository attempts,
+    private static ChannelQueryService queryService(InMemoryChannelOrderRepository attempts,
                                                     PaymentChannel channel) {
         // spec 037 / T4：主构造改为接门面（单通道门面 = 改造前的单通道注册表 + 恒等路由）
         ChannelGateway gateway = ChannelGateway.ofSingleChannel(channel);

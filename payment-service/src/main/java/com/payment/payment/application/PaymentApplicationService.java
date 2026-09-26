@@ -5,11 +5,11 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.channelgateway.application.ChannelGateway;
-import com.payment.common.dto.channel.CallbackUrls;
+import com.payment.channelgateway.application.ChannelOrderService;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.channelgateway.application.PaymentChannel;
-import com.payment.common.dto.channel.PaymentScene;
+import com.payment.channelgateway.domain.ChannelOrder;
 import com.payment.common.dto.rpc.CreatePaymentRequest;
 import com.payment.channelgateway.application.RouteContext;
 import com.payment.payment.application.reliability.PaymentRetryService;
@@ -17,7 +17,6 @@ import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.mq.PaymentEventPublisher;
-import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -52,14 +51,13 @@ public class PaymentApplicationService {
      */
     private final ChannelGateway channelGateway;
     /**
-     * spec 030 / FR-103 + tasks Q5 裁决「配置单值」：渠道**异步回调（notify）**地址。
-     * 空 = 未配置（沙箱链路会 400，见 {@link #configuredCallbackUrls()}）。
+     * 渠道单服务（spec 041）：渠道单是<b>渠道层的订单</b>，其开单 / 收敛 / 落库全部由渠道域承担。
+     *
+     * <p>本类经它完成三件事：开渠道单（拿到渠道侧身份）、收敛渠道单（落渠道事实）、
+     * 查渠道单（幂等重放时取回真实渠道码）。<b>不 new、不 save 渠道单，也不写
+     * {@code channel_orders} 表</b>。</p>
      */
-    @org.springframework.beans.factory.annotation.Value("${payment.channel.notify-url:}")
-    private String channelNotifyUrl;
-    /** 买家付款后页面跳回地址（**非**资金事实，可空）。 */
-    @org.springframework.beans.factory.annotation.Value("${payment.channel.return-url:}")
-    private String channelReturnUrl;
+    private final ChannelOrderService channelOrderService;
     /** spec 029 / FR-201 / T28：`mq.enabled=true` 时存在，走事务消息；否则回落同步 Feign（FR-306）。 */
     private final PaymentEventPublisher mq;
 
@@ -73,6 +71,7 @@ public class PaymentApplicationService {
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger,
                                      ChannelGateway channelGateway,
+                                     ChannelOrderService channelOrderService,
                                      ObjectProvider<PaymentEventPublisher> mqProvider) {
         this.paymentRepository = paymentRepository;
         this.paymentPersistence = paymentPersistence;
@@ -82,19 +81,26 @@ public class PaymentApplicationService {
         this.metrics = metrics;
         this.auditLogger = auditLogger;
         this.channelGateway = channelGateway;
+        this.channelOrderService = channelOrderService;
         this.mq = mqProvider == null ? null : mqProvider.getIfAvailable();
     }
 
-    /** 兼容构造（不接账本）：空记账网关（测试/账本未接入场景）；无注册表、无 Router 的门面。 */
+    /**
+     * 兼容构造（不接账本）：空记账网关（测试/账本未接入场景）；无注册表、无 Router 的门面。
+     *
+     * <p><b>spec 041</b>：{@code channelOrderService} 由调用方给出（测试传内存渠道单仓储），
+     * 它是支付主链的<b>必需</b>协作者——渠道单不再由 payment 侧代开。</p>
+     */
     public PaymentApplicationService(PaymentRepository paymentRepository,
                                      PaymentPersistence paymentPersistence,
                                      PaymentRetryService retryService,
                                      OrderGateway orderGateway,
                                      BusinessMetrics metrics,
-                                     StructuredAuditLogger auditLogger) {
+                                     StructuredAuditLogger auditLogger,
+                                     ChannelOrderService channelOrderService) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway,
                 facts -> {
-                }, metrics, auditLogger, ChannelGateway.none(), null);
+                }, metrics, auditLogger, ChannelGateway.none(), channelOrderService, null);
     }
 
     /**
@@ -112,9 +118,11 @@ public class PaymentApplicationService {
                                      LedgerPostingGateway ledgerGateway,
                                      BusinessMetrics metrics,
                                      StructuredAuditLogger auditLogger,
-                                     PaymentChannel singleChannel) {
+                                     PaymentChannel singleChannel,
+                                     ChannelOrderService channelOrderService) {
         this(paymentRepository, paymentPersistence, retryService, orderGateway, ledgerGateway,
-                metrics, auditLogger, ChannelGateway.ofSingleChannel(singleChannel), null);
+                metrics, auditLogger, ChannelGateway.ofSingleChannel(singleChannel),
+                channelOrderService, null);
     }
 
     /**
@@ -149,21 +157,40 @@ public class PaymentApplicationService {
         // 1 参数校验与命令构造
         CreatePaymentCommand command = requireCommand(cmd);
 
-        // 2 建单：选路 → 落库 → 幂等判定
+        // 2 建单：选路 → 落库（payment 侧事务）→ 幂等判定
         String routedChannelCode = resolveChannelCode(command);
         PaymentPersistence.PendingPayment pending = paymentPersistence.insertPending(command, routedChannelCode);
-        String channelCode = effectiveChannelCode(pending, routedChannelCode);
         if (!pending.created()) {
             metrics.counter("payment.duplicate", 1.0, "module", MODULE);
-            return new PayResult(pending.payment(), channelCode, null);
+            return new PayResult(pending.payment(), channelCodeOf(pending.payment(), routedChannelCode), null);
         }
         metrics.counter("payment.initiated", 1.0, "module", MODULE);
 
-        // 3 调用下游：渠道扣款
+        // 3 开渠道单（渠道侧事务）并关联回支付单
+        Long channelOrderId = openChannelOrder(pending.payment(), routedChannelCode);
+
+        // 4 调用下游：渠道扣款（事务之外，通信失败内联退避重放）
         PaymentRetryService.RetryOutcome outcome = chargeChannel(pending.payment(), command, routedChannelCode);
 
-        // 4 处理返回结果 + 5 返回结果
-        return applyChannelResult(pending, routedChannelCode, outcome);
+        // 5 处理返回结果：渠道单先收敛（渠道侧事务），再推进支付单（payment 侧事务）
+        return applyChannelResult(pending.payment(), routedChannelCode, channelOrderId, outcome);
+    }
+
+    /**
+     * 步骤 3：开渠道单并把它关联回支付单。
+     *
+     * <p><b>为什么是渠道层开单</b>：渠道单就是渠道层的订单——渠道身份（{@code channelNo}）、
+     * 渠道模态、收敛终态都是渠道侧的事实，只有渠道域知道怎么成形。改造前由
+     * {@code PaymentPersistence} 在同一事务里代开，等于把渠道域的生命周期写进资金动作域。</p>
+     *
+     * <p><b>事务（spec 041 / D2）</b>：开单是渠道侧独立事务，关联是 payment 侧独立事务。
+     * 开单失败 ⇒ 支付单停在 {@code PENDING}，由主动查询 / 超时扫描兜底，不伪造渠道事实。</p>
+     */
+    private Long openChannelOrder(Payment payment, String channelCode) {
+        ChannelOrder order = channelOrderService.openChannelOrder(
+                payment.getPaymentNo(), channelCode, payment.getAmountMinor(), payment.getCurrencyCode());
+        paymentPersistence.attachChannelOrder(payment.getId(), order.getId());
+        return order.getId();
     }
 
     /**
@@ -192,42 +219,40 @@ public class PaymentApplicationService {
      */
     private PaymentRetryService.RetryOutcome chargeChannel(Payment payment, CreatePaymentCommand cmd,
                                                            String channelCode) {
-        // spec 030 本期：编排层不推导默认场景（tasks Q7 / 零回归）。
-        // 场景校验 MUST 在调 charge **之前**（INV-8：不静默降级）。
-        PaymentScene scene = null;
-        validateSceneIfPresent(scene, channelCode);
-
-        // spec 030 / FR-103 + Q5：回调地址来自**配置单值**（不按单动态拼）。未配置 ⇒ null，
-        // 沙箱链路会在 charge 之前 400（INV-8：不静默降级）；mock 链路不读该字段，零回归。
-        CallbackUrls callbackUrls = configuredCallbackUrls();
-
+        // spec 041：场景能力校验与回调地址拼装<b>都不再是 payment 层的事</b>——
+        //   场景是否被支持由渠道网关在派发前裁决（GateWay / 渠道实现自校验，INV-8「不静默降级」在网关侧守）；
+        //   回调地址由各渠道 plugin 读自己的配置拼装（通知地址/跳回地址怎么写是渠道协议细节）。
+        // 本方法只做一件事：把平台意图翻译成渠道契约并调用。
+        //
         // 渠道扣款在事务之外执行；通信失败在本次请求内联退避重放（ADR-0012/0013 修订），
         // 重试期间不落库，最终结果与重试次数一次性写入。
         return retryService.chargeWithRetry(new ChargeRequest(payment.getPaymentNo(),
                 cmd.amountMinor(), cmd.currencyCode(), channelCode,
-                scene, null, callbackUrls, null, null, null, null, cmd.orderNo()));
+                null, null, null, null, null, null, cmd.orderNo()));
     }
 
     /** 步骤 4：应用渠道返回结果（凭证 / 终态两条分支），步骤 5 在此一并返回。 */
-    private PayResult applyChannelResult(PaymentPersistence.PendingPayment pending,
-                                         String channelCode,
+    private PayResult applyChannelResult(Payment payment, String channelCode, Long channelOrderId,
                                          PaymentRetryService.RetryOutcome outcome) {
         ChannelResult result = outcome.result();
 
         // spec 030 / FR-115（T30）· INV-6：凭证非空 ⇒ 渠道**仅受理**、买家尚未付款 ⇒
-        // **不调 applyAndPersist**，payment 停在 PROCESSING（不记账、不通知 order）。
+        // **不推进支付单、也不收敛渠道单**（两侧都停在"已受理"），不记账、不通知 order。
         // 钱还没到却走成功收敛路径＝把「已受理」当成「已收款」，是资金事故。
         if (result.hasCredential()) {
             // 只记凭证种类，绝不打印 payload（INV-2：凭证 MUST NOT 进明文日志）
             LOGGER.info("channel accepted with credential, payment stays PROCESSING paymentNo={} kind={}",
-                    pending.payment().getPaymentNo(), result.credential().kind());
+                    payment.getPaymentNo(), result.credential().kind());
             metrics.counter("payment.awaiting_buyer", 1.0, "module", MODULE);
-            return new PayResult(pending.payment(), channelCode, result.credential().payload());
+            return new PayResult(payment, channelCode, result.credential().payload());
         }
 
-        // 应用渠道结果并落库（独立短事务，含本次实际重试次数）
-        PaymentPersistence.AppliedPayment applied = paymentPersistence.applyAndPersist(
-                pending.payment().getId(), pending.attempt().getId(), result, outcome.retries());
+        // 步骤 4a：渠道单先在**渠道侧**收敛（渠道事实先成形），再推进支付单——
+        // 顺序不可颠倒：payment 的终态要反映一条已经成形的渠道事实，不是一条还在猜的。
+        channelOrderService.converge(channelOrderId, result, outcome.retries());
+
+        // 步骤 4b：渠道结果应用到支付单并落库（payment 侧独立短事务）
+        PaymentPersistence.AppliedPayment applied = paymentPersistence.applyAndPersist(payment.getId(), result);
         if (applied.changed()) {
             recordTransition(applied.payment(), applied.fromStatus(), result);
         }
@@ -279,59 +304,15 @@ public class PaymentApplicationService {
      * 本次生效的渠道码：幂等重复时以库内已记录的 attempt 渠道为准（首次那笔的真实渠道）。
      *
      * <p>回带权威渠道码的原因（Feature 028 / FR-027）：渠道身份记在
-     * {@code payment_attempts.channel_code}（{@code payments} 表无该列），调用方若回显
+     * {@code channel_orders.channel_code}（{@code payments} 表无该列），调用方若回显
      * 自己请求里的 {@code channelCode}，在「不指定渠道、由 Router 选路」的场景下会得到
      * {@code null}——收银台与排障都会拿到错误信息。</p>
      */
-    private String effectiveChannelCode(PaymentPersistence.PendingPayment pending, String routedChannelCode) {
-        return pending.attempt() == null || pending.attempt().getChannelCode() == null
-                ? routedChannelCode
-                : pending.attempt().getChannelCode();
-    }
-
-    /**
-     * spec 030 / FR-110（T31）：场景校验——{@code scene != null} 且渠道未声明支持
-     * ⇒ {@code 400 INVALID_ARGUMENT}；{@code scene == null} <b>不校验</b>（INV-8 / 零回归）。
-     *
-     * <p>门面 {@link ChannelGateway#supportedScenes} 返回 {@code null} 时跳过校验：那是既有兼容
-     * 构造路径（无注册表），且本期编排层不传场景——此处 MUST NOT 因此抛 NPE 破坏既有测试（SC-A-02）。</p>
-     */
-    /**
-     * spec 030 / FR-103 + tasks Q5 裁决「配置单值」：把配置的 notify / return 地址装进
-     * {@link CallbackUrls}，供渠道下单时透传。
-     *
-     * <p><b>未配置 notify-url ⇒ 返回 {@code null}</b>：与 spec 030 之前的行为逐字节一致
-     * （零回归；mock 链路不读该字段）。沙箱链路会在 {@code charge} <b>之前</b>因缺
-     * {@code notifyUrl} 抛 {@code 400 INVALID_ARGUMENT}——<b>不静默降级</b>（INV-8）：
-     * 没有异步通知就拿不到资金事实，而页面跳回（returnUrl）MUST NOT 驱动支付状态。</p>
-     *
-     * <p>字段由 Spring {@code @Value} 注入；不经过 Spring 容器时（既有测试直接 new）
-     * 保持 {@code null} ⇒ 本方法返回 {@code null}，既有断言全部不变。</p>
-     */
-    private CallbackUrls configuredCallbackUrls() {
-        if (channelNotifyUrl == null || channelNotifyUrl.isBlank()) {
-            return null;
-        }
-        String returnUrl = (channelReturnUrl == null || channelReturnUrl.isBlank())
-                ? null : channelReturnUrl;
-        return new CallbackUrls(channelNotifyUrl, returnUrl);
-    }
-
-    private void validateSceneIfPresent(PaymentScene scene, String channelCode) {
-        if (scene == null) {
-            return;
-        }
-        // spec 037 / T4：能力查询经门面；返回 null 即「无注册表」（既有兼容构造路径）⇒ 跳过校验。
-        // 判据与改造前 channelRegistry == null 逐字等价（NFR-2）。
-        Set<PaymentScene> supported = channelGateway.supportedScenes(channelCode);
-        if (supported == null) {
-            return;
-        }
-        if (!supported.contains(scene)) {
-            throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
-                    "channel " + channelCode + " does not support scene " + scene
-                            + "; supported: " + supported);
-        }
+    private String channelCodeOf(Payment payment, String routedChannelCode) {
+        return channelOrderService.findChannelOrder(payment.getPaymentNo())
+                .map(ChannelOrder::getChannelCode)
+                .filter(code -> code != null && !code.isBlank())
+                .orElse(routedChannelCode);
     }
 
     /**

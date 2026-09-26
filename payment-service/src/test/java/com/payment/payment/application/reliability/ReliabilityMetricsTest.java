@@ -12,12 +12,12 @@ import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.channelgateway.application.RefundRequest;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -61,7 +61,7 @@ class ReliabilityMetricsTest {
     }
 
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-    private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
     private final PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
     private final FixedChannel channel = new FixedChannel();
     private final ReliabilityConfig config = new ReliabilityConfig();
@@ -81,8 +81,8 @@ class ReliabilityMetricsTest {
         Payment payment = Payment.rehydrate(paymentId, "PM-" + paymentId, "txn-" + paymentId, "order-" + paymentId, "user-1",
                 100, "CNY", "idem-" + paymentId, status, attemptId, null, 0, null, 0, 1, "M001");
         payments.save(payment);
-        attempts.save(PaymentAttempt.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
-                Instant.now().minusSeconds(120), null, null, PaymentAttemptStatus.ACCEPTED,
+        attempts.save(ChannelOrder.rehydrate(attemptId, "PM-" + paymentId, "mock", 0,
+                Instant.now().minusSeconds(120), null, null, ChannelOrderStatus.ACCEPTED,
                 null, null, 0, 0L, "CNY"));
         return payment;
     }

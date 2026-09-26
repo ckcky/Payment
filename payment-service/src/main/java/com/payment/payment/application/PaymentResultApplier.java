@@ -9,9 +9,9 @@ import com.payment.payment.domain.PaymentStatus;
  * 把渠道结果应用到 <b>payment 聚合</b> 状态机（Feature 028 / FR-004，ADR-0072）。
  *
  * <p><b>本类只管 payment 侧</b>：渠道层负责 {@code attempt} 的收敛
- * （见 {@code ChannelAttemptRecorder#converge}），payment 层负责 {@code payment} 的状态迁移，
+ * （见 {@code ChannelOrderService#converge}），payment 层负责 {@code payment} 的状态迁移，
  * 两者由调用方在同一事务内协调（INV-5）。Feature 028 前，一个
- * {@code apply(Payment, PaymentAttempt, ChannelResult)} 方法同时推进两个聚合（spec §1.2 S2）
+ * {@code apply(Payment, ChannelOrder, ChannelResult)} 方法同时推进两个聚合（spec §1.2 S2）
  * ——现在拆开，职责各归其层。</p>
  *
  * <p>返回 {@code true} 表示「支付发生了真正的状态迁移」，调用方据此触发一次履约 RPC；

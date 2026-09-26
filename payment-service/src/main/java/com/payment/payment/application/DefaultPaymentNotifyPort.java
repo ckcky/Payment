@@ -9,8 +9,8 @@ import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelRefundNotified;
 import com.payment.payment.application.refund.RefundRpcCallbackService;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
 import com.payment.payment.domain.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,14 +53,14 @@ public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
     private final PaymentCallbackService payCallbackService;
     private final RefundRpcCallbackService refundCallbackService;
     private final PaymentRepository paymentRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
     public DefaultPaymentNotifyPort(PaymentCallbackService payCallbackService,
                                     RefundRpcCallbackService refundCallbackService,
                                     PaymentRepository paymentRepository,
-                                    PaymentAttemptRepository attemptRepository,
+                                    ChannelOrderRepository attemptRepository,
                                     BusinessMetrics metrics,
                                     StructuredAuditLogger auditLogger) {
         this.payCallbackService = payCallbackService;
@@ -148,8 +148,8 @@ public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
      * 不算不一致。</p>
      */
     private String validateChannelReference(String paymentNo, String channelReference) {
-        for (PaymentAttempt candidate : attemptRepository.findByPaymentNo(paymentNo)) {
-            if (PaymentAttempt.TYPE_PAYMENT.equals(candidate.getAttemptType())
+        for (ChannelOrder candidate : attemptRepository.findByPaymentNo(paymentNo)) {
+            if (ChannelOrder.TYPE_PAYMENT.equals(candidate.getAttemptType())
                     && candidate.getChannelReference() != null
                     && !candidate.getChannelReference().equals(channelReference)) {
                 return "channel reference mismatch: recorded=" + candidate.getChannelReference()

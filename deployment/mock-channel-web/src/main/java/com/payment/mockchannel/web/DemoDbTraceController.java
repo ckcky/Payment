@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  *   <li>orders.order_no（OR+雪花）是对外业务单号；orders.id 仅为本服务主键。</li>
  *   <li>order_items / transactions / payments / refunds / fulfillments / entitlements
  *       的 order_no 均存业务单号。</li>
- *   <li>payment_attempts.payment_no 存业务单号（不再落数值 payment_id）。</li>
+ *   <li>channel_orders.payment_no 存业务单号（不再落数值 payment_id）。</li>
  *   <li>settlement_items.reference ← 对账匹配事实的渠道引用（attempt.channel_reference），
  *       反查 settlement_batches 经 items.batch_id。</li>
  *   <li>ledger postings.source_id 为 varchar(64)，存业务单号（ADR-0063）：
@@ -96,8 +96,8 @@ public class DemoDbTraceController {
         List<Map<String, Object>> payments = query(sections, "payment-service", "payments",
                 "SELECT * FROM payment.payments WHERE order_no = ?", new Object[]{orderNo}, "支付单");
         List<Object> paymentNos = ids(payments, "payment_no");
-        List<Map<String, Object>> attempts = query(sections, "payment-service", "payment_attempts",
-                "SELECT * FROM payment.payment_attempts WHERE payment_no IN (" + placeholders(paymentNos) + ")",
+        List<Map<String, Object>> attempts = query(sections, "payment-service", "channel_orders",
+                "SELECT * FROM payment.channel_orders WHERE payment_no IN (" + placeholders(paymentNos) + ")",
                 paymentNos.toArray(), "渠道交互尝试记录");
         List<Object> channelRefs = new ArrayList<>();
         for (Map<String, Object> a : attempts) {
@@ -107,15 +107,15 @@ public class DemoDbTraceController {
             }
         }
 
-        // ③-b 渠道层退款尝试：同一张 payment_attempts 表，只挑 attempt_type=REFUND 的行。
+        // ③-b 渠道层退款尝试：同一张 channel_orders 表，只挑 attempt_type=REFUND 的行。
         //     单独成段的原因：退款的渠道交互原本混在「渠道交互尝试记录」里与 PAYMENT 行同表展示，
         //     演示时看不出「渠道层的退款单」在哪——三层退款必须各层都有独立可查的证据。
-        query(sections, "payment-service", "payment_attempts(REFUND)",
+        query(sections, "payment-service", "channel_orders(REFUND)",
                 "SELECT id, payment_no, attempt_type, channel_code, channel_reference, status, "
-                        + "failure_reason, requested_at FROM payment.payment_attempts "
+                        + "failure_reason, requested_at FROM payment.channel_orders "
                         + "WHERE attempt_type = 'REFUND' AND payment_no IN (" + placeholders(paymentNos) + ") "
                         + "ORDER BY id",
-                paymentNos.toArray(), "渠道层退款尝试（payment_attempts · REFUND）");
+                paymentNos.toArray(), "渠道层退款尝试（channel_orders · REFUND）");
 
         // ④ 支付层退款单（Feature 015 后 refund 域并入 payment-service，refunds 表迁至 payment 库）／履约／权益
         List<Map<String, Object>> refunds = query(sections, "payment-service", "refunds",
@@ -206,7 +206,7 @@ public class DemoDbTraceController {
     }
 
     /**
-     * 退款渠道尝试（演示控制台 ③ 退款卡片）：按订单只读直查 payment_attempts 中
+     * 退款渠道尝试（演示控制台 ③ 退款卡片）：按订单只读直查 channel_orders 中
      * attempt_type=REFUND 的行（Feature 016 / FR-017：PaymentRefundService 调渠道后落库，
      * channel_reference 即真实渠道退款流水号，015 对账事实以它寻址）。
      *
@@ -246,9 +246,9 @@ public class DemoDbTraceController {
             resp.put("note", "该订单尚无支付单 —— 未建支付单则无退款尝试");
             return resp;
         }
-        List<Map<String, Object>> attempts = query(sections, "payment-service", "payment_attempts",
+        List<Map<String, Object>> attempts = query(sections, "payment-service", "channel_orders",
                 "SELECT id, payment_no, attempt_type, channel_code, channel_reference, status, "
-                        + "failure_reason, created_at FROM payment.payment_attempts "
+                        + "failure_reason, created_at FROM payment.channel_orders "
                         + "WHERE attempt_type = 'REFUND' AND payment_no IN (" + placeholders(paymentNos) + ") "
                         + "ORDER BY id",
                 paymentNos.toArray(), "渠道交互尝试记录");

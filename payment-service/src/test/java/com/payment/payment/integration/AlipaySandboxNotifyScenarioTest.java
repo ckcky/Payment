@@ -4,7 +4,6 @@ import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.common.dto.channel.PayCredential;
 import com.payment.common.dto.channel.PaymentScene;
 import com.payment.channelgateway.application.ChannelCallbackAck;
@@ -19,10 +18,10 @@ import com.payment.channelgateway.support.StubChannelRegistry;
 import com.payment.payment.application.DefaultPaymentNotifyPort;
 import com.payment.payment.application.PaymentNotifyPort;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.AfterEach;
@@ -80,7 +79,7 @@ class AlipaySandboxNotifyScenarioTest {
 
     private PaymentTestStack stack;
     private InMemoryPaymentRepository payments;
-    private InMemoryPaymentAttemptRepository attempts;
+    private InMemoryChannelOrderRepository attempts;
     private ScriptedGateway gateway;
     private AlipayChannelAdapter adapter;
     private ChannelCallbackHandler handler;
@@ -139,14 +138,14 @@ class AlipaySandboxNotifyScenarioTest {
         // ① 建单：payment=PROCESSING，attempt 已 stamp SANDBOX
         payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
                 10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
-        attempts.save(PaymentAttempt.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
-                Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
+        attempts.save(ChannelOrder.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
+                Instant.now().minusSeconds(60), null, null, ChannelOrderStatus.ACCEPTED,
                 null, null, 1, "PAYMENT", 10_00L, "CNY",
-                Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
+                Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX")));
 
         gateway = new ScriptedGateway();
         adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, APP_ID);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, APP_ID, NOTIFY_URL, null);
 
         // 通用端点背后的真实链路：注册表（精确寻址 INV-6）→ 四步模板 → Payment 入向端口
         ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE, adapter);
@@ -163,8 +162,8 @@ class AlipaySandboxNotifyScenarioTest {
     /** 构造一笔真实的沙箱下单请求（含 notifyUrl —— 沙箱下单的硬前提）。 */
     private ChargeRequest chargeRequest() {
         return new ChargeRequest(PAYMENT_NO, 10_00L, "CNY", "ALIPAY",
-                PaymentScene.WEB, null, CallbackUrls.notifyOnly(NOTIFY_URL),
-                Instant.now().plusSeconds(1800), null, null, null);
+                PaymentScene.WEB, null,
+                Instant.now().plusSeconds(1800), null, null, null, null);
     }
 
     /** 构造一条验签可通过的支付宝 notify 报文。 */
@@ -219,7 +218,7 @@ class AlipaySandboxNotifyScenarioTest {
                 .as("权威回调到达后才落终态")
                 .isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+                .isEqualTo(ChannelOrderStatus.SUCCEEDED);
 
         // order 收到成功通知（收敛链路的下游副作用）
         assertThat(stack.order.succeededRequests)

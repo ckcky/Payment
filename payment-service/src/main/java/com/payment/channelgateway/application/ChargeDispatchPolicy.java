@@ -21,7 +21,7 @@ import java.util.Optional;
  * <p>也可以让 mock 渠道插件在演示模式下返回收银台凭证。但那样渠道实现<b>会被真实触达</b>，
  * 而既有语义（{@code PaymentDeferredChannelTest}）要求「延迟路径下渠道绝不能被触达」——
  * 那不是洁癖：延迟路径的存在意义就是「平台尚未向渠道发起扣款」，
- * 一旦触达，{@code payment_attempts} 就该有一条真实渠道交互记录，与「未发起」自相矛盾。
+ * 一旦触达，{@code channel_orders} 就该有一条真实渠道交互记录，与「未发起」自相矛盾。
  * 故裁决 MUST 发生在解析渠道实现<b>之前</b>，即本层。</p>
  *
  * <h3>契约</h3>

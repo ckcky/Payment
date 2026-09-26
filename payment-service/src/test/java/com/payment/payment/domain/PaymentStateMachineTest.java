@@ -2,6 +2,8 @@ package com.payment.payment.domain;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,8 +18,8 @@ class PaymentStateMachineTest {
         return new Payment("txn-1", "order-1", "user-1", 100, "CNY", "idem-1");
     }
 
-    private static PaymentAttempt attempt() {
-        return new PaymentAttempt("PM-1", "mock", 0, 100, "CNY");
+    private static ChannelOrder attempt() {
+        return new ChannelOrder("PM-1", "mock", 0, 100, "CNY");
     }
 
     // ---- Payment ----
@@ -116,14 +118,14 @@ class PaymentStateMachineTest {
                         e -> assertThat(e.getCode()).isEqualTo(ErrorCodes.STATE_TRANSITION_VIOLATION));
     }
 
-    // ---- PaymentAttempt ----
+    // ---- ChannelOrder ----
 
     @Test
     void attemptAcceptThenSucceed() {
-        PaymentAttempt a = attempt();
+        ChannelOrder a = attempt();
         assertThat(a.accept("ref-1")).isTrue();
         assertThat(a.succeed()).isTrue();
-        assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(a.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
         assertThat(a.getChannelReference()).isEqualTo("ref-1");
         assertThat(a.getAmountMinor()).isEqualTo(100);
         assertThat(a.getCurrencyCode()).isEqualTo("CNY");
@@ -131,32 +133,32 @@ class PaymentStateMachineTest {
 
     @Test
     void attemptMarkUnknownThenConverge() {
-        PaymentAttempt a = attempt();
+        ChannelOrder a = attempt();
         assertThat(a.markUnknown("timeout")).isTrue();
-        assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.UNKNOWN);
+        assertThat(a.getStatus()).isEqualTo(ChannelOrderStatus.UNKNOWN);
         assertThat(a.succeed()).isTrue();
-        assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(a.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
     }
 
     /** 回归（fix）：UNKNOWN 阶段的占位文案不得残留到 SUCCEEDED 尝试行。 */
     @Test
     void attemptSucceedClearsStaleFailureReason() {
-        PaymentAttempt a = attempt();
+        ChannelOrder a = attempt();
         a.markUnknown("mock refund accepted, awaiting async callback");
         assertThat(a.getFailureReason())
                 .isEqualTo("mock refund accepted, awaiting async callback");
 
         assertThat(a.succeed()).isTrue();
-        assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(a.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
         assertThat(a.getFailureReason()).isNull();
     }
 
     @Test
     void attemptLateFailAfterSuccessIsAbsorbed() {
-        PaymentAttempt a = attempt();
+        ChannelOrder a = attempt();
         a.accept("ref-1");
         a.succeed();
         assertThat(a.fail("late")).isFalse();
-        assertThat(a.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(a.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
     }
 }

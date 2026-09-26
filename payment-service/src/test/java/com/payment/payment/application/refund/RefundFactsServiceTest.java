@@ -3,8 +3,8 @@ package com.payment.payment.application.refund;
 import com.payment.common.core.id.BusinessNoType;
 import com.payment.common.core.id.BusinessNos;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.api.dto.RefundFactResponse;
 import com.payment.payment.domain.Refund;
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RefundFactsServiceTest {
 
     private final InMemoryRefundRepository refunds = new InMemoryRefundRepository();
-    private final InMemoryPaymentAttemptRepository paymentAttempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository paymentAttempts = new InMemoryChannelOrderRepository();
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
 
     private RefundFactsService service() {
@@ -74,7 +74,7 @@ class RefundFactsServiceTest {
         refunds.save(succeeded);
 
         // 退款渠道尝试记录（Feature 016 / FR-017 ②）：channel_reference = 渠道退款流水号
-        PaymentAttempt refundAttempt = PaymentAttempt.refundAttempt("PM-1", "mock", 1000L, "CNY");
+        ChannelOrder refundAttempt = ChannelOrder.refundAttempt("PM-1", "mock", 1000L, "CNY");
         refundAttempt.accept("mock-refund-ref-real");
         refundAttempt.succeed();
         paymentAttempts.save(refundAttempt);
@@ -94,12 +94,12 @@ class RefundFactsServiceTest {
         succeeded.succeed();
         refunds.save(succeeded);
 
-        PaymentAttempt failedAttempt = PaymentAttempt.refundAttempt("PM-1", "mock", 1000L, "CNY");
+        ChannelOrder failedAttempt = ChannelOrder.refundAttempt("PM-1", "mock", 1000L, "CNY");
         failedAttempt.accept("mock-refund-ref-FAILED");
         failedAttempt.fail("channel declined");
         paymentAttempts.save(failedAttempt);
 
-        PaymentAttempt okAttempt = PaymentAttempt.refundAttempt("PM-1", "mock", 1000L, "CNY");
+        ChannelOrder okAttempt = ChannelOrder.refundAttempt("PM-1", "mock", 1000L, "CNY");
         okAttempt.accept("mock-refund-ref-OK");
         okAttempt.succeed();
         paymentAttempts.save(okAttempt);

@@ -3,9 +3,9 @@ package com.payment.payment.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.payment.channelgateway.application.ChannelResult;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -13,11 +13,11 @@ import org.junit.jupiter.api.Test;
  */
 class RefundAttemptSettlementServiceTest {
 
-    private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
     private final RefundAttemptSettlementService service = new RefundAttemptSettlementService(attempts);
 
-    private PaymentAttempt unknownRefundAttempt(String paymentNo, String channelReference) {
-        PaymentAttempt attempt = PaymentAttempt.refundAttempt(paymentNo, "mock", 100, "CNY");
+    private ChannelOrder unknownRefundAttempt(String paymentNo, String channelReference) {
+        ChannelOrder attempt = ChannelOrder.refundAttempt(paymentNo, "mock", 100, "CNY");
         attempt.accept(channelReference);
         attempt.markUnknown("channel refund accepted in-flight");
         return attempts.save(attempt);
@@ -30,7 +30,7 @@ class RefundAttemptSettlementServiceTest {
         service.convergeRefundAttempt("PM-1", "mock-refund-ref-1", ChannelResult.success("mock-refund-ref-1"));
 
         assertThat(attempts.findByPaymentNo("PM-1").get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+                .isEqualTo(ChannelOrderStatus.SUCCEEDED);
     }
 
     @Test
@@ -40,23 +40,23 @@ class RefundAttemptSettlementServiceTest {
         service.convergeRefundAttempt("PM-1", "mock-refund-ref-1",
                 ChannelResult.businessFailure("mock-refund-ref-1", "channel declined"));
 
-        PaymentAttempt attempt = attempts.findByPaymentNo("PM-1").get(0);
-        assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.FAILED);
+        ChannelOrder attempt = attempts.findByPaymentNo("PM-1").get(0);
+        assertThat(attempt.getStatus()).isEqualTo(ChannelOrderStatus.FAILED);
         assertThat(attempt.getFailureReason()).isEqualTo("channel declined");
     }
 
     @Test
     void convergeWithoutReferenceFallsBackToLatestNonTerminalAttempt() {
         unknownRefundAttempt("PM-1", "mock-refund-ref-1");
-        PaymentAttempt latest = unknownRefundAttempt("PM-1", "mock-refund-ref-2");
+        ChannelOrder latest = unknownRefundAttempt("PM-1", "mock-refund-ref-2");
 
         service.convergeRefundAttempt("PM-1", null, ChannelResult.success(null));
 
-        assertThat(latest.getStatus()).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        assertThat(latest.getStatus()).isEqualTo(ChannelOrderStatus.SUCCEEDED);
         assertThat(attempts.findByPaymentNo("PM-1").stream()
                 .filter(a -> "mock-refund-ref-1".equals(a.getChannelReference()))
                 .findFirst().orElseThrow().getStatus())
-                .isEqualTo(PaymentAttemptStatus.UNKNOWN); // 第一条不受影响
+                .isEqualTo(ChannelOrderStatus.UNKNOWN); // 第一条不受影响
     }
 
     @Test
@@ -66,7 +66,7 @@ class RefundAttemptSettlementServiceTest {
         service.convergeRefundAttempt("PM-1", "mock-refund-ref-1", ChannelResult.businessUnknown("still unknown"));
 
         assertThat(attempts.findByPaymentNo("PM-1").get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.UNKNOWN);
+                .isEqualTo(ChannelOrderStatus.UNKNOWN);
     }
 
     @Test
@@ -78,7 +78,7 @@ class RefundAttemptSettlementServiceTest {
         service.convergeRefundAttempt("PM-1", "mock-refund-ref-1", ChannelResult.success("mock-refund-ref-1"));
 
         assertThat(attempts.findByPaymentNo("PM-1").get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+                .isEqualTo(ChannelOrderStatus.SUCCEEDED);
     }
 
     @Test
@@ -90,8 +90,8 @@ class RefundAttemptSettlementServiceTest {
         service.convergeRefundAttempt("PM-1", "mock-refund-ref-cb",
                 ChannelResult.businessFailure("mock-refund-ref-cb", "channel declined"));
 
-        PaymentAttempt attempt = attempts.findByPaymentNo("PM-1").get(0);
-        assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.FAILED);
+        ChannelOrder attempt = attempts.findByPaymentNo("PM-1").get(0);
+        assertThat(attempt.getStatus()).isEqualTo(ChannelOrderStatus.FAILED);
         assertThat(attempt.getFailureReason()).isEqualTo("channel declined");
         assertThat(attempt.getChannelReference()).isEqualTo("mock-refund-ref-cb");
     }
@@ -106,14 +106,14 @@ class RefundAttemptSettlementServiceTest {
                 ChannelResult.success("mock-refund-ref-404"));
 
         assertThat(attempts.findByPaymentNo("PM-1").stream()
-                .allMatch(a -> a.getStatus() == PaymentAttemptStatus.UNKNOWN))
+                .allMatch(a -> a.getStatus() == ChannelOrderStatus.UNKNOWN))
                 .isTrue();
     }
 
     @Test
     void convergeIgnoresPaymentTypeAttempts() {
         // PAYMENT 尝试行不受退款收敛影响
-        PaymentAttempt paymentAttempt = new PaymentAttempt("PM-1", "mock", 0, 100, "CNY");
+        ChannelOrder paymentAttempt = new ChannelOrder("PM-1", "mock", 0, 100, "CNY");
         paymentAttempt.accept("mock-pay-ref-1");
         paymentAttempt.markUnknown("pay accepted in-flight");
         attempts.save(paymentAttempt);
@@ -121,6 +121,6 @@ class RefundAttemptSettlementServiceTest {
         service.convergeRefundAttempt("PM-1", "mock-pay-ref-1", ChannelResult.success("mock-pay-ref-1"));
 
         assertThat(attempts.findByPaymentNo("PM-1").get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.UNKNOWN);
+                .isEqualTo(ChannelOrderStatus.UNKNOWN);
     }
 }

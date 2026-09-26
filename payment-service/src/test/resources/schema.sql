@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS payment_attempts;
+DROP TABLE IF EXISTS channel_orders;
 DROP TABLE IF EXISTS payments;
 
 CREATE TABLE payments (
@@ -26,7 +26,10 @@ CREATE TABLE payments (
 );
 CREATE INDEX idx_payments_txn_seq ON payments (transaction_id, attempt_seq);
 
-CREATE TABLE payment_attempts (
+-- spec 041：渠道单表（原 payment_attempts，随 ChannelOrder 迁入渠道网关域后正名）。
+-- 生产侧由 03-payment-schema.sql 建 payment_attempts 再由 041-channel-orders-rename.sql 改名；
+-- 此处是 H2 测试镜像，直接建成终态名（H2 镜像不会自动同步迁移脚本，见 037 的同类说明）。
+CREATE TABLE channel_orders (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     payment_no VARCHAR(32) NOT NULL,
     -- spec 037 / FR-001 / FR-002：渠道网关业务单号（CH+雪花），NOT NULL + UNIQUE。

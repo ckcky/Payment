@@ -111,14 +111,14 @@ jget "d['status']"; ORDER_STATUS="$VALUE"
 assert_eq "$ORDER_STATUS" "PARTIALLY_REFUNDED" "订单状态 → PARTIALLY_REFUNDED（7000/9900 已退）"
 http GET "$DEMO_URL/demo/trace?orderId=$ORDER_NO"
 # 退款三层落库必须**逐层可见**（交易层 TXRF / 支付层 PMRF / 渠道层 REFUND attempt）。
-# 回归背景：支付层那条原本只叫「退款单」、渠道层混在 payment_attempts 里，
+# 回归背景：支付层那条原本只叫「退款单」、渠道层混在 channel_orders 里，
 # 演示「查询库」时看不出退款的三层结构（2026-09-25）。三层缺任一层都要红。
 jget "any(s['table']=='transaction_refunds' and s['rows'] for s in d['sections'])"; HAS_TXRF_ROWS="$VALUE"
 assert_eq "$HAS_TXRF_ROWS" "True" "demo 追踪含交易层退款单 transaction_refunds（TXRF）且有数据"
 jget "any(s['table']=='refunds' and s['rows'] for s in d['sections'])"; HAS_PMRF_ROWS="$VALUE"
 assert_eq "$HAS_PMRF_ROWS" "True" "demo 追踪含支付层退款单 refunds（PMRF）且有数据"
-jget "any(s['table']=='payment_attempts(REFUND)' and s['rows'] for s in d['sections'])"; HAS_REFUND_ATTEMPT="$VALUE"
-assert_eq "$HAS_REFUND_ATTEMPT" "True" "demo 追踪含渠道层退款尝试 payment_attempts(REFUND) 且有数据"
+jget "any(s['table']=='channel_orders(REFUND)' and s['rows'] for s in d['sections'])"; HAS_REFUND_ATTEMPT="$VALUE"
+assert_eq "$HAS_REFUND_ATTEMPT" "True" "demo 追踪含渠道层退款尝试 channel_orders(REFUND) 且有数据"
 
 echo ""
 info "scenario-refund 全部断言通过 ✅"

@@ -2,10 +2,10 @@ package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,7 +25,7 @@ class TimeoutScanTest {
 
     private static final class TimeoutScannerHarness {
         final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-        final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+        final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
     }
 
     private Payment processingPayment(long pid, long aid) {
@@ -33,9 +33,9 @@ class TimeoutScanTest {
                 100, "CNY", "idem-" + pid, PaymentStatus.PROCESSING, aid, null, 0, null, 0, 1, "M001");
     }
 
-    private PaymentAttempt attempt(long aid, long pid, Instant requestedAt) {
-        return PaymentAttempt.rehydrate(aid, "PM-" + pid, "mock", 0,
-                requestedAt, null, null, PaymentAttemptStatus.PENDING, null, null, 0, 0L, "CNY");
+    private ChannelOrder attempt(long aid, long pid, Instant requestedAt) {
+        return ChannelOrder.rehydrate(aid, "PM-" + pid, "mock", 0,
+                requestedAt, null, null, ChannelOrderStatus.PENDING, null, null, 0, 0L, "CNY");
     }
 
     @Test

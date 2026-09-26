@@ -66,6 +66,21 @@ public class AlipaySandboxProperties {
     private long httpTimeoutMs = 10_000L;
 
     /**
+     * 异步通知地址（{@code notify_url}，spec 041：回调地址归渠道协议自己管）。
+     *
+     * <p><b>这是资金事实的唯一可信来源</b>：买家在支付宝侧完成付款后，支付宝回调本地址告知结果。
+     * 页面跳回（{@link #returnUrl}）<b>不承载资金事实</b>，MUST NOT 据其推进支付状态（FR-103）。
+     * 未配置 ⇒ 沙箱下单在 {@code charge} 之前 400（<b>不静默降级</b>，INV-8）——
+     * 没有异步通知就拿不到资金事实。</p>
+     *
+     * <p>改造前该值由 payment 层读全局配置拼好再下发；spec 041 起由本渠道读自己的配置。</p>
+     */
+    private String notifyUrl;
+
+    /** 买家付款后页面跳回地址（{@code return_url}，**非**资金事实，可空）。 */
+    private String returnUrl;
+
+    /**
      * 启动期强校验（FR-134）。
      *
      * <p>只在 {@code enabled=true} 时校验——{@code false} 时缺配置是<b>正常状态</b>
@@ -88,6 +103,10 @@ public class AlipaySandboxProperties {
         }
         if (isBlank(gatewayUrl)) {
             missing.add("gatewayUrl");
+        }
+        if (isBlank(notifyUrl)) {
+            // spec 041：notifyUrl 是资金事实的唯一可信来源，启用沙箱却没有它 = 下单必失败
+            missing.add("notifyUrl（env PAYMENT_ALIPAY_SANDBOX_NOTIFY_URL）");
         }
         if (httpTimeoutMs <= 0) {
             missing.add("httpTimeoutMs（必须为正数）");
@@ -177,6 +196,24 @@ public class AlipaySandboxProperties {
 
     public void setHttpTimeoutMs(long httpTimeoutMs) {
         this.httpTimeoutMs = httpTimeoutMs;
+    }
+
+    /** 异步通知地址（资金事实来源；未配置 ⇒ 沙箱下单 400，INV-8）。 */
+    public String getNotifyUrl() {
+        return notifyUrl;
+    }
+
+    public void setNotifyUrl(String notifyUrl) {
+        this.notifyUrl = notifyUrl;
+    }
+
+    /** 页面跳回地址（非资金事实，可空）。 */
+    public String getReturnUrl() {
+        return returnUrl;
+    }
+
+    public void setReturnUrl(String returnUrl) {
+        this.returnUrl = returnUrl;
     }
 
     /**
