@@ -93,7 +93,7 @@ flowchart TB
 | 类型 | 名称 | 位置 | 说明 |
 |---|---|---|---|
 | 聚合根 | `Payment` | [domain/Payment.java](../../../payment-service/src/main/java/com/payment/payment/domain/Payment.java) | 平台支付意图 + 平台状态；不保存渠道内部状态 |
-| 实体 | `PaymentAttempt` | [domain/PaymentAttempt.java](../../../payment-service/src/main/java/com/payment/payment/domain/PaymentAttempt.java) | 一次渠道交互的完整历史（渠道引用/时间/结果/状态） |
+| 实体（渠道网关域） | `ChannelOrder` | [channelgateway/domain/ChannelOrder.java](../../../payment-service/src/main/java/com/payment/channelgateway/domain/ChannelOrder.java) | 一次渠道交互的完整历史（渠道引用/时间/结果/状态）；原 `PaymentAttempt`，spec 041 随域迁入并正名 |
 | 值对象 | `Money` | [common-core](../../../common/common-core/src/main/java/com/payment/common/core/money/Money.java) | 金额 + 币种（领域内金额用 `long` 分承载） |
 | 值对象 | `IdempotencyKey` | [common-core](../../../common/common-core/src/main/java/com/payment/common/core/idempotency/IdempotencyKey.java) | 幂等键 |
 | 值对象 | `ChannelResult` | [channelgateway/application/ChannelResult.java](../../../payment-service/src/main/java/com/payment/channelgateway/application/ChannelResult.java) | 渠道结果 SUCCESS/FAILURE/UNKNOWN + 渠道引用 + 原因 + **可选付款凭证**（spec 030） |
