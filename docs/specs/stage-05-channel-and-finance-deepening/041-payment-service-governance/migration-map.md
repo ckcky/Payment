@@ -81,22 +81,28 @@
 | 5 | `POST /internal/channels/{channelCode}/callback` | `POST /callbacks/channels/{channelCode}` | `mock-channel-web/{ChannelCallbackProxy,RefundCallbackProxy,routing.html,demo.html}`、`demo/start-tunnel.sh`、`docker-compose.yml`（`PAYMENT_CHANNEL_NOTIFY_URL`）、`start-all.sh`、`start-container.sh`、runbook |
 | 6 | `GET /internal/payments/confirmed-facts` | `/internal/payments/confirmed-facts`（保留）+ 新增 `/internal/refunds/confirmed-facts` | `reconciliation-service/{PaymentFacts,RefundFacts}FeignClient` |
 
-#### B. 🔴 spec 未给目标但今日存在（**实施前 MUST 补齐，否则必然残留**）
+#### B. ✅ spec 未给目标但今日存在 —— **已定案（H-041-7，2026-09-26 负责人授权实施者自行定案）**
 
-| # | 现状端点 | 所在 Controller | 目标 | 备注 |
+定案依据：ADR-0084 决策 3（一次性替换、禁兼容层）、[ADR-0063](../../../adr/0063-cross-service-reference-by-business-no.md)（数值主键不跨 HTTP）、
+FR-005（外部渠道回调**仅由 Channel API 接收**）、以及 **spec 040 已有的结论**（040 由本 Feature 吸收）。
+
+| # | 现状端点 | 定案 | 目标路径 | 依据 / 连带改动 |
 |---|---|---|---|---|
-| B1 | `POST /internal/payments/query-amount` | `RefundRpcController` | **待定** | 退款可退金额查询；FR-011 覆盖「查询」但未给路径 |
-| B2 | `POST /internal/payments/refund-attempt` | `RefundRpcController` | **待定** | 疑似 067 遗留的 attempt 面；**待确认是否仍在使用** |
-| B3 | `POST /internal/payments/refund-command` | `PaymentRefundCommandController` | **待定** | 与 `/refunds` 语义重叠，**待确认取舍（合并 or 保留）** |
-| B4 | `POST /internal/payments/{paymentNo}/channel-callback` | `ChannelCallbackController` | **待定** | 疑似 037 前遗留的回调面（037 后回调走 `/internal/channels/{code}/callback`）；**待确认是否可删** |
-| B5 | `POST /internal/payments/refunds/{refundNo}/channel-callback` | `RefundController` | **待定** | 同上，退款回调面；**待确认是否可删** |
-| B6 | `POST /internal/channels/{code}/status` | `ChannelAdminController` | `POST /internal/channels/{channelCode}/availability` | spec 用的是 `availability`；**路径变量名 `{code}` → `{channelCode}`** |
-| B7 | `GET /internal/payments/unknown` | `UnknownQueueController` | **待定**（FR-011 覆盖「UNKNOWN 收敛」） | UNKNOWN 队列只读端点 |
-| B8 | `GET /internal/limits/users/{userId}`、`PUT /internal/limits/users/{userId}`、`GET /internal/limits/payments/{paymentNo}/operations`、`GET /internal/limits/diagnostics` | `LimitController` | **待定**（FR-011 覆盖「运维」） | 4 个端点；ADR-0071 明确 `/internal/limits/**` 是 ADR-0048 的显式例外 |
-| B9 | `POST /internal/payments/pending-postings/{id}/replay` | `PendingPostingAdminController` | **待定** | ⚠️ 路径变量是**数值 `id`**，违反 ADR-0063「数值主键不跨 HTTP」⇒ 正名为业务单号 |
+| B1 | `POST /internal/payments/query-amount` | **删除** | — | 040 FR-015（零生产调用方，仅 `InternalServiceAuthTest:207-211` 当鉴权样例引用）。⚠️ 040 FR-016：**该测试 MUST 改用仍在册的内部端点**（建议 `GET /internal/payments/refunds/{refundNo}`），**禁止删测试或改断言迎合** |
+| B2 | `POST /internal/payments/refund-attempt` | **删除** | — | 040 FR-014（**全仓零调用方、零测试**）。`RefundRpcController` 在 B1+B2 后无残留 ⇒ **整类删除** |
+| B3 | `POST /internal/payments/refund-command` | **保留不动** | `/internal/payments/refund-command` | 040 FR-012 / NG2：承载 ADR-0067 的 TXRF/PMRF 双层互记语义（必带 `transactionRefundNo`），`order-service` 是调用方。**不与通用退款端点合并**（合并需改 ADR-0067，属人类决策边界） |
+| B4 | `POST /internal/payments/{paymentNo}/channel-callback` | **删除**，调用方改打统一回调入口 | `POST /callbacks/channels/{channelCode}` | ⚠️ **不是死端点**：`deployment/mock-channel-web/ChannelCallbackProxy.java:82` 正在调用。FR-005 要求回调仅由 Channel API 接收 ⇒ 该代理改打新端点。连带：`ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN`、`PaymentCallbackPathParityTest`、`ChannelCallbackSecurityTest`、`InternalServiceAuthTest:98`、`e2e-tests/Api.java:67-73`、`AccessLogFilterTest:155-169` |
+| B5 | `POST /internal/payments/refunds/{refundNo}/channel-callback` | **删除**，调用方改打统一回调入口 | `POST /callbacks/channels/{channelCode}` | ⚠️ **不是死端点**：`RefundCallbackProxy.java:73` 正在调用。连带：`ChannelCallbackSignatureFilter.REFUND_CALLBACK_PATH_PATTERN`、`RefundResultProcessor.java:53` 注释 |
+| B6 | `POST /internal/channels/{code}/status` | **改名** | `POST /internal/channels/{channelCode}/availability` | spec `plan.md §3` 用的是 `availability`；路径变量 `{code}` → `{channelCode}` 统一口径 |
+| B7 | `GET /internal/payments/unknown` | **保留 + 加开关** | `/internal/payments/unknown` | 040 FR-013 / NG3：是 runbook 与 5 条 Prometheus 告警规则的排障入口，**默认必须开启**（`@ConditionalOnProperty(name="payment.ops.unknown-queue.enabled", matchIfMissing=true)`），只提供「生产可关闭」能力 |
+| B8 | `/internal/limits/**`（4 个：GET/PUT `/users/{userId}`、GET `/payments/{paymentNo}/operations`、GET `/diagnostics`） | **路径保留**，Controller 迁出旁路包 | `/internal/limits/**`（不变） | ADR-0071 明确 `/internal/limits/**` 是 ADR-0048 的**显式例外**；本 Feature 只把 `LimitController` 从 `payment/limit/web` 迁至 `payment/api`，**不改路径、不改契约** |
+| B9 | `POST /internal/payments/pending-postings/{id}/replay` | **正名为业务单号** | `POST /internal/payments/pending-postings/{idempotencyKey}/replay` | 数值 `id` 违反 ADR-0063。`PendingPosting` 唯一业务键 = `idempotencyKey`（ADR-0077 Ledger 派生）。⚠️ 实施前须确认其字符集 URL 安全；若不可行则保留 `{id}` 并**显式登记为 ADR-0063 例外**。**范围只限 payment-service** —— `reconciliation` / `settlement` 的同形端点不在本 Feature 范围，口径不一致列为后续项 |
 
-> **B 组的处置必须在 T19/T21 之前定案**。建议一并写入 ADR-0084 的补充或 spec 修订，
-> 否则「禁止新旧混跑」下这些端点无处可去。
+> **连带风险（供实施时盯）**：B4/B5 的删除会动到**既有测试断言**
+> （`PaymentCallbackPathParityTest` / `ChannelCallbackSecurityTest` / `InternalServiceAuthTest`）。
+> 项目红线是「既有断言零变化」——此处属**端点被 spec 强制删除**导致的必然改动，
+> 处置原则与 037 T6 一致：**能靠口径/装配保住的断言一律保住**，确须改的**逐条上报**，
+> 不得为让测试变绿而弱化断言。
 
 ### 2.3 🔴 跨 ADR 强制同步项（ADR-0084 X-2）
 

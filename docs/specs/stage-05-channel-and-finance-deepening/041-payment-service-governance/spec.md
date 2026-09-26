@@ -1,15 +1,16 @@
 # 041-payment-service-governance — Spec
 
-> **Status**: Approved（2026-09-26 负责人裁决批准立项，H-041-1~3 已裁决）
+> **Status**: In Development（2026-09-26 负责人裁决批准立项 + **Accept ADR-0084**；T04 起实施中）
 > **Date**: 2026-09-26
 > **Stage / Path**: `docs/specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/`
-> **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟡 **Proposed**，2026-09-26 起草，待负责人 Accept；**Supersedes ADR-0072 §6**）
+> **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟢 **Accepted** 2026-09-26，H-041-1~7 全部批准；**Supersedes ADR-0072 §6**）
 > **Standard**: [spec-standard.md](../../../standards/spec-standard.md)
 >
-> ⚠️ **实施门禁（不得跳过）**：`acceptance.md` §1 前置条件 1 要求「**新 ADR 已 Accepted**；
-> Feature 已进入 `In Development` 或更高状态」。当前 ADR-0084 为 **Proposed**，
-> 且 H-041-4~6（Supersedes ADR-0072 §6 / ADR-0083 排除路径补 `/callbacks/**` / spec 040 置 Superseded）待裁决
-> ⇒ **Accept 前禁止动任何代码**；本轮只完成 T01（ADR 草案）、T02（四件套与索引）、T03（迁移映射）。
+> ✅ **实施门禁已解除**：`acceptance.md` §1 前置条件 1（「新 ADR 已 Accepted；Feature 已进入 `In Development` 或更高」）**已满足**。
+> 已裁决：H-041-1~3（2026-09-26 上午）与 H-041-4~7（同日 12:27，负责人「可以，继续搞完吧」）：
+> ① Accept ADR-0084；② Supersedes ADR-0072 §6；③ ADR-0083 排除路径补 `/callbacks/**`；
+> ④ spec 040 置 `Superseded by 041`；⑤ **授权实施者按 ADR-0084 决策 3 与 ADR-0063 自行定案 B1~B9 端点目标**。
+> **硬约束不变**：状态枚举与合法迁移一律不得改变（§8）；发现必须改 ⇒ **停工另提 ADR**。
 
 ### 0.5 现状与目标结构的差异（2026-09-26 实测核对，实施前必读）
 

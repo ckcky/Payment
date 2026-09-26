@@ -1,12 +1,12 @@
 # 041-payment-service-governance — Acceptance
 
-> **Status**: Approved（2026-09-26 负责人裁决批准立项；**ADR-0084 Accept 前不进入 In Development**）
+> **Status**: In Development（2026-09-26 负责人裁决批准立项 + **Accept ADR-0084**；T04 起实施中）
 > **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Tasks**: [tasks.md](tasks.md) ｜ **Migration Map**: [migration-map.md](migration-map.md)
 
 ## 1. 验收前置条件
 
 1. 新 ADR 已 Accepted；Feature 已进入 `In Development` 或更高状态。
-   - **当前状态（2026-09-26）**：❌ **未满足**。ADR-0084 已起草但为 **Proposed**；Feature 状态 **Approved**（立项已批准）而非 In Development；H-041-4~6 待裁决。
+   - **当前状态（2026-09-26 12:27）**：✅ **已满足**。ADR-0084 已 **🟢 Accepted**；Feature 状态 **In Development**；H-041-1~7 全部裁决完毕。
 2. 数据库明确是 development/test，且安全清库；生产、共享验收和未识别环境必须拒绝。
    - **当前状态**：⚠️ 本机 `deployment/logs/*.log` 在实时写入 ⇒ **有 live 栈在跑**，清库前必须先停栈。
 3. 旧包/API/DTO/配置/Schema/调用方迁移清单完成；仓内调用方均使用新 API。

@@ -2,7 +2,10 @@
 
 # ADR-0084：payment-service 双域治理——Payment/Channel 对称四层、`ChannelGateway` 与 `PaymentResultPort` 双向端口、一次性 API 替换与仅开发/测试清库重建（Feature 041）
 
-> **Status**: 🟡 **Proposed**（2026-09-26 起草；待负责人 Accept。**Accept 前禁止进入实现**）`<!-- Proposed | Accepted | Rejected | Not Implemented | Superseded | Deprecated -->`
+> **Status**: 🟢 **Accepted**（**2026-09-26 负责人裁决接受，H-041-1~6 全部批准**；即刻生效，是当前权威约束）`<!-- Proposed | Accepted | Rejected | Not Implemented | Superseded | Deprecated -->`
+> **裁决记录（2026-09-26）**：负责人对 T01~T03 交付的回复为「**可以，继续搞完吧**」——
+> 解释为：① 接受本 ADR（含 H-041-4~6）；② 授权实施者按本文既定原则自行定案 B1~B9 端点目标；③ 批准 T04 起进入实现。
+> （[ADR-0072 §6](0072-two-layer-channel-architecture.md) 自此刻起被本文决策 6 取代。）
 > **Date**: 2026-09-26
 > **Standard**: [adr-standard.md](../standards/adr-standard.md)
 >
@@ -257,9 +260,10 @@ Factory/Registry 只按规范化 `channelCode` 定位唯一 Plugin；
 | H-041-1 | 是否批准 041 立项（Draft → Approved，并建本 ADR） | 立项授权 | ✅ **批准立项，先出 ADR 待 Accept** |
 | H-041-2 | 一次性替换全部 HTTP API + 开发/测试环境清库重建 Schema | 公共 API / 数据库结构 | ✅ **两项都授权** |
 | H-041-3 | 旧 041（`payment-flow-layering`，已合入 master）如何处置 | 领域模型 / 基线 | ✅ **视为可替换基线**（spec §1 已声明） |
-| H-041-4 | 是否 Supersedes ADR-0072 §6「分层 ≠ 拆事务」 | 服务边界 / 一致性语义 | ⏳ **随本 ADR 一并 Accept** |
-| H-041-5 | ADR-0083 排除路径补 `/callbacks/**`（X-2） | 安全口径 | ⏳ **随本 ADR 一并 Accept**（不补即重新泄漏渠道报文） |
-| H-041-6 | spec 040 置为 `Superseded by 041`（X-4） | 文档治理 | ⏳ **随本 ADR 一并 Accept** |
+| H-041-4 | 是否 Supersedes ADR-0072 §6「分层 ≠ 拆事务」 | 服务边界 / 一致性语义 | ✅ **Accepted**（2026-09-26） |
+| H-041-5 | ADR-0083 排除路径补 `/callbacks/**`（X-2） | 安全口径 | ✅ **Accepted**（2026-09-26；不补即重新泄漏渠道报文） |
+| H-041-6 | spec 040 置为 `Superseded by 041`（X-4） | 文档治理 | ✅ **Accepted**（2026-09-26） |
+| H-041-7 | B1~B9 共 9 个 spec 未给出目标的端点如何处置 | 公共 API | ✅ **授权实施者按本文决策 3 与 ADR-0063 自行定案**（2026-09-26）；定案见 [migration-map.md §2.2 B 组](../specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/migration-map.md) |
 
-> **Accept 前禁止进入实现**：spec 041 `acceptance.md` §1 前置条件 1 要求「新 ADR 已 Accepted；
-> Feature 已进入 `In Development` 或更高状态」。H-041-4~6 三项未裁决时，决策 6 与 X-2/X-4 均无授权依据。
+> **门禁已解除**：H-041-1~7 全部裁决完毕，本 ADR 🟢 **Accepted**。
+> spec 041 `acceptance.md` §1 前置条件 1（「新 ADR 已 Accepted」）**已满足**，Feature 可进入 `In Development`。

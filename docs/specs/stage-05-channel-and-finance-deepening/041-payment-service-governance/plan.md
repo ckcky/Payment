@@ -1,8 +1,8 @@
 # 041-payment-service-governance — Plan
 
-> **Status**: Approved（2026-09-26 负责人裁决批准立项；**ADR-0084 Accept 前不进入 In Development**）
+> **Status**: In Development（2026-09-26 负责人裁决批准立项 + **Accept ADR-0084**）
 > **Date**: 2026-09-26
-> **Spec**: [spec.md](spec.md) ｜ **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟡 Proposed，待 Accept）
+> **Spec**: [spec.md](spec.md) ｜ **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟢 **Accepted** 2026-09-26）
 
 ## 1. 技术上下文与前置决策
 

@@ -2,7 +2,15 @@
 
 **Feature**：040　**标题**：Payment API Surface Consolidation（查单双单号 / 通用退款入口 / 死端点清理 / 运维端点可控）
 **版本**：v1.0（Draft）　**日期**：2026-09-26
-> **Status**: Draft <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
+> **Status**: Superseded <!-- Draft | In Review | Approved | In Development | Implemented | Deprecated | Superseded | Not Implemented -->
+>
+> ⚠️ **Superseded by [041-payment-service-governance](../041-payment-service-governance/spec.md)**（ADR-0084 H-041-6，2026-09-26 负责人裁决）。
+> 040 的 API 面治理目标（查单双单号 / 通用退款入口 / 死端点清理 / 运维端点可控）**由 041 一次性 API 替换整体吸收**；
+> 041 已把 9 组端点目标写死并**禁止兼容层**，二者不能并行实施，否则出现两套 API 面。
+> **040 中仍被 041 直接沿用的结论已转入 041 的 [migration-map.md](../041-payment-service-governance/migration-map.md)**：
+> FR-012（`refund-command` 保留）、FR-014/015（删 `refund-attempt` / `query-amount`）、
+> FR-013（unknown 端点加开关默认开启）、FR-016（`PaymentRefundService` 类保留、鉴权样例测试改指仍在册端点）、
+> INV-7（既有调用方零破坏）。**041 实施时 MUST 遵守这些条款，不得以「040 已 Superseded」为由忽略。**
 **前置**：036（渠道微内核）、037（渠道网关边界）、038（payment-service 包边界）、039（微信插件）均已在 master
 **输入权威**：[Constitution §Governance / §Architecture](../../../../.specify/memory/constitution.md)、
 [ADR-0063 跨系统标识](../../../adr/)、[ADR-0067 两层退款单](../../../adr/)、[ADR-0016 退款恒按全退](../../../adr/)

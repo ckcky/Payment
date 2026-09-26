@@ -1,6 +1,6 @@
 # 041-payment-service-governance — Tasks
 
-> **Status**: Approved（2026-09-26 负责人裁决批准立项；**ADR-0084 Accept 前不进入 In Development，T04 起不得开工**）
+> **Status**: In Development（2026-09-26 负责人裁决批准立项 + **Accept ADR-0084**，H-041-1~7 全部批准；T04 起实施中）
 > **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Acceptance**: [acceptance.md](acceptance.md) ｜ **Migration Map**: [migration-map.md](migration-map.md)
 > **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟡 Proposed，2026-09-26 起草，待负责人 Accept）
 
