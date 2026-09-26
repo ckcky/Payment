@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.payment.channel.application.spi.AbstractChannelPlugin;
 import com.payment.channel.application.spi.ChannelPluginDescriptor;
-import com.payment.channel.infra.wechat.WechatChannelPlugin;
+import com.payment.channel.infra.plugins.wechat.WechatChannelPlugin;
+import com.payment.channel.infra.plugins.alipay.AlipayChannelAdapter;
+import com.payment.channel.infra.plugins.douyin.DouyinChannelAdapter;
+import com.payment.channel.infra.plugins.mock.MockChannelAdapter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

@@ -1,6 +1,7 @@
 package com.payment.channel.infra.config;
 
 import com.payment.channel.application.ChargeDispatchPolicy;
+import com.payment.channel.infra.plugins.mock.MockCashierProperties;
 import com.payment.channel.application.ChargeRequest;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.dto.channel.PayCredential;

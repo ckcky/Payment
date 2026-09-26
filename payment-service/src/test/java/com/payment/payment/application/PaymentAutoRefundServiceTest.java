@@ -19,7 +19,7 @@ import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channel.infra.MockChannelAdapter;
+import com.payment.channel.infra.plugins.mock.MockChannelAdapter;
 import com.payment.payment.application.refund.RefundApplicationService;
 import com.payment.payment.application.refund.RefundResultProcessor;
 import com.payment.payment.domain.Refund;

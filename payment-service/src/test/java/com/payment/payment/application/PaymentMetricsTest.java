@@ -10,7 +10,7 @@ import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channel.infra.MockChannelAdapter;
+import com.payment.channel.infra.plugins.mock.MockChannelAdapter;
 import com.payment.payment.support.PaymentTestStack;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;

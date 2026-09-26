@@ -4,7 +4,7 @@ import com.payment.payment.application.PaymentApplicationService;
 import com.payment.channel.application.ChannelResult;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.channel.infra.MockChannelAdapter;
+import com.payment.channel.infra.plugins.mock.MockChannelAdapter;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.Test;
 

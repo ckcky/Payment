@@ -13,7 +13,7 @@ import com.payment.channel.domain.ChannelOrder;
 import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channel.infra.MockChannelAdapter;
+import com.payment.channel.infra.plugins.mock.MockChannelAdapter;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

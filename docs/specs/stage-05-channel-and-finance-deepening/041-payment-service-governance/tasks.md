@@ -72,11 +72,76 @@
 
 ## 2. Channel 域
 
-- [ ] T07 `channel/domain/`：重建 ChannelOrder、状态机、领域错误和 Repository 端口。依赖：T05。追溯：FR-004，INV-002/004/005/007。验收：状态机与幂等单测。
-- [ ] T08 `channel/infra/persistence/`：实现 Entity、Mapper、Repository 和本地事务写入口。依赖：T07。追溯：FR-010/012，INV-003。验收：真库唯一键/并发测试。
-- [ ] T09 `channel/application/`：实现命令校验、ChannelOrder 创建/复用、原渠道查询/退款和标准化结果。依赖：T06/T08。追溯：FR-003/004，INV-004/005/007。
-- [ ] T10 `channel/infra/plugins/`：建立模板方法、Factory/Registry、Strategy 和插件结构测试。依赖：T09。追溯：FR-007/008，INV-009。
-- [ ] T11 `channel/infra/plugins/{alipay,wechat,stripe,douyin,mock}/`：逐渠道迁入 SDK、配置、签名、Gateway、Plugin、回调解析和测试。依赖：T10。追溯：FR-007/008/013。验收：每渠道独立装配测试。
+- [x] T07 `channel/domain/`：重建 ChannelOrder、状态机、领域错误和 Repository 端口。依赖：T05。追溯：FR-004，INV-002/004/005/007。验收：状态机与幂等单测。
+  - **执行记录（2026-09-26）**：**「确认 + 补测」而非重建**。实测四件已在位且质量达标：
+    `ChannelOrder`（聚合，`channelNo` 业务单号不可变、`channelCode` 不可变 ⇒ INV-007 强制回原渠道）、
+    `ChannelOrderStatus`（五态枚举）、`ChannelOrderErrorType`（领域错误分类）、
+    `ChannelOrderRepository`（领域端口，实现在 `channel/infra/persistence/`）。
+    - INV-002 复核：状态只经 `accept/succeed/fail/markUnknown` 推进，无 `setStatus`；
+      终态（SUCCEEDED/FAILED）吸收迟到/重复/冲突结果（返回 false）。
+    - INV-005 复核：`markUnknown` 覆盖 PENDING/ACCEPTED，终态不被未知结果污染。
+    - **FR-010 负向检查通过**：`channel/application/` 无任何 Mapper/Entity 引用；
+      `ChannelOrderEntity` / `ChannelOrderMapper` / `MybatisChannelOrderRepository` /
+      `InMemoryChannelOrderRepository` 全部位于 `channel/infra/persistence/`。
+    - **补测**：新增 `channel/domain/ChannelOrderStateMachineTest`（19 用例）——Channel 域此前
+      无专属状态机单测（Payment 域已有 `PaymentStateMachineTest` 对照）。锁定 spec §8 迁移图
+      （PENDING/ACCEPTED/UNKNOWN → SUCCEEDED/FAILED，终态吸收一切迟到/冲突结果）、
+      引用回填边界、无公共 `setStatus`。**新增测试，未触碰任何既有断言。**
+  - **验证**：该测试 19 / 0F / 0E；全量门禁在 T08 提交前重跑（见 T08 记录）。
+- [x] T08 `channel/infra/persistence/`：实现 Entity、Mapper、Repository 和本地事务写入口。依赖：T07。追溯：FR-010/012，INV-003。验收：真库唯一键/并发测试。
+  - **执行记录（2026-09-26）**：**「确认 + 补测」**。实现四件已在位：
+    `ChannelOrderEntity` / `ChannelOrderMapper` / `MybatisChannelOrderRepository`（乐观锁，
+    冲突抛 CONFLICT）/ `InMemoryChannelOrderRepository`；**本地事务写入口**
+    `ChannelOrderServiceImpl` 落在 `infra/persistence`（每写方法自带 `@Transactional`，
+    spec 041 / D2 与 payment 侧拆事务——ADR-0084 决策 6 的落点）。
+  - **补测**：新增 `channel/infra/persistence/ChannelOrderPersistenceTest`（6 用例，
+    渠道域此前无自有持久化测试）：
+    roundTrip 全字段映射（含 errorType / extra 模态 / REFUND 类型）、
+    `uk_attempts_channel_no` 重复插入被拒、`uk_attempts_channel_reference` 重复插入被拒、
+    乐观锁陈旧版本被拒（先到者事实不被覆盖）、**8 线程竞争同一 channelNo 恰好一个赢家**、
+    rehydrate 时间戳读回。踩坑两条已记录：① `com.payment.channel.**` 向上找不到
+    `@SpringBootConfiguration` ⇒ `@SpringBootTest(classes = PaymentApplication.class)`
+    必须显式给；② H2 schema 每次上下文只刷一次 ⇒ 同 paymentNo 跨用例互相污染，
+    每用例必须用唯一单号。**新增测试，未触碰任何既有断言。**
+  - **验证**：该测试 6 / 0F / 0E。
+- [x] T09 `channel/application/`：实现命令校验、ChannelOrder 创建/复用、原渠道查询/退款和标准化结果。依赖：T06/T08。追溯：FR-003/004，INV-004/005/007。验收：应用/插件测试。
+  - **执行记录（2026-09-26）**：**「确认」而非重建**——管线四段全部在位且有钉死测试：
+    - 命令校验：`PaymentApplicationService` 入口 `INVALID_ARGUMENT`（空命令 / 双单号交叉校验）。
+    - 幂等创建/复用：Payment 侧 `PaymentPersistence.insertPending`（业务唯一键幂等）⇒
+      Channel 侧 `ChannelOrderService.openChannelOrder`（FIX-3 断言 1:1，复用由幂等键在**建单前**拦下）。
+    - 原渠道查询/退款（INV-007）：`ChannelQueryService.resolveRecordedTarget` 按
+      `attempt_type=PAYMENT` 行取 `channel_code`（确定性 id 升序，修 S22），找不到即抛
+      `INTERNAL_ERROR` **不回落默认渠道**；退款同口径（渠道码由调用方解析传入，接口不回落）。
+    - 标准化结果：`ChannelResult` + `converge` 三态收敛（SUCCESS/FAILURE/UNKNOWN），
+      UNKNOWN 进 `markUnknown`（INV-005 不猜结果）。
+  - **验证**：`ChannelGatewayTest` 11 + `DefaultChannelGatewayDispatchTest` 3 +
+    `ChannelOrderServiceContractTest` 7 = **21 / 0F / 0E**。
+- [x] T10 `channel/infra/plugins/`：建立模板方法、Factory/Registry、Strategy 和插件结构测试。依赖：T09。追溯：FR-007/008，INV-009。
+  - **执行记录（2026-09-26）**：**「确认内核 + 建目录 + 补结构测试」**。
+    模板方法 {@code AbstractChannelPlugin}（final 主流程四步：能力校验 → 模态门控 → 模态分派 →
+    异常兜底）、{@code ChannelPluginFactory} / {@code ChannelPluginDescriptor} SPI 已在
+    `application/spi` 内核侧；Registry（`SpringChannelRegistry`）/ Router（`ConfiguredChannelRouter`）/
+    Factory 定位器（`ChannelPluginFactoryLocator`，Spring + ServiceLoader 双路合并）在 infra 根。
+    - 新建 `infra/plugins/{alipay,wechat,stripe,douyin,mock}/` 骨架（T11 一并迁入）。
+    - **补测**：新增 `ChannelPluginStructureTest`（3 用例）：五家实现全部落在
+      `channel.infra.plugins.<vendor>`、模板在内核 `application.spi`、五家均可赋值到模板
+      （差异关进笼子的结构判据）。
+- [x] T11 `channel/infra/plugins/{alipay,wechat,stripe,douyin,mock}/`：逐渠道迁入 SDK、配置、签名、Gateway、Plugin、回调解析和测试。依赖：T10。追溯：FR-007/008/013。验收：每渠道独立装配测试。
+  - **执行记录（2026-09-26）**：**纯机械迁移，零行为变更**（`git mv` + Python 全仓替换，
+    吸取 T05 的 zsh sed 教训）：
+    - `infra/alipay/` → `plugins/alipay/`（含目录外散件 `AlipayChannelAdapter`、
+      `config/AlipaySandboxProperties` 收进同目录，§0.5 登记的半成品补齐）；
+      `infra/wechat/` → `plugins/wechat/`；`infra/stripe/` → `plugins/stripe/`；
+      扁平件 `DouyinChannelAdapter` → `plugins/douyin/`；
+      `MockChannelAdapter` + `AbstractMockChannelAdapter` + `MockCashierProperties` → `plugins/mock/`。
+    - 测试同步迁移（alipay/wechat 目录 + 两个扁平测试文件）；45 个 java 文件引用替换，残留 0；
+      补 import 6 处（4 个生产：Alipay/Douyin 父类、config 两个 MockCashierProperties 引用；
+      2 个测试：ChannelPluginMigrationTest 三个 Adapter、DemoCashierDispatchPolicyTest）+
+      2 个扁平测试文件的 package 声明改写。
+  - **补测**：新增 `StripeChannelPluginTest`（4 用例）——Stripe 此前<b>无专属测试</b>，
+    「每渠道独立装配测试」对它缺席；补齐工厂装配/自描述、能力校验先于网关触达
+    （桩网关任何被调即炸）、MOCK 模态零触达、enabled=false 不阻塞 MOCK（C-1 同口径）。
+  - **验证**：迁移相关 8 个测试类 79 / 0F / 0E；新增 7 用例（结构 3 + Stripe 4）全绿。
 - [ ] T12 `channel/api/`、`channel/application/`：实现唯一回调入口及“识别→验签→解析→收敛→PaymentResultPort”流程。依赖：T06/T09/T10。追溯：FR-005/006，INV-008。验收：错误回调不触达 Payment。
 - [ ] T13 `channel/api/`：重建渠道订单查询、路由预览和可开关运维端点。依赖：T09。追溯：FR-009/011，INV-010。
 

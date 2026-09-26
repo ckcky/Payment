@@ -2,6 +2,7 @@ package com.payment.channel.infra.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import com.payment.channel.infra.plugins.mock.MockCashierProperties;
 
 /**
  * 渠道网关域配置装配（spec 041）。
