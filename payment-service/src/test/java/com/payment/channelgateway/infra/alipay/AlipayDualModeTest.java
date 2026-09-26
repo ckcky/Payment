@@ -3,7 +3,6 @@ package com.payment.channelgateway.infra.alipay;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.channelgateway.infra.alipay.AlipayGateway;
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.common.dto.channel.Goods;
@@ -39,6 +38,12 @@ class AlipayDualModeTest {
             "<form name=\"punchout_form\" method=\"post\" "
                     + "action=\"https://openapi-sandbox.dl.alipaydev.com/gateway.do\">"
                     + "<script>document.forms[0].submit();</script></form>";
+
+    /** 回调地址（spec 041：归渠道配置）。 */
+    private static final String NOTIFY_URL = "https://x/notify";
+
+    /** 页面跳回地址（非资金事实）。 */
+    private static final String RETURN_URL = "https://x/return";
 
     /** 可编排的网关桩，记录被调用情况。 */
     private static final class StubGateway implements AlipayGateway {
@@ -83,8 +88,8 @@ class AlipayDualModeTest {
 
     private static ChargeRequest chargeRequest() {
         return new ChargeRequest("PM001", 10_00L, "CNY", "ALIPAY",
-                PaymentScene.WEB, Goods.of("测试商品"), new CallbackUrls("https://x/notify", "https://x/return"),
-                Instant.now().plusSeconds(300), null, null, null);
+                PaymentScene.WEB, Goods.of("测试商品"),
+                Instant.now().plusSeconds(300), null, null, null, null);
     }
 
     // ---- FR-130：MOCK 分支 super 委托，语义不变 ----
@@ -94,7 +99,8 @@ class AlipayDualModeTest {
     void mockModeDoesNotTouchSandbox() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.clear(); // 未染色 ⇒ MOCK
         ChannelResult result = adapter.charge(chargeRequest());
@@ -109,7 +115,8 @@ class AlipayDualModeTest {
     void explicitMockDyeStaysMock() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.MOCK);
         adapter.charge(chargeRequest());
@@ -124,7 +131,8 @@ class AlipayDualModeTest {
     void sandboxChargeProducesCredential() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.SANDBOX);
         ChannelResult result = adapter.charge(chargeRequest());
@@ -144,7 +152,8 @@ class AlipayDualModeTest {
         StubGateway gateway = new StubGateway();
         gateway.pagePayResult = AlipayGateway.PagePayResult.transportFailure("timeout");
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.SANDBOX);
         ChannelResult result = adapter.charge(chargeRequest());
@@ -156,10 +165,11 @@ class AlipayDualModeTest {
     @Test
     @DisplayName("沙箱 charge 缺 notifyUrl ⇒ 400（returnUrl 不承载资金事实）[FR-103]")
     void sandboxChargeRequiresNotifyUrl() {
+        // spec 041：notifyUrl 来自渠道配置；不配即拒绝下单（不静默降级，INV-8）
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true);
+                AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true, null, null, null);
         ChargeRequest noNotify = new ChargeRequest("PM001", 10_00L, "CNY", "ALIPAY",
-                PaymentScene.WEB, Goods.of("x"), CallbackUrls.notifyOnly(null), null, null, null, null);
+                PaymentScene.WEB, Goods.of("x"), null, null, null, null, null);
 
         DyeContext.set(DyeMode.SANDBOX);
         assertThatThrownBy(() -> adapter.charge(noNotify))
@@ -173,7 +183,8 @@ class AlipayDualModeTest {
     @DisplayName("SANDBOX 染色但沙箱未启用 ⇒ 400，绝不静默回落 mock [FR-241][INV-8]")
     void sandboxDyeWithoutEnabledFailsHard() {
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, null, false);
+                AlipayChannelAdapter.Scenario.SUCCESS, null, false, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.SANDBOX);
         assertThatThrownBy(() -> adapter.charge(chargeRequest()))
@@ -188,7 +199,8 @@ class AlipayDualModeTest {
     void sandboxQueryMapsThreeStates() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
         DyeContext.set(DyeMode.SANDBOX);
         QueryStatusRequest req = new QueryStatusRequest("PM001", "txn-1", "idem-1", "ch-txn-1");
 
@@ -217,7 +229,8 @@ class AlipayDualModeTest {
     void sandboxRefundMapsSynchronously() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
         DyeContext.set(DyeMode.SANDBOX);
         RefundRequest req = new RefundRequest("PM001", "R001", 10_00L, "CNY", "ALIPAY",
                 "ch-txn-1", "R001", "user request", "https://x/notify");
@@ -234,7 +247,8 @@ class AlipayDualModeTest {
     @DisplayName("supportsRealMode=true；supportedScenes 沙箱收窄为 WEB，mock 全支持 [FR-131]")
     void capabilityDeclarationIsModeAware() {
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true);
+                AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true, null,
+                NOTIFY_URL, RETURN_URL);
 
         assertThat(adapter.supportsRealMode()).isTrue();
 

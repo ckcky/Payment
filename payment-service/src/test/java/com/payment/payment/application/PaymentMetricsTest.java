@@ -8,7 +8,7 @@ import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.application.PaymentPersistence;
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.channelgateway.infra.MockChannelAdapter;
 import com.payment.payment.support.PaymentTestStack;
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PaymentMetricsTest {
 
     private final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-    private final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+    private final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
     private final PaymentTestStack.RecordingOrderGateway order =
             new PaymentTestStack.RecordingOrderGateway();
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -35,8 +35,8 @@ class PaymentMetricsTest {
                 new PaymentResultProcessor(payments, attempts, order);
         PaymentRetryService retryService = new PaymentRetryService(channel,
                 PaymentTestStack.fastRetryConfig(), metrics);
-        return new PaymentApplicationService(payments, new PaymentPersistence(payments, attempts),
-                retryService, order, metrics, audit);
+        return new PaymentApplicationService(payments, new PaymentPersistence(payments),
+                retryService, order, metrics, audit, attempts);
     }
 
     private CreatePaymentCommand command(String idempotencyKey) {
@@ -93,9 +93,9 @@ class PaymentMetricsTest {
         PaymentUnknownResolutionService resolution =
                 new PaymentUnknownResolutionService(payments, processor, metrics, audit);
 
-        boolean resolved = resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
+        Payment resolved = resolution.resolve(payment.getPaymentNo(), ChannelResult.success("authoritative"));
 
-        assertThat(resolved).isTrue();
+        assertThat(resolved.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(registry.get("payment.succeeded").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("payment.unknown.duration").timer().count()).isEqualTo(1);
     }

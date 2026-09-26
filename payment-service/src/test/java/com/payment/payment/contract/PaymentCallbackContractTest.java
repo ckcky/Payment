@@ -29,7 +29,7 @@ class PaymentCallbackContractTest {
 
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.success("ref-cb"));
         assertThat(changed).isTrue();
-        assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        assertThat(service.getPaymentByNo(payment.getPaymentNo()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         // T023：SUCCESS 通知 order 恰好 1 次
         assertThat(stack.order.succeededRequests).hasSize(1);
     }
@@ -57,7 +57,7 @@ class PaymentCallbackContractTest {
         boolean changed = stack.callback.handleCallback(
                 payment.getPaymentNo(), ChannelResult.businessFailure("ref", "late decline"));
         assertThat(changed).isFalse();
-        assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        assertThat(service.getPaymentByNo(payment.getPaymentNo()).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         // T023 + Feature 016（FR-001）：同步 charge 成功已通知 order 恰一次；
         // 迟到失败不产生二次成功事实（changed=false 不再通知）
         assertThat(stack.order.succeededRequests).hasSize(1);
@@ -72,7 +72,7 @@ class PaymentCallbackContractTest {
 
         boolean changed = stack.callback.handleCallback(payment.getPaymentNo(), ChannelResult.businessUnknown("still unknown"));
         assertThat(changed).isFalse();
-        assertThat(service.getPayment(payment.getId()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+        assertThat(service.getPaymentByNo(payment.getPaymentNo()).getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
         assertThat(stack.order.succeededRequests).hasSize(requestsAfterFirst);
         // T023：UNKNOWN 不通知 order
         assertThat(stack.order.succeededRequests).isEmpty();

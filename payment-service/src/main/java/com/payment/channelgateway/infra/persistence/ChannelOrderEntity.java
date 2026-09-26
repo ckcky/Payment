@@ -1,4 +1,4 @@
-package com.payment.payment.infra.persistence.attempt;
+package com.payment.channelgateway.infra.persistence;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.payment.common.mybatis.BaseEntity;
@@ -6,11 +6,11 @@ import com.payment.common.mybatis.BaseEntity;
 import java.time.Instant;
 
 /**
- * 支付尝试持久化实体（PO）：承载 payment_attempts 表列，记录一次渠道交互的完整历史
- * （渠道身份、渠道引用、请求/响应时间、结果与状态）。状态机逻辑在 {@code domain.PaymentAttempt}。
+ * 支付尝试持久化实体（PO）：承载 channel_orders 表列，记录一次渠道交互的完整历史
+ * （渠道身份、渠道引用、请求/响应时间、结果与状态）。状态机逻辑在 {@code domain.ChannelOrder}。
  */
-@TableName("payment_attempts")
-public class PaymentAttemptEntity extends BaseEntity {
+@TableName("channel_orders")
+public class ChannelOrderEntity extends BaseEntity {
 
     private String paymentNo;
     /**

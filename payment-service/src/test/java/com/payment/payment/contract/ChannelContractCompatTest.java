@@ -42,7 +42,6 @@ class ChannelContractCompatTest {
         assertThat(req.channelCode()).isEqualTo("MOCK");
         assertThat(req.scene()).isNull();
         assertThat(req.goods()).isNull();
-        assertThat(req.callbackUrls()).isNull();
         assertThat(req.expireAt()).isNull();
         assertThat(req.payer()).isNull();
         assertThat(req.attach()).isNull();
@@ -54,8 +53,8 @@ class ChannelContractCompatTest {
     void chargeRequestFullConstructorCarriesExtensions() {
         Instant expire = Instant.parse("2026-09-20T00:00:00Z");
         ChargeRequest req = new ChargeRequest("PM1", 100L, "CNY", "ALIPAY",
-                null, null, null, expire, null, "attach-1",
-                Map.of("subject", "测试商品"));
+                null, null, expire, null, "attach-1",
+                Map.of("subject", "测试商品"), null);
 
         assertThat(req.expireAt()).isEqualTo(expire);
         assertThat(req.attach()).isEqualTo("attach-1");

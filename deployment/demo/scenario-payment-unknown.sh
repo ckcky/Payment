@@ -28,9 +28,9 @@ jget "d['paymentNo']"; PAYMENT_NO="$VALUE"
 info "orderNo=$ORDER_NO paymentNo=$PAYMENT_NO"
 
 echo "==> ③ 等待支付进入 UNKNOWN（不猜成败落账）"
-wait_until 60 3 "payment 进入 UNKNOWN" bash -c "curl -s --noproxy '*' $PAYMENT_URL/payments/$PAYMENT_NO | python -c \"import json,sys;print('UNKNOWN' if json.load(sys.stdin).get('status')=='UNKNOWN' else 'WAIT')\" | grep -q UNKNOWN"
+wait_until 60 3 "payment 进入 UNKNOWN" bash -c "curl -s --noproxy '*' $PAYMENT_URL/payments?paymentNo=$PAYMENT_NO | python -c \"import json,sys;print('UNKNOWN' if json.load(sys.stdin).get('status')=='UNKNOWN' else 'WAIT')\" | grep -q UNKNOWN"
 # wait_until 的探测不更新 BODY，需重新拉取支付单
-http GET "$PAYMENT_URL/payments/$PAYMENT_NO"
+http GET "$PAYMENT_URL/payments?paymentNo=$PAYMENT_NO"
 jget "d['status']"; STATUS1="$VALUE"
 assert_eq "$STATUS1" "UNKNOWN" "支付状态 → UNKNOWN（渠道无明确结论，不猜成败落账）"
 

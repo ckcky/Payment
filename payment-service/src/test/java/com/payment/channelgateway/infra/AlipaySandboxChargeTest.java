@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.channelgateway.infra.alipay.AlipayGateway;
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.common.dto.channel.Goods;
@@ -46,6 +45,12 @@ class AlipaySandboxChargeTest {
                     + "<input type=\"hidden\" name=\"biz_content\" value=\"{}\">"
                     + "<input type=\"submit\" value=\"立即支付\" style=\"display:none\"></form>"
                     + "<script>document.forms[0].submit();</script>";
+
+    /** 回调地址（spec 041：归渠道配置，不再经 {@code ChargeRequest} 下发）。 */
+    private static final String NOTIFY_URL = "https://demo/notify";
+
+    /** 页面跳回地址（非资金事实）。 */
+    private static final String RETURN_URL = "https://demo/return";
 
     /** 只记录调用、可编排结果的最小网关桩。 */
     private static final class StubGateway implements AlipayGateway {
@@ -92,8 +97,7 @@ class AlipaySandboxChargeTest {
     private static ChargeRequest charge(long amountMinor) {
         return new ChargeRequest("PM030", amountMinor, "CNY", "ALIPAY",
                 PaymentScene.WEB, Goods.of("沙箱测试商品"),
-                new CallbackUrls("https://demo/notify", "https://demo/return"),
-                Instant.parse("2026-09-20T12:00:00Z"), null, null, new HashMap<>());
+                Instant.parse("2026-09-20T12:00:00Z"), null, null, new HashMap<>(), null);
     }
 
     // ---------- 零分叉探针：MOCK 尾数 11 仍 timeout ----------
@@ -103,7 +107,8 @@ class AlipaySandboxChargeTest {
     void mockTailElevenStillTimesOut() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.clear(); // 未染色 ⇒ MOCK
         ChannelResult result = adapter.charge(charge(3_411L)); // % 100 == 11
@@ -121,7 +126,8 @@ class AlipaySandboxChargeTest {
     void explicitMockDyeAlsoStaysOnMockFaultPath() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.MOCK);
         ChannelResult result = adapter.charge(charge(3_411L));
@@ -135,7 +141,8 @@ class AlipaySandboxChargeTest {
     void mockOrdinaryAmountStillSucceeds() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.clear();
         ChannelResult result = adapter.charge(charge(3_400L)); // % 100 == 0
@@ -152,7 +159,8 @@ class AlipaySandboxChargeTest {
     void sandboxTailElevenGoesToRealGatewayInstead() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.SANDBOX);
         ChannelResult result = adapter.charge(charge(3_411L));
@@ -170,7 +178,8 @@ class AlipaySandboxChargeTest {
     void sandboxProducesRedirectCredentialAndPassesThrough() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.SANDBOX);
         ChannelResult result = adapter.charge(charge(12_345L));
@@ -184,7 +193,7 @@ class AlipaySandboxChargeTest {
         // 网关收到的是**分**（换算发生在网关层，Adapter 不预换算——避免双处换算漂移）
         assertThat(gateway.lastAmountMinor).isEqualTo(12_345L);
         assertThat(gateway.lastOutTradeNo).isEqualTo("PM030");
-        assertThat(gateway.lastNotifyUrl).isEqualTo("https://demo/notify");
+        assertThat(gateway.lastNotifyUrl).isEqualTo(NOTIFY_URL);
         assertThat(gateway.lastSubject).isEqualTo("沙箱测试商品");
     }
 
@@ -194,7 +203,8 @@ class AlipaySandboxChargeTest {
         StubGateway gateway = new StubGateway();
         gateway.pagePayResult = AlipayGateway.PagePayResult.transportFailure("connection reset");
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true);
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, true, null,
+                NOTIFY_URL, RETURN_URL);
 
         DyeContext.set(DyeMode.SANDBOX);
         ChannelResult result = adapter.charge(charge(12_345L));
@@ -209,7 +219,8 @@ class AlipaySandboxChargeTest {
     void sandboxWithoutEnabledFailsHardAndNeverTouchesGateway() {
         StubGateway gateway = new StubGateway();
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
-                AlipayChannelAdapter.Scenario.SUCCESS, gateway, false); // enabled=false
+                AlipayChannelAdapter.Scenario.SUCCESS, gateway, false, null,
+                NOTIFY_URL, RETURN_URL); // enabled=false
 
         DyeContext.set(DyeMode.SANDBOX);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.charge(charge(12_345L)))

@@ -5,8 +5,8 @@ import com.payment.common.dto.channel.ChannelPayStatus;
 import com.payment.common.dto.channel.ChannelRefundNotified;
 import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.support.PaymentTestStack;
 import com.payment.payment.support.RecordingObservability;
@@ -54,10 +54,10 @@ class PaymentNotifyPortTest {
 
         stack.payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
                 10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
-        stack.attempts.save(PaymentAttempt.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
-                Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
+        stack.attempts.save(ChannelOrder.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
+                Instant.now().minusSeconds(60), null, null, ChannelOrderStatus.ACCEPTED,
                 null, null, 1, "PAYMENT", 10_00L, "CNY",
-                Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
+                Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX")));
 
         // 退款侧协作者置 null：本类只验支付回调路径（退款路径由既有退款单测覆盖）
         port = new DefaultPaymentNotifyPort(stack.callback, null,
@@ -146,7 +146,7 @@ class PaymentNotifyPortTest {
     @Test
     @DisplayName("FR-011：渠道引用串号 ⇒ 拒绝并计入 channel_reference 维度")
     void conflictingChannelReferenceIsRejected() {
-        PaymentAttempt attempt = stack.attempts.findByPaymentNo(PAYMENT_NO).get(0);
+        ChannelOrder attempt = stack.attempts.findByPaymentNo(PAYMENT_NO).get(0);
         attempt.backfillChannelReference("ch-original");
         stack.attempts.save(attempt);
 
@@ -172,7 +172,7 @@ class PaymentNotifyPortTest {
     @Test
     @DisplayName("校验通过 ⇒ 收敛成功且**无**拒绝痕迹（诚实拒绝的反面）")
     void acceptedConvergesWithoutRejectionTrace() {
-        PaymentAttempt attempt = stack.attempts.findByPaymentNo(PAYMENT_NO).get(0);
+        ChannelOrder attempt = stack.attempts.findByPaymentNo(PAYMENT_NO).get(0);
         attempt.backfillChannelReference("ch-1");
         stack.attempts.save(attempt);
 

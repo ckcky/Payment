@@ -34,11 +34,11 @@
     <div class="pa-eyebrow">Feature 028 · ADR-0072 / ADR-0073</div>
     <h1 style="font-size:34px;letter-spacing:-.02em;margin-top:12px">渠道两层结构与路由</h1>
     <div style="font-size:16px;color:var(--pa-ink-2);margin-top:10px;line-height:1.6;max-width:720px">
-      payment 层负责编排支付单，channelAttempt 层负责与渠道交互并独占 <code>payment_attempts</code> 的写入。
+      payment 层负责编排支付单，channelAttempt 层负责与渠道交互并独占 <code>channel_orders</code> 的写入。
       路由只产出渠道码字符串；反向路径（退款 / 重试 / 查询）一律按尝试行记录的渠道码解析，绝不重新选路。
     </div>
     <div style="font-size:12px;color:var(--pa-ink-3);margin-top:10px">
-      观测口径：渠道归属一律读 <code>payment_attempts.channel_code</code> 列，不解析渠道引用的字符串形态。
+      观测口径：渠道归属一律读 <code>channel_orders.channel_code</code> 列，不解析渠道引用的字符串形态。
     </div>
   </div>
 </section>
@@ -84,7 +84,7 @@
   <div class="pa-main">
     <div style="font-size:22px;font-weight:600">④ 六个可演示场景</div>
     <div style="font-size:14px;color:var(--pa-ink-2);margin-top:6px;margin-bottom:20px">
-      全部断言读 <code>payment_attempts.channel_code</code> 列。命令行等价物：<code>bash demo/scenario-routing.sh</code>。
+      全部断言读 <code>channel_orders.channel_code</code> 列。命令行等价物：<code>bash demo/scenario-routing.sh</code>。
     </div>
 
     <div class="rt-scn">

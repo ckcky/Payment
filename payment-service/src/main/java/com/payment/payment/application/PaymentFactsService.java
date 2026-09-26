@@ -2,7 +2,7 @@ package com.payment.payment.application;
 
 import com.payment.payment.api.dto.PaymentFactResponse;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttemptRepository;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.time.LocalDate;
@@ -26,10 +26,10 @@ public class PaymentFactsService {
     private static final Logger log = LoggerFactory.getLogger(PaymentFactsService.class);
 
     private final PaymentRepository paymentRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
 
     public PaymentFactsService(PaymentRepository paymentRepository,
-                               PaymentAttemptRepository attemptRepository) {
+                               ChannelOrderRepository attemptRepository) {
         this.paymentRepository = paymentRepository;
         this.attemptRepository = attemptRepository;
     }

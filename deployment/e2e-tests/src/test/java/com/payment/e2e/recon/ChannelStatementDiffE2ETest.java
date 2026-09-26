@@ -138,9 +138,9 @@ class ChannelStatementDiffE2ETest extends E2eBase {
 
     private String channelReferenceOf(String paymentNo) {
         List<Map<String, Object>> rows = db.query("payment",
-                "SELECT channel_reference FROM payment_attempts WHERE payment_no='" + paymentNo
+                "SELECT channel_reference FROM channel_orders WHERE payment_no='" + paymentNo
                         + "' AND channel_reference IS NOT NULL ORDER BY id DESC LIMIT 1");
-        assertThat(rows).as("渠道引用存在 [payment=%s, 表=payment.payment_attempts]", paymentNo).isNotEmpty();
+        assertThat(rows).as("渠道引用存在 [payment=%s, 表=payment.channel_orders]", paymentNo).isNotEmpty();
         return String.valueOf(rows.get(0).get("channel_reference"));
     }
 

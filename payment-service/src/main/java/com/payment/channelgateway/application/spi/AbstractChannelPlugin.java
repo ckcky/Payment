@@ -327,7 +327,7 @@ public abstract class AbstractChannelPlugin implements ChannelPlugin {
      *
      * <p>进程内 Mock 的「推送」与真实渠道的 HTTP 回调走同一入向端口（{@link PaymentNotifyPort}），
      * 语义等价、不留双路径。{@code channelNo} 留空：推送这一刻只有 {@code refundNo}
-     * （入向寻址键），网关单号的权威值在 {@code payment_attempts.channel_no}。</p>
+     * （入向寻址键），网关单号的权威值在 {@code channel_orders.channel_no}。</p>
      */
     private ChannelRefundNotified toRefundNotified(String refundNo, ChannelResult result) {
         return new ChannelRefundNotified(null, refundNo, channelCode(),

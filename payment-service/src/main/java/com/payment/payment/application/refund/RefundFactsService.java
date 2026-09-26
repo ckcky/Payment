@@ -1,9 +1,9 @@
 package com.payment.payment.application.refund;
 
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptRepository;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.api.dto.RefundFactResponse;
 import com.payment.payment.domain.Refund;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
  * 供 reconciliation-service 拉取并与渠道账单逐笔核对。
  *
  * <p>Feature 016（FR-017 / N4 修复）：渠道引用改用<b>真实渠道退款流水号</b>——
- * 自退款渠道尝试记录（{@code payment_attempts} 中 {@code attempt_type=REFUND} 的行，
+ * 自退款渠道尝试记录（{@code channel_orders} 中 {@code attempt_type=REFUND} 的行，
  * 由 {@code PaymentRefundService} 在调渠道后落库）取得；废弃 {@code refund-{id}} 合成引用。
  * 仅有迁移前存量退款（无对应尝试记录）时回退 {@code refund-{id}} 并 WARN 留痕。</p>
  *
@@ -37,11 +37,11 @@ public class RefundFactsService {
     private static final Logger log = LoggerFactory.getLogger(RefundFactsService.class);
 
     private final RefundRepository refundRepository;
-    private final PaymentAttemptRepository attemptRepository;
+    private final ChannelOrderRepository attemptRepository;
     private final PaymentRepository paymentRepository;
 
     public RefundFactsService(RefundRepository refundRepository,
-                              PaymentAttemptRepository attemptRepository,
+                              ChannelOrderRepository attemptRepository,
                               PaymentRepository paymentRepository) {
         this.refundRepository = refundRepository;
         this.attemptRepository = attemptRepository;
@@ -87,14 +87,14 @@ public class RefundFactsService {
      * （重试多笔时确定性指向最终成功流水）；无任何成功尝试的存量退款回退合成引用并 WARN。
      */
     private String resolveChannelReference(Refund refund) {
-        Optional<PaymentAttempt> refundAttempt = attemptRepository.findByPaymentNo(refund.getPaymentNo())
+        Optional<ChannelOrder> refundAttempt = attemptRepository.findByPaymentNo(refund.getPaymentNo())
                 .stream()
-                .filter(a -> PaymentAttempt.TYPE_REFUND.equals(a.getAttemptType()))
+                .filter(a -> ChannelOrder.TYPE_REFUND.equals(a.getAttemptType()))
                 .filter(a -> a.getChannelReference() != null)
-                .filter(a -> a.getStatus() == PaymentAttemptStatus.SUCCEEDED)
-                .max(Comparator.comparing(PaymentAttempt::getId));
+                .filter(a -> a.getStatus() == ChannelOrderStatus.SUCCEEDED)
+                .max(Comparator.comparing(ChannelOrder::getId));
         return refundAttempt
-                .map(PaymentAttempt::getChannelReference)
+                .map(ChannelOrder::getChannelReference)
                 .orElseGet(() -> {
                     // 存量退款（Feature 016 之前）：无退款渠道尝试记录，回退 MVP 合成引用
                     return "refund-" + refund.getId();

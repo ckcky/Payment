@@ -6,7 +6,6 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.rpc.BusinessCode;
 import com.payment.common.core.rpc.TransportCode;
 import com.payment.channelgateway.infra.alipay.AlipayGateway;
-import com.payment.common.dto.channel.CallbackUrls;
 import com.payment.channelgateway.application.ChannelResult;
 import com.payment.channelgateway.application.ChargeRequest;
 import com.payment.common.dto.channel.PayCredential;
@@ -118,6 +117,17 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
     private final String sandboxAppId;
 
     /**
+     * 沙箱异步通知地址（spec 041：回调地址归<b>渠道协议自己</b>管）。
+     *
+     * <p>改造前由 payment 层读全局配置拼好、经 {@code ChargeRequest.callbackUrls} 下发；
+     * spec 041 起本渠道读自己的配置。支付域不再知道「通知地址怎么写」这回事。</p>
+     */
+    private final String sandboxNotifyUrl;
+
+    /** 沙箱页面跳回地址（**非**资金事实，可空）。 */
+    private final String sandboxReturnUrl;
+
+    /**
      * Spring 主构造：场景优先读 {@code payment.channel.adapters.ALIPAY.scenario}，
      * 未配则回落全局 {@code payment.channel.mock-scenario}（FR-014）。
      */
@@ -133,6 +143,8 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
         this.sandboxGateway = sandboxGateway.getIfAvailable();
         this.sandboxEnabled = sandboxProperties.isEnabled();
         this.sandboxAppId = sandboxProperties.getAppId();
+        this.sandboxNotifyUrl = sandboxProperties.getNotifyUrl();
+        this.sandboxReturnUrl = sandboxProperties.getReturnUrl();
     }
 
     /** 便捷构造（测试/演示脚本显式指定形态）：无沙箱能力，等价于 spec 028 时期的行为。 */
@@ -148,10 +160,25 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
     /** 供测试直接注入网关与 app_id（FR-203 身份校验的可测形态）。 */
     public AlipayChannelAdapter(Scenario scenario, AlipayGateway sandboxGateway,
                                 boolean sandboxEnabled, String sandboxAppId) {
+        this(scenario, sandboxGateway, sandboxEnabled, sandboxAppId, null, null);
+    }
+
+    /**
+     * 供测试直接注入网关、app_id 与回调地址（spec 041：回调地址归渠道配置）。
+     *
+     * <p>测试需要一个可显式给定 notifyUrl 的形态——{@code AlipaySandboxChargeTest} 等的
+     * 沙箱下单断言依赖它；生产走上面的 Spring 主构造从
+     * {@link AlipaySandboxProperties} 读。</p>
+     */
+    public AlipayChannelAdapter(Scenario scenario, AlipayGateway sandboxGateway,
+                                boolean sandboxEnabled, String sandboxAppId,
+                                String notifyUrl, String returnUrl) {
         super(scenario, 1500L, false, 1000L);
         this.sandboxGateway = sandboxGateway;
         this.sandboxEnabled = sandboxEnabled;
         this.sandboxAppId = sandboxAppId;
+        this.sandboxNotifyUrl = notifyUrl;
+        this.sandboxReturnUrl = returnUrl;
     }
 
     @Override
@@ -329,13 +356,14 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
      */
     @Override
     protected ChannelResult doRealCharge(ChargeRequest request) {
-        CallbackUrls callbackUrls = request.callbackUrls();
-        if (callbackUrls == null || callbackUrls.notifyUrl() == null || callbackUrls.notifyUrl().isBlank()) {
-            // 没有 notifyUrl 就拿不到资金事实：页面跳转回来（returnUrl）不承载资金事实，
-            // MUST NOT 据其推进支付状态（FR-103）。这是配置错误，不是渠道错误。
+        // spec 041：回调地址读**本渠道自己的配置**（协议细节归渠道），不再从 ChargeRequest 取。
+        // notifyUrl 仍是资金事实的唯一可信来源：没有它就拒绝下单（不静默降级，INV-8）——
+        // 页面跳回（returnUrl）不承载资金事实，MUST NOT 据其推进支付状态（FR-103）。
+        if (sandboxNotifyUrl == null || sandboxNotifyUrl.isBlank()) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
-                    "sandbox charge requires callbackUrls.notifyUrl: the notify callback is the only "
-                            + "trustworthy source of fund facts; returnUrl must not drive payment state");
+                    "alipay sandbox charge requires notifyUrl (payment.channel.adapters.alipay.sandbox.notify-url):"
+                            + " the notify callback is the only trustworthy source of fund facts;"
+                            + " returnUrl must not drive payment state");
         }
 
         Instant expireAt = request.expireAt();
@@ -344,8 +372,8 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
                 request.amountMinor(),
                 request.currencyCode(),
                 subjectOf(request),
-                callbackUrls.notifyUrl(),
-                callbackUrls.returnUrl(),
+                sandboxNotifyUrl,
+                sandboxReturnUrl,
                 expireAt);
 
         if (!result.transportOk()) {

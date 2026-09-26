@@ -38,31 +38,27 @@ public class PaymentUnknownResolutionService {
         this.auditLogger = auditLogger;
     }
 
-    public boolean resolve(String ref, ChannelResult authoritativeResult) {
-        Long paymentId = resolveId(ref);
-        return resolveById(paymentId, authoritativeResult);
-    }
-
-    /** 供控制器按「数值 id 或 paymentNo」寻址；内部实现仍以数值 id 走原路径。 */
-    private Long resolveId(String ref) {
-        if (ref.chars().allMatch(Character::isDigit)) {
-            return Long.parseLong(ref);
-        }
-        return paymentRepository.findByPaymentNo(ref)
-                .map(Payment::getId)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + ref));
-    }
-
-    public boolean resolveById(Long paymentId, ChannelResult authoritativeResult) {
-        Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId));
+    /**
+     * 用权威结果收敛一笔 UNKNOWN 支付，返回<b>收敛后</b>的支付单（spec 041 / FR-023）。
+     *
+     * <h3>为什么返回支付单而不是 boolean</h3>
+     * <p>改造前本方法返回 {@code boolean}，调用方（Controller）不得不再调一次
+     * {@code getPaymentByRef} 回读——「写 + 读」两步编排漏在了 Controller 里。
+     * 收敛后回读是收敛流程的一部分，属应用服务职责，故由本方法一并给出。</p>
+     *
+     * <h3>寻址口径</h3>
+     * <p>一律按 {@code paymentNo}（ADR-0063）。改造前的「全数字就当数值主键」双轨猜测已废除
+     * （spec 041 / FR-022）：它让调用方靠数据形态猜语义，且实测零调用。</p>
+     *
+     * @return 收敛后的支付单；非 UNKNOWN（终态或已被收敛）时原样返回，不重复发布事件
+     */
+    public Payment resolve(String paymentNo, ChannelResult authoritativeResult) {
+        Payment payment = paymentRepository.findByPaymentNo(paymentNo)
+                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentNo));
         if (payment.getStatus() != PaymentStatus.UNKNOWN) {
-            return false;
+            return payment; // 幂等重复：不重复收敛、不重复发布事件
         }
-        boolean changed = processor.applyAndNotify(paymentRepository.findById(paymentId)
-                .map(Payment::getPaymentNo)
-                .orElseThrow(() -> BizException.of(ErrorCodes.NOT_FOUND, "payment not found: " + paymentId)),
-                authoritativeResult);
+        boolean changed = processor.applyAndNotify(paymentNo, authoritativeResult);
         if (changed) {
             recordTransition(payment, PaymentStatus.UNKNOWN, authoritativeResult);
             // UNKNOWN 真实收敛时长：进入 UNKNOWN 时由状态机记录 enteredUnknownAt（spec US5 / ADR-0015）。
@@ -75,7 +71,8 @@ public class PaymentUnknownResolutionService {
             // **只加指标、不加自动动作**：分级阈值与是否自动处置属 H5 裁决，本 Feature 不做。
             metrics.counter("payment.unknown_age", 1.0, "module", MODULE, "bucket", bucketOf(duration));
         }
-        return changed;
+        // 收敛可能改变了状态机，返回的必须是**收敛后**的事实（调用方据此渲染响应）。
+        return paymentRepository.findByPaymentNo(paymentNo).orElse(payment);
     }
 
     /**

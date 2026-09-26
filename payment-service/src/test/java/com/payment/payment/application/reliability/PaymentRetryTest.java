@@ -14,9 +14,9 @@ import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.channelgateway.application.QueryStatusRequest;
 import com.payment.channelgateway.application.RefundRequest;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttemptErrorType;
+import com.payment.channelgateway.domain.ChannelOrderErrorType;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -124,7 +124,7 @@ class PaymentRetryTest {
         assertThat(channel.chargeCalls).isEqualTo(1);
         assertThat(outcome.retries()).isZero();
         assertThat(outcome.result().status()).isEqualTo(ChannelResult.Status.FAILURE);
-        assertThat(outcome.result().errorType()).isEqualTo(PaymentAttemptErrorType.HARD);
+        assertThat(outcome.result().errorType()).isEqualTo(ChannelOrderErrorType.HARD);
     }
 
     @Test
@@ -140,7 +140,7 @@ class PaymentRetryTest {
         assertThat(channel.chargeCalls).isEqualTo(1);
         assertThat(outcome.retries()).isZero();
         assertThat(outcome.result().status()).isEqualTo(ChannelResult.Status.UNKNOWN);
-        assertThat(outcome.result().errorType()).isEqualTo(PaymentAttemptErrorType.UNKNOWN);
+        assertThat(outcome.result().errorType()).isEqualTo(ChannelOrderErrorType.UNKNOWN);
     }
 
     @Test
@@ -158,7 +158,7 @@ class PaymentRetryTest {
         assertThat(outcome.retries()).isEqualTo(1);
         assertThat(outcome.result().status()).isEqualTo(ChannelResult.Status.UNKNOWN);
         assertThat(outcome.result().reason()).isEqualTo(PaymentRetryService.EXHAUSTED_REASON);
-        assertThat(outcome.result().errorType()).isEqualTo(PaymentAttemptErrorType.TRANSIENT);
+        assertThat(outcome.result().errorType()).isEqualTo(ChannelOrderErrorType.TRANSIENT);
         assertThat(registry.get("payment.retry").counter().count()).isEqualTo(1.0);
         assertThat(registry.get("payment.retry_exhausted").counter().count()).isEqualTo(1.0);
     }
@@ -166,15 +166,15 @@ class PaymentRetryTest {
     @Test
     void endToEndRetryThenSuccessNotifiesDownstreamExactlyOnce() {
         InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-        InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+        InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
         QueueChannel channel = new QueueChannel()
                 .then(ChannelResult.transportFailure(TransportCode.IO_ERROR, "reset by peer"));
         PaymentRetryService retryService =
                 new PaymentRetryService(channel, config(3), new NoopBusinessMetrics());
         PaymentTestStack.RecordingOrderGateway order = new PaymentTestStack.RecordingOrderGateway();
         PaymentApplicationService appService = new PaymentApplicationService(payments,
-                new PaymentPersistence(payments, attempts), retryService, order,
-                new NoopBusinessMetrics(), new StructuredAuditLogger());
+                new PaymentPersistence(payments), retryService, order,
+                new NoopBusinessMetrics(), new StructuredAuditLogger(), attempts);
 
         Payment payment = appService.createPaymentIntent(
                 new CreatePaymentCommand("txn-1", "order-1", "user-1", 100, "CNY", "idem-1", "mock", "M001"));

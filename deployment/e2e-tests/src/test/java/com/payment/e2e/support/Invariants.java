@@ -64,9 +64,9 @@ public final class Invariants {
                     .isEqualTo(1L);
             // PAYMENT attempt 归属
             assertThat(asLong(db.scalar("payment",
-                    "SELECT COUNT(*) FROM payment_attempts WHERE payment_no='" + paidPaymentNo
+                    "SELECT COUNT(*) FROM channel_orders WHERE payment_no='" + paidPaymentNo
                             + "' AND attempt_type='PAYMENT'")))
-                    .as("PAYMENT attempt 归属 [payment=%s, 表=payment.payment_attempts]", paidPaymentNo)
+                    .as("PAYMENT attempt 归属 [payment=%s, 表=payment.channel_orders]", paidPaymentNo)
                     .isGreaterThanOrEqualTo(1L);
         }
 
@@ -87,9 +87,9 @@ public final class Invariants {
                                 txrfNo, pmrfNo)
                         .isEqualTo(1L);
                 assertThat(asLong(db.scalar("payment",
-                        "SELECT COUNT(*) FROM payment_attempts WHERE payment_no='" + txrf.get("payment_no")
+                        "SELECT COUNT(*) FROM channel_orders WHERE payment_no='" + txrf.get("payment_no")
                                 + "' AND attempt_type='REFUND'")))
-                        .as("REFUND attempt 归属 [payment=%s, 表=payment.payment_attempts]", txrf.get("payment_no"))
+                        .as("REFUND attempt 归属 [payment=%s, 表=payment.channel_orders]", txrf.get("payment_no"))
                         .isGreaterThanOrEqualTo(1L);
             }
         }

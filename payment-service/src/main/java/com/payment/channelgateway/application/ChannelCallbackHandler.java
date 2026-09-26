@@ -43,8 +43,8 @@ import java.time.Instant;
  * <h3>关于第 ④ 步「网关单更新」的落点</h3>
  * <p>spec FR-009 的第 ④ 步写作「网关单更新（内核统一）」。本实现里这一步落为
  * <b>「内核统一封装跨域事件 + 跨域通知」</b>：网关侧并不存在一个独立的「网关单」聚合
- * 可以更新——渠道交互的事实载体是 {@code payment_attempts}，而它的收敛入口唯一归属
- * {@code ChannelAttemptRecorder} 端口，且由 Payment 侧的 {@code PaymentResultProcessor}
+ * 可以更新——渠道交互的事实载体是 {@code channel_orders}，而它的收敛入口唯一归属
+ * {@code ChannelOrderService} 端口，且由 Payment 侧的 {@code PaymentResultProcessor}
  * 统一编排。若内核在这里再推一次 attempt 状态，就出现了<b>第二个写入口</b>
  * （两套不变量必然漂移，INV-5 要防的正是这个）。故 ④ 的「内核统一」体现在
  * 「跨域事件的封装口径只有这一处」，而不是重复推进状态。</p>
@@ -142,7 +142,7 @@ public class ChannelCallbackHandler {
      * <p><b>{@code channelNo} 传 {@code null}</b>：入向通知的寻址键是 {@code paymentNo}
      * （渠道只会给商户订单号），网关单号是平台侧标识；在回调这一刻反查它只是为填一个
      * 下游不消费的字段，却要多一次未必成功的读库。故入向契约里该字段可空，
-     * 权威值仍以 {@code payment_attempts.channel_no} 为准。</p>
+     * 权威值仍以 {@code channel_orders.channel_no} 为准。</p>
      */
     private static ChannelPayNotified toNotified(String channelCode, ParsedCallback parsed) {
         ParsedCallback.NotifiedAmount notifiedAmount = parsed.notifiedAmount();

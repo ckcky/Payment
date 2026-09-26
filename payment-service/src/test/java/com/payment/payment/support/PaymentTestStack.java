@@ -14,7 +14,7 @@ import com.payment.payment.application.PaymentUnknownResolutionService;
 import com.payment.channelgateway.application.PaymentChannel;
 import com.payment.payment.application.reliability.PaymentRetryService;
 import com.payment.payment.application.reliability.ReliabilityConfig;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -26,7 +26,7 @@ import java.util.List;
 public final class PaymentTestStack {
 
     public final InMemoryPaymentRepository payments = new InMemoryPaymentRepository();
-    public final InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
+    public final InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
     public final RecordingOrderGateway order = new RecordingOrderGateway();
 
     public final PaymentResultProcessor processor =
@@ -55,16 +55,16 @@ public final class PaymentTestStack {
      * 的记账调用可被记录，从而与**回调收敛路径**断言出同一个 postingKey（FR-221）。
      */
     public PaymentApplicationService appService(PaymentChannel channel, LedgerPostingGateway ledgerGateway) {
-        PaymentPersistence persistence = new PaymentPersistence(payments, attempts);
+        PaymentPersistence persistence = new PaymentPersistence(payments);
         PaymentRetryService retryService = new PaymentRetryService(channel, fastRetryConfig(),
                 new NoopBusinessMetrics());
         // Feature 016（ADR-0054）：payment 不再持有履约网关；order 回写直接走记录式 fake
         if (ledgerGateway == null) {
             return new PaymentApplicationService(payments, persistence, retryService, order,
-                    new NoopBusinessMetrics(), new StructuredAuditLogger());
+                    new NoopBusinessMetrics(), new StructuredAuditLogger(), attempts);
         }
         return new PaymentApplicationService(payments, persistence, retryService, order,
-                ledgerGateway, new NoopBusinessMetrics(), new StructuredAuditLogger(), channel);
+                ledgerGateway, new NoopBusinessMetrics(), new StructuredAuditLogger(), channel, attempts);
     }
 
     public CreatePaymentCommand command(String idempotencyKey) {

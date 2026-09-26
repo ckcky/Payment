@@ -276,15 +276,15 @@ class ServiceBoundaryTest {
     }
 
     /**
-     * INV-5（Feature 028 / FR-002）：{@code payment_attempts} 的<b>写入口唯一</b>归属于渠道层端口
-     * {@code ChannelAttemptRecorder}；应用层不得直接依赖 {@code PaymentAttemptRepository}。
+     * INV-5（Feature 028 / FR-002）：{@code channel_orders} 的<b>写入口唯一</b>归属于渠道层端口
+     * {@code ChannelOrderService}；应用层不得直接依赖 {@code ChannelOrderRepository}。
      *
      * <p>一条支付尝试行的生命周期跨了「应用层编排」与「渠道层调用」两个关注点。若应用层既能
      * 经端口收敛、又能直连仓储改写，同一行就有两个写入口——两个写入口意味着两套不变量，
      * 而它们必然会漂移（典型症状：一处收敛了 status 忘了 channel_reference，对账就缺流水号）。</p>
      *
      * <p><b>本规则只约束「写」</b>：{@code save} 是唯一的写方法，故规则针对
-     * {@code PaymentAttemptRepository.save(...)} 的调用点；纯读（{@code findById} /
+     * {@code ChannelOrderRepository.save(...)} 的调用点；纯读（{@code findById} /
      * {@code findByPaymentNo}）不受约束——匹配目标行、抽取渠道引用、拼装对账事实都需要读，
      * 把读也禁掉只会逼出「绕道反射或新开只读仓储」的更差做法。</p>
      *
@@ -293,10 +293,10 @@ class ServiceBoundaryTest {
      *   <li>{@code application.reliability..} —— UNKNOWN 主动查询的只读反向路径；</li>
      *   <li>{@code application.channel..} —— 端口自身所在包。</li>
      * </ul>
-     * {@code ChannelAttemptRecorders}（把仓储适配成端口的兼容垫片）是全类豁免：
+     * {@code ChannelOrderServices}（把仓储适配成端口的兼容垫片）是全类豁免：
      * 它的职责就是持有仓储并转发，是端口本身的实现细节。</p>
      *
-     * <p><b>为什么用「按类名 + 方法名」的字符串匹配而不是 {@code callMethod(PaymentAttemptRepository.class, …)}</b>：
+     * <p><b>为什么用「按类名 + 方法名」的字符串匹配而不是 {@code callMethod(ChannelOrderRepository.class, …)}</b>：
      * 各服务经 {@code spring-boot-maven-plugin} 重打包，类在 {@code BOOT-INF/classes}，
      * 本模块无法在编译期引用它们的类型（见类注释）。ArchUnit 的字符串重载对这类
      * 「只导入字节码、不建依赖」的用法是唯一可行路径。</p>
@@ -309,11 +309,11 @@ class ServiceBoundaryTest {
                         "com.payment.payment.application.reliability..",
                         "com.payment.channelgateway.application..")
                 .and().haveNameNotMatching(
-                        "com\\.payment\\.payment\\.application\\.ChannelAttemptRecorders.*")
+                        "com\\.payment\\.payment\\.application\\.ChannelOrderServices.*")
                 .should().callMethod(
-                        "com.payment.payment.domain.PaymentAttemptRepository", "save",
-                        "com.payment.payment.domain.PaymentAttempt")
-                .because("payment_attempts 的写入口唯一归属 channel 层端口 ChannelAttemptRecorder；"
+                        "com.payment.channelgateway.domain.ChannelOrderRepository", "save",
+                        "com.payment.channelgateway.domain.ChannelOrder")
+                .because("channel_orders 的写入口唯一归属 channel 层端口 ChannelOrderService；"
                         + "应用层直连仓储写会产生第二个写入口，两套不变量必然漂移（INV-5 / FR-002）");
         rule.check(serviceClasses);
     }
@@ -499,9 +499,9 @@ class ServiceBoundaryTest {
      * FR-009 ①（spec 038）：{@code payment} 与 {@code channelgateway} 之间保持<b>单向依赖</b>。
      *
      * <p>允许的方向是 {@code payment → channelgateway}（资金动作域调用渠道网关域）。
-     * 反向依赖只允许落在<b>领域值类型</b>（{@code payment.domain} 的 {@code PaymentAttempt} /
-     * {@code PaymentAttemptErrorType}）——那是既有的 DIP：渠道层定义端口
-     * （{@code ChannelAttemptRecorder} / {@code ChannelResult}），payment 侧实现它。</p>
+     * 反向依赖只允许落在<b>领域值类型</b>（{@code payment.domain} 的 {@code ChannelOrder} /
+     * {@code ChannelOrderErrorType}）——那是既有的 DIP：渠道层定义端口
+     * （{@code ChannelOrderService} / {@code ChannelResult}），payment 侧实现它。</p>
      *
      * <p>被禁止的是反向依赖 payment 的<b>应用层 / 接入层 / Web 层</b>：渠道网关域一旦直连
      * {@code PaymentCallbackService} / {@code PaymentApplicationService}，就不再是「可独立演进的
@@ -615,11 +615,11 @@ class ServiceBoundaryTest {
      * 改造前正是如此：模态包裹散落在退款、主动查询、超时扫描、建单入口四处。</p>
      *
      * <p>037 / T5b 的收口方式是把「模态的<b>施加</b>」收进 {@code ChannelGateway}
-     * （带 {@code DyeMode} 的 {@code refund} / {@code query} 重载 + {@code isSandboxRequest()} 探针），
+     * （带 {@code DyeMode} 的 {@code refund} / {@code query} 重载 + 扣款派发策略 {@code ChargeDispatchPolicy}），
      * Payment 侧只回答「这一笔当初记的是哪种模态」。本规则把该收口钉成构建期事实。</p>
      *
      * <p><b>为什么只禁 {@code DyeContext} 而不是整个 {@code com.payment.common.core.dye} 包</b>：
-     * {@code DyeMode} 是<b>值类型</b>，{@code payment.domain.PaymentAttempt#getChannelMode()}
+     * {@code DyeMode} 是<b>值类型</b>，{@code payment.domain.ChannelOrder#getChannelMode()}
      * 就返回它（落库模态的只读派生访问器），禁整包会连领域模型一起禁掉。
      * 要禁的是「谁去读 ThreadLocal 上的当前染色」这个<b>判定动作</b>。</p>
      *
@@ -627,7 +627,7 @@ class ServiceBoundaryTest {
      * {@code payment.application..} 与 {@code payment.api..}——这是 FR-013 的原文口径
      * （「{@code DyeContext} 不得在 Payment <b>应用/api 层</b>被读取」）。FR-016 ③ 的措辞
      * 更宽（「仅限渠道网关域」），但那会要求把 {@code payment.infra} 的两个写入口实现
-     * （{@code ChannelAttemptRecorderImpl}、{@code InMemoryPaymentAttemptRepository}）
+     * （{@code ChannelOrderServiceImpl}、{@code InMemoryChannelOrderRepository}）
      * 也搬出 payment 域——那是一次<b>独立的服务边界裁决</b>，不属本 Spec 的机械收口范围，
      * 故本轮按 FR-013 口径落地并登记为后续项。</p>
      *
@@ -668,7 +668,7 @@ class ServiceBoundaryTest {
                 .because("模态（MOCK/SANDBOX）判定 MUST 内聚在渠道网关域（FR-013）；"
                         + "Payment 应用/api 层读染色上下文会让「模态是什么」变成两个域各自解释的概念——"
                         + "改造前模态包裹散落在退款/查询/超时扫描/建单入口四处，正是这种失真"
-                        + "（FR-016 ③；施加点收在 ChannelGateway 的 DyeMode 重载与 isSandboxRequest 探针）");
+                        + "（FR-016 ③；施加点收在 ChannelGateway 的 DyeMode 重载与派发策略——spec 041 起连 isSandboxRequest 探针也已移除，Payment 侧无从询问模态）");
         rule.check(serviceClasses);
     }
 

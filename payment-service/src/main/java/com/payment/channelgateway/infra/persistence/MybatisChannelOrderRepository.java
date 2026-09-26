@@ -1,12 +1,12 @@
-package com.payment.payment.infra.persistence.attempt;
+package com.payment.channelgateway.infra.persistence;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptErrorType;
-import com.payment.payment.domain.PaymentAttemptRepository;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderErrorType;
+import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
@@ -16,40 +16,51 @@ import org.springframework.stereotype.Repository;
  * 更新走乐观锁，冲突抛 {@link ErrorCodes#CONFLICT}。
  */
 @Repository
-public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository {
+public class MybatisChannelOrderRepository implements ChannelOrderRepository {
 
-    private final PaymentAttemptMapper attemptMapper;
+    private final ChannelOrderMapper attemptMapper;
 
-    public MybatisPaymentAttemptRepository(PaymentAttemptMapper attemptMapper) {
+    public MybatisChannelOrderRepository(ChannelOrderMapper attemptMapper) {
         this.attemptMapper = attemptMapper;
     }
 
     @Override
-    public Optional<PaymentAttempt> findById(Long id) {
-        PaymentAttemptEntity entity = attemptMapper.selectById(id);
+    public Optional<ChannelOrder> findById(Long id) {
+        ChannelOrderEntity entity = attemptMapper.selectById(id);
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
     }
 
     @Override
-    public List<PaymentAttempt> findByPaymentNo(String paymentNo) {
+    public Optional<ChannelOrder> findByChannelNo(String channelNo) {
+        if (channelNo == null || channelNo.isBlank()) {
+            return Optional.empty();
+        }
+        ChannelOrderEntity entity = attemptMapper.selectOne(
+                Wrappers.<ChannelOrderEntity>lambdaQuery()
+                        .eq(ChannelOrderEntity::getChannelNo, channelNo));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public List<ChannelOrder> findByPaymentNo(String paymentNo) {
         return attemptMapper.selectList(
-                        Wrappers.<PaymentAttemptEntity>lambdaQuery()
-                                .eq(PaymentAttemptEntity::getPaymentNo, paymentNo))
+                        Wrappers.<ChannelOrderEntity>lambdaQuery()
+                                .eq(ChannelOrderEntity::getPaymentNo, paymentNo))
                 .stream()
                 .map(this::toDomain)
                 .toList();
     }
 
     @Override
-    public PaymentAttempt save(PaymentAttempt attempt) {
+    public ChannelOrder save(ChannelOrder attempt) {
         if (attempt.getId() == null) {
-            PaymentAttemptEntity entity = toEntity(attempt);
+            ChannelOrderEntity entity = toEntity(attempt);
             attemptMapper.insert(entity);
             attempt.setId(entity.getId());
             attempt.setVersion(entity.getVersion());
             return attempt;
         }
-        PaymentAttemptEntity entity = toEntity(attempt);
+        ChannelOrderEntity entity = toEntity(attempt);
         if (attemptMapper.updateById(entity) == 0) {
             throw BizException.of(ErrorCodes.CONFLICT, "payment attempt concurrent update: " + attempt.getId());
         }
@@ -57,22 +68,22 @@ public class MybatisPaymentAttemptRepository implements PaymentAttemptRepository
         return attempt;
     }
 
-    private PaymentAttempt toDomain(PaymentAttemptEntity entity) {
+    private ChannelOrder toDomain(ChannelOrderEntity entity) {
         // spec 037 / FR-001：回读路径走显式 channelNo 重载——原样还原持久化的网关单号，不重新铸造。
-        return PaymentAttempt.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getChannelNo(),
+        return ChannelOrder.rehydrate(entity.getId(), entity.getPaymentNo(), entity.getChannelNo(),
                 entity.getChannelCode(),
                 entity.getRetryCount(), entity.getRequestedAt(), entity.getRespondedAt(),
-                entity.getChannelReference(), PaymentAttemptStatus.valueOf(entity.getStatus()),
+                entity.getChannelReference(), ChannelOrderStatus.valueOf(entity.getStatus()),
                 entity.getFailureReason(),
-                entity.getErrorType() == null ? null : PaymentAttemptErrorType.valueOf(entity.getErrorType()),
+                entity.getErrorType() == null ? null : ChannelOrderErrorType.valueOf(entity.getErrorType()),
                 entity.getVersion(), entity.getAttemptType(),
                 entity.getAmountMinor() == null ? 0L : entity.getAmountMinor(), entity.getCurrencyCode(),
                 // spec 030 / FR-302：extra_json → Map（fail-safe：坏数据 ⇒ null ⇒ 模态判 MOCK）
                 AttemptExtraCodec.decode(entity.getExtraJson()));
     }
 
-    private PaymentAttemptEntity toEntity(PaymentAttempt attempt) {
-        PaymentAttemptEntity entity = new PaymentAttemptEntity();
+    private ChannelOrderEntity toEntity(ChannelOrder attempt) {
+        ChannelOrderEntity entity = new ChannelOrderEntity();
         entity.setId(attempt.getId());
         entity.setPaymentNo(attempt.getPaymentNo());
         // spec 037 / FR-002：channel_no 列 NOT NULL，INSERT / UPDATE 都必须带上（漏了插入即失败）

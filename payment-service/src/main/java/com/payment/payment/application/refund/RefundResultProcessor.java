@@ -24,11 +24,11 @@ import org.springframework.stereotype.Component;
  * <ol>
  *   <li><b>refunds 状态机终态</b>：终态吸收冲突/重复结果（{@code succeed()/fail()} 返回 false
  *       即为重放，幂等吸收）；</li>
- *   <li><b>payment_attempts REFUND 尝试行收敛</b>：权威终态（SUCCESS/FAILURE）同步到 payment 域
+ *   <li><b>channel_orders REFUND 尝试行收敛</b>：权威终态（SUCCESS/FAILURE）同步到 payment 域
  *       对应尝试行（按渠道流水号精确匹配，resolve 无引用回退最近未收敛行）——异步受理落 UNKNOWN
  *       的尝试行不再永久滞留（fix）；失败仅 WARN，不影响退款事实；</li>
  *   <li><b>payments 退款口径</b>：定稿为<b>不动 payments 状态/不加列</b>——退款事实权威台账 =
- *       {@code refunds}（累计/终态/幂等）+ {@code payment_attempts}（REFUND 尝试持渠道流水），
+ *       {@code refunds}（累计/终态/幂等）+ {@code channel_orders}（REFUND 尝试持渠道流水），
  *       对账经 {@code RefundFactsService} 抽取；避免 payments.refunded_minor 与 refunds 双路径漂移
  *       （ADR-0054：payment 是能力提供方，支付单保留 SUCCEEDED 事实不回滚）；</li>
  *   <li><b>ledger 冲正</b>：仅退款成功触发，发 {@code REFUND} 事件（spec 031 §9 / ADR-0077），

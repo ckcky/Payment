@@ -9,7 +9,7 @@ import java.util.Set;
  * <p><b>两条使用路径，语义完全不同</b>：
  * <ul>
  *   <li><b>正向（建单）</b>：{@code ChannelRouter} 选出一个码，再由本表 {@link #resolve} 取实现；</li>
- *   <li><b>反向（退款 / 重试 / 主动查询）</b>：按 {@code payment_attempts.channel_code} <b>已记录</b>
+ *   <li><b>反向（退款 / 重试 / 主动查询）</b>：按 {@code channel_orders.channel_code} <b>已记录</b>
  *       的码解析实现（INV-6）——<b>禁止调 Router</b>。资金安全红线：退款换渠道 = 钱退错地方。</li>
  * </ul>
  *

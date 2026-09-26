@@ -8,7 +8,7 @@ package com.payment.channelgateway.application;
  * <h3>spec 030 契约扩展（FR-107）</h3>
  * 新增 {@code channelTransactionId}。<b>⚠️ 注意区分</b>：{@code transactionId} 是
  * <b>平台侧</b>交易号（TX+雪花），<b>不是渠道交易号</b>；渠道定位原交易需要的是
- * {@code channelTransactionId}（即 {@code payment_attempts.channel_reference}）。
+ * {@code channelTransactionId}（即 {@code channel_orders.channel_reference}）。
  * 修复前 {@code ChannelQueryService} 错把平台交易号当渠道交易号传（C-12 / S21），
  * 该调用侧由 Phase 6 / T60 同步修正。
  *

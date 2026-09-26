@@ -1,4 +1,4 @@
-package com.payment.payment.infra.persistence.attempt;
+package com.payment.channelgateway.infra.persistence;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,9 +8,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * {@code payment_attempts.extra_json} 的编解码（spec 030 / FR-302）。
+ * {@code channel_orders.extra_json} 的编解码（spec 030 / FR-302）。
  *
- * <p><b>为什么单独一个类</b>：领域对象 {@link com.payment.payment.domain.PaymentAttempt} 只持有
+ * <p><b>为什么单独一个类</b>：领域对象 {@link com.payment.channelgateway.domain.ChannelOrder} 只持有
  * {@code Map<String,String>}，<b>MUST NOT 依赖 Jackson</b>；JSON 是<b>存储细节</b>，
  * 必须留在 {@code infra/persistence}。</p>
  *

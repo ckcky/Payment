@@ -52,7 +52,7 @@ public interface ChannelGateway {
     /**
      * 退款：按<b>调用方给出的</b>渠道码精确解析渠道实现后调用。
      *
-     * <p><b>INV-6</b>：退款是反向路径，渠道码来自 {@code payment_attempts.channel_code} 已记录的值，
+     * <p><b>INV-6</b>：退款是反向路径，渠道码来自 {@code channel_orders.channel_code} 已记录的值，
      * 门面 <b>MUST NOT</b> 重新选路——退款换渠道 = 钱退错地方。</p>
      */
     ChannelResult refund(String channelCode, RefundRequest request);
@@ -66,7 +66,7 @@ public interface ChannelGateway {
      *
      * <h3>为什么模态要经门面传，而不是调用方自己包染色上下文</h3>
      * <p>反向路径（退款 / 主动查询 / 超时扫描）没有入站 HTTP 请求，染色 ThreadLocal 为空，
-     * 必须用 {@code payment_attempts.extra_json} 里<b>落库的模态</b>包裹渠道调用——
+     * 必须用 {@code channel_orders.extra_json} 里<b>落库的模态</b>包裹渠道调用——
      * 不包裹的话，沙箱支付单的退款会退化成走 mock 渠道，<b>原渠道的钱根本没退</b>。
      * 改造前这段包裹散落在 Payment 侧的三个类里（各自 {@code DyeContext.callWith}），
      * 等于把「模态怎么判定」这个渠道域的知识漏给了 Payment。收进门面后，
@@ -84,14 +84,10 @@ public interface ChannelGateway {
      */
     ChannelResult query(String channelCode, DyeMode mode, QueryStatusRequest request);
 
-    /**
-     * 当前请求是否处于 {@code SANDBOX} 染色（FR-013：模态判定内聚在渠道网关域）。
-     *
-     * <p>Payment 侧有需要「按模态分叉」的编排（如 mock 收银台只在 mock 模态下延迟扣款），
-     * 但它<b>不该自己去读染色上下文</b>——那会让「模态是什么」变成两个域各自解释的概念。
-     * 由门面回答，Payment 只消费布尔结论。</p>
-     */
-    boolean isSandboxRequest();
+    // spec 041：原 `isSandboxRequest()` 探针已删除。
+    // 它当时服务于「Payment 侧按模态分叉（mock 收银台要不要延迟扣款）」——但那本身就是
+    // 渠道域的知识，spec 041 已把整段判断下沉为 ChargeDispatchPolicy。
+    // 探针随之成为死代码：留着只会让「Payment 还能问模态」这个错误印象继续存在。
 
     /**
      * 该渠道支持的支付场景。
@@ -110,7 +106,7 @@ public interface ChannelGateway {
      * {@code INVALID_ARGUMENT}（与 {@link #query} 同一错误口径）。
      *
      * <p><b>为什么需要单独一个校验方法</b>：{@code ChannelQueryService#queryOnce} 必须在
-     * <b>消耗一次查询次数之前</b>确认「渠道码可解析」——{@code payment_attempts} 行存在但
+     * <b>消耗一次查询次数之前</b>确认「渠道码可解析」——{@code channel_orders} 行存在但
      * {@code channel_code} 已未注册（渠道下线/配置变更）属于脏数据，它 MUST NOT 计入
      * {@code payments.query_attempts}，否则脏数据会自己把查询预算耗光、掩盖真实原因。
      * 若把校验推迟到 {@link #query} 内部，那次计数就已经落库了。</p>

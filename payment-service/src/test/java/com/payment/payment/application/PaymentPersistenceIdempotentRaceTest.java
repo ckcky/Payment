@@ -1,9 +1,9 @@
 package com.payment.payment.application;
 
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
+import com.payment.channelgateway.domain.ChannelOrder;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>被修的缺陷</b>：{@code PaymentPersistence.insertPending} 里，{@code insertNew} 捕获
  * {@link DuplicateKeyException} 后只回查了既有支付单，调用方却<b>继续</b>为这条已存在的支付单
- * {@code openPaymentAttempt} 建第二条 attempt、再 {@code payment.start(新 attemptId)}——
+ * {@code openChannelOrder} 建第二条 attempt、再 {@code payment.start(新 attemptId)}——
  * 而既有支付单此时已是 {@code PROCESSING}，于是 {@code start} 抛
  * {@code STATE_TRANSITION_VIOLATION}、整个建单事务回滚。
  * 结果：<b>幂等重试被答成状态机错误</b>（调用方拿到 409/500，而不是首次结果）。</p>
@@ -62,11 +62,11 @@ class PaymentPersistenceIdempotentRaceTest {
     void concurrentDuplicateReplaysStoredPaymentInsteadOfViolatingStateMachine() {
         // 对手方那笔：已落库、已 PROCESSING、已有一条 PAYMENT attempt
         Payment winner = new Payment("txn-race", "order-race", "user-race", 100L, "CNY", IDEMPOTENCY_KEY);
-        InMemoryPaymentAttemptRepository attempts = new InMemoryPaymentAttemptRepository();
-        PaymentAttempt stored = attempts.openPaymentAttempt(winner.getPaymentNo(), "MOCK", 100L, "CNY");
+        InMemoryChannelOrderRepository attempts = new InMemoryChannelOrderRepository();
+        ChannelOrder stored = attempts.openChannelOrder(winner.getPaymentNo(), "MOCK", 100L, "CNY");
         winner.start(stored.getId()); // PENDING -> PROCESSING（并发下首次请求已完成这一步）
 
-        PaymentPersistence persistence = new PaymentPersistence(new RaceLosingRepository(winner), attempts);
+        PaymentPersistence persistence = new PaymentPersistence(new RaceLosingRepository(winner));
 
         PaymentPersistence.PendingPayment pending = persistence.insertPending(
                 new CreatePaymentCommand("txn-race", "order-race", "user-race", 100L, "CNY",
@@ -77,11 +77,8 @@ class PaymentPersistenceIdempotentRaceTest {
                 .as("撞唯一键后必须是「命中重复」而非「新建」——修复前这里会一路走到 payment.start 抛状态机错误")
                 .isFalse();
         assertThat(pending.payment()).isSameAs(winner);
-        assertThat(pending.attempt())
-                .as("幂等重放必须回放库内那条 attempt，而不是新建一条")
-                .isSameAs(stored);
         assertThat(attempts.findByPaymentNo(winner.getPaymentNo()))
-                .as("Payment 1:1 PaymentAttempt：重放 MUST NOT 产生第二条 PAYMENT 尝试行")
+                .as("Payment 1:1 ChannelOrder：重放 MUST NOT 产生第二条 PAYMENT 尝试行")
                 .hasSize(1);
         assertThat(pending.payment().getStatus())
                 .as("重放不得改动库内支付单状态")

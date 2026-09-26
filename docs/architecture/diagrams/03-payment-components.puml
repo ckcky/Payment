@@ -71,12 +71,12 @@ package "application 应用层（payment 支付层 —— 管 payments 表的资
   A5 -[hidden]right- A6
 }
 
-' ============ 3. application.channel 渠道层端口 ============
-package "application.channel —— 渠道层端口（payment 层只依赖这里的接口抽象，Payment ≠ Channel）" as PORTS {
+' ============ 3. channelgateway.application 渠道网关层 ============
+package "channelgateway.application —— 渠道网关域（spec 038：独立顶层包；payment 层只依赖这里的接口抽象，Payment ≠ Channel）" as PORTS {
   rectangle "PaymentChannel\n渠道交互端口" as P1 <<port>>
   rectangle "ChannelRouter\n前向选路（确定性，读 channel_code 枚举）" as P2 <<port>>
   rectangle "ChannelRegistry\n渠道身份注册表（按 channel_code 解析）" as P3 <<port>>
-  rectangle "ChannelAttemptRecorder\npayment_attempts 表唯一写入口" as P4 <<port>>
+  rectangle "ChannelOrderService\nchannel_orders 表唯一写入口" as P4 <<port>>
   P1 -[hidden]right- P2
   P2 -[hidden]right- P3
   P3 -[hidden]right- P4
@@ -92,7 +92,7 @@ package "application.reliability 可靠性" as REL {
 ' ============ 5. domain 领域层 ============
 package "domain 领域层（聚合根 / 状态机 / 不变式）" as DOM {
   rectangle "Payment（聚合根）\n状态机 / 幂等键 / 金额口径" as D1 <<domain>>
-  rectangle "PaymentAttempt（聚合根）\n渠道交互生命周期 / channelMode 派生" as D2 <<domain>>
+  rectangle "ChannelOrder（聚合根）\n渠道单生命周期 / channelMode 派生" as D2 <<domain>>
   D1 -[hidden]right- D2
 }
 
@@ -110,7 +110,7 @@ package "infra.channel 渠道实现族（依赖倒置：实现 application.chann
 ' ============ 7. infra.persistence 持久化 ============
 package "infra.persistence 持久化（依赖倒置：实现 domain 仓储 + 渠道层端口）" as IMPP {
   rectangle "MybatisPaymentRepository\n实现 domain 仓储接口" as J1 <<channel>>
-  rectangle "ChannelAttemptRecorderImpl\n实现 ChannelAttemptRecorder 端口" as J2 <<channel>>
+  rectangle "ChannelOrderServiceImpl\n实现 ChannelOrderService 端口" as J2 <<channel>>
   J1 -[hidden]right- J2
 }
 
@@ -125,7 +125,7 @@ package "外部容器 / 外部系统（本服务的上下游）" as EXTS {
 
 package "本服务数据表（每张表只有一个写入口）" as TABS {
   database "payments\n只由 payment 支付层写\n（PaymentPersistence）" as DB1
-  database "payment_attempts\n只由 channelAttempt 渠道层写\n（ChannelAttemptRecorder）" as DB2
+  database "channel_orders\n只由 channelgateway 渠道网关层写\n（ChannelOrderService）" as DB2
   DB1 -[hidden]right- DB2
 }
 
@@ -141,11 +141,11 @@ EXTS -[hidden]down- TABS
 
 legend bottom left
   **Legend**
-  蓝灰 = payment 支付层组件 ｜ **淡紫 = domain 领域层（聚合根）** ｜ 浅蓝 = channelAttempt 渠道层 / 持久化实现 ｜ 浅灰 = 端口（interface）｜ 灰 = 外部容器 / 系统
+  蓝灰 = payment 支付层组件 ｜ **淡紫 = domain 领域层（聚合根）** ｜ 浅蓝 = channelgateway 渠道网关层 / 持久化实现 ｜ 浅灰 = 端口（interface）｜ 灰 = 外部容器 / 系统
   ★ **结构视图：不画任何连线。** 依赖关系由**自上而下的层序**表达，不用箭头。
   ★ 依赖方向铁律：api → application → domain ← infra（依赖倒置，infra 实现 domain 与端口）
     · **application 包 MUST NOT 依赖 infra.channel**（ArchUnit **INV-4 / INV-5**）
-    · payment_attempts 写入口唯一 = ChannelAttemptRecorder；payments 写入口唯一 = PaymentPersistence
+    · channel_orders 写入口唯一 = ChannelOrderService；payments 写入口唯一 = PaymentPersistence
   ★ 运行期调用顺序见 [04-payment-flow] / [05-payment-unknown-recovery] / [06-refund-flow]
 endlegend
 

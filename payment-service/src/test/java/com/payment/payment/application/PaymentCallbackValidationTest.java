@@ -8,10 +8,10 @@ import com.payment.channelgateway.infra.AlipayChannelAdapter;
 import com.payment.channelgateway.infra.alipay.AlipayGateway;
 import com.payment.channelgateway.support.StubChannelRegistry;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import com.payment.payment.support.RecordingObservability;
@@ -59,7 +59,7 @@ class PaymentCallbackValidationTest {
 
     private PaymentTestStack stack;
     private InMemoryPaymentRepository payments;
-    private InMemoryPaymentAttemptRepository attempts;
+    private InMemoryChannelOrderRepository attempts;
     private RecordingObservability obs;
     private StubGateway gateway;
     private ChannelCallbackHandler handler;
@@ -98,10 +98,10 @@ class PaymentCallbackValidationTest {
 
         payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
                 10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
-        attempts.save(PaymentAttempt.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
-                Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
+        attempts.save(ChannelOrder.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
+                Instant.now().minusSeconds(60), null, null, ChannelOrderStatus.ACCEPTED,
                 null, null, 1, "PAYMENT", 10_00L, "CNY",
-                Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
+                Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX")));
 
         gateway = new StubGateway();
 
@@ -150,7 +150,7 @@ class PaymentCallbackValidationTest {
                 .isEqualTo(PaymentStatus.PROCESSING);
         assertThat(attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus())
                 .as("① 不推进：attempt 也不得被推进")
-                .isEqualTo(PaymentAttemptStatus.ACCEPTED);
+                .isEqualTo(ChannelOrderStatus.ACCEPTED);
 
         assertThat(obs.countOf("payment.notify_rejected", "reason", expectedReasonTag))
                 .as("② 计指标：reason=%s 的拒绝计数必须 +1", expectedReasonTag)
@@ -244,7 +244,7 @@ class PaymentCallbackValidationTest {
         @Test
         @DisplayName("本单已记录引用而通知携带另一个 ⇒ 三件套齐全，不推进（防渠道重发他笔）[SC-B2-03]")
         void conflictingReferenceRejects() {
-            PaymentAttempt attempt = attempts.findByPaymentNo(PAYMENT_NO).get(0);
+            ChannelOrder attempt = attempts.findByPaymentNo(PAYMENT_NO).get(0);
             attempt.backfillChannelReference("ch-original");
             attempts.save(attempt);
 
@@ -256,7 +256,7 @@ class PaymentCallbackValidationTest {
         @Test
         @DisplayName("引用一致 ⇒ 正常收敛，不留拒绝痕迹 [SC-B2-04]")
         void matchingReferenceConverges() {
-            PaymentAttempt attempt = attempts.findByPaymentNo(PAYMENT_NO).get(0);
+            ChannelOrder attempt = attempts.findByPaymentNo(PAYMENT_NO).get(0);
             attempt.backfillChannelReference("ch-1");
             attempts.save(attempt);
 
@@ -304,7 +304,7 @@ class PaymentCallbackValidationTest {
             assertThat(payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus())
                     .isEqualTo(PaymentStatus.PROCESSING);
             assertThat(attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus())
-                    .isEqualTo(PaymentAttemptStatus.ACCEPTED);
+                    .isEqualTo(ChannelOrderStatus.ACCEPTED);
 
             // ② 计指标：身份校验与验签同源，归入 signature 维度（app_id 维度已按裁决取消）
             assertThat(obs.countOf("payment.notify_rejected", "reason", "signature")).isEqualTo(1);

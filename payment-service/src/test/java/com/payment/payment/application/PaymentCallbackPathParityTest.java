@@ -12,10 +12,10 @@ import com.payment.channelgateway.infra.AlipayChannelAdapter;
 import com.payment.channelgateway.infra.alipay.AlipayGateway;
 import com.payment.channelgateway.support.StubChannelRegistry;
 import com.payment.payment.domain.Payment;
-import com.payment.payment.domain.PaymentAttempt;
-import com.payment.payment.domain.PaymentAttemptStatus;
+import com.payment.channelgateway.domain.ChannelOrder;
+import com.payment.channelgateway.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.payment.infra.InMemoryPaymentAttemptRepository;
+import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.AfterEach;
@@ -69,7 +69,7 @@ class PaymentCallbackPathParityTest {
 
     private PaymentTestStack stack;
     private InMemoryPaymentRepository payments;
-    private InMemoryPaymentAttemptRepository attempts;
+    private InMemoryChannelOrderRepository attempts;
     private ChannelCallbackHandler handler;
 
     /** 网关桩：验签恒通过（本类只比收敛语义，不比验签）。 */
@@ -123,10 +123,10 @@ class PaymentCallbackPathParityTest {
     private void resetPayment() {
         payments.save(Payment.rehydrate(1L, PAYMENT_NO, "TX-1", "ORDER-1", "user-1",
                 10_00L, "CNY", "idem-1", PaymentStatus.PROCESSING, 10L, null, 0, null, 0, 1, "M001"));
-        attempts.save(PaymentAttempt.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
-                Instant.now().minusSeconds(60), null, null, PaymentAttemptStatus.ACCEPTED,
+        attempts.save(ChannelOrder.rehydrate(10L, PAYMENT_NO, "ALIPAY", 0,
+                Instant.now().minusSeconds(60), null, null, ChannelOrderStatus.ACCEPTED,
                 null, null, 1, "PAYMENT", 10_00L, "CNY",
-                Map.of(PaymentAttempt.CHANNEL_MODE_KEY, "SANDBOX")));
+                Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX")));
     }
 
     private PaymentStatus status() {
@@ -244,12 +244,12 @@ class PaymentCallbackPathParityTest {
     @DisplayName("幂等：attempt 终态在两条路径下同样被吸收（不重复迁移）[SC-B2-06]")
     void attemptTerminalAbsorptionMatches() {
         viaJsonPath(new ChannelCallbackRequest("SUCCESS", "ch-1", null, 10_00L));
-        PaymentAttemptStatus afterJson = attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus();
-        assertThat(afterJson).isEqualTo(PaymentAttemptStatus.SUCCEEDED);
+        ChannelOrderStatus afterJson = attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus();
+        assertThat(afterJson).isEqualTo(ChannelOrderStatus.SUCCEEDED);
 
         resetPayment();
         viaNotifyPath("TRADE_SUCCESS");
-        PaymentAttemptStatus afterNotify = attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus();
+        ChannelOrderStatus afterNotify = attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus();
         assertThat(afterNotify)
                 .as("两条路径的 attempt 终态必须一致")
                 .isEqualTo(afterJson);
@@ -276,7 +276,7 @@ class PaymentCallbackPathParityTest {
         assertThat(after.getStatus()).isEqualTo(statusBefore);
         assertThat(after.getVersion()).isEqualTo(versionBefore);
         assertThat(attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus())
-                .isEqualTo(PaymentAttemptStatus.ACCEPTED);
+                .isEqualTo(ChannelOrderStatus.ACCEPTED);
     }
 
     // ---- ⑥ 两路径共享同一收敛链路（结构证据） ----

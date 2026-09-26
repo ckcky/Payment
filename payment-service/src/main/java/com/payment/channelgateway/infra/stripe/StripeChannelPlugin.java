@@ -52,7 +52,7 @@ import java.util.Set;
  */
 public class StripeChannelPlugin extends AbstractChannelPlugin {
 
-    /** 渠道码（大写、全局唯一；与 {@code payment_attempts.channel_code} 取值一致）。 */
+    /** 渠道码（大写、全局唯一；与 {@code channel_orders.channel_code} 取值一致）。 */
     public static final String CODE = "STRIPE";
 
     /** 回调挂载路径段：{@code POST /internal/channels/STRIPE/callback}。 */
@@ -119,7 +119,7 @@ public class StripeChannelPlugin extends AbstractChannelPlugin {
                 request.amountMinor(),
                 request.currencyCode(),
                 subjectOf(request),
-                successUrlOf(request),
+                successUrlOf(),
                 properties.getCancelUrl(),
                 expiresAt);
 
@@ -261,11 +261,14 @@ public class StripeChannelPlugin extends AbstractChannelPlugin {
         };
     }
 
-    private String successUrlOf(ChargeRequest request) {
-        if (request.callbackUrls() != null && request.callbackUrls().returnUrl() != null
-                && !request.callbackUrls().returnUrl().isBlank()) {
-            return request.callbackUrls().returnUrl();
-        }
+    /**
+     * 成功跳回地址（spec 041：读本插件自己的配置）。
+     *
+     * <p>改造前优先取 {@code ChargeRequest.callbackUrls().returnUrl()}、回落配置；
+     * spec 041 移除该字段后统一读配置——跳回地址是 Stripe Checkout 会话自身的参数，
+     * 属渠道协议细节，不该由资金动作域下发。</p>
+     */
+    private String successUrlOf() {
         return properties.getSuccessUrl();
     }
 

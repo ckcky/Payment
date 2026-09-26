@@ -49,7 +49,7 @@ import java.util.Set;
  */
 public class WechatChannelPlugin extends AbstractChannelPlugin {
 
-    /** 渠道码（大写、全局唯一；与 {@code payment_attempts.channel_code} 取值一致）。 */
+    /** 渠道码（大写、全局唯一；与 {@code channel_orders.channel_code} 取值一致）。 */
     public static final String CODE = "WECHAT";
 
     /** 回调挂载路径段：{@code POST /internal/channels/WECHAT/callback}（复用通用端点，FR-014）。 */
@@ -120,7 +120,7 @@ public class WechatChannelPlugin extends AbstractChannelPlugin {
                     "wechat charge requires an explicit scene (NATIVE/JSAPI/MINI_PROGRAM/H5)",
                     BusinessCode.INVALID_REQUEST);
         }
-        String notifyUrl = notifyUrlOf(request);
+        String notifyUrl = notifyUrlOf();
         if (notifyUrl == null || notifyUrl.isBlank()) {
             // 回调地址是资金事实的唯一权威来源；缺失即「下单成功却收不到钱的通知」（INV-8 同口径）
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
@@ -321,12 +321,15 @@ public class WechatChannelPlugin extends AbstractChannelPlugin {
         };
     }
 
-    /** 回调地址：请求内联优先（{@code notifyUrl} 是资金事实来源，MUST NOT 为空串），否则回落配置。 */
-    private String notifyUrlOf(ChargeRequest request) {
-        if (request.callbackUrls() != null && request.callbackUrls().notifyUrl() != null
-                && !request.callbackUrls().notifyUrl().isBlank()) {
-            return request.callbackUrls().notifyUrl();
-        }
+    /**
+     * 异步通知地址（spec 041：读本插件自己的配置）。
+     *
+     * <p>改造前优先取 {@code ChargeRequest.callbackUrls().notifyUrl()}、回落配置；
+     * spec 041 移除该字段后统一读配置——通知地址是微信下单请求自身的参数，
+     * 属渠道协议细节。{@code notifyUrl} 是资金事实来源，配置缺失时由下单前的校验拒绝
+     * （不静默降级，INV-8）。</p>
+     */
+    private String notifyUrlOf() {
         return properties == null ? null : properties.getNotifyUrl();
     }
 
