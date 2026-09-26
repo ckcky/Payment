@@ -38,7 +38,7 @@ public class MockChannelAdapter extends AbstractMockChannelAdapter {
     /**
      * 插件自描述：<b>无回调路径</b>。
      *
-     * <p>mock 渠道的退款结果由进程内推送（{@code PaymentNotifyPort}）送达，
+     * <p>mock 渠道的退款结果由进程内推送（{@code PaymentResultPort}）送达，
      * 不存在 HTTP 回调端点——声明一个回调路径会让通用回调端点误以为可以收单，
      * 而那个端点永远不会有人调用。</p>
      */

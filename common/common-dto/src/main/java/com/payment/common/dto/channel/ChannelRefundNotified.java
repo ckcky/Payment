@@ -7,7 +7,7 @@ import java.time.Instant;
  *
  * <p>本契约取代 {@code RefundResultListener#onChannelRefundResult(String, ChannelResult)}——
  * 修正<b>接口定义权方向</b>（FR-012 / INV-2）：旧形态下接口定义在渠道包、实现却在退款应用服务，
- * 形成「渠道 → 退款」的反向驱动；现在由 Payment 定义 {@code PaymentNotifyPort}
+ * 形成「渠道 → 退款」的反向驱动；现在由 Payment 定义 {@code PaymentResultPort}
  * 并实现，渠道网关只依赖接口。</p>
  *
  * <p>与 {@link ChannelPayNotified} 同构，但按 {@code refundNo} 寻址——退款的收敛编排

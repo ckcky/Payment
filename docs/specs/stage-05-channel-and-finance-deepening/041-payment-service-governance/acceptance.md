@@ -12,7 +12,7 @@
 3. 旧包/API/DTO/配置/Schema/调用方迁移清单完成；仓内调用方均使用新 API。
    - **当前状态**：✅ 清单已完成（[migration-map.md](migration-map.md)，T03）；❌ 调用方**尚未迁移**（T21~T23 未开工）。
 4. MySQL、Redis、测试容器和依赖服务可用；CI 的真实库测试不得静默跳过。
-   - **当前状态**：✅ 全量 `mvnw clean test` 1086 / 0F / 0E 通过（见 §5），依赖服务可用。
+   - **当前状态**：✅ 全量 `mvnw clean test` 1112 / 0F / 0E 通过（见 §5），依赖服务可用。
 
 ## 2. INV 门禁
 
@@ -70,7 +70,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 ./mvnw -B clean test     # 必须 clean：target/surefire-reports/ 会残留已删除类的旧 XML，直接加总得到虚高数字
 ```
 
-**实测结果**（master `5ce4853`，18 reactor 模块）：**1086 tests / 0 Failures / 0 Errors / BUILD SUCCESS**（6 分 37 秒）
+**实测结果**（master `5ce4853`，18 reactor 模块）：**1112 tests / 0 Failures / 0 Errors / BUILD SUCCESS**（6 分 37 秒）
 
 | 模块 | 测试数 | 模块 | 测试数 |
 |---|---|---|---|
@@ -80,21 +80,32 @@ export PATH="$JAVA_HOME/bin:$PATH"
 | merchant-service | 10 | ledger-service | 73 |
 | catalog-service | 49 | deployment/mock-channel-web | 11 |
 | order-service | 73 | deployment/test-infra | 19 |
-| **payment-service** | **456** | deployment/architecture-tests | 23 |
-| fulfillment-service | 25 | **合计** | **1086** |
+| **payment-service** | **482** | deployment/architecture-tests | 23 |
+| fulfillment-service | 25 | **合计** | **1112** |
 
 - `common-mybatis`、`deployment/e2e-tests` 无 surefire 报告（前者无测试；后者 live 栈默认跳过），计 0。
 - **自洽校验**：`payment-service` 源码级 `@Test|@ParameterizedTest|@RepeatedTest` 注解数 = **496**，
-  执行数 = **456**，差 40（参数化用例展开、条件装配与依赖 Testcontainers 的用例计入源码但不计入本 profile）。
+  执行数 = **482**，差 14（参数化用例展开、条件装配与依赖 Testcontainers 的用例计入源码但不计入本 profile）。
   本 Feature 结束时**必须重跑同一口径**并给出「增量 = 新增用例数」的对照。
-- ⚠️ 本基线比 037 收口时记录的 482 / 1112 **低 26**，原因是旧 041（`payment-flow-layering`，
-  `5c00ad4` / `57e12c3`）已合入并改动了测试装配。**基线必须在每次开工前重测，不得沿用历史数字。**
+
+> ⚠️ **统计口径（2026-09-26 修正，务必沿用）**：测试数**只能**用 surefire 的 **XML**（`tests="N"` 属性）求和，
+> **不能用 `.txt` 的 `Tests run:` 行**求和。实测同一份报告：XML = **482**，`.txt` awk = **456**，
+> 后者**少算 26 且这个差值不稳定**（本轮首次踩到，曾据此误判「基线比 037 时期低 26 是旧 041 造成的」——
+> **该结论已作废**：037 收口记录的 482 / 1112 与本轮 XML 口径**逐位相等**，基线从未变化）。
+>
+> ```bash
+> # ✅ 正确口径
+> grep -ho 'tests="[0-9]*"' <module>/target/surefire-reports/TEST-*.xml | grep -oE '[0-9]+' \
+>   | awk '{s+=$1} END {print s+0}'
+> # ❌ 错误口径（少算）
+> grep -h "^Tests run:" <module>/target/surefire-reports/*.txt | awk -F'[:,]' '{s+=$2} END {print s+0}'
+> ```
 
 ## 6. 交付记录
 
 | 项目 | 结果 | 证据/命令 | 备注 |
 | --- | --- | --- | --- |
-| 全量单测基线（开工前） | ✅ **1086 / 0F / 0E** | `./mvnw -B clean test` | 见 §5；本轮唯一已执行的验证 |
+| 全量单测基线（开工前） | ✅ **1112 / 0F / 0E** | `./mvnw -B clean test` | 见 §5；本轮唯一已执行的验证 |
 | Schema lint 与双路径重放 | 待执行 | `schema-lint.sh` / `schema-replay.sh` | 阻塞于 T20 |
 | Payment/Channel 单元与真库测试 | 待执行 | payment-service 单测 | 阻塞于 T07~T18 |
 | ArchUnit 与阳性对照 | 待执行 | `deployment/architecture-tests` | 阻塞于 T25；现状 23/23 绿 |

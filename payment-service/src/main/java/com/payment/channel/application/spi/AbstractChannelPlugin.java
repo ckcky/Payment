@@ -11,7 +11,7 @@ import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.common.dto.channel.PaymentScene;
 import com.payment.channel.application.QueryStatusRequest;
 import com.payment.channel.application.RefundRequest;
-import com.payment.payment.application.PaymentNotifyPort;
+import com.payment.payment.application.port.PaymentResultPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,7 +67,7 @@ import java.util.function.Supplier;
  *   <li><b>未命中则走基线场景</b>：{@code mock-scenario} 决定 SUCCESS / FAILURE /
  *       TIMEOUT / TRANSPORT_ERROR / BUSINESS_UNKNOWN（ADR-0049）；</li>
  *   <li><b>退款可异步</b>：{@code refund-async=true} 时当场回「已受理」，
- *       延迟后经 {@link PaymentNotifyPort} 推送权威结果（spec 019 / D7）。</li>
+ *       延迟后经 {@link PaymentResultPort} 推送权威结果（spec 019 / D7）。</li>
  * </ol>
  * 这个顺序不可颠倒——尾数注入是 E2E 确定性的基石，必须先于可配置的基线场景。
  *
@@ -119,7 +119,7 @@ public abstract class AbstractChannelPlugin implements ChannelPlugin {
                 return t;
             });
     /** 退款结果推送目标（Spring 装配；纯单元测试可不注入——注入后才有异步推送）。 */
-    private volatile PaymentNotifyPort paymentNotifyPort;
+    private volatile PaymentResultPort paymentNotifyPort;
 
     /**
      * 运行级前缀（跨重启唯一）。
@@ -311,7 +311,7 @@ public abstract class AbstractChannelPlugin implements ChannelPlugin {
             return;
         }
         refundPusher.schedule(() -> {
-            PaymentNotifyPort port = paymentNotifyPort;
+            PaymentResultPort port = paymentNotifyPort;
             if (port == null) {
                 return;
             }
@@ -325,7 +325,7 @@ public abstract class AbstractChannelPlugin implements ChannelPlugin {
     /**
      * 网关域结果 → 跨域入向事件（spec 037 / T5 / FR-010）。
      *
-     * <p>进程内 Mock 的「推送」与真实渠道的 HTTP 回调走同一入向端口（{@link PaymentNotifyPort}），
+     * <p>进程内 Mock 的「推送」与真实渠道的 HTTP 回调走同一入向端口（{@link PaymentResultPort}），
      * 语义等价、不留双路径。{@code channelNo} 留空：推送这一刻只有 {@code refundNo}
      * （入向寻址键），网关单号的权威值在 {@code channel_orders.channel_no}。</p>
      */
@@ -378,11 +378,11 @@ public abstract class AbstractChannelPlugin implements ChannelPlugin {
      * 注入退款结果推送目标（Spring 装配；未注入时异步模式退化为纯受理、不推送）。
      *
      * <p>spec 037 / T5：目标类型由 {@code RefundResultListener}（定义在渠道包）改为
-     * {@link PaymentNotifyPort}（Payment 定义 + 实现，FR-012 / INV-2）——
+     * {@link PaymentResultPort}（Payment 定义 + 实现，FR-012 / INV-2）——
      * 渠道侧不再掌握「退款怎么收敛」的接口定义权。</p>
      */
     @Autowired(required = false)
-    public void setPaymentNotifyPort(PaymentNotifyPort paymentNotifyPort) {
+    public void setPaymentResultPort(PaymentResultPort paymentNotifyPort) {
         this.paymentNotifyPort = paymentNotifyPort;
     }
 

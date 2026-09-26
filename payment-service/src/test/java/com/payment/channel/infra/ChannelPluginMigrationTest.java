@@ -86,7 +86,7 @@ class ChannelPluginMigrationTest {
         assertThat(new AlipayChannelAdapter(AlipayChannelAdapter.Scenario.SUCCESS).descriptor().callbackPath())
                 .as("支付宝 MUST 声明回调路径")
                 .isNotBlank();
-        // 纯 mock 渠道的结果由进程内推送（PaymentNotifyPort），不经 HTTP 回调
+        // 纯 mock 渠道的结果由进程内推送（PaymentResultPort），不经 HTTP 回调
         assertThat(new MockChannelAdapter().descriptor().callbackPath())
                 .as("纯 mock 渠道 MUST NOT 声明回调路径")
                 .isNull();

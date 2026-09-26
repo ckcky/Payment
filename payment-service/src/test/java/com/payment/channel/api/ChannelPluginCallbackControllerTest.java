@@ -17,8 +17,8 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelRefundNotified;
 import com.payment.common.dto.channel.PaymentScene;
-import com.payment.payment.application.PayNotifyOutcome;
-import com.payment.payment.application.PaymentNotifyPort;
+import com.payment.payment.application.port.PayNotifyOutcome;
+import com.payment.payment.application.port.PaymentResultPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -113,7 +113,7 @@ class ChannelPluginCallbackControllerTest {
     }
 
     /** 恒受理的入向端口替身：本类不测业务校验。 */
-    private static final class AcceptingPort implements PaymentNotifyPort {
+    private static final class AcceptingPort implements PaymentResultPort {
 
         final List<ChannelPayNotified> pays = new ArrayList<>();
 
@@ -259,7 +259,7 @@ class ChannelPluginCallbackControllerTest {
     }
 
     /** 业务侧拒绝的端口替身（INV-10 的对照面：报文可信，只是与我们记的对不上）。 */
-    private static final class RejectingPort implements PaymentNotifyPort {
+    private static final class RejectingPort implements PaymentResultPort {
 
         @Override
         public PayNotifyOutcome onChannelPayResult(ChannelPayNotified notified) {

@@ -1,5 +1,9 @@
 package com.payment.payment.application;
 
+import com.payment.payment.application.port.PaymentResultPort;
+
+import com.payment.payment.application.port.DefaultPaymentResultPort;
+
 import com.payment.common.core.dye.DyeContext;
 import com.payment.channel.application.ChannelCallbackHandler;
 import com.payment.channel.application.ChannelRegistry;
@@ -30,14 +34,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * spec 030 / T124 / SC-B2-01~04：notify 校验失败的<b>三件套</b>（FR-213）。
  *
- * <p>{@code PaymentNotifyPortTest} 覆盖了「金额/币种/引用不符 ⇒ 拒绝 + 三件套」在
+ * <p>{@code PaymentResultPortTest} 覆盖了「金额/币种/引用不符 ⇒ 拒绝 + 三件套」在
  * <b>端口层</b>的口径；本类从<b>入站端点</b>出发把同一条纪律再走一遍——因为端点这一层
  * 还多了一段「插件验签/身份 → 网关模板 → 端口」的路，而<b>那段路上的失败也必须是拒绝</b>，
  * 不能因为「还没到业务校验」就变成静默通过。</p>
  *
  * <p><b>T6 迁移说明</b>：本类原先驱动的是支付宝专属端点 {@code AlipayNotifyController}
  * （FR-015 已删除）。现驱动通用端点背后的真实链路
- * （{@code ChannelCallbackHandler} + {@link DefaultPaymentNotifyPort}），
+ * （{@code ChannelCallbackHandler} + {@link DefaultPaymentResultPort}），
  * 报文形态、拒绝语义、三件套断言全部不变。</p>
  *
  * <p>为什么三件套要一起断言：静默拒绝是最危险的形态——状态没动看起来「一切正常」，
@@ -110,7 +114,7 @@ class PaymentCallbackValidationTest {
         // 两段共用一个记录器，才能证明「无论在哪一段被拒，都留了痕迹」。
         PaymentResultProcessor processor = new PaymentResultProcessor(payments, attempts, stack.order);
         PaymentCallbackService callback = new PaymentCallbackService(processor, payments, obs.metrics, obs.audit);
-        PaymentNotifyPort port = new DefaultPaymentNotifyPort(callback, null,
+        PaymentResultPort port = new DefaultPaymentResultPort(callback, null,
                 payments, attempts, obs.metrics, obs.audit);
 
         ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE,

@@ -10,7 +10,7 @@ import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
 import com.payment.channel.application.ChannelOrderService;
 import com.payment.channel.application.ChannelOrderServices;
-import com.payment.channel.application.ChannelGateway;
+import com.payment.channel.application.port.ChannelGateway;
 import com.payment.channel.application.ChannelResult;
 import com.payment.channel.application.PaymentChannel;
 import com.payment.channel.application.RefundRequest;

@@ -2,7 +2,7 @@
 
 > **Status**: In Development（2026-09-26 负责人裁决批准立项 + **Accept ADR-0084**，H-041-1~7 全部批准；T04 起实施中）
 > **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Acceptance**: [acceptance.md](acceptance.md) ｜ **Migration Map**: [migration-map.md](migration-map.md)
-> **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟡 Proposed，2026-09-26 起草，待负责人 Accept）
+> **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟢 **Accepted**，2026-09-26 负责人裁决接受，即刻生效）
 
 ## 0. 决策与迁移基线
 
@@ -43,11 +43,32 @@
     **旁路包与 `posting` 的收拢留到 T11/T14/T18**（属于「迁内容」而非「建骨架」）。
   - Spring 组件扫描 / MyBatis Mapper 扫描均以 `com.payment` 为根，改名后**无需改配置**（`application.yml` 中 `channelgateway` 引用数为 0，已复核）。
   - ⚠️ **工具坑记录**：zsh 下 `for f in $(...)` **不做词分割**、`sed -i ''` 参数被吞 —— 批量替换改用 Python 脚本完成（见本节）。
-- [ ] T06 `channel/application/port/ChannelGateway`、`payment/application/port/PaymentResultPort`：定义并装配两个跨域端口。依赖：T04/T05。追溯：FR-002/003/006，INV-003。验收：端口装配和依赖测试。
-  - **现状（2026-09-26 实测）**：`ChannelGateway` 在 `channel/application/ChannelGateway.java`（缺 `port` 子包）；
-    Payment 侧入向端口现名 **`PaymentNotifyPort`**（`payment/application/PaymentNotifyPort.java`），
-    实现为 `DefaultPaymentNotifyPort`。⇒ 待办：① 建 `channel/application/port/` 并移入 `ChannelGateway`；
-    ② 建 `payment/application/port/`，`PaymentNotifyPort` → **`PaymentResultPort`** 并移入。
+- [x] T06 `channel/application/port/ChannelGateway`、`payment/application/port/PaymentResultPort`：定义并装配两个跨域端口。依赖：T04/T05。追溯：FR-002/003/006，INV-003。验收：端口装配和依赖测试。
+  - **执行记录（2026-09-26）**：两个端口均已归位到 `port` 子包。
+    - `channel/application/ChannelGateway.java` → **`channel/application/port/ChannelGateway.java`**
+    - `payment/application/PaymentNotifyPort.java` → **`payment/application/port/PaymentResultPort.java`**
+      （按 spec 正名；实现 `DefaultPaymentNotifyPort` → **`DefaultPaymentResultPort`**，测试类同步改名）
+    - `PayNotifyOutcome`（入向端口的返回类型，被 Channel 侧 `ChannelResult` / `AbstractChannelPlugin` /
+      `MockChannelAdapter` 消费，属跨域类型）**一并迁入 `payment/application/port/`**
+  - **实测**：26 个文件的限定名/类名替换 + 5 个被移动文件的 `package` 声明改写，残留 0。
+    补 import 11 处（8 个同包引用因跨包失效：3 个生产 + 5 个测试）。
+  - 🔶 **有意差异 D-2（登记）**：`ChannelGateway` 接口上的两个静态工厂 `none()` / `ofSingleChannel()`
+    需要 `new DefaultChannelGateway(...)`，导致 **port 包内部反向依赖 `channel.application` 的实现类**。
+    **刻意保留这两个工厂在接口上，不移到 `channel.application`** —— 实测两个工厂的 6 个调用点
+    **全部在 Payment 侧（其中 4 个是生产代码）**；若移到 `channel.application`，Payment 就必须
+    import `com.payment.channel.application.*`，**直接违反 INV-003 / ADR-0084 plan §2**
+    「Payment 禁止依赖 Channel 的其他 application 类型」。留在 port 接口上时，Payment 编译期只看见
+    `com.payment.channel.application.port.ChannelGateway`，看不到 `DefaultChannelGateway`，边界成立。
+    代价（port → impl 的包内反向依赖）属 **Channel 域内部事务，不跨域**，已在源码注释中写明。
+  - 🔴 **断言变更（唯一一处，已获负责人放行）**：`PaymentResultPortTest#portIsDefinedByPayment`
+    原断言 `.isEqualTo("com.payment.payment.application")` 与「端口落在 `port` 子包」不可兼得。
+    全仓扫描同类硬编码包名断言仅 2 条（本条 + `ChannelCallbackHandlerTest:198`，后者当前仍绿）。
+    负责人裁决：**按原则同步更新** —— 包路径断言随被断言类的实际落点同步更新为**等值**断言，
+    **不得放宽为 `startsWith`**（那会允许任意子包，属弱化断言）。本条改为
+    `.isEqualTo("com.payment.payment.application.port")`，语义（定义权归 Payment / 落在渠道包即 INV-2 倒置）
+    与 `@DisplayName` 的 INV-2 / FR-012 追溯**逐字保留**，并在源码注释中写明变更缘由。
+    该通则对后续 T12 等同类情况一并适用。
+  - **验证**：`./mvnw -B -pl payment-service -am test` = **482 / 0F / 0E / BUILD SUCCESS**（与基线逐位相等）。
 
 ## 2. Channel 域
 

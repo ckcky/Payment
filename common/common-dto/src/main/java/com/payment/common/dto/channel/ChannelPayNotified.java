@@ -6,7 +6,7 @@ import java.time.Instant;
  * 渠道支付结果通知（渠道网关 → Payment，spec 037 / FR-004 / FR-006 / SC-004）。
  *
  * <p>这是<b>入向</b>跨域事件：渠道网关收完 HTTP 回调、验完签、翻译完报文之后，
- * 只把本结构交给 Payment 定义的 {@code PaymentNotifyPort}（FR-010 / INV-2）。
+ * 只把本结构交给 Payment 定义的 {@code PaymentResultPort}（FR-010 / INV-2）。
  * 渠道私有类型（渠道报文结构、渠道状态码、渠道 SDK 异常）<b>一律不出现在本 record 里</b>——
  * 这是 SC-004「Payment 收到的事件不含任何渠道私有类型」的落点。</p>
  *

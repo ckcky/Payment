@@ -2,7 +2,7 @@ package com.payment.payment.application.refund;
 
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.trace.TraceContext;
-import com.payment.channel.application.ChannelGateway;
+import com.payment.channel.application.port.ChannelGateway;
 import com.payment.channel.application.ChannelResult;
 import com.payment.channel.application.QueryStatusRequest;
 import com.payment.payment.application.reliability.ReliabilityConfig;

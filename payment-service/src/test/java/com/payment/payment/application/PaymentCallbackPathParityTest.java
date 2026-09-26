@@ -1,5 +1,9 @@
 package com.payment.payment.application;
 
+import com.payment.payment.application.port.PaymentResultPort;
+
+import com.payment.payment.application.port.DefaultPaymentResultPort;
+
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
@@ -44,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>T6 迁移说明</b>：notify 路径原先走支付宝专属端点 {@code AlipayNotifyController}
  * （FR-015 已删除），现走<b>通用端点</b>{@code ChannelPluginCallbackController} →
- * {@code ChannelCallbackHandler} 四步模板 → {@link PaymentNotifyPort}。
+ * {@code ChannelCallbackHandler} 四步模板 → {@link PaymentResultPort}。
  * 本类因此装配的不再是那个专属 Controller，而是通用端点背后的真实链路——
  * <b>断言一条未改</b>：SC-B2-06 要锁的是「两条路收敛到同一处」，
  * 而这件事在迁移前后是同一个事实，只是入口换了名字。</p>
@@ -109,7 +113,7 @@ class PaymentCallbackPathParityTest {
         AlipayChannelAdapter adapter = new AlipayChannelAdapter(
                 AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true, APP_ID);
         ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE, adapter);
-        PaymentNotifyPort port = new DefaultPaymentNotifyPort(stack.callback, null,
+        PaymentResultPort port = new DefaultPaymentResultPort(stack.callback, null,
                 payments, attempts, new NoopBusinessMetrics(), new StructuredAuditLogger());
         handler = new ChannelCallbackHandler(registry, port, new NoopBusinessMetrics());
     }
@@ -143,7 +147,7 @@ class PaymentCallbackPathParityTest {
      *
      * <p>与旧专属端点的对应关系：验签（插件 parseCallback ①）、身份（②）、
      * 报文翻译（④）合并在插件里一次完成；业务校验（引用/金额/币种）在
-     * {@code DefaultPaymentNotifyPort}；收敛仍在同一 {@code handleCallback}。</p>
+     * {@code DefaultPaymentResultPort}；收敛仍在同一 {@code handleCallback}。</p>
      */
     private void viaNotifyPath(String tradeStatus) {
         Map<String, String> params = new HashMap<>();

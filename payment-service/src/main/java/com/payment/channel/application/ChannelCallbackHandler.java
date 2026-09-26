@@ -10,8 +10,8 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelPayStatus;
-import com.payment.payment.application.PayNotifyOutcome;
-import com.payment.payment.application.PaymentNotifyPort;
+import com.payment.payment.application.port.PayNotifyOutcome;
+import com.payment.payment.application.port.PaymentResultPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -31,7 +31,7 @@ import java.time.Instant;
  *   <li><b>③ 报文转换</b>（插件钩子）：渠道私有报文 → 平台语义。内核<b>不解析任何字段名</b>
  *       ——一旦认识 {@code out_trade_no}，第二家渠道就得改内核。</li>
  *   <li><b>④ 内核统一封装 + 跨域通知</b>：把翻译产物封成 {@code common-dto} 的
- *       {@link ChannelPayNotified}，经 {@link PaymentNotifyPort} 交给 Payment，
+ *       {@link ChannelPayNotified}，经 {@link PaymentResultPort} 交给 Payment，
  *       再把 Payment 的处理结论转成应答。</li>
  * </ol>
  *
@@ -54,7 +54,7 @@ import java.time.Instant;
  * {@code DyeContext.runWith} 原先散落在回调 Controller 里，现收归网关域
  * （FR-013：模态判定内聚在渠道网关域），Payment 侧因此完全不出现 {@code DyeContext}。</p>
  *
- * @see PaymentNotifyPort 第二层：跨域通知（Payment 定义 + 实现）
+ * @see PaymentResultPort 第二层：跨域通知（Payment 定义 + 实现）
  * @see ChannelPlugin#parseCallback ②③ 的插件钩子
  */
 @Component
@@ -65,11 +65,11 @@ public class ChannelCallbackHandler {
     private static final String MODULE = "payment";
 
     private final ChannelRegistry registry;
-    private final PaymentNotifyPort notifyPort;
+    private final PaymentResultPort notifyPort;
     private final BusinessMetrics metrics;
 
     public ChannelCallbackHandler(ChannelRegistry registry,
-                                  PaymentNotifyPort notifyPort,
+                                  PaymentResultPort notifyPort,
                                   BusinessMetrics metrics) {
         this.registry = registry;
         this.notifyPort = notifyPort;

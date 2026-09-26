@@ -1,5 +1,7 @@
 package com.payment.payment.application;
 
+import com.payment.payment.application.port.PaymentResultPort;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -164,12 +166,12 @@ class PaymentAutoRefundServiceTest {
                         processor, new NoopBusinessMetrics(), new StructuredAuditLogger()),
                 metrics);
         // 注入监听：模拟渠道延迟推送权威结果（真实渠道走 HTTP 回调端点，同一收敛路径）。
-        // spec 037 / T5：推送目标由 RefundResultListener 改为 Payment 定义的 PaymentNotifyPort（FR-012 / INV-2）。
+        // spec 037 / T5：推送目标由 RefundResultListener 改为 Payment 定义的 PaymentResultPort（FR-012 / INV-2）。
         com.payment.payment.application.refund.RefundRpcCallbackService refundCallback =
                 new com.payment.payment.application.refund.RefundRpcCallbackService(refunds, processor);
-        channel.setPaymentNotifyPort(new com.payment.payment.application.PaymentNotifyPort() {
+        channel.setPaymentResultPort(new com.payment.payment.application.port.PaymentResultPort() {
             @Override
-            public com.payment.payment.application.PayNotifyOutcome onChannelPayResult(
+            public com.payment.payment.application.port.PayNotifyOutcome onChannelPayResult(
                     com.payment.common.dto.channel.ChannelPayNotified notified) {
                 throw new UnsupportedOperationException("refund-only test double");
             }

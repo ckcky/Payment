@@ -52,7 +52,7 @@ class ServiceBoundaryTest {
      * spec 038 / FR-009 ① 的<b>显式白名单</b>——已登记的既有反向依赖（技术债，不静默放宽）。
      *
      * <p>这些类在 038 之前就依赖 {@code com.payment.payment} 的应用/接入层，是「渠道回调分层」
-     * 尚未收口的证据。它们的收口属于 <b>037</b>（门面 / {@code PaymentNotifyPort} / 回调分层），
+     * 尚未收口的证据。它们的收口属于 <b>037</b>（门面 / {@code PaymentResultPort} / 回调分层），
      * 见 spec 038 §4 非目标与 acceptance TD-4 / TD-5。</p>
      *
      * <p><b>037 / T5 已收口 1 个</b>：{@code ChannelPluginCallbackController} 改造后只剩
@@ -60,7 +60,7 @@ class ServiceBoundaryTest {
      *
      * <p><b>037 / T6 已收口第 2 个</b>：{@code AlipayNotifyController} 按 FR-015 删除，
      * 回调统一走通用端点——它的解析职责下沉到 {@code AlipayChannelAdapter.parseCallback}，
-     * 业务校验归 {@code DefaultPaymentNotifyPort}，模态包裹归 {@code ChannelCallbackHandler}，
+     * 业务校验归 {@code DefaultPaymentResultPort}，模态包裹归 {@code ChannelCallbackHandler}，
      * 三处都不在「渠道域反向依赖 payment 应用层」这条线上。剩余 2 个：</p>
      * <ul>
      *   <li>{@code ChannelCallbackController} —— {@code /internal/payments/{paymentNo}/channel-callback}，
@@ -79,7 +79,7 @@ class ServiceBoundaryTest {
                     + "|com\\.payment\\.channel\\.web\\.ChannelCallbackSignatureFilter";
 
     /**
-     * spec 037 / FR-016 ② 的<b>唯一例外</b>：{@code PaymentNotifyPort} 是 Payment 定义并实现的
+     * spec 037 / FR-016 ② 的<b>唯一例外</b>：{@code PaymentResultPort} 是 Payment 定义并实现的
      * <b>入向端口</b>，渠道网关域<b>必须</b>依赖它（否则「渠道 → Payment 只经该端口」无从成立）。
      * {@code PayNotifyOutcome} 是它的返回类型，同属例外。
      *
@@ -93,12 +93,12 @@ class ServiceBoundaryTest {
      * 其它任何应用/接入层类型，规则立即变红。</p>
      */
     private static final DescribedPredicate<JavaClass> INBOUND_PORT_EXCEPTION =
-            new DescribedPredicate<>("Payment 定义的入向端口（PaymentNotifyPort / PayNotifyOutcome 及其嵌套类型）") {
+            new DescribedPredicate<>("Payment 定义的入向端口（PaymentResultPort / PayNotifyOutcome 及其嵌套类型）") {
                 @Override
                 public boolean test(JavaClass input) {
                     String name = input.getName();
-                    return name.equals("com.payment.payment.application.PaymentNotifyPort")
-                            || name.startsWith("com.payment.payment.application.PayNotifyOutcome");
+                    return name.equals("com.payment.payment.application.port.PaymentResultPort")
+                            || name.startsWith("com.payment.payment.application.port.PayNotifyOutcome");
                 }
             };
 
@@ -512,7 +512,7 @@ class ServiceBoundaryTest {
      * 037 / T5 已收口其中 1 个（{@code ChannelPluginCallbackController}），
      * T6 又收口 1 个（{@code AlipayNotifyController} 按 FR-015 删除）。</p>
      *
-     * <p><b>唯一例外是入向端口</b>：{@code PaymentNotifyPort}（及其返回类型 {@code PayNotifyOutcome}）
+     * <p><b>唯一例外是入向端口</b>：{@code PaymentResultPort}（及其返回类型 {@code PayNotifyOutcome}）
      * 由 Payment 定义并实现，渠道网关域<b>必须</b>依赖它才能把回调结果交给 Payment
      * （FR-010 / FR-016 ② 的括号例外）。例外按简单类名逐个列出，不是整包放行。</p>
      *
@@ -540,7 +540,7 @@ class ServiceBoundaryTest {
                 .because("依赖方向必须是 payment → channel；反向依赖 payment 的应用/接入层会把"
                         + "渠道网关域绑死在资金域实现上，进程内微服务边界失效"
                         + "（FR-009 ① / FR-016 ② / INV-1、INV-2；唯一例外是 Payment 定义的入向端口 "
-                        + "PaymentNotifyPort / PayNotifyOutcome；白名单见 LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES）");
+                        + "PaymentResultPort / PayNotifyOutcome；白名单见 LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES）");
         rule.check(serviceClasses);
     }
 

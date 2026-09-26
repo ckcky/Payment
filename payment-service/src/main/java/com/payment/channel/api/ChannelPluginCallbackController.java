@@ -35,7 +35,7 @@ import java.util.Map;
  *
  * <p>改造前本类还承担了<b>Payment 的业务校验</b>（查 payment、验渠道引用归属、验金额币种）
  * 与拒绝三件套——那是把资金域的规则写进了渠道域的入口。T5 按 FR-011 把这段逻辑迁入
- * {@code PaymentNotifyPort} 的实现，本类因此不再依赖任何 Payment 侧类型。</p>
+ * {@code PaymentResultPort} 的实现，本类因此不再依赖任何 Payment 侧类型。</p>
  *
  * <h3>为什么路径里带 {@code channelCode}（INV-6）</h3>
  * <p>回调必须<b>精确寻址</b>到「当初那笔交互走的渠道」，绝不重新路由。
@@ -54,7 +54,7 @@ import java.util.Map;
  *   <li>支付宝专属端点 {@code AlipayNotifyController}（{@code /internal/channels/alipay/notify}）
  *       已于 <b>T6（FR-015）删除</b>——「专属端点 / 通用端点」双轨并存的技术债（036 TD-1）就此关闭。
  *       它的解析职责下沉到 {@code AlipayChannelAdapter#parseCallback}，
- *       业务校验归 {@code DefaultPaymentNotifyPort}，模态包裹归 {@code ChannelCallbackHandler}。
+ *       业务校验归 {@code DefaultPaymentResultPort}，模态包裹归 {@code ChannelCallbackHandler}。
  *       自此<b>回调只有本端点一条路</b>，不再有「哪条路径才是权威」的歧义。</li>
  * </ul>
  */

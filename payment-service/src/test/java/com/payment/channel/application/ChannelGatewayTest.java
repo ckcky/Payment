@@ -1,5 +1,7 @@
 package com.payment.channel.application;
 
+import com.payment.channel.application.port.ChannelGateway;
+
 import com.payment.channel.application.spi.ChannelPlugin;
 import com.payment.common.core.error.BizException;
 import com.payment.common.dto.channel.PaymentScene;

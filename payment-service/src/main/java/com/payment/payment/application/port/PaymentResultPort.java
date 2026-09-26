@@ -1,4 +1,4 @@
-package com.payment.payment.application;
+package com.payment.payment.application.port;
 
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelRefundNotified;
@@ -24,7 +24,7 @@ import com.payment.common.dto.channel.ChannelRefundNotified;
  *
  * @see PayNotifyOutcome 支付回调的处理结论
  */
-public interface PaymentNotifyPort {
+public interface PaymentResultPort {
 
     /**
      * 渠道支付结果通知。

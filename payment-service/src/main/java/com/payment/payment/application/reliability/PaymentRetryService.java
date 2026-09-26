@@ -1,7 +1,7 @@
 package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.BusinessMetrics;
-import com.payment.channel.application.ChannelGateway;
+import com.payment.channel.application.port.ChannelGateway;
 import com.payment.channel.application.ChannelResult;
 import com.payment.channel.application.ChargeRequest;
 import com.payment.channel.application.PaymentChannel;

@@ -1,9 +1,9 @@
-package com.payment.payment.application;
+package com.payment.payment.application.port;
 
 /**
  * 渠道支付回调的<b>处理结论</b>（Payment → 渠道网关，spec 037 / FR-010）。
  *
- * <p>渠道网关把「渠道说这笔钱怎么样了」翻译出来交给 Payment（{@link PaymentNotifyPort}），
+ * <p>渠道网关把「渠道说这笔钱怎么样了」翻译出来交给 Payment（{@link PaymentResultPort}），
  * Payment 做完业务校验与终态收敛后，用本结论告诉网关<b>该对渠道回什么</b>——
  * 网关不认识任何业务规则，只负责把结论转成渠道协议要求的应答体。</p>
  *

@@ -15,8 +15,8 @@ import com.payment.channel.application.spi.ChannelCallbackEnvelope;
 import com.payment.channel.infra.AlipayChannelAdapter;
 import com.payment.channel.infra.alipay.AlipayGateway;
 import com.payment.channel.support.StubChannelRegistry;
-import com.payment.payment.application.DefaultPaymentNotifyPort;
-import com.payment.payment.application.PaymentNotifyPort;
+import com.payment.payment.application.port.DefaultPaymentResultPort;
+import com.payment.payment.application.port.PaymentResultPort;
 import com.payment.payment.domain.Payment;
 import com.payment.channel.domain.ChannelOrder;
 import com.payment.channel.domain.ChannelOrderStatus;
@@ -149,7 +149,7 @@ class AlipaySandboxNotifyScenarioTest {
 
         // 通用端点背后的真实链路：注册表（精确寻址 INV-6）→ 四步模板 → Payment 入向端口
         ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE, adapter);
-        PaymentNotifyPort port = new DefaultPaymentNotifyPort(stack.callback, null,
+        PaymentResultPort port = new DefaultPaymentResultPort(stack.callback, null,
                 payments, attempts, new NoopBusinessMetrics(), new StructuredAuditLogger());
         handler = new ChannelCallbackHandler(registry, port, new NoopBusinessMetrics());
     }

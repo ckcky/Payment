@@ -1,5 +1,7 @@
 package com.payment.channel.application;
 
+import com.payment.channel.application.port.ChannelGateway;
+
 import com.payment.common.dto.channel.PayCredential;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -5,7 +5,7 @@ import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.channel.application.ChannelGateway;
+import com.payment.channel.application.port.ChannelGateway;
 import com.payment.channel.application.ChannelResult;
 import com.payment.channel.application.ChargeRequest;
 import com.payment.channel.application.PaymentChannel;

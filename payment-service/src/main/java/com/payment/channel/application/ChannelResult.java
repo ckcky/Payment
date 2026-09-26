@@ -119,7 +119,7 @@ public record ChannelResult(Status status, String channelReference, String reaso
      * 跨域入向事件 → 网关域结果（spec 037 / T5 / FR-010）。
      *
      * <p>渠道网关把翻译产物封成 {@code common-dto} 的入向事件交给 Payment
-     * （{@code PaymentNotifyPort}），Payment 侧的端口实现再用本工厂把它翻译回网关域结果，
+     * （{@code PaymentResultPort}），Payment 侧的端口实现再用本工厂把它翻译回网关域结果，
      * 交给既有的收敛链路（{@code PaymentCallbackService} / {@code RefundRpcCallbackService}）。
      * 跨域契约因此不必携带任何网关域类型（SC-004），而收敛链路一行不改。</p>
      *

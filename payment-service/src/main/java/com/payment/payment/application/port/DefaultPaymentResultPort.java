@@ -1,4 +1,4 @@
-package com.payment.payment.application;
+package com.payment.payment.application.port;
 
 import com.payment.channel.application.ChannelResult;
 import com.payment.common.core.error.BizException;
@@ -7,6 +7,7 @@ import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelRefundNotified;
+import com.payment.payment.application.PaymentCallbackService;
 import com.payment.payment.application.refund.RefundRpcCallbackService;
 import com.payment.payment.domain.Payment;
 import com.payment.channel.domain.ChannelOrder;
@@ -17,7 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * {@link PaymentNotifyPort} 的默认实现（spec 037 / T5 / FR-010 / FR-011 / FR-012）。
+ * {@link PaymentResultPort} 的默认实现（spec 037 / T5 / FR-010 / FR-011 / FR-012）。
  *
  * <h3>它是从哪来的</h3>
  * <p>支付回调的<b>业务校验</b>原先直接写在 {@code ChannelPluginCallbackController.validate()} 里
@@ -44,9 +45,9 @@ import org.springframework.stereotype.Service;
  * {@code DyeContext}——它只处理「渠道说这笔钱怎么样了」这个业务问题。</p>
  */
 @Service
-public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
+public class DefaultPaymentResultPort implements PaymentResultPort {
 
-    private static final Logger log = LoggerFactory.getLogger(DefaultPaymentNotifyPort.class);
+    private static final Logger log = LoggerFactory.getLogger(DefaultPaymentResultPort.class);
 
     private static final String MODULE = "payment";
 
@@ -57,7 +58,7 @@ public class DefaultPaymentNotifyPort implements PaymentNotifyPort {
     private final BusinessMetrics metrics;
     private final StructuredAuditLogger auditLogger;
 
-    public DefaultPaymentNotifyPort(PaymentCallbackService payCallbackService,
+    public DefaultPaymentResultPort(PaymentCallbackService payCallbackService,
                                     RefundRpcCallbackService refundCallbackService,
                                     PaymentRepository paymentRepository,
                                     ChannelOrderRepository attemptRepository,

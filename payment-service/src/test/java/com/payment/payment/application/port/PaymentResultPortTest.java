@@ -1,4 +1,4 @@
-package com.payment.payment.application;
+package com.payment.payment.application.port;
 
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelPayStatus;
@@ -39,13 +39,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       校验失败的「三件套」（不推进 + 计指标 + 写审计）保持逐字同口径。</li>
  * </ol>
  */
-class PaymentNotifyPortTest {
+class PaymentResultPortTest {
 
     private static final String PAYMENT_NO = "PM-NOTIFY-1";
 
     private PaymentTestStack stack;
     private RecordingObservability obs;
-    private DefaultPaymentNotifyPort port;
+    private DefaultPaymentResultPort port;
 
     @BeforeEach
     void setUp() {
@@ -60,7 +60,7 @@ class PaymentNotifyPortTest {
                 Map.of(ChannelOrder.CHANNEL_MODE_KEY, "SANDBOX")));
 
         // 退款侧协作者置 null：本类只验支付回调路径（退款路径由既有退款单测覆盖）
-        port = new DefaultPaymentNotifyPort(stack.callback, null,
+        port = new DefaultPaymentResultPort(stack.callback, null,
                 stack.payments, stack.attempts, obs.metrics, obs.audit);
     }
 
@@ -73,17 +73,20 @@ class PaymentNotifyPortTest {
     // ===================== 契约层（定义权方向 / 纯度） =====================
 
     @Test
-    @DisplayName("INV-2 / FR-012：入向端口由 Payment 定义（位于 payment.application）")
+    @DisplayName("INV-2 / FR-012：入向端口由 Payment 定义（位于 payment.application.port）")
     void portIsDefinedByPayment() {
-        assertThat(PaymentNotifyPort.class.getPackageName())
+        // 2026-09-26 T06：端口按 ADR-0084 / plan §2 归位到 payment.application.port 子包，
+        // 本断言随被断言类的实际落点同步更新为**等值**断言（不放宽为 startsWith —— 那会允许任意子包）。
+        // 语义逐字保留：「定义权归 Payment，落在渠道包即 INV-2 倒置」。负责人已按通则放行。
+        assertThat(PaymentResultPort.class.getPackageName())
                 .as("接口定义权必须归 Payment；定义在渠道包即 INV-2 倒置")
-                .isEqualTo("com.payment.payment.application");
+                .isEqualTo("com.payment.payment.application.port");
     }
 
     @Test
     @DisplayName("FR-010：端口只暴露两条入向操作 onChannelPayResult / onChannelRefundResult")
     void portExposesExactlyTheTwoInboundOperations() {
-        List<String> names = Arrays.stream(PaymentNotifyPort.class.getDeclaredMethods())
+        List<String> names = Arrays.stream(PaymentResultPort.class.getDeclaredMethods())
                 .filter(m -> !m.isSynthetic())
                 .map(Method::getName)
                 .sorted()

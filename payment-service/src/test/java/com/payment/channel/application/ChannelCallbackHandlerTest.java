@@ -10,8 +10,8 @@ import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelPayStatus;
 import com.payment.common.dto.channel.ChannelRefundNotified;
 import com.payment.common.dto.channel.PaymentScene;
-import com.payment.payment.application.PayNotifyOutcome;
-import com.payment.payment.application.PaymentNotifyPort;
+import com.payment.payment.application.port.PayNotifyOutcome;
+import com.payment.payment.application.port.PaymentResultPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   <li>① 工厂 + 策略选插件（按 {@code channelCode} 精确寻址，INV-6）；</li>
  *   <li>② 验签（插件钩子；失败 ⇒ 403 且<b>不触达</b> Payment 侧）；</li>
  *   <li>③ 报文转换（插件钩子；翻译成平台语义）；</li>
- *   <li>④ 内核统一封装跨域事件并经 {@link PaymentNotifyPort} 跨域通知。</li>
+ *   <li>④ 内核统一封装跨域事件并经 {@link PaymentResultPort} 跨域通知。</li>
  * </ol>
  *
  * <p><b>为什么顺序要钉死</b>：把 ② 排到 ④ 之后（或省掉）意味着「未验签的报文也能推进资金事实」——
@@ -294,7 +294,7 @@ class ChannelCallbackHandlerTest {
     }
 
     /** 记录式入向端口替身：只关心「收到了什么」「返回什么结论」。 */
-    private final class RecordingPort implements PaymentNotifyPort {
+    private final class RecordingPort implements PaymentResultPort {
 
         final List<ChannelPayNotified> pays = new ArrayList<>();
         PayNotifyOutcome outcome = PayNotifyOutcome.accepted();

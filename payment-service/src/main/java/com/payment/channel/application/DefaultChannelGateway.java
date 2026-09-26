@@ -1,5 +1,6 @@
 package com.payment.channel.application;
 
+import com.payment.channel.application.port.ChannelGateway;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.dto.channel.PayCredential;

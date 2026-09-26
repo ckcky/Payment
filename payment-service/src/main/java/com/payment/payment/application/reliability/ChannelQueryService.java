@@ -3,7 +3,7 @@ package com.payment.payment.application.reliability;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.payment.application.PaymentUnknownResolutionService;
-import com.payment.channel.application.ChannelGateway;
+import com.payment.channel.application.port.ChannelGateway;
 import com.payment.channel.application.ChannelResult;
 import com.payment.channel.application.PaymentChannel;
 import com.payment.channel.application.QueryStatusRequest;

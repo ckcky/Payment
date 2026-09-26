@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
  * 通用端点因此完全不需要认识支付宝的字段名。
  *
  * <h3>本类刻意不断言什么</h3>
- * 金额/币种/引用归属的<b>校验</b>不在这里测：它们已由 {@code DefaultPaymentNotifyPort}
+ * 金额/币种/引用归属的<b>校验</b>不在这里测：它们已由 {@code DefaultPaymentResultPort}
  * 统一承担（FR-011 / T5），本插件的职责只是把渠道声称的金额<b>读出来</b>
  * （{@link ParsedCallback.NotifiedAmount}），判定权在内核。把「读」和「判」分开测，
  * 才能保证「漏判」不会因为「读对了」而被掩盖。

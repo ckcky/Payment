@@ -1,5 +1,22 @@
-package com.payment.channel.application;
+package com.payment.channel.application.port;
 
+// ⚠️ 本接口的两个静态工厂（none / ofSingleChannel）需要构造 DefaultChannelGateway，
+// 因此 port 包**内部**依赖 channel.application 的实现类。这是刻意的取舍：
+//   这两个工厂的全部 6 个调用点都在 **Payment 侧**（其中 4 个是生产代码）。若把工厂移到
+//   channel.application，Payment 就必须 import com.payment.channel.application.* ——
+//   直接违反 INV-003 / ADR-0084 plan §2「Payment 禁止依赖 Channel 的其他 application 类型」。
+//   留在 port 接口上，Payment 只见 com.payment.channel.application.port.ChannelGateway，
+//   编译期看不到 DefaultChannelGateway，边界因此成立。代价是 port → impl 的包内反向依赖，
+//   属 Channel 域内部事务，不跨越域边界。
+import com.payment.channel.application.ChargeRequest;
+import com.payment.channel.application.DefaultChannelGateway;
+import com.payment.channel.application.ChannelRegistry;
+import com.payment.channel.application.ChannelResult;
+import com.payment.channel.application.ChannelRouter;
+import com.payment.channel.application.PaymentChannel;
+import com.payment.channel.application.QueryStatusRequest;
+import com.payment.channel.application.RefundRequest;
+import com.payment.channel.application.RouteContext;
 import com.payment.common.core.dye.DyeMode;
 import com.payment.common.dto.channel.PaymentScene;
 
