@@ -1,9 +1,9 @@
 package com.payment.payment.contract;
 
-import com.payment.channelgateway.application.ChannelResult;
-import com.payment.channelgateway.application.ChargeRequest;
-import com.payment.channelgateway.application.PaymentChannel;
-import com.payment.channelgateway.infra.MockChannelAdapter;
+import com.payment.channel.application.ChannelResult;
+import com.payment.channel.application.ChargeRequest;
+import com.payment.channel.application.PaymentChannel;
+import com.payment.channel.infra.MockChannelAdapter;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

@@ -2,7 +2,7 @@ package com.payment.payment.application;
 
 import com.payment.payment.domain.Payment;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.channelgateway.infra.MockChannelAdapter;
+import com.payment.channel.infra.MockChannelAdapter;
 import com.payment.payment.support.PaymentTestStack;
 import org.junit.jupiter.api.Test;
 

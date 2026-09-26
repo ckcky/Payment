@@ -45,7 +45,7 @@ class ServiceBoundaryTest {
             "fulfillment", "entitlement", "reconciliation", "settlement", "ledger"
     };
     // Feature 015 / P3：refund 已并入 payment-service（com.payment.payment 包，进程内调用替代 Feign），服务数 10→9。
-    // spec 038：渠道网关域独立为 com.payment.channelgateway（同属 payment-service 进程，见
+    // spec 038：渠道网关域独立为 com.payment.channel（同属 payment-service 进程，见
     // channelGatewayMustNotDependOnOtherServicesAtCompileTime 的覆盖说明）。
 
     /**
@@ -75,8 +75,8 @@ class ServiceBoundaryTest {
      * <p>白名单按<b>全限定类名</b>逐条列出而非整包放行：新增任何反向依赖都会立即变红。</p>
      */
     private static final String LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES =
-            "com\\.payment\\.channelgateway\\.api\\.ChannelCallbackController"
-                    + "|com\\.payment\\.channelgateway\\.web\\.ChannelCallbackSignatureFilter";
+            "com\\.payment\\.channel\\.api\\.ChannelCallbackController"
+                    + "|com\\.payment\\.channel\\.web\\.ChannelCallbackSignatureFilter";
 
     /**
      * spec 037 / FR-016 ② 的<b>唯一例外</b>：{@code PaymentNotifyPort} 是 Payment 定义并实现的
@@ -237,7 +237,7 @@ class ServiceBoundaryTest {
      * ADR-0072 的两层结构当场失效。</p>
      *
      * <p><b>覆盖面修正（为什么要放宽到 {@code application..}）</b>：本规则的 {@code that()} 此前只写
-     * {@code com.payment.channelgateway.application..}，<b>不覆盖 {@code application..} 主体</b>。
+     * {@code com.payment.channel.application..}，<b>不覆盖 {@code application..} 主体</b>。
      * 一个子包之差，让三处真实反向依赖（{@code PaymentRetryService} / {@code ChannelQueryService} /
      * {@code PaymentRefundService} 的兼容构造引用 {@code infra.channel.SingleChannelRegistry}）
      * <b>长期逃过门禁</b>——INV-4 名义合规、实际穿透。</p>
@@ -257,18 +257,18 @@ class ServiceBoundaryTest {
                 .filter(c -> c.getPackageName().startsWith("com.payment.payment.application"))
                 .count();
         long infraChannelClasses = serviceClasses.stream()
-                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway.infra"))
+                .filter(c -> c.getPackageName().startsWith("com.payment.channel.infra"))
                 .count();
         assertThat(applicationOwners)
                 .as("com.payment.payment.application.. 必须有类，否则本规则空转（INV-4 防空转对照）")
                 .isGreaterThan(5L);
         assertThat(infraChannelClasses)
-                .as("com.payment.channelgateway.infra.. 必须有类，否则被禁目标不存在、规则恒通过（INV-4 防空转对照）")
+                .as("com.payment.channel.infra.. 必须有类，否则被禁目标不存在、规则恒通过（INV-4 防空转对照）")
                 .isGreaterThan(0L);
 
         ArchRule rule = noClasses()
                 .that().resideInAPackage("com.payment.payment.application..")
-                .should().dependOnClassesThat().resideInAPackage("com.payment.channelgateway.infra..")
+                .should().dependOnClassesThat().resideInAPackage("com.payment.channel.infra..")
                 .because("依赖方向必须是 infra.channel → application.channel；应用层（含 application 主体，"
                         + "不只是 application.channel 一个子包）反向依赖适配器会把路由决策绑死在具体实现上"
                         + "（INV-4 / ADR-0072、ADR-0073）");
@@ -307,12 +307,12 @@ class ServiceBoundaryTest {
                 .that().resideInAPackage("com.payment.payment.application..")
                 .and().resideOutsideOfPackages(
                         "com.payment.payment.application.reliability..",
-                        "com.payment.channelgateway.application..")
+                        "com.payment.channel.application..")
                 .and().haveNameNotMatching(
                         "com\\.payment\\.payment\\.application\\.ChannelOrderServices.*")
                 .should().callMethod(
-                        "com.payment.channelgateway.domain.ChannelOrderRepository", "save",
-                        "com.payment.channelgateway.domain.ChannelOrder")
+                        "com.payment.channel.domain.ChannelOrderRepository", "save",
+                        "com.payment.channel.domain.ChannelOrder")
                 .because("channel_orders 的写入口唯一归属 channel 层端口 ChannelOrderService；"
                         + "应用层直连仓储写会产生第二个写入口，两套不变量必然漂移（INV-5 / FR-002）");
         rule.check(serviceClasses);
@@ -460,25 +460,25 @@ class ServiceBoundaryTest {
     }
 
     /**
-     * <b>spec 038 覆盖修补</b>：{@code com.payment.channelgateway..} 不得在编译期依赖任何<b>其它服务</b>。
+     * <b>spec 038 覆盖修补</b>：{@code com.payment.channel..} 不得在编译期依赖任何<b>其它服务</b>。
      *
      * <p><b>为什么必须单独补这一条</b>：{@link #servicesMustNotDependOnEachOtherAtCompileTime()}
      * 的主体是 {@code com.payment.<service>..}。038 把 40 个渠道件从 {@code com.payment.payment.application.channel..}
-     * / {@code com.payment.payment.infra.channel..} 搬到新顶层包 {@code com.payment.channelgateway..} 之后，
+     * / {@code com.payment.payment.infra.channel..} 搬到新顶层包 {@code com.payment.channel..} 之后，
      * 这些类<b>不再落在任何 {@code SERVICES} 前缀下</b>——原有的跨服务门禁对它们<b>静默失效</b>，
      * 形成「门禁看似还在、实际漏检一整块」的假绿。本方法把覆盖面补回来。</p>
      *
-     * <p>{@code payment} 从禁用清单中排除：{@code channelgateway} 与 {@code payment} 同属
+     * <p>{@code payment} 从禁用清单中排除：{@code channel} 与 {@code payment} 同属
      * payment-service 进程，二者之间的方向性由
      * {@link #paymentAndChannelGatewayMustKeepOneWayDependency()} 单独约束。</p>
      */
     @Test
     void channelGatewayMustNotDependOnOtherServicesAtCompileTime() {
         long gatewayClasses = serviceClasses.stream()
-                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway."))
+                .filter(c -> c.getPackageName().startsWith("com.payment.channel."))
                 .count();
         assertThat(gatewayClasses)
-                .as("com.payment.channelgateway.. 必须有类，否则本规则空转（038 覆盖修补的防空转对照）")
+                .as("com.payment.channel.. 必须有类，否则本规则空转（038 覆盖修补的防空转对照）")
                 .isGreaterThan(20L);
 
         List<String> others = new ArrayList<>();
@@ -488,7 +488,7 @@ class ServiceBoundaryTest {
             }
         }
         ArchRule rule = noClasses()
-                .that().resideInAPackage("com.payment.channelgateway..")
+                .that().resideInAPackage("com.payment.channel..")
                 .should().dependOnClassesThat().resideInAnyPackage(others.toArray(new String[0]))
                 .because("渠道网关件搬出 com.payment.payment.. 后，若不单独覆盖就会脱离跨服务门禁；"
                         + "跨服务只能经 HTTP/Feign + common-dto 通信（ADR-0029）");
@@ -496,9 +496,9 @@ class ServiceBoundaryTest {
     }
 
     /**
-     * FR-009 ①（spec 038）：{@code payment} 与 {@code channelgateway} 之间保持<b>单向依赖</b>。
+     * FR-009 ①（spec 038）：{@code payment} 与 {@code channel} 之间保持<b>单向依赖</b>。
      *
-     * <p>允许的方向是 {@code payment → channelgateway}（资金动作域调用渠道网关域）。
+     * <p>允许的方向是 {@code payment → channel}（资金动作域调用渠道网关域）。
      * 反向依赖只允许落在<b>领域值类型</b>（{@code payment.domain} 的 {@code ChannelOrder} /
      * {@code ChannelOrderErrorType}）——那是既有的 DIP：渠道层定义端口
      * （{@code ChannelOrderService} / {@code ChannelResult}），payment 侧实现它。</p>
@@ -521,23 +521,23 @@ class ServiceBoundaryTest {
     @Test
     void paymentAndChannelGatewayMustKeepOneWayDependency() {
         long gatewayClasses = serviceClasses.stream()
-                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway."))
+                .filter(c -> c.getPackageName().startsWith("com.payment.channel."))
                 .count();
         long paymentClasses = serviceClasses.stream()
                 .filter(c -> c.getPackageName().startsWith("com.payment.payment."))
                 .count();
         assertThat(gatewayClasses)
-                .as("com.payment.channelgateway.. 必须有类，否则本规则空转（FR-009 ① 防空转对照）")
+                .as("com.payment.channel.. 必须有类，否则本规则空转（FR-009 ① 防空转对照）")
                 .isGreaterThan(20L);
         assertThat(paymentClasses)
                 .as("com.payment.payment.. 必须有类，否则本规则空转（FR-009 ① 防空转对照）")
                 .isGreaterThan(20L);
 
         ArchRule rule = noClasses()
-                .that().resideInAPackage("com.payment.channelgateway..")
+                .that().resideInAPackage("com.payment.channel..")
                 .and().haveNameNotMatching(LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES)
                 .should().dependOnClassesThat(FORBIDDEN_PAYMENT_LAYERS)
-                .because("依赖方向必须是 payment → channelgateway；反向依赖 payment 的应用/接入层会把"
+                .because("依赖方向必须是 payment → channel；反向依赖 payment 的应用/接入层会把"
                         + "渠道网关域绑死在资金域实现上，进程内微服务边界失效"
                         + "（FR-009 ① / FR-016 ② / INV-1、INV-2；唯一例外是 Payment 定义的入向端口 "
                         + "PaymentNotifyPort / PayNotifyOutcome；白名单见 LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES）");
@@ -548,16 +548,16 @@ class ServiceBoundaryTest {
      * FR-016 ①（spec 037 / T7）：<b>Payment 的应用层与接入层不得触达渠道网关的内部件</b>。
      *
      * <p>038 的 {@link #channelRoutingAbstractionMustNotDependOnChannelInfrastructure()} 只约束了
-     * <b>反方向</b>（{@code payment.application} 不得依赖 {@code channelgateway.infra}）——
+     * <b>反方向</b>（{@code payment.application} 不得依赖 {@code channel.infra}）——
      * 于是「Payment 侧直接持有 {@code ChannelRegistry} / {@code ChannelRouter} / {@code ChannelPlugin}」
      * 这条<b>正方向的越界</b>长期没有门禁兜底：只要它们恰好落在
-     * {@code channelgateway.application}（而非 {@code .infra}），规则就看不见。</p>
+     * {@code channel.application}（而非 {@code .infra}），规则就看不见。</p>
      *
      * <p>而这正是 spec 037 §1.1 记录的现状：改造前 Payment 侧有 9 个类直接依赖这三件套。
      * T4 用门面把它们全部收口，本规则把「收口」变成<b>不可回退</b>的构建期事实——
      * 否则下一次「顺手 resolve 一下」就会悄悄把内部结构重新泄出去。</p>
      *
-     * <p><b>为什么只禁这三件套而不是整个 {@code channelgateway.application}</b>：Payment
+     * <p><b>为什么只禁这三件套而不是整个 {@code channel.application}</b>：Payment
      * <b>必须</b>依赖 {@code ChannelGateway}（门面）与 {@code ChannelResult}（结果值类型），
      * 它们就在同一个包里。禁整包等于禁掉合法的边界调用。被禁的是「内部结构」：
      * 注册表（怎么找实现）、路由器（怎么选渠道）、插件契约（渠道长什么样）。</p>
@@ -587,7 +587,7 @@ class ServiceBoundaryTest {
 
         // ③ 同一 classpath 内可命中：网关域自己就在用这三件套（证明依赖是「够得着」的）
         long gatewayOwnUsers = serviceClasses.stream()
-                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway."))
+                .filter(c -> c.getPackageName().startsWith("com.payment.channel."))
                 .filter(c -> c.getDirectDependenciesFromSelf().stream()
                         .anyMatch(d -> CHANNEL_GATEWAY_INTERNALS.test(d.getTargetClass())))
                 .count();
@@ -652,7 +652,7 @@ class ServiceBoundaryTest {
                 .isGreaterThan(20L);
 
         long gatewayDyeReaders = serviceClasses.stream()
-                .filter(c -> c.getPackageName().startsWith("com.payment.channelgateway."))
+                .filter(c -> c.getPackageName().startsWith("com.payment.channel."))
                 .filter(c -> c.getDirectDependenciesFromSelf().stream()
                         .anyMatch(d -> DYE_CONTEXT.test(d.getTargetClass())))
                 .count();
@@ -701,14 +701,14 @@ class ServiceBoundaryTest {
         legacyPackageMustNotExist.check(serviceClasses);
 
         ArchRule rule = noClasses()
-                .that().resideInAPackage("com.payment.channelgateway..")
+                .that().resideInAPackage("com.payment.channel..")
                 .should().dependOnClassesThat().resideInAPackage("com.payment.refund..")
                 .because("渠道网关域不得引用已被消灭的退款顶层包（FR-009 ②）");
         rule.check(serviceClasses);
     }
 
     /**
-     * FR-009 ③（spec 038）：<b>渠道插件必须位于 {@code com.payment.channelgateway.infra.<channel>}</b>。
+     * FR-009 ③（spec 038）：<b>渠道插件必须位于 {@code com.payment.channel.infra.<channel>}</b>。
      *
      * <p>插件化的落点约定：新增一家渠道 = 新增一个 {@code infra/<channel>/} 包，内含该渠道的
      * 插件（{@code ChannelPlugin} 实现）、Gateway 端口与 SdkGateway。这条约定一旦松动，
@@ -726,8 +726,8 @@ class ServiceBoundaryTest {
     void channelPluginsMustResideInTheirInfraChannelPackage() {
         long concretePlugins = serviceClasses.stream()
                 .filter(c -> !c.isInterface())
-                .filter(c -> c.isAssignableTo("com.payment.channelgateway.application.spi.ChannelPlugin"))
-                .filter(c -> !c.getPackageName().startsWith("com.payment.channelgateway.application.spi"))
+                .filter(c -> c.isAssignableTo("com.payment.channel.application.spi.ChannelPlugin"))
+                .filter(c -> !c.getPackageName().startsWith("com.payment.channel.application.spi"))
                 .count();
         assertThat(concretePlugins)
                 .as("内核（application.spi）之外必须存在具体渠道插件实现，否则本规则空转"
@@ -735,11 +735,11 @@ class ServiceBoundaryTest {
                 .isGreaterThan(0L);
 
         ArchRule rule = classes()
-                .that().areAssignableTo("com.payment.channelgateway.application.spi.ChannelPlugin")
+                .that().areAssignableTo("com.payment.channel.application.spi.ChannelPlugin")
                 .and().areNotInterfaces()
-                .and().resideOutsideOfPackage("com.payment.channelgateway.application.spi")
-                .should().resideInAPackage("com.payment.channelgateway.infra..")
-                .because("渠道插件必须按渠道分包落在 channelgateway.infra.<channel>，"
+                .and().resideOutsideOfPackage("com.payment.channel.application.spi")
+                .should().resideInAPackage("com.payment.channel.infra..")
+                .because("渠道插件必须按渠道分包落在 channel.infra.<channel>，"
                         + "否则渠道件重新散落、插件化落点约定失效（FR-009 ③ / INV-3）");
         rule.check(serviceClasses);
     }

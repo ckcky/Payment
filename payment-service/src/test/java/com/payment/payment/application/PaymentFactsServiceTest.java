@@ -2,8 +2,8 @@ package com.payment.payment.application;
 
 import com.payment.payment.api.dto.PaymentFactResponse;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import org.junit.jupiter.api.Test;
 

@@ -4,11 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.payment.common.core.rpc.BusinessCode;
 import com.payment.common.core.rpc.TransportCode;
-import com.payment.channelgateway.application.ChargeRequest;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChargeRequest;
+import com.payment.channel.application.ChannelResult;
 import com.payment.common.dto.channel.PayCredential;
-import com.payment.channelgateway.application.QueryStatusRequest;
-import com.payment.channelgateway.application.RefundRequest;
+import com.payment.channel.application.QueryStatusRequest;
+import com.payment.channel.application.RefundRequest;
 import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;

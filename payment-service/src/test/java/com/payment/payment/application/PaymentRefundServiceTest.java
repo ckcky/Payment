@@ -9,11 +9,11 @@ import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
-import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderStatus;
+import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channelgateway.infra.MockChannelAdapter;
+import com.payment.channel.infra.MockChannelAdapter;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

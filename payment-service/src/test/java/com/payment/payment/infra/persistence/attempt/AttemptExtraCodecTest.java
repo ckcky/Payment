@@ -1,4 +1,4 @@
-package com.payment.channelgateway.infra.persistence;
+package com.payment.channel.infra.persistence;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,8 +61,8 @@ class AttemptExtraCodecTest {
 
         // 两层防御的第二层：领域侧 parse("123") 抛 IllegalArgumentException ⇒ 一律落 MOCK。
         // 这正是 FR-304 要求的「MUST NOT 误判为 SANDBOX、MUST NOT 中断反向路径」。
-        com.payment.channelgateway.domain.ChannelOrder attempt =
-                new com.payment.channelgateway.domain.ChannelOrder("PM001", "MOCK", 0, 1000L, "CNY");
+        com.payment.channel.domain.ChannelOrder attempt =
+                new com.payment.channel.domain.ChannelOrder("PM001", "MOCK", 0, 1000L, "CNY");
         attempt.putExtra("channelMode", decoded.get("channelMode"));
         assertEquals(com.payment.common.core.dye.DyeMode.MOCK, attempt.getChannelMode());
     }

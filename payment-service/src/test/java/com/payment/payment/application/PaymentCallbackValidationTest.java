@@ -1,17 +1,17 @@
 package com.payment.payment.application;
 
 import com.payment.common.core.dye.DyeContext;
-import com.payment.channelgateway.application.ChannelCallbackHandler;
-import com.payment.channelgateway.application.ChannelRegistry;
-import com.payment.channelgateway.application.spi.ChannelCallbackEnvelope;
-import com.payment.channelgateway.infra.AlipayChannelAdapter;
-import com.payment.channelgateway.infra.alipay.AlipayGateway;
-import com.payment.channelgateway.support.StubChannelRegistry;
+import com.payment.channel.application.ChannelCallbackHandler;
+import com.payment.channel.application.ChannelRegistry;
+import com.payment.channel.application.spi.ChannelCallbackEnvelope;
+import com.payment.channel.infra.AlipayChannelAdapter;
+import com.payment.channel.infra.alipay.AlipayGateway;
+import com.payment.channel.support.StubChannelRegistry;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
+import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import com.payment.payment.support.RecordingObservability;

@@ -2,7 +2,7 @@ package com.payment.payment.api.dto;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 

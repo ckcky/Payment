@@ -5,8 +5,8 @@ import com.payment.common.dto.channel.ChannelPayStatus;
 import com.payment.common.dto.channel.ChannelRefundNotified;
 import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
 import com.payment.payment.support.PaymentTestStack;
 import com.payment.payment.support.RecordingObservability;
@@ -108,7 +108,7 @@ class PaymentNotifyPortTest {
                 assertThat(pkg)
                         .as("%s#%s 的类型 %s 不得来自渠道网关域或 payment 内部实现",
                                 contract.getSimpleName(), component.getName(), component.getType().getName())
-                        .doesNotStartWith("com.payment.channelgateway")
+                        .doesNotStartWith("com.payment.channel")
                         .doesNotStartWith("com.payment.payment");
             }
         }

@@ -8,7 +8,7 @@ import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundAttemptRequest;
 import com.payment.common.dto.rpc.RefundAttemptResponse;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.domain.Refund;
 import com.payment.payment.domain.RefundDecision;
 import com.payment.payment.domain.RefundPolicy;

@@ -1,9 +1,9 @@
 package com.payment.payment.application.refund;
 
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderRepository;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderRepository;
+import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.api.dto.RefundFactResponse;
 import com.payment.payment.domain.Refund;

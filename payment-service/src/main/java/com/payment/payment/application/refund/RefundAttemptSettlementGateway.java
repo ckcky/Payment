@@ -1,6 +1,6 @@
 package com.payment.payment.application.refund;
 
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 
 /**
  * refund 域 → payment 域的退款尝试收敛端口（fix：channel_orders 的 REFUND 行状态同步）：

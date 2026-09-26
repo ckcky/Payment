@@ -1,6 +1,6 @@
 package com.payment.payment.integration;
 
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.application.refund.CreateRefundCommand;
 import com.payment.payment.application.refund.RefundApplicationService;
 import com.payment.payment.application.refund.RefundRpcCallbackService;

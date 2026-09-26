@@ -2,10 +2,10 @@ package com.payment.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.payment.channelgateway.application.ChannelResult;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
-import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
+import com.payment.channel.application.ChannelResult;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderStatus;
+import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import org.junit.jupiter.api.Test;
 
 /**

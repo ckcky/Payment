@@ -2,7 +2,7 @@ package com.payment.payment.application;
 
 import com.payment.payment.api.dto.PaymentFactResponse;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channel.domain.ChannelOrderRepository;
 import com.payment.payment.domain.PaymentRepository;
 import com.payment.payment.domain.PaymentStatus;
 import java.time.LocalDate;

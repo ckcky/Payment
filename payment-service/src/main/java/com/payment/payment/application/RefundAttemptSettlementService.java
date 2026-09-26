@@ -1,11 +1,11 @@
 package com.payment.payment.application;
 
-import com.payment.channelgateway.application.ChannelOrderService;
-import com.payment.channelgateway.application.ChannelOrderServices;
-import com.payment.channelgateway.application.ChannelResult;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderRepository;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channel.application.ChannelOrderService;
+import com.payment.channel.application.ChannelOrderServices;
+import com.payment.channel.application.ChannelResult;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderRepository;
+import com.payment.channel.domain.ChannelOrderStatus;
 import java.util.Comparator;
 import java.util.List;
 import org.slf4j.Logger;

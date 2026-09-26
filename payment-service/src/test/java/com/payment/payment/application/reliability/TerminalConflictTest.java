@@ -2,12 +2,12 @@ package com.payment.payment.application.reliability;
 
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.payment.application.PaymentResultProcessor;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
+import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
 import com.payment.payment.support.PaymentTestStack;
 import java.time.Instant;

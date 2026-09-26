@@ -6,7 +6,7 @@ import com.payment.common.dto.rpc.PaymentAmountQueryRequest;
 import com.payment.common.dto.rpc.PaymentAmountQueryResponse;
 import com.payment.common.dto.rpc.RefundResultNotification;
 import com.payment.payment.application.OrderGateway;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.mq.PaymentEventPublisher;
 import com.payment.payment.domain.Refund;
 import com.payment.payment.domain.RefundRepository;

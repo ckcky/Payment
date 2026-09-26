@@ -10,14 +10,14 @@ import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
 import com.payment.common.dto.rpc.RefundCommandRequest;
 import com.payment.common.dto.rpc.RefundCommandResponse;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderStatus;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderStatus;
 import com.payment.payment.domain.PaymentStatus;
-import com.payment.channelgateway.infra.persistence.InMemoryChannelOrderRepository;
+import com.payment.channel.infra.persistence.InMemoryChannelOrderRepository;
 import com.payment.payment.infra.InMemoryPaymentRepository;
-import com.payment.channelgateway.infra.MockChannelAdapter;
+import com.payment.channel.infra.MockChannelAdapter;
 import com.payment.payment.application.refund.RefundApplicationService;
 import com.payment.payment.application.refund.RefundResultProcessor;
 import com.payment.payment.domain.Refund;
@@ -178,7 +178,7 @@ class PaymentAutoRefundServiceTest {
             public void onChannelRefundResult(
                     com.payment.common.dto.channel.ChannelRefundNotified notified) {
                 refundCallback.handleChannelCallback(notified.refundNo(),
-                        com.payment.channelgateway.application.ChannelResult.fromNotified(
+                        com.payment.channel.application.ChannelResult.fromNotified(
                                 notified.status(), notified.channelTransactionId(), notified.reason()));
             }
         });

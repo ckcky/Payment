@@ -1,6 +1,6 @@
 package com.payment.payment.api;
 
-import com.payment.channelgateway.api.dto.ChannelCallbackRequest;
+import com.payment.channel.api.dto.ChannelCallbackRequest;
 import com.payment.payment.api.dto.RefundFactResponse;
 import com.payment.payment.application.refund.RefundApplicationService;
 import com.payment.payment.application.refund.RefundFactsService;

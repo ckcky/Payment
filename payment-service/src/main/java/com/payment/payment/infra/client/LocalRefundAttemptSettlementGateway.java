@@ -1,7 +1,7 @@
 package com.payment.payment.infra.client;
 
 import com.payment.payment.application.RefundAttemptSettlementService;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.application.refund.RefundAttemptSettlementGateway;
 import org.springframework.stereotype.Component;
 

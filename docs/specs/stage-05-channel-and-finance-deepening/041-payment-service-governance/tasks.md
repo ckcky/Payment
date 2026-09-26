@@ -20,9 +20,34 @@
 
 ## 1. 契约与目标骨架
 
-- [ ] T04 `common/common-dto/src/main/java/com/payment/common/dto/paymentchannel/`：定义 ChannelGateway 命令/回执与 PaymentResultPort 通知 DTO；禁止数值 ID 和私有渠道类型。依赖：T01。追溯：FR-002/003/006，INV-009。验收：DTO 契约测试。
-- [ ] T05 `payment-service/src/main/java/com/payment/payment/{api,application,domain,infra}/`、`.../channel/{api,application,domain,infra}/`：建包骨架，更新 Spring/Feign/Mapper 扫描。依赖：T04。追溯：FR-001。验收：上下文启动。
+- [x] T04 `common/common-dto/src/main/java/com/payment/common/dto/paymentchannel/`：定义 ChannelGateway 命令/回执与 PaymentResultPort 通知 DTO；禁止数值 ID 和私有渠道类型。依赖：T01。追溯：FR-002/003/006，INV-009。验收：DTO 契约测试。
+  - **执行记录（2026-09-26）**：**契约已存在，本任务为「确认 + 保留」而非新建**。
+    实测 `com/payment/common/dto/channel/` 已有全套跨域契约（ADR-0075 / spec 030 产物）：
+    `ChannelPayCommand` / `ChannelPayReceipt` / `ChannelQueryCommand` / `ChannelQuerySnapshot` /
+    `ChannelRefundCommand` / `ChannelRefundReceipt`（出向命令与回执）、
+    `ChannelPayNotified` / `ChannelRefundNotified`（入向通知）、
+    `ChannelPayStatus` / `ChannelRefundStatus`、`CallbackUrls` / `Goods` / `Payer` / `PaymentScene` / `PayCredential`。
+  - **INV-009 复核通过**：① 无数值主键（标识全为业务单号 `channelNo` / `paymentNo`，由
+    `ChannelContractTest#outboundContractsCarryNoNumericPrimaryKey` 钉死）；② 无渠道私有类型
+    （扩展袋是 `Map<String,String>` 的 `channelExtra`，无 SDK / 签名器 / 渠道报文结构）；
+    ③ 金额一律 `long` / `Long`（`Long` 的 `null` 表示「渠道未读到」，不等于 0）。
+  - 🔶 **有意差异 D-1（登记）**：spec 写的目标包名是 `…dto.paymentchannel`，现状是 `…dto.channel`。
+    **沿用既有 `channel`，不新建 `paymentchannel`** —— 前者已由 ADR-0075 确立、被全仓引用，
+    改名是零收益churn；且 `common-dto` 下不存在同名冲突（`rpc` 是另一域）。
+    **追溯影响**：本项偏离 spec 字面路径，属「包名口径」，不触及契约语义与 FR-002/003/006。
+- [x] T05 `payment-service/src/main/java/com/payment/payment/{api,application,domain,infra}/`、`.../channel/{api,application,domain,infra}/`：建包骨架，更新 Spring/Feign/Mapper 扫描。依赖：T04。追溯：FR-001。验收：上下文启动。
+  - **执行记录（2026-09-26）**：`com.payment.channelgateway` → **`com.payment.channel`** 整体改名完成
+    （`git mv` 目录 + 全量替换）。**实测**：146 个 java 文件 / 506 处引用全部替换，残留 0；
+    涉及 main 87 + test 58 + `deployment/architecture-tests` 1（`ServiceBoundaryTest` 白名单正则）。
+  - `payment` 域四层**已成立**（`api/application/domain/infra`），本次不动；`channel` 域四层由改名后自然成立。
+    **旁路包与 `posting` 的收拢留到 T11/T14/T18**（属于「迁内容」而非「建骨架」）。
+  - Spring 组件扫描 / MyBatis Mapper 扫描均以 `com.payment` 为根，改名后**无需改配置**（`application.yml` 中 `channelgateway` 引用数为 0，已复核）。
+  - ⚠️ **工具坑记录**：zsh 下 `for f in $(...)` **不做词分割**、`sed -i ''` 参数被吞 —— 批量替换改用 Python 脚本完成（见本节）。
 - [ ] T06 `channel/application/port/ChannelGateway`、`payment/application/port/PaymentResultPort`：定义并装配两个跨域端口。依赖：T04/T05。追溯：FR-002/003/006，INV-003。验收：端口装配和依赖测试。
+  - **现状（2026-09-26 实测）**：`ChannelGateway` 在 `channel/application/ChannelGateway.java`（缺 `port` 子包）；
+    Payment 侧入向端口现名 **`PaymentNotifyPort`**（`payment/application/PaymentNotifyPort.java`），
+    实现为 `DefaultPaymentNotifyPort`。⇒ 待办：① 建 `channel/application/port/` 并移入 `ChannelGateway`；
+    ② 建 `payment/application/port/`，`PaymentNotifyPort` → **`PaymentResultPort`** 并移入。
 
 ## 2. Channel 域
 

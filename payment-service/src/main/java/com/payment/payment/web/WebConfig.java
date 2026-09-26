@@ -8,9 +8,9 @@ import org.springframework.core.Ordered;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import com.payment.channelgateway.infra.config.RoutingProperties;
+import com.payment.channel.infra.config.RoutingProperties;
 
-import com.payment.channelgateway.web.ChannelCallbackSignatureFilter;
+import com.payment.channel.web.ChannelCallbackSignatureFilter;
 /**
  * Web 层配置：注册安全守卫（Feature 009 / ADR-0024 / ADR-0025）。
  *
@@ -27,7 +27,7 @@ import com.payment.channelgateway.web.ChannelCallbackSignatureFilter;
  *
  * <p>另启用 {@link RoutingProperties}（Feature 028 / ADR-0073：渠道路由与可用性配置）。
  * （{@code MockCashierProperties} 已于 spec 041 随演示收银台派发策略迁入渠道网关域，
- * 注册点见 {@code com.payment.channelgateway.infra.config.ChannelGatewayConfig}。）</p>
+ * 注册点见 {@code com.payment.channel.infra.config.ChannelGatewayConfig}。）</p>
  */
 @Configuration
 @EnableConfigurationProperties({RoutingProperties.class})

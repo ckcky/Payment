@@ -8,11 +8,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * payment-service（Feature 015 / P3 合并）：支付域 + 退款域单体部署。
- * 扫描范围同时覆盖 com.payment.payment、com.payment.channelgateway 与 com.payment.posting
+ * 扫描范围同时覆盖 com.payment.payment、com.payment.channel 与 com.payment.posting
  * （spec 038：渠道网关域独立顶层包；spec 034：出站失败台账独立子域包）。
  */
-@SpringBootApplication(scanBasePackages = {"com.payment.payment", "com.payment.channelgateway", "com.payment.posting"})
-@EnableFeignClients(basePackages = {"com.payment.payment", "com.payment.channelgateway"})
+@SpringBootApplication(scanBasePackages = {"com.payment.payment", "com.payment.channel", "com.payment.posting"})
+@EnableFeignClients(basePackages = {"com.payment.payment", "com.payment.channel"})
 @EnableScheduling
 @MapperScan({"com.payment.payment.infra.persistence", "com.payment.payment.infra.persistence.refund",
         // spec 027 / ADR-0071：限额子域三表 Mapper 与支付域同库，须一并扫描
@@ -23,7 +23,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         // 包路径从 com.payment.payment.infra.persistence.attempt 变为本包）。
         // ⚠️ 顶层包新增/搬迁时**MUST**在此登记：漏登记不会编译报错，而是启动即
         // NoSuchBeanDefinitionException: ChannelOrderMapper（本类是全仓唯一 MapperScan 声明点）。
-        "com.payment.channelgateway.infra.persistence"})
+        "com.payment.channel.infra.persistence"})
 public class PaymentApplication {
 
     public static void main(String[] args) {

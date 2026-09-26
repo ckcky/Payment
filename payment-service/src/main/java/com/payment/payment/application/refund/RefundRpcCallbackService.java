@@ -2,7 +2,7 @@ package com.payment.payment.application.refund;
 
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.payment.domain.Refund;
 import com.payment.payment.domain.RefundRepository;
 import org.springframework.stereotype.Service;

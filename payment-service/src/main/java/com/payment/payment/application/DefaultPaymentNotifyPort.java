@@ -1,6 +1,6 @@
 package com.payment.payment.application;
 
-import com.payment.channelgateway.application.ChannelResult;
+import com.payment.channel.application.ChannelResult;
 import com.payment.common.core.error.BizException;
 import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
@@ -9,8 +9,8 @@ import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelRefundNotified;
 import com.payment.payment.application.refund.RefundRpcCallbackService;
 import com.payment.payment.domain.Payment;
-import com.payment.channelgateway.domain.ChannelOrder;
-import com.payment.channelgateway.domain.ChannelOrderRepository;
+import com.payment.channel.domain.ChannelOrder;
+import com.payment.channel.domain.ChannelOrderRepository;
 import com.payment.payment.domain.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
