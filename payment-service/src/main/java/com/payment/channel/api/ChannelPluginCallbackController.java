@@ -47,16 +47,23 @@ import java.util.Map;
  * 再按 content-type 决定是否需要解析成表单。若改用 {@code @RequestParam}，
  * 容器会先消费 body，JSON 形态的渠道将拿不到原始报文。</p>
  *
- * <h3>与既有端点的关系</h3>
+ * <h3>唯一回调入口（spec 041 / T12）</h3>
+ * <p>本端点是<b>全平台唯一的渠道回调入口</b>，路径 {@code POST /callbacks/channels/{channelCode}}。
+ * T12 之前存在三条并行的回调面，现已全部收敛到此处：</p>
  * <ul>
- *   <li>{@link ChannelCallbackController}（{@code /internal/payments/{paymentNo}/channel-callback}）：
- *       <b>平台内部</b>的 mock 回调入口，非渠道协议，保持不动；</li>
- *   <li>支付宝专属端点 {@code AlipayNotifyController}（{@code /internal/channels/alipay/notify}）
- *       已于 <b>T6（FR-015）删除</b>——「专属端点 / 通用端点」双轨并存的技术债（036 TD-1）就此关闭。
- *       它的解析职责下沉到 {@code AlipayChannelAdapter#parseCallback}，
- *       业务校验归 {@code DefaultPaymentResultPort}，模态包裹归 {@code ChannelCallbackHandler}。
- *       自此<b>回调只有本端点一条路</b>，不再有「哪条路径才是权威」的歧义。</li>
+ *   <li>支付宝专属端点 {@code /internal/channels/alipay/notify} —— T6（FR-015）删除；</li>
+ *   <li>支付 JSON 回调 {@code /internal/payments/{paymentNo}/channel-callback} —— T12 删除
+ *       （原在 channel.api，却直调 Payment 服务，是「渠道域回调由 payment 语义处理」的边界倒置）；</li>
+ *   <li>退款 JSON 回调 {@code /internal/payments/refunds/{refundNo}/channel-callback} —— T12 删除
+ *       （原在 payment.api）。</li>
  * </ul>
+ * <p>删除后，mock 族（演示/联调链路）的回调改由<b>自己的插件</b>解析
+ * （{@code MockChannelAdapter#parseCallback}，平台原生 JSON），真实渠道仍由各自插件解析私有协议；
+ * 退款结论经 {@code ParsedCallback.ParsedRefundCallback} 分支走
+ * {@code PaymentResultPort#onChannelRefundResult}（FR-006）。自此<b>回调只有一条路</b>。</p>
+ *
+ * <p><b>路径不在 {@code /internal/**} 下</b>：回调来自外部渠道，不是内部服务调用，
+ * 因此不受内部服务鉴权拦截器管辖（ADR-0024 的口径）。</p>
  */
 @RestController
 public class ChannelPluginCallbackController {
@@ -70,7 +77,7 @@ public class ChannelPluginCallbackController {
     }
 
     /** 接收渠道异步回调：收报文 → 交网关 → 转 HTTP。 */
-    @PostMapping("/internal/channels/{channelCode}/callback")
+    @PostMapping("/callbacks/channels/{channelCode}")
     public ResponseEntity<String> onCallback(@PathVariable String channelCode,
                                              HttpServletRequest request) throws IOException {
         ChannelCallbackEnvelope envelope = toEnvelope(request);

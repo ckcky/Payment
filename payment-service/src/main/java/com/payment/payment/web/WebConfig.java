@@ -33,11 +33,13 @@ import com.payment.channel.web.ChannelCallbackSignatureFilter;
 @EnableConfigurationProperties({RoutingProperties.class})
 public class WebConfig implements WebMvcConfigurer {
 
-    /** 渠道回调的 Servlet 前缀匹配模式（具体路径由过滤器内部再判定；含支付与退款两条回调链）。 */
-    static final String CHANNEL_CALLBACK_PREFIX = "/internal/payments/*";
-
-    /** 退款渠道回调的 Servlet 前缀匹配模式（spec 019 / D7）。 */
-    static final String REFUND_CALLBACK_PREFIX = "/internal/payments/refunds/*";
+    /**
+     * 唯一回调入口的 Servlet 前缀匹配模式（spec 041 / T12；具体路径由过滤器内部再判定）。
+     *
+     * <p>T12 之前这里是两条前缀（{@code /internal/payments/*} 与
+     * {@code /internal/payments/refunds/*}）；两个端点删除后合并为一条。</p>
+     */
+    static final String CHANNEL_CALLBACK_PREFIX = "/callbacks/*";
 
     private final ResolveAuthorizationInterceptor resolveInterceptor;
     private final InternalServiceAuthInterceptor internalAuthInterceptor;
@@ -57,7 +59,6 @@ public class WebConfig implements WebMvcConfigurer {
         FilterRegistrationBean<ChannelCallbackSignatureFilter> registration =
                 new FilterRegistrationBean<>(new ChannelCallbackSignatureFilter());
         registration.addUrlPatterns(CHANNEL_CALLBACK_PREFIX);
-        registration.addUrlPatterns(REFUND_CALLBACK_PREFIX);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }
@@ -68,9 +69,10 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/payments/*/resolve")
                 // spec 034 / T9：台账人工重放端点与 resolve 同守卫（X-Admin-Token）
                 .addPathPatterns("/internal/payments/pending-postings/**");
+        // spec 041 / T12：唯一回调入口 /callbacks/channels/** 不在 /internal/** 之下，
+        // 因此天然不受内部服务鉴权管辖——原先的两条 excludePathPatterns 随之删除
+        // （它们排除的 /internal/payments/** 回调路径已不存在）。
         registry.addInterceptor(internalAuthInterceptor)
-                .addPathPatterns("/internal/**")
-                .excludePathPatterns(ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN)
-                .excludePathPatterns(ChannelCallbackSignatureFilter.REFUND_CALLBACK_PATH_PATTERN);
+                .addPathPatterns("/internal/**");
     }
 }

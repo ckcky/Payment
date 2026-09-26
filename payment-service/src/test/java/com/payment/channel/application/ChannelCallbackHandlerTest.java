@@ -9,6 +9,7 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelPayStatus;
 import com.payment.common.dto.channel.ChannelRefundNotified;
+import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.common.dto.channel.PaymentScene;
 import com.payment.payment.application.port.PayNotifyOutcome;
 import com.payment.payment.application.port.PaymentResultPort;
@@ -44,6 +45,7 @@ class ChannelCallbackHandlerTest {
 
     private static final String CODE = "STUB";
     private static final String PAYMENT_NO = "PM-CB-1";
+    private static final String REFUND_NO = "PMRF-CB-1";
 
     private StubRegistry registry;
     private RecordingPort port;
@@ -189,6 +191,58 @@ class ChannelCallbackHandlerTest {
         assertThat(ack.body()).isEqualTo("processing error");
     }
 
+    // ---- ④ 退款分支（spec 041 / T12：FR-006 的退款半边）----
+
+    @Test
+    @DisplayName("④ 退款分支：解析产物是退款 ⇒ 只走 onChannelRefundResult，不碰支付入向")
+    void refundBranchNotifiesRefundPortOnly() {
+        plugin.parsed = ParsedCallback.refund(REFUND_NO, ChannelResult.success("ch-r-1"));
+
+        ChannelCallbackAck ack = handler.handle(CODE, envelope());
+
+        assertThat(ack.signatureVerified()).isTrue();
+        assertThat(port.pays).as("退款回调不得触发支付入向（两条入向操作互斥）").isEmpty();
+        assertThat(port.refunds).hasSize(1);
+        ChannelRefundNotified notified = port.refunds.get(0);
+        assertThat(notified.refundNo()).as("寻址键换成退款单号").isEqualTo(REFUND_NO);
+        assertThat(notified.channelCode()).as("FR-006：MUST 携带 channelCode").isEqualTo(CODE);
+        assertThat(notified.status()).isEqualTo(ChannelRefundStatus.SUCCESS);
+        assertThat(notified.channelTransactionId()).isEqualTo("ch-r-1");
+        assertThat(notified.amountMinor()).as("退款金额的权威值是平台退款单，渠道通知不携带").isNull();
+        assertThat(notified.currencyCode()).isNull();
+    }
+
+    @Test
+    @DisplayName("④ 退款分支：无结论 ⇒ UNKNOWN 原样跨域（不猜结论，INV-005）")
+    void refundBranchKeepsUnknownStatus() {
+        plugin.parsed = ParsedCallback.refund(REFUND_NO, ChannelResult.businessUnknown("still processing"));
+
+        handler.handle(CODE, envelope());
+
+        assertThat(port.refunds.get(0).status()).isEqualTo(ChannelRefundStatus.UNKNOWN);
+        assertThat(port.refunds.get(0).reason()).isEqualTo("still processing");
+    }
+
+    @Test
+    @DisplayName("④ 退款分支：应答仍是插件声明的渠道应答体（与支付分支同口径）")
+    void refundBranchReturnsPluginAckBody() {
+        plugin.parsed = ParsedCallback.refund(REFUND_NO, ChannelResult.success("ch-r-1"));
+        plugin.ackBody = "success";
+
+        assertThat(handler.handle(CODE, envelope()).body()).isEqualTo("success");
+    }
+
+    @Test
+    @DisplayName("④ 退款分支：收敛失败 ⇒ 异常上抛（端点转 5xx 让渠道重推，不伪装成功）")
+    void refundBranchPropagatesConvergenceFailure() {
+        plugin.parsed = ParsedCallback.refund(REFUND_NO, ChannelResult.success("ch-r-1"));
+        port.refundFailure = new IllegalStateException("refund convergence failed");
+
+        assertThatThrownBy(() -> handler.handle(CODE, envelope()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("refund convergence failed");
+    }
+
     // ---- 落点（SC-002 同向）----
 
     @Test
@@ -212,6 +266,8 @@ class ChannelCallbackHandlerTest {
         ChannelResult result = ChannelResult.success("ch-1");
         ParsedCallback.NotifiedAmount notifiedAmount = ParsedCallback.NotifiedAmount.UNKNOWN;
         String ackBody = "success";
+        /** 解析产物可编排：默认支付分支；置为退款分支即可覆盖 ④ 的另一半（spec 041 / T12）。 */
+        ParsedCallback parsed;
 
         @Override
         public ChannelPluginDescriptor descriptor() {
@@ -241,7 +297,7 @@ class ChannelCallbackHandlerTest {
             if (!verifyOk) {
                 throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "signature verification failed");
             }
-            return new ParsedCallback(paymentNo, result, notifiedAmount);
+            return parsed != null ? parsed : ParsedCallback.pay(paymentNo, result, notifiedAmount);
         }
 
         @Override
@@ -297,7 +353,10 @@ class ChannelCallbackHandlerTest {
     private final class RecordingPort implements PaymentResultPort {
 
         final List<ChannelPayNotified> pays = new ArrayList<>();
+        final List<ChannelRefundNotified> refunds = new ArrayList<>();
         PayNotifyOutcome outcome = PayNotifyOutcome.accepted();
+        /** 退款分支的收敛失败（端点转 5xx 的异常语义，spec 041 / T12）。 */
+        RuntimeException refundFailure;
 
         @Override
         public PayNotifyOutcome onChannelPayResult(ChannelPayNotified notified) {
@@ -308,7 +367,11 @@ class ChannelCallbackHandlerTest {
 
         @Override
         public void onChannelRefundResult(ChannelRefundNotified notified) {
-            throw new UnsupportedOperationException();
+            refunds.add(notified);
+            plugin.order.add("refund-notify");
+            if (refundFailure != null) {
+                throw refundFailure;
+            }
         }
     }
 }

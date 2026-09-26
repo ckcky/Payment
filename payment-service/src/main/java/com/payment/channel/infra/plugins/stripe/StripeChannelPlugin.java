@@ -208,7 +208,9 @@ public class StripeChannelPlugin extends AbstractChannelPlugin {
      * 因此不会产生任何状态推进（INV-10）。</p>
      */
     @Override
-    public ParsedCallback parseCallback(ChannelCallbackEnvelope envelope) {
+    // 协变返回类型（spec 041 / T12）：真实渠道只产生支付回调解析产物，
+    // 声明更具体的类型让调用方（含既有解析测试）无需向下转型。
+    public ParsedCallback.ParsedPayCallback parseCallback(ChannelCallbackEnvelope envelope) {
         String signature = envelope.headers().get(SIGNATURE_HEADER);
         if (signature == null || signature.isBlank()) {
             throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
@@ -228,7 +230,7 @@ public class StripeChannelPlugin extends AbstractChannelPlugin {
                 ? ParsedCallback.NotifiedAmount.UNKNOWN
                 : ParsedCallback.NotifiedAmount.of(event.amountTotalMinor(),
                         event.currency().toUpperCase());
-        return new ParsedCallback(paymentNo, result, amount);
+        return ParsedCallback.pay(paymentNo, result, amount);
     }
 
     /** Stripe 应答 200 即可，body 内容不参与判定（与支付宝的字符串精确匹配不同）。 */

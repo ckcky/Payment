@@ -252,7 +252,9 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
      * <p><b>本方法不产生副作用</b>：只做翻译，状态推进由内核的收敛链路负责。</p>
      */
     @Override
-    public ParsedCallback parseCallback(ChannelCallbackEnvelope envelope) {
+    // 协变返回类型（spec 041 / T12）：真实渠道只产生支付回调解析产物，
+    // 声明更具体的类型让调用方（含既有解析测试）无需向下转型。
+    public ParsedCallback.ParsedPayCallback parseCallback(ChannelCallbackEnvelope envelope) {
         Map<String, String> params = envelope.formParams();
 
         // ---- ① 验签（FR-202）----
@@ -287,7 +289,7 @@ public class AlipayChannelAdapter extends AbstractMockChannelAdapter {
         ParsedCallback.NotifiedAmount amount = notifiedMinor == null
                 ? ParsedCallback.NotifiedAmount.UNKNOWN
                 : ParsedCallback.NotifiedAmount.of(notifiedMinor, "CNY");
-        return new ParsedCallback(paymentNo, result, amount);
+        return ParsedCallback.pay(paymentNo, result, amount);
     }
 
     /**

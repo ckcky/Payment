@@ -1,6 +1,5 @@
 package com.payment.payment.api;
 
-import com.payment.channel.api.dto.ChannelCallbackRequest;
 import com.payment.payment.api.dto.RefundFactResponse;
 import com.payment.payment.application.refund.RefundApplicationService;
 import com.payment.payment.application.refund.RefundFactsService;
@@ -53,16 +52,11 @@ public class RefundController {
         return RefundResponse.from(callbackService.resolveRefund(refundNo, request.status()));
     }
 
-    /**
-     * 渠道异步退款回调（spec 019 / D7）：渠道受理后延迟推送权威结果。
-     * 验签防重放由 {@code ChannelCallbackSignatureFilter} 前置（扩展覆盖本路径）；
-     * 重复回调由退款状态机终态吸收（幂等）。
-     */
-    @PostMapping("/{refundNo}/channel-callback")
-    public RefundResponse onChannelCallback(@PathVariable String refundNo,
-                                            @RequestBody ChannelCallbackRequest request) {
-        return RefundResponse.from(callbackService.handleChannelCallback(refundNo, request.toResult()));
-    }
+    // spec 041 / T12：渠道异步退款回调端点（POST /{refundNo}/channel-callback）已删除。
+    // 外部渠道的退款回调统一由渠道域唯一入口 POST /callbacks/channels/{channelCode} 接收
+    // （渠道插件解析报文 → PaymentResultPort#onChannelRefundResult，FR-005/FR-006）；
+    // mock 族的进程内异步推送不经 HTTP，直接调同一端口。两条路都收敛到同一个退款收敛编排，
+    // 「同一件事两条路」的歧义就此消除。
 
     /**
      * 对账事实查询接口：向 reconciliation-service 暴露平台侧已确认的退款事实。

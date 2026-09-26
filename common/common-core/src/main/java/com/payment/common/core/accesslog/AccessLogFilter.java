@@ -97,7 +97,7 @@ public class AccessLogFilter extends OncePerRequestFilter {
     private void logAccess(ContentCachingRequestWrapper request,
                            ContentCachingResponseWrapper response, long costMs) {
         // spec 035 §6.2 纪律 2：uri MUST 归一化路径变量——Spring MVC 命中路由后会写
-        // BEST_MATCHING_PATTERN 属性（如 /internal/payments/{ref}/channel-callback），
+        // BEST_MATCHING_PATTERN 属性（如 /callbacks/channels/{channelCode}），
         // 优先记录该模式；未命中路由（404/静态）无该属性时回落原始 URI。
         // 否则访问日志自己就是高基数源（单号进 uri = 单号进 label 的日志版）。
         Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);

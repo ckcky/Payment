@@ -61,22 +61,22 @@ class ServiceBoundaryTest {
      * <p><b>037 / T6 已收口第 2 个</b>：{@code AlipayNotifyController} 按 FR-015 删除，
      * 回调统一走通用端点——它的解析职责下沉到 {@code AlipayChannelAdapter.parseCallback}，
      * 业务校验归 {@code DefaultPaymentResultPort}，模态包裹归 {@code ChannelCallbackHandler}，
-     * 三处都不在「渠道域反向依赖 payment 应用层」这条线上。剩余 2 个：</p>
+     * 三处都不在「渠道域反向依赖 payment 应用层」这条线上。</p>
+     *
+     * <p><b>spec 041 / T12 已收口第 3 个（白名单只剩 1 条）</b>：{@code ChannelCallbackController}
+     * 随 B4 删除——支付与退款两条 JSON 回调面并进唯一入口
+     * {@code POST /callbacks/channels/{channelCode}}（{@code ChannelPluginCallbackController}），
+     * 「渠道域的回调由 payment 语义处理」这一边界倒置随之消失。剩余唯一一条：</p>
      * <ul>
-     *   <li>{@code ChannelCallbackController} —— {@code /internal/payments/{paymentNo}/channel-callback}，
-     *       是<b>平台内部</b>的 mock 回调入口（非渠道协议），返回 Payment 的 API DTO
-     *       （{@code PaymentResponse}）；其归属需要一次独立裁决（移回 {@code payment.api}
-     *       还是改契约），不属本 Spec 的机械收口范围；</li>
      *   <li>{@code ChannelCallbackSignatureFilter} —— 复用 {@code payment.web} 的请求体包装器
      *       {@code CachedBodyHttpServletRequest}；要解除依赖需先决定该包装器的归属，
-     *       同样是一次独立裁决。</li>
+     *       是一次独立裁决（{@code payment.web} 的收拢见 spec 041 §1.2 旁路包映射）。</li>
      * </ul>
      *
      * <p>白名单按<b>全限定类名</b>逐条列出而非整包放行：新增任何反向依赖都会立即变红。</p>
      */
     private static final String LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES =
-            "com\\.payment\\.channel\\.api\\.ChannelCallbackController"
-                    + "|com\\.payment\\.channel\\.web\\.ChannelCallbackSignatureFilter";
+            "com\\.payment\\.channel\\.web\\.ChannelCallbackSignatureFilter";
 
     /**
      * spec 037 / FR-016 ② 的<b>唯一例外</b>：{@code PaymentResultPort} 是 Payment 定义并实现的
@@ -510,7 +510,8 @@ class ServiceBoundaryTest {
      * <p><b>既有违规不静默放宽</b>：038 之前就存在的反向依赖按 spec 038 T6 的要求<b>登记为技术债</b>
      * 并在此逐条白名单化（见 {@link #LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES}），收口归 037。
      * 037 / T5 已收口其中 1 个（{@code ChannelPluginCallbackController}），
-     * T6 又收口 1 个（{@code AlipayNotifyController} 按 FR-015 删除）。</p>
+     * T6 又收口 1 个（{@code AlipayNotifyController} 按 FR-015 删除），
+     * spec 041 / T12 再收口 1 个（{@code ChannelCallbackController} 按 B4 删除，回调并入唯一入口）。</p>
      *
      * <p><b>唯一例外是入向端口</b>：{@code PaymentResultPort}（及其返回类型 {@code PayNotifyOutcome}）
      * 由 Payment 定义并实现，渠道网关域<b>必须</b>依赖它才能把回调结果交给 Payment

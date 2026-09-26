@@ -83,16 +83,20 @@ class ChannelPluginMigrationTest {
     }
 
     @Test
-    @DisplayName("回调挂载点由插件自描述声明：ALIPAY 有、纯 mock 渠道没有 [SPI-01 / FR-014]")
+    @DisplayName("回调挂载点由插件自描述声明：ALIPAY / MOCK 有、纯进程内推送的 DOUYIN 没有 [SPI-01 / FR-014]")
     void callbackPathIsSelfDescribed() {
         // 支付宝有专属异步通知协议 ⇒ 必须声明回调路径（删除 AlipayNotifyController 后走通用端点）
         assertThat(new AlipayChannelAdapter(AlipayChannelAdapter.Scenario.SUCCESS).descriptor().callbackPath())
                 .as("支付宝 MUST 声明回调路径")
                 .isNotBlank();
-        // 纯 mock 渠道的结果由进程内推送（PaymentResultPort），不经 HTTP 回调
+        // spec 041 / T12：mock 族的 HTTP 回调从 payment 域的两个内部端点收敛到唯一入口
+        // POST /callbacks/channels/MOCK ⇒ mock 渠道必须声明回调挂载点，否则
+        // ChannelCallbackHandler#resolvePlugin 会以 NOT_FOUND 拒绝（插件未声明回调能力）。
+        // 这条断言因此由 isNull() 改为**等值**断言（不放宽为 isNotBlank —— 那会允许任意挂载点）。
         assertThat(new MockChannelAdapter().descriptor().callbackPath())
-                .as("纯 mock 渠道 MUST NOT 声明回调路径")
-                .isNull();
+                .as("MOCK 族演示回调经唯一入口送达 ⇒ 必须声明回调路径，且等于渠道码本身")
+                .isEqualTo("MOCK");
+        // DOUYIN 仍无外部回调驱动：结果由进程内推送（PaymentResultPort），不经 HTTP 回调
         assertThat(new DouyinChannelAdapter(DouyinChannelAdapter.Scenario.SUCCESS).descriptor().callbackPath())
                 .as("纯 mock 渠道 MUST NOT 声明回调路径")
                 .isNull();

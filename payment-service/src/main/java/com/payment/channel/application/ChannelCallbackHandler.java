@@ -10,6 +10,8 @@ import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.core.observability.BusinessMetrics;
 import com.payment.common.dto.channel.ChannelPayNotified;
 import com.payment.common.dto.channel.ChannelPayStatus;
+import com.payment.common.dto.channel.ChannelRefundNotified;
+import com.payment.common.dto.channel.ChannelRefundStatus;
 import com.payment.payment.application.port.PayNotifyOutcome;
 import com.payment.payment.application.port.PaymentResultPort;
 import org.slf4j.Logger;
@@ -99,17 +101,30 @@ public class ChannelCallbackHandler {
             return ChannelCallbackAck.rejected("rejected: " + ex.getMessage());
         }
 
-        // ---- ④ 内核统一封装 + 跨域通知 ----
-        ChannelPayNotified notified = toNotified(plugin.channelCode(), parsed);
-        // callWith（而非 runWith）：需要拿回 Payment 的处理结论来构造应答。
-        // 两者的 try/finally 语义一致，均不吞异常——Business 侧的异常已由端口转成结论。
-        PayNotifyOutcome outcome = DyeContext.callWith(DyeMode.SANDBOX,
-                () -> notifyPort.onChannelPayResult(notified));
-
-        return switch (outcome.status()) {
-            case ACCEPTED -> ChannelCallbackAck.ok(plugin.callbackAckBody());
-            case REJECTED -> ChannelCallbackAck.ok("rejected: " + outcome.detail());
-            case ERROR -> ChannelCallbackAck.ok("processing error");
+        // ---- ④ 内核统一封装 + 跨域通知（按解析产物分支，spec 041 / T12 / FR-006）----
+        // 密封类型 ⇒ 编译期穷举：新增回调种类必须在此处理，漏不掉。
+        return switch (parsed) {
+            case ParsedCallback.ParsedPayCallback pay -> {
+                ChannelPayNotified notified = toNotified(plugin.channelCode(), pay);
+                // callWith（而非 runWith）：需要拿回 Payment 的处理结论来构造应答。
+                // 两者的 try/finally 语义一致，均不吞异常——Business 侧的异常已由端口转成结论。
+                PayNotifyOutcome outcome = DyeContext.callWith(DyeMode.SANDBOX,
+                        () -> notifyPort.onChannelPayResult(notified));
+                yield switch (outcome.status()) {
+                    case ACCEPTED -> ChannelCallbackAck.ok(plugin.callbackAckBody());
+                    case REJECTED -> ChannelCallbackAck.ok("rejected: " + outcome.detail());
+                    case ERROR -> ChannelCallbackAck.ok("processing error");
+                };
+            }
+            case ParsedCallback.ParsedRefundCallback refund -> {
+                ChannelRefundNotified notified = toRefundNotified(plugin.channelCode(), refund);
+                // 退款入向端口返回 void（退款回调不参与渠道应答体构造，见 PaymentResultPort 注释）：
+                // 收敛失败以异常表达，由端点转 5xx 让渠道重推——与改造前 RefundController
+                // 直调退款收敛的异常语义一致（不吞、不伪装成功）。
+                DyeContext.runWith(DyeMode.SANDBOX,
+                        () -> notifyPort.onChannelRefundResult(notified));
+                yield ChannelCallbackAck.ok(plugin.callbackAckBody());
+            }
         };
     }
 
@@ -144,7 +159,8 @@ public class ChannelCallbackHandler {
      * 下游不消费的字段，却要多一次未必成功的读库。故入向契约里该字段可空，
      * 权威值仍以 {@code channel_orders.channel_no} 为准。</p>
      */
-    private static ChannelPayNotified toNotified(String channelCode, ParsedCallback parsed) {
+    private static ChannelPayNotified toNotified(String channelCode,
+                                                ParsedCallback.ParsedPayCallback parsed) {
         ParsedCallback.NotifiedAmount notifiedAmount = parsed.notifiedAmount();
         return new ChannelPayNotified(null, parsed.paymentNo(), channelCode,
                 toStatus(parsed.result().status()),
@@ -153,6 +169,33 @@ public class ChannelCallbackHandler {
                 notifiedAmount == null ? null : notifiedAmount.currencyCode(),
                 parsed.result().reason(),
                 Instant.now());
+    }
+
+    /**
+     * 退款分支的跨域封装（spec 041 / T12）：与支付分支同构，寻址键换成 {@code refundNo}。
+     *
+     * <p>{@code channelNo} 传 {@code null} 的理由与支付分支相同（入向寻址键是业务单号，
+     * 网关单号权威值在 {@code channel_orders.channel_no}）；{@code amountMinor} / {@code currencyCode}
+     * 同样留空——退款金额的权威值是平台退款单上的金额，渠道通知不携带它，
+     * 金额校验因此不适用于退款入向（与 {@code ChannelRefundNotified} 的契约一致）。</p>
+     */
+    private static ChannelRefundNotified toRefundNotified(String channelCode,
+                                                          ParsedCallback.ParsedRefundCallback parsed) {
+        return new ChannelRefundNotified(null, parsed.refundNo(), channelCode,
+                toRefundStatus(parsed.result().status()),
+                parsed.result().channelReference(),
+                null, null,
+                parsed.result().reason(),
+                Instant.now());
+    }
+
+    /** 网关域三档结论 → 退款跨域口径（1:1，语义同名同义）。 */
+    private static ChannelRefundStatus toRefundStatus(ChannelResult.Status status) {
+        return switch (status) {
+            case SUCCESS -> ChannelRefundStatus.SUCCESS;
+            case FAILURE -> ChannelRefundStatus.FAILURE;
+            case UNKNOWN -> ChannelRefundStatus.UNKNOWN;
+        };
     }
 
     /** 网关域三档结论 → 跨域口径（1:1，语义同名同义）。 */

@@ -88,14 +88,22 @@ class InternalServiceAuthTest {
      *
      * <p>保留此用例是为了锁定：回调路径<b>不会因为内部鉴权挂点的存在而被额外拦截</b>——
      * 外部渠道不持有内部令牌，一旦被内部鉴权一并拦住，渠道回调将全线失效。</p>
+     *
+     * <p><b>spec 041 / T12 迁移（断言未改）</b>：回调收敛到<b>唯一入口</b>
+     * {@code POST /callbacks/channels/{channelCode}}（原先的
+     * {@code /internal/payments/{paymentNo}/channel-callback} 已随 B4 删除）。新路径
+     * <b>不在 {@code /internal/**} 之下</b>，故本条保证从「拦截器显式排除」升级为
+     * 「路径结构上不重叠」——更强的形式，同一件事。支付单号由路径参数改为报文正文的
+     * {@code paymentNo}（mock 插件按此判别支付 / 退款分支）。</p>
      */
     @Test
     void channelCallbackPathIsNotBlockedByInternalAuth() throws Exception {
         Payment payment = newPayment();
-        String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
+        String body = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = String.valueOf(System.currentTimeMillis());
 
-        mockMvc.perform(post("/internal/payments/" + payment.getPaymentNo() + "/channel-callback")
+        mockMvc.perform(post("/callbacks/channels/MOCK")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body)
                         .header("X-Channel-Timestamp", timestamp)

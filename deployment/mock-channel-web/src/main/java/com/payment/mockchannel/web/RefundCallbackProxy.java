@@ -17,10 +17,12 @@ import org.springframework.web.client.RestClient;
  * 渠道<b>退款</b>回调代理（spec 019 / T111，ADR-0067）：以"渠道"身份向 payment-service
  * 推送退款异步回调——演示「受理 → 延迟 → 回调」中回调一环的报文形态（签名、双号寻址）。
  *
- * <p>upstream：{@code POST {payment}/internal/payments/refunds/{refundNo}/channel-callback}（PMRF 业务单号），
+ * <p>upstream（spec 041 / T12 起）：{@code POST {payment}/callbacks/channels/MOCK}——
+ * 与支付回调<b>共用唯一入口</b>，{@code refundNo} 移入报文正文并由它判别退款分支
+ * （{@code ParsedCallback.ParsedRefundCallback}）。
  * 签名方式与支付回调一致（{@code X-Channel-Timestamp} + {@code X-Channel-Signature}，
  * HMAC-SHA256 over {@code timestamp + "." + rawBody}）。{@code signMode} 语义同支付回调：
- * VALID / FORGED（演示 403 fail-closed）/ NONE（缺头被拒）。</p>
+ * VALID / FORGED / NONE。</p>
  *
  * <p>说明：进程内 Mock 渠道（payment.channel.refund-async）已实现自动的「受理 + 延迟推送」；
  * 本端点用于人工演示 / 回调丢失后手工补推（与 resolve 人工收敛互补）。</p>
@@ -54,6 +56,9 @@ public class RefundCallbackProxy {
         }
 
         Map<String, Object> upstreamBody = new java.util.LinkedHashMap<>();
+        // spec 041 / T12：唯一入口按渠道码寻址，退款单号改由正文承载（原为路径参数），
+        // 并作为插件侧的退款分支判别式
+        upstreamBody.put("refundNo", request.refundNo());
         upstreamBody.put("status", request.status());
         upstreamBody.put("channelReference", request.channelReference());
         upstreamBody.put("reason", request.reason());
@@ -70,7 +75,7 @@ public class RefundCallbackProxy {
         }
         signatureHeaders.forEach(headers::set);
 
-        String url = paymentUrl + "/internal/payments/refunds/" + request.refundNo() + "/channel-callback";
+        String url = paymentUrl + "/callbacks/channels/MOCK";
         log.info("[demo] refund callback -> payment {} (signMode={}, status={})", url, mode, request.status());
         try {
             ResponseEntity<String> upstream = restClient.post()

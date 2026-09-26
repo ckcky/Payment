@@ -142,7 +142,56 @@
     「每渠道独立装配测试」对它缺席；补齐工厂装配/自描述、能力校验先于网关触达
     （桩网关任何被调即炸）、MOCK 模态零触达、enabled=false 不阻塞 MOCK（C-1 同口径）。
   - **验证**：迁移相关 8 个测试类 79 / 0F / 0E；新增 7 用例（结构 3 + Stripe 4）全绿。
-- [ ] T12 `channel/api/`、`channel/application/`：实现唯一回调入口及“识别→验签→解析→收敛→PaymentResultPort”流程。依赖：T06/T09/T10。追溯：FR-005/006，INV-008。验收：错误回调不触达 Payment。
+- [x] T12 `channel/api/`、`channel/application/`：实现唯一回调入口及“识别→验签→解析→收敛→PaymentResultPort”流程。依赖：T06/T09/T10。追溯：FR-005/006，INV-008。验收：错误回调不触达 Payment。
+  - **执行记录（2026-09-26）**：唯一回调入口落地——三条并行回调面收敛为一条。
+    - **端点**：`POST /internal/channels/{channelCode}/callback` → **`POST /callbacks/channels/{channelCode}`**
+      （脱离 `/internal/**`，故不受内部服务鉴权管辖，ADR-0024 口径）。
+    - **删除两条旧回调面**（B4/B5）：`channel/api/ChannelCallbackController`
+      （`/internal/payments/{paymentNo}/channel-callback`）与其 DTO `ChannelCallbackRequest`、
+      `RefundController` 的 `/internal/payments/refunds/{refundNo}/channel-callback`。
+      ⚠️ 二者**都不是死端点**：`mock-channel-web` 的两个 proxy 正在调用 ⇒ 同步改打新入口。
+    - **`ParsedCallback` 改密封接口**（负责人裁决「密封类型两分支」）：
+      `ParsedPayCallback`（paymentNo + result + notifiedAmount）/ `ParsedRefundCallback`（refundNo + result），
+      `ChannelCallbackHandler` 第 ④ 步按 `switch` 穷举分支分调
+      `onChannelPayResult` / `onChannelRefundResult`（FR-006 的退款半边）。
+      保留 `of(...)` / `NotifiedAmount` 兼容；三个真实渠道 `parseCallback` 改**协变**返回
+      `ParsedPayCallback`，使既有解析测试零改动。
+    - **`MockChannelAdapter` 补回调能力**：描述符 `withoutCallback` → `withCallback(CODE, …, CODE)`，
+      新增 `parseCallback` 解析平台原生 JSON（`paymentNo`/`refundNo` 判别分支）。
+      **这是 mock 族第一次有解析职责**——改造前报文由 payment 域端点的 `@RequestBody` 反序列化。
+    - **同步项**：`ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN` → `/callbacks/channels/*`；
+      `WebConfig` 前缀与过滤器注册合一、删两条 `excludePathPatterns`；
+      `RefundResultProcessor.Source` 注释；`AccessLogProperties` 默认排除补 `/callbacks/**`（ADR-0084 **X-2**，
+      不补即重开「渠道报文含 `sign` 进 ACCESS_LOG」的漏洞）。
+    - **deployment**：`ChannelCallbackProxy` / `RefundCallbackProxy` 改打新入口，`paymentNo`/`refundNo`
+      移入报文正文；`e2e-tests/Api.java`、`e2e-tests/README.md` 同步。
+  - 🔴 **既有断言变更逐条登记（共 3 处，均获负责人放行）**：
+    1. **`ChannelCallbackSecurityTest`**（放行批次①）——路径改为 `/callbacks/channels/MOCK`、
+       支付单号由路径参数移入报文正文。**断言零变化**：唯一入口背后新增了
+       `DefaultPaymentResultPort` 的「渠道引用归属」串号校验（被删的 `ChannelCallbackController`
+       没有这道校验），报文里写死的 `ch-ref-1` 会被正当拒绝；故按「能靠**装配**保住的断言一律保住」
+       的处置原则，建单取 `mock-scenario=BUSINESS_UNKNOWN`（受理时渠道未返回引用 ⇒ 校验无从触发），
+       报文与断言**一字未改**。
+    2. **`InternalServiceAuthTest:98`**（放行批次①）——路径改为 `/callbacks/channels/MOCK`、
+       支付单号入正文；断言 `status().isOk()` 未变。新路径不在 `/internal/**` 下，
+       该保证由「拦截器显式排除」升级为「路径结构上不重叠」（更强的形式，同一件事）。
+    3. **`ChannelPluginMigrationTest:93-95`**（🔴 **新发现，单独上报并获放行**）——原断言
+       「纯 mock 渠道 MUST NOT 声明回调路径」与 T12 直接冲突且**不可靠装配保住**
+       （唯一入口要求插件 `acceptsCallback()`，而 B4 要求 mock 族回调走该入口）。
+       改为**等值**断言 `.isEqualTo("MOCK")`（不放宽为 `isNotBlank`）；`DOUYIN` 的 `isNull()` 保持不变。
+    - 另同步两处**样本/注释**（非断言）：`AccessLogFilterTest` 的路由归一化样本 URI
+      改指新入口（断言仍是「模式优先于原始 URI」），`AccessLogFilter` 注释同步。
+    - 同步收口 ArchUnit 白名单：`ServiceBoundaryTest.LEGACY_GATEWAY_TO_PAYMENT_DEPENDENCIES`
+      删除 `ChannelCallbackController` 的死条目（被删类不再反向依赖 payment 应用层），
+      白名单由 2 条收敛为 1 条。
+  - **补测（TDD：新分支必须有测试）**：
+    - `ChannelCallbackHandlerTest` +4 用例（原类**未覆盖退款分支**）：退款只走 `onChannelRefundResult`
+      且不碰支付入向、UNKNOWN 原样跨域、应答体同口径、收敛失败异常上抛（端点转 5xx 让渠道重推）。
+    - `MockChannelAdapterCallbackParseTest` **新建 10 用例**：支付/退款分支判别、两键并存时退款优先、
+      三档映射、缺寻址键/非法状态/空体/非法 JSON 一律拒绝（INV-10）、金额缺省 ⇒ UNKNOWN
+      （不把「没读到」当 0 元）、描述符声明回调挂载点。
+  - **验证**：`./mvnw -B clean test` = **18/18 模块 BUILD SUCCESS**，全量 **1158** 用例 / 0F / 0E
+    （= T11 后基线 1144 + 新增 14）。`payment-service` 528 用例全绿。
 - [ ] T13 `channel/api/`：重建渠道订单查询、路由预览和可开关运维端点。依赖：T09。追溯：FR-009/011，INV-010。
 
 ## 3. Payment 域

@@ -1,11 +1,19 @@
 package com.payment.channel.infra.plugins.mock;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.payment.channel.application.ChannelResult;
+import com.payment.channel.application.spi.ChannelCallbackEnvelope;
 import com.payment.channel.application.spi.ChannelPluginDescriptor;
+import com.payment.channel.application.spi.ParsedCallback;
+import com.payment.common.core.error.BizException;
+import com.payment.common.core.error.ErrorCodes;
 import com.payment.common.dto.channel.PaymentScene;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.util.Set;
 
 /**
@@ -36,14 +44,30 @@ public class MockChannelAdapter extends AbstractMockChannelAdapter {
     private static final Set<PaymentScene> SUPPORTED_SCENES = Set.of(PaymentScene.values());
 
     /**
-     * 插件自描述：<b>无回调路径</b>。
+     * 插件自描述：<b>回调路径 {@code MOCK}</b>（spec 041 / T12）。
      *
-     * <p>mock 渠道的退款结果由进程内推送（{@code PaymentResultPort}）送达，
-     * 不存在 HTTP 回调端点——声明一个回调路径会让通用回调端点误以为可以收单，
-     * 而那个端点永远不会有人调用。</p>
+     * <h3>为什么从「无回调」改为「有回调」</h3>
+     * <p>此前 mock 族的 HTTP 回调走的是 <b>payment 域</b>的两个内部端点
+     * （{@code /internal/payments/{paymentNo}/channel-callback} 与
+     * {@code /internal/payments/refunds/{refundNo}/channel-callback}），
+     * 由演示/联调工具（{@code mock-channel-web} 的两个 proxy）调用。那是
+     * 「渠道域的回调由 payment 域端点接收」的边界倒置（FR-005 要求回调仅由 Channel API 接收），
+     * 也是「同一件事两条路」的歧义来源。</p>
+     *
+     * <p>T12 把这两个端点删除，演示回调改打<b>唯一入口</b>
+     * {@code POST /callbacks/channels/MOCK}：mock 族因此必须具备回调能力，
+     * 解析平台原生的 JSON 结果报文（见 {@link #parseCallback}）。</p>
+     *
+     * <p><b>注意与「进程内推送」的分工</b>：mock 族的<b>退款异步推送</b>
+     * （{@code AbstractChannelPlugin.scheduleRefundPush}）仍然是<b>进程内</b>直接调
+     * {@code PaymentResultPort}，不经过 HTTP——那条路径与真实渠道的回调语义等价，
+     * 无需绕道网络。本回调路径服务的是<b>外部驱动的演示/联调</b>（proxy 模拟渠道推结果）。</p>
      */
     private static final ChannelPluginDescriptor DESCRIPTOR =
-            ChannelPluginDescriptor.withoutCallback(CODE, "Mock 渠道（本地模拟）", SUPPORTED_SCENES, false);
+            ChannelPluginDescriptor.withCallback(CODE, "Mock 渠道（本地模拟）", SUPPORTED_SCENES, false, CODE);
+
+    /** 平台原生回调报文解析器（mock 族专用格式；渠道私有协议不在此列）。 */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Override
     public ChannelPluginDescriptor descriptor() {
@@ -53,6 +77,81 @@ public class MockChannelAdapter extends AbstractMockChannelAdapter {
     @Override
     public String channelCode() {
         return CODE;
+    }
+
+    /**
+     * 解析平台原生回调报文（spec 041 / T12）。
+     *
+     * <h3>报文格式（{@code application/json}）</h3>
+     * <pre>
+     *   支付：{"paymentNo":"PM…","status":"SUCCESS|FAILURE|UNKNOWN",
+     *          "channelReference":"ch-1","reason":null,"amountMinor":100}
+     *   退款：{"refundNo":"PMRF…","status":"SUCCESS|FAILURE|UNKNOWN",
+     *          "channelReference":"ch-1","reason":null}
+     * </pre>
+     * <p>判别式是<b>寻址键字段</b>：带 {@code refundNo} ⇒ 退款；否则要求 {@code paymentNo}
+     * ⇒ 支付。这与 {@code PaymentResultPort} 的两条入向操作一一对应（FR-006）。</p>
+     *
+     * <h3>验签：本期空实现（ADR-0025 负责人决议，2026-08-30）</h3>
+     * <p>ADR-0025 决议「渠道回调签名校验改为预留函数、空实现就行」，故本方法
+     * <b>不校验</b> {@code X-Channel-Signature} / {@code X-Channel-Timestamp}。
+     * 真实渠道的验签各自落在自己的插件里（支付宝表单验签 / 微信 V3 验签 / Stripe 原始字节验签），
+     * 本类只服务 mock 族的演示链路。接入真实验签时，改造点在本方法内，
+     * 且必须同时把 {@code mock-channel-web} 的 FORGED/NONE 演示模式反转为拒绝断言。</p>
+     *
+     * <p>解析失败（空体 / 非法 JSON / 缺寻址键 / 状态值非法）一律抛
+     * {@code BizException(INVALID_ARGUMENT)} ⇒ 端点转 403，<b>不触达</b>任何状态推进（INV-10）。</p>
+     */
+    @Override
+    public ParsedCallback parseCallback(ChannelCallbackEnvelope envelope) {
+        String body = envelope == null ? null : envelope.rawBody();
+        if (body == null || body.isBlank()) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "mock callback body must not be empty");
+        }
+        JsonNode root;
+        try {
+            root = MAPPER.readTree(body);
+        } catch (IOException e) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "unparseable mock callback body");
+        }
+        String status = text(root, "status");
+        String channelReference = text(root, "channelReference");
+        String reason = text(root, "reason");
+        ChannelResult result = toResult(status, channelReference, reason);
+
+        String refundNo = text(root, "refundNo");
+        if (refundNo != null) {
+            return ParsedCallback.refund(refundNo, result);
+        }
+        String paymentNo = text(root, "paymentNo");
+        if (paymentNo == null) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                    "mock callback must carry paymentNo (pay) or refundNo (refund)");
+        }
+        Long amountMinor = root.hasNonNull("amountMinor") ? root.get("amountMinor").asLong() : null;
+        ParsedCallback.NotifiedAmount amount = amountMinor == null
+                ? ParsedCallback.NotifiedAmount.UNKNOWN
+                : ParsedCallback.NotifiedAmount.of(amountMinor, text(root, "currencyCode"));
+        return ParsedCallback.pay(paymentNo, result, amount);
+    }
+
+    /** 三档结论映射：状态值非法即拒绝（不猜结论）。 */
+    private static ChannelResult toResult(String status, String channelReference, String reason) {
+        if (status == null) {
+            throw BizException.of(ErrorCodes.INVALID_ARGUMENT, "mock callback must carry status");
+        }
+        return switch (status) {
+            case "SUCCESS" -> ChannelResult.success(channelReference);
+            case "FAILURE" -> ChannelResult.businessFailure(channelReference, reason);
+            case "UNKNOWN" -> ChannelResult.businessUnknown(reason);
+            default -> throw BizException.of(ErrorCodes.INVALID_ARGUMENT,
+                    "invalid mock callback status: " + status + "; expected SUCCESS|FAILURE|UNKNOWN");
+        };
+    }
+
+    private static String text(JsonNode root, String field) {
+        JsonNode node = root.get(field);
+        return node == null || node.isNull() ? null : node.asText();
     }
 
     /** 兼容构造①：默认 SUCCESS 场景。 */

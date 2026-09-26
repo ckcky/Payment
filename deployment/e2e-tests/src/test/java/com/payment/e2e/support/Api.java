@@ -64,13 +64,19 @@ public final class Api {
 
     // ---- 支付回调 / 收敛（payment-service）----
 
-    /** POST /internal/payments/{paymentNo}/channel-callback：渠道回调（可重复发验幂等）。 */
+    /**
+     * POST /callbacks/channels/MOCK：渠道回调（唯一入口，可重复发验幂等）。
+     *
+     * <p>spec 041 / T12：原 {@code /internal/payments/{paymentNo}/channel-callback} 已删除，
+     * 回调收敛到唯一入口并按渠道码寻址；{@code paymentNo} 由路径参数改为报文正文。</p>
+     */
     public ApiResponse paymentChannelCallback(String paymentNo, String status, String channelReference, String reason) {
         Map<String, Object> body = new LinkedHashMap<>();
+        body.put("paymentNo", paymentNo);
         body.put("status", status);
         body.put("channelReference", channelReference);
         body.put("reason", reason);
-        return post("payment", "/internal/payments/" + paymentNo + "/channel-callback", Map.of(), body);
+        return post("payment", "/callbacks/channels/MOCK", Map.of(), body);
     }
 
     /** POST /payments/{ref}/resolve：UNKNOWN 人工收敛（管理端点，需 X-Admin-Token，F2）。 */

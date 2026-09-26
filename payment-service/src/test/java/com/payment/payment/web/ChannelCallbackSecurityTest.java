@@ -47,12 +47,39 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>这些用例存在的意义不是证明「验签没做」，而是把「验签没做」这一事实钉在测试里：
  * 一旦有人悄悄实现验签却忘了补拒绝路径，或改坏了过滤器注册，本测试会立刻变红。</p>
+ *
+ * <h3>spec 041 / T12：入口与寻址键的迁移（断言一条未改）</h3>
+ * <p>回调收敛到<b>唯一入口</b> {@code POST /callbacks/channels/{channelCode}}，原先被本测试
+ * 打靶的 {@code POST /internal/payments/{paymentNo}/channel-callback} 已随 B4 删除。
+ * 两个变化都是<b>寻址方式</b>的变化，不是被测语义的变化：</p>
+ * <ul>
+ *   <li>路径：{@code /internal/payments/{paymentNo}/channel-callback} → {@code /callbacks/channels/MOCK}
+ *       （渠道码寻址，INV-6）；</li>
+ *   <li>支付单号：由<b>路径参数</b>改为<b>报文正文</b>的 {@code paymentNo}（mock 插件按此判别
+ *       支付 / 退款分支，见 {@code MockChannelAdapter#parseCallback}）。</li>
+ * </ul>
+ * <p>验签过滤器命中模式（{@code ChannelCallbackSignatureFilter.CALLBACK_PATH_PATTERN}）随之变为
+ * {@code /callbacks/channels/*}；本测试对「过滤器生效 / body 可重复读 / 放行后触达业务」三条
+ * 结构保证的断言<b>逐条保持原样</b>。</p>
+ *
+ * <h3>为什么建单用 {@code BUSINESS_UNKNOWN} 场景（装配调整，非断言调整）</h3>
+ * <p>唯一入口背后是 {@code DefaultPaymentResultPort}，它带<b>「渠道引用归属」串号校验</b>
+ * （FR-011：报文里的渠道引用必须与本单已记录的引用一致）。被删除的
+ * {@code ChannelCallbackController} <b>没有</b>这道校验（它直调 {@code PaymentCallbackService}），
+ * 所以改造前报文里写死 {@code "ch-ref-1"} 无所谓；并进唯一入口后，一个平台从未签发过的引用
+ * 会被正当地判为串号而拒绝，{@code handleCallback} 便不再被调用。</p>
+ * <p>本测试打靶的是<b>过滤器</b>，不是串号校验（后者由 {@code DefaultPaymentResultPort} 的
+ * 专属测试覆盖）。故按「能靠装配保住的断言一律保住」的处置原则，建单取
+ * {@code mock-scenario=BUSINESS_UNKNOWN}：受理时渠道<b>尚未返回引用</b>
+ * （{@code channel_reference} 落 NULL），串号校验因此无从触发——
+ * 这与改造前「无校验」的等效语义一致，报文与断言<b>一字未改</b>。</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
         "payment.security.channel-secret=test-channel-secret",
-        "payment.security.signature-replay-window-ms=300000"
+        "payment.security.signature-replay-window-ms=300000",
+        "payment.channel.mock-scenario=BUSINESS_UNKNOWN"
 })
 class ChannelCallbackSecurityTest {
 
@@ -71,9 +98,10 @@ class ChannelCallbackSecurityTest {
     @Test
     void validSignatureIsDelegatedToCallbackService() throws Exception {
         Payment payment = newPayment();
-        String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\",\"amountMinor\":100}";
+        String body = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\",\"amountMinor\":100}";
 
-        mockMvc.perform(signed(payment.getPaymentNo(), body)).andExpect(status().isOk());
+        mockMvc.perform(signed(body)).andExpect(status().isOk());
 
         ArgumentCaptor<ChannelResult> captor = ArgumentCaptor.forClass(ChannelResult.class);
         verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), captor.capture());
@@ -86,10 +114,11 @@ class ChannelCallbackSecurityTest {
     @Test
     void invalidSignatureIsAllowedWhileSignatureVerificationIsStubbed() throws Exception {
         Payment payment = newPayment();
-        String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
+        String body = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = now();
 
-        mockMvc.perform(callback(payment.getPaymentNo(), body, timestamp, "deadbeef"))
+        mockMvc.perform(callback(body, timestamp, "deadbeef"))
                 .andExpect(status().isOk());
 
         verify(callbackService, times(1)).handleCallback(eq(payment.getPaymentNo()), any());
@@ -99,9 +128,10 @@ class ChannelCallbackSecurityTest {
     @Test
     void missingSignatureHeadersIsAllowedWhileSignatureVerificationIsStubbed() throws Exception {
         Payment payment = newPayment();
-        String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
+        String body = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
 
-        mockMvc.perform(post(url(payment.getPaymentNo()))
+        mockMvc.perform(post(url())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
@@ -113,10 +143,11 @@ class ChannelCallbackSecurityTest {
     @Test
     void staleTimestampIsAllowedWhileReplayProtectionIsStubbed() throws Exception {
         Payment payment = newPayment();
-        String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
+        String body = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
         String staleTimestamp = String.valueOf(System.currentTimeMillis() - 600_000L);
 
-        mockMvc.perform(callback(payment.getPaymentNo(), body, staleTimestamp,
+        mockMvc.perform(callback(body, staleTimestamp,
                         SignatureVerifier.sign(SECRET, staleTimestamp, body)))
                 .andExpect(status().isOk());
 
@@ -127,11 +158,13 @@ class ChannelCallbackSecurityTest {
     @Test
     void tamperedBodyIsAllowedWhileSignatureVerificationIsStubbed() throws Exception {
         Payment payment = newPayment();
-        String signedBody = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
-        String tamperedBody = "{\"status\":\"FAILURE\",\"channelReference\":\"ch-ref-1\"}";
+        String signedBody = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
+        String tamperedBody = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                + "\",\"status\":\"FAILURE\",\"channelReference\":\"ch-ref-1\"}";
         String timestamp = now();
 
-        mockMvc.perform(callback(payment.getPaymentNo(), tamperedBody, timestamp,
+        mockMvc.perform(callback(tamperedBody, timestamp,
                         SignatureVerifier.sign(SECRET, timestamp, signedBody)))
                 .andExpect(status().isOk());
 
@@ -147,7 +180,10 @@ class ChannelCallbackSecurityTest {
     @Nested
     @SpringBootTest
     @AutoConfigureMockMvc
-    @TestPropertySource(properties = "payment.security.channel-secret=")
+    @TestPropertySource(properties = {
+            "payment.security.channel-secret=",
+            "payment.channel.mock-scenario=BUSINESS_UNKNOWN"
+    })
     class UnconfiguredSecret {
 
         @Autowired
@@ -161,10 +197,11 @@ class ChannelCallbackSecurityTest {
             Payment payment = applicationService.createPaymentIntent(
                     new CreatePaymentCommand("txn-" + UUID.randomUUID(), "order-1", "user-1", 100L, "CNY",
                             "idem-" + UUID.randomUUID(), "mock", "M001"));
-            String body = "{\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
+            String body = "{\"paymentNo\":\"" + payment.getPaymentNo()
+                    + "\",\"status\":\"SUCCESS\",\"channelReference\":\"ch-ref-1\"}";
             String timestamp = now();
 
-            mockMvc.perform(callback(payment.getPaymentNo(), body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body)))
+            mockMvc.perform(callback(body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body)))
                     .andExpect(status().isOk());
         }
     }
@@ -175,22 +212,22 @@ class ChannelCallbackSecurityTest {
                         "idem-" + UUID.randomUUID(), "mock", "M001"));
     }
 
-    private static String url(String paymentNo) {
-        return "/internal/payments/" + paymentNo + "/channel-callback";
+    /** 唯一回调入口（spec 041 / T12）：按渠道码精确寻址，支付单号由报文正文承载。 */
+    private static String url() {
+        return "/callbacks/channels/MOCK";
     }
 
     private static String now() {
         return String.valueOf(System.currentTimeMillis());
     }
 
-    private static MockHttpServletRequestBuilder signed(String paymentNo, String body) {
+    private static MockHttpServletRequestBuilder signed(String body) {
         String timestamp = now();
-        return callback(paymentNo, body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body));
+        return callback(body, timestamp, SignatureVerifier.sign(SECRET, timestamp, body));
     }
 
-    private static MockHttpServletRequestBuilder callback(String paymentNo, String body,
-                                                          String timestamp, String signature) {
-        return post(url(paymentNo))
+    private static MockHttpServletRequestBuilder callback(String body, String timestamp, String signature) {
+        return post(url())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .header("X-Channel-Timestamp", timestamp)

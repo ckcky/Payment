@@ -50,7 +50,7 @@ public class RefundResultProcessor {
     public enum Source {
         /** 渠道同步应答直接收敛（refund() 调用返回终态）。 */
         SYNC,
-        /** 渠道异步回调推送收敛（POST /internal/payments/refunds/{refundNo}/channel-callback）。 */
+        /** 渠道异步回调推送收敛（spec 041 / T12：经唯一入口 POST /callbacks/channels/{channelCode} 送达）。 */
         CHANNEL_CALLBACK,
         /** 人工裁定收敛（POST /internal/payments/refunds/{refundNo}/resolve）。 */
         RESOLVE,

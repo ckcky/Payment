@@ -18,9 +18,10 @@ import org.springframework.web.client.RestClient;
 /**
  * 渠道回调代理：以"渠道"身份向 payment-service 发送签名回调（ADR-0048 修订 + ADR-0052）。
  *
- * <p>upstream：{@code POST {payment}/internal/payments/{paymentNo}/channel-callback}（业务单号，ADR-0063），
+ * <p>upstream（spec 041 / T12 起）：{@code POST {payment}/callbacks/channels/MOCK}——
+ * <b>唯一回调入口</b>，按渠道码寻址；{@code paymentNo} 移入报文正文（原路径参数改为正文寻址键）。
  * 携带 {@code X-Channel-Timestamp} + {@code X-Channel-Signature}（HMAC-SHA256 over
- * {@code timestamp + "." + rawBody}，与 payment-service 的验签过滤器同一实现）。</p>
+ * {@code timestamp + "." + rawBody}，与 payment-service 的验签实现同一算法）。</p>
  *
  * <p>{@code signMode} 支持三种演示形态：</p>
  * <ul>
@@ -47,7 +48,7 @@ public class ChannelCallbackProxy {
 
     /**
      * 回调请求体：{@code {paymentNo, status, channelReference, reason, amountMinor, signMode}}。
-     * 仅 {@code paymentNo/status} 必填，其余可空（与 ChannelCallbackRequest 对齐）。
+     * 仅 {@code paymentNo/status} 必填，其余可空。
      */
     public record CallbackRequest(String paymentNo, String status, String channelReference,
                                   String reason, Long amountMinor, String signMode) {
@@ -62,6 +63,8 @@ public class ChannelCallbackProxy {
 
         // upstream body 只含业务字段（signMode 是本组件的演示开关，不下传）
         Map<String, Object> upstreamBody = new java.util.LinkedHashMap<>();
+        // spec 041 / T12：唯一入口按渠道码寻址，支付单号改由正文承载（原为路径参数）
+        upstreamBody.put("paymentNo", request.paymentNo());
         upstreamBody.put("status", request.status());
         upstreamBody.put("channelReference", request.channelReference());
         upstreamBody.put("reason", request.reason());
@@ -79,7 +82,7 @@ public class ChannelCallbackProxy {
         }
         signatureHeaders.forEach(headers::set);
 
-        String url = paymentUrl + "/internal/payments/" + request.paymentNo() + "/channel-callback";
+        String url = paymentUrl + "/callbacks/channels/MOCK";
         log.info("[demo] channel callback -> payment {} (signMode={}, status={})", url, mode, request.status());
         try {
             ResponseEntity<String> upstream = restClient.post()

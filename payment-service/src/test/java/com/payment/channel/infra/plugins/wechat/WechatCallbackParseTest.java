@@ -88,7 +88,7 @@ class WechatCallbackParseTest {
     void validNotificationRoundTrips() throws Exception {
         String body = notificationBody(SUCCESS_PLAINTEXT);
 
-        ParsedCallback parsed = plugin().parseCallback(envelope(body, null));
+        ParsedCallback.ParsedPayCallback parsed = plugin().parseCallback(envelope(body, null));
 
         assertThat(parsed.paymentNo()).isEqualTo("PM001");
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.SUCCESS);
@@ -167,7 +167,7 @@ class WechatCallbackParseTest {
     void pendingStatesMapToUnknown() throws Exception {
         for (String state : new String[]{"USERPAYING", "NOTPAY"}) {
             String body = notificationBody(SUCCESS_PLAINTEXT.replace("\"SUCCESS\"", "\"" + state + "\""));
-            ParsedCallback parsed = plugin().parseCallback(envelope(body, null));
+            ParsedCallback.ParsedPayCallback parsed = plugin().parseCallback(envelope(body, null));
 
             assertThat(parsed.result().status())
                     .as("trade_state=%s 不得被判为 FAILURE", state)
@@ -180,7 +180,7 @@ class WechatCallbackParseTest {
     void closedStatesMapToFailure() throws Exception {
         for (String state : new String[]{"CLOSED", "REFUND", "PAYERROR"}) {
             String body = notificationBody(SUCCESS_PLAINTEXT.replace("\"SUCCESS\"", "\"" + state + "\""));
-            ParsedCallback parsed = plugin().parseCallback(envelope(body, null));
+            ParsedCallback.ParsedPayCallback parsed = plugin().parseCallback(envelope(body, null));
 
             assertThat(parsed.result().status())
                     .as("trade_state=%s 应判 FAILURE", state)

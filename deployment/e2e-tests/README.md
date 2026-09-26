@@ -53,7 +53,8 @@ bash deployment/e2e-tests/run.sh -Dtest=RefundChainE2ETest#partialRefundChainKee
 - **对账差异**：审计 FAULT 走 DB 直改（备份→注入→检出→还原，闭环可验证）；
   渠道账单差异经 `POST /internal/reconciliation/statement-imports` 导入接口注入
   （032 实账化：内容 SHA-256 幂等；文件目录回退已删除，ADR-0080）。
-- **回调重复/乱序**：E2E 直发 `channel-callback` 端点（ADR-0025 验签占位放行）。
+- **回调重复/乱序**：E2E 直发渠道回调（spec 041 / T12 起为唯一入口
+  `POST /callbacks/channels/MOCK`，报文正文携带 `paymentNo`；ADR-0025 验签占位放行）。
 
 ## 快照基线更新（契约有意变更时）
 

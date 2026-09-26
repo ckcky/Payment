@@ -7,13 +7,13 @@ import com.payment.payment.application.port.DefaultPaymentResultPort;
 import com.payment.common.core.dye.DyeContext;
 import com.payment.common.core.observability.NoopBusinessMetrics;
 import com.payment.common.core.observability.StructuredAuditLogger;
-import com.payment.channel.api.dto.ChannelCallbackRequest;
 import com.payment.channel.application.ChannelCallbackHandler;
 import com.payment.channel.application.ChannelRegistry;
 import com.payment.channel.application.ChannelResult;
 import com.payment.channel.application.spi.ChannelCallbackEnvelope;
 import com.payment.channel.infra.plugins.alipay.AlipayChannelAdapter;
 import com.payment.channel.infra.plugins.alipay.AlipayGateway;
+import com.payment.channel.infra.plugins.mock.MockChannelAdapter;
 import com.payment.channel.support.StubChannelRegistry;
 import com.payment.payment.domain.Payment;
 import com.payment.channel.domain.ChannelOrder;
@@ -34,34 +34,34 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * spec 030 / T125 / SC-B2-06：JSON 回调路径与支付宝 notify 路径的<b>收敛行为一致</b>。
+ * spec 030 / T125 / SC-B2-06：两种回调报文形态的<b>收敛行为一致</b>。
  *
- * <p>两条入站路径形态迥异——
+ * <p>平台原生 JSON 报文与支付宝表单报文形态迥异——
  * <ul>
- *   <li><b>JSON 路径</b>：{@code POST /internal/payments/{no}/channel-callback}，
- *       验签在 {@code ChannelCallbackSignatureFilter}（过滤器层，未过则不触达 Controller）；
- *       报文是结构化 JSON，映射由 {@link ChannelCallbackRequest#toResult()} 完成；</li>
- *   <li><b>notify 路径</b>：{@code POST /internal/channels/ALIPAY/callback}，
- *       验签在支付宝插件内（{@code ChannelPlugin#parseCallback} 四步第一步）；
- *       报文是表单，映射由插件的 {@code parseCallback} 完成。</li>
+ *   <li><b>JSON 形态</b>：由 <b>MOCK 插件</b>解析（{@code MockChannelAdapter#parseCallback}，
+ *       平台自有格式，见其 javadoc）；</li>
+ *   <li><b>表单形态</b>：由 <b>ALIPAY 插件</b>解析（{@code AlipayChannelAdapter#parseCallback}，
+ *       渠道私有协议 + 插件内验签）。</li>
  * </ul>
  *
- * <p><b>T6 迁移说明</b>：notify 路径原先走支付宝专属端点 {@code AlipayNotifyController}
- * （FR-015 已删除），现走<b>通用端点</b>{@code ChannelPluginCallbackController} →
- * {@code ChannelCallbackHandler} 四步模板 → {@link PaymentResultPort}。
- * 本类因此装配的不再是那个专属 Controller，而是通用端点背后的真实链路——
- * <b>断言一条未改</b>：SC-B2-06 要锁的是「两条路收敛到同一处」，
- * 而这件事在迁移前后是同一个事实，只是入口换了名字。</p>
+ * <p><b>spec 041 / T12 迁移说明（断言一条未改）</b>：迁移前这两条路是<b>两个不同的 HTTP 端点</b>
+ * （{@code /internal/payments/{paymentNo}/channel-callback} 与
+ * {@code /internal/channels/{channelCode}/callback}）。T12 把回调收敛到<b>唯一入口</b>
+ * {@code POST /callbacks/channels/{channelCode}}，两条报文形态由<b>各自的插件</b>解析，
+ * 之后走<b>同一条</b>内核四步模板 → {@link PaymentResultPort}。
+ * SC-B2-06 要锁的是「两种形态收敛到同一处、语义不分叉」，这件事在迁移前后是同一个事实，
+ * 只是入口由两个变成一个、差异由「端点」下移到「插件」。故本类改为直接驱动
+ * {@link ChannelCallbackHandler}（端点背后的真实链路），断言逐条保持。</p>
  *
- * <p><b>三条必须一致的不变量</b>（这正是 SC-B2-06 怕的东西：两条路各自演化后语义分叉）：
+ * <p><b>三条必须一致的不变量</b>（这正是 SC-B2-06 怕的东西：两种形态各自演化后语义分叉）：
  * <ol>
  *   <li><b>同状态语义</b>：{@code TRADE_SUCCESS} 与 JSON {@code SUCCESS} 都必须收敛 SUCCEEDED；
  *       {@code TRADE_CLOSED} 与 {@code FAILURE} 都必须 FAILED；无结论态都必须 UNKNOWN 不推进；</li>
- *   <li><b>终态吸收一致</b>：两条路径都经同一 {@link PaymentCallbackService#handleCallback}，
+ *   <li><b>终态吸收一致</b>：两条路都经同一 {@code PaymentCallbackService#handleCallback}，
  *       重复/迟到回调的幂等吸收必须同口径；</li>
  *   <li><b>拒绝不留半写一致</b>：任一路径判定「不可信」时，状态一个字节都不许动。</li>
  * </ol>
- * 本类<b>不</b>断言两条路径的报文校验规则相同（金额/币种是 notify 独有的语义校验，
+ * 本类<b>不</b>断言两条路径的报文校验规则相同（金额/币种是支付宝 notify 独有的语义校验，
  * 层位与职责本就不同）——那是刻意的差异，不是分叉。
  */
 class PaymentCallbackPathParityTest {
@@ -108,11 +108,12 @@ class PaymentCallbackPathParityTest {
         attempts = stack.attempts;
         resetPayment();
 
-        // notify 路径的真实链路（T6 迁移后它的唯一入口）：
-        // ALIPAY 插件（验签桩恒通过）→ 网关域四步模板 → Payment 入向端口 → 既有收敛链路
-        AlipayChannelAdapter adapter = new AlipayChannelAdapter(
+        // 唯一入口背后的真实链路（T12）：两个插件 → 同一个内核四步模板 → Payment 入向端口 → 既有收敛链路
+        AlipayChannelAdapter alipay = new AlipayChannelAdapter(
                 AlipayChannelAdapter.Scenario.SUCCESS, new StubGateway(), true, APP_ID);
-        ChannelRegistry registry = new StubChannelRegistry().register(AlipayChannelAdapter.CODE, adapter);
+        ChannelRegistry registry = new StubChannelRegistry()
+                .register(AlipayChannelAdapter.CODE, alipay)
+                .register(MockChannelAdapter.CODE, new MockChannelAdapter(MockChannelAdapter.Scenario.SUCCESS));
         PaymentResultPort port = new DefaultPaymentResultPort(stack.callback, null,
                 payments, attempts, new NoopBusinessMetrics(), new StructuredAuditLogger());
         handler = new ChannelCallbackHandler(registry, port, new NoopBusinessMetrics());
@@ -137,17 +138,32 @@ class PaymentCallbackPathParityTest {
         return payments.findByPaymentNo(PAYMENT_NO).orElseThrow().getStatus();
     }
 
-    /** JSON 路径：模拟 Controller 的入站映射（request.toResult() + handleCallback）。 */
-    private void viaJsonPath(ChannelCallbackRequest request) {
-        stack.callback.handleCallback(PAYMENT_NO, request.toResult());
+    /** 平台原生 JSON 报文（MOCK 插件的解析格式；T12 前由已删除的 payment 侧 JSON 端点承载）。 */
+    private static String json(String status, String channelReference, String reason, Long amountMinor) {
+        StringBuilder sb = new StringBuilder("{\"paymentNo\":\"").append(PAYMENT_NO)
+                .append("\",\"status\":\"").append(status).append('"');
+        if (channelReference != null) {
+            sb.append(",\"channelReference\":\"").append(channelReference).append('"');
+        }
+        if (reason != null) {
+            sb.append(",\"reason\":\"").append(reason).append('"');
+        }
+        if (amountMinor != null) {
+            sb.append(",\"amountMinor\":").append(amountMinor).append(",\"currencyCode\":\"CNY\"");
+        }
+        return sb.append('}').toString();
+    }
+
+    /** JSON 形态路径：经唯一入口由 MOCK 插件解析后全链路收敛。 */
+    private void viaJsonPath(String jsonBody) {
+        handler.handle(MockChannelAdapter.CODE, ChannelCallbackEnvelope.json(Map.of(), jsonBody));
     }
 
     /**
-     * notify 路径：支付宝表单报文经<b>通用端点</b>全链路。
+     * 表单形态路径：支付宝表单报文经<b>唯一入口</b>由 ALIPAY 插件解析后全链路。
      *
-     * <p>与旧专属端点的对应关系：验签（插件 parseCallback ①）、身份（②）、
-     * 报文翻译（④）合并在插件里一次完成；业务校验（引用/金额/币种）在
-     * {@code DefaultPaymentResultPort}；收敛仍在同一 {@code handleCallback}。</p>
+     * <p>验签（插件 parseCallback ①）、身份（②）、报文翻译（④）合并在插件里一次完成；
+     * 业务校验（引用/金额/币种）在 {@code DefaultPaymentResultPort}；收敛仍在同一 {@code handleCallback}。</p>
      */
     private void viaNotifyPath(String tradeStatus) {
         Map<String, String> params = new HashMap<>();
@@ -164,7 +180,7 @@ class PaymentCallbackPathParityTest {
     @Test
     @DisplayName("成功：JSON SUCCESS 与 notify TRADE_SUCCESS 都收敛 SUCCEEDED [SC-B2-06]")
     void successSemanticsMatch() {
-        viaJsonPath(new ChannelCallbackRequest("SUCCESS", "ch-1", null, 10_00L));
+        viaJsonPath(json("SUCCESS", "ch-1", null, 10_00L));
         assertThat(status()).as("JSON 路径").isEqualTo(PaymentStatus.SUCCEEDED);
 
         resetPayment();
@@ -184,7 +200,7 @@ class PaymentCallbackPathParityTest {
     @Test
     @DisplayName("失败：JSON FAILURE 与 notify TRADE_CLOSED 都收敛 FAILED [SC-B2-06]")
     void failureSemanticsMatch() {
-        viaJsonPath(new ChannelCallbackRequest("FAILURE", "ch-1", "channel declined", 10_00L));
+        viaJsonPath(json("FAILURE", "ch-1", "channel declined", 10_00L));
         assertThat(status()).as("JSON 路径").isEqualTo(PaymentStatus.FAILED);
 
         resetPayment();
@@ -197,7 +213,7 @@ class PaymentCallbackPathParityTest {
     @Test
     @DisplayName("无结论：JSON UNKNOWN 与 notify WAIT_BUYER_PAY 都**不落终态**，收敛 UNKNOWN [SC-B2-06]")
     void unknownSemanticsMatch() {
-        viaJsonPath(new ChannelCallbackRequest("UNKNOWN", "ch-1", "no conclusion", null));
+        viaJsonPath(json("UNKNOWN", "ch-1", "no conclusion", null));
         assertThat(status()).as("JSON 路径").isEqualTo(PaymentStatus.UNKNOWN);
 
         resetPayment();
@@ -212,7 +228,7 @@ class PaymentCallbackPathParityTest {
         assertThat(status()).isNotIn(PaymentStatus.SUCCEEDED, PaymentStatus.FAILED);
 
         resetPayment();
-        viaJsonPath(new ChannelCallbackRequest("UNKNOWN", null, "timeout", null));
+        viaJsonPath(json("UNKNOWN", null, "timeout", null));
         assertThat(status()).isNotIn(PaymentStatus.SUCCEEDED, PaymentStatus.FAILED);
     }
 
@@ -221,8 +237,8 @@ class PaymentCallbackPathParityTest {
     @Test
     @DisplayName("幂等：两条路径的重复回调都被终态吸收，状态稳定 [SC-B2-06]")
     void duplicateAbsorptionMatches() {
-        viaJsonPath(new ChannelCallbackRequest("SUCCESS", "ch-1", null, 10_00L));
-        viaJsonPath(new ChannelCallbackRequest("SUCCESS", "ch-1", null, 10_00L));
+        viaJsonPath(json("SUCCESS", "ch-1", null, 10_00L));
+        viaJsonPath(json("SUCCESS", "ch-1", null, 10_00L));
         assertThat(status()).as("JSON 路径重复").isEqualTo(PaymentStatus.SUCCEEDED);
 
         resetPayment();
@@ -234,8 +250,8 @@ class PaymentCallbackPathParityTest {
     @Test
     @DisplayName("幂等：成功后迟到的失败回调**两条路径都**被吸收，不翻盘 [SC-B2-06]")
     void lateFailureAbsorbedOnBothPaths() {
-        viaJsonPath(new ChannelCallbackRequest("SUCCESS", "ch-1", null, 10_00L));
-        viaJsonPath(new ChannelCallbackRequest("FAILURE", "ch-1", "late failure", 10_00L));
+        viaJsonPath(json("SUCCESS", "ch-1", null, 10_00L));
+        viaJsonPath(json("FAILURE", "ch-1", "late failure", 10_00L));
         assertThat(status()).as("JSON 路径：成功后迟到失败不翻盘").isEqualTo(PaymentStatus.SUCCEEDED);
 
         resetPayment();
@@ -247,7 +263,7 @@ class PaymentCallbackPathParityTest {
     @Test
     @DisplayName("幂等：attempt 终态在两条路径下同样被吸收（不重复迁移）[SC-B2-06]")
     void attemptTerminalAbsorptionMatches() {
-        viaJsonPath(new ChannelCallbackRequest("SUCCESS", "ch-1", null, 10_00L));
+        viaJsonPath(json("SUCCESS", "ch-1", null, 10_00L));
         ChannelOrderStatus afterJson = attempts.findByPaymentNo(PAYMENT_NO).get(0).getStatus();
         assertThat(afterJson).isEqualTo(ChannelOrderStatus.SUCCEEDED);
 

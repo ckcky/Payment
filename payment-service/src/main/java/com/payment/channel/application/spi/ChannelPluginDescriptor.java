@@ -41,10 +41,24 @@ public record ChannelPluginDescriptor(String code,
         }
     }
 
-    /** 无回调能力的插件（如纯 mock / 仅主动查询型渠道）。 */
+    /** 无回调能力的插件（如仅主动查询型渠道）。 */
     public static ChannelPluginDescriptor withoutCallback(String code, String displayName,
                                                           Set<PaymentScene> supportedScenes,
                                                           boolean supportsRealMode) {
         return new ChannelPluginDescriptor(code, displayName, supportedScenes, supportsRealMode, null);
+    }
+
+    /**
+     * 有回调能力的插件（spec 041 / T12）。
+     *
+     * <p>{@code callbackPath} 是通用回调端点 {@code POST /callbacks/channels/{channelCode}}
+     * 之后用于<b>识别</b>的路径段（与渠道码同名）。声明它即表示「本渠道接收异步回调」，
+     * 通用端点据此拒收未声明的渠道，而不是先解析再报错。</p>
+     */
+    public static ChannelPluginDescriptor withCallback(String code, String displayName,
+                                                       Set<PaymentScene> supportedScenes,
+                                                       boolean supportsRealMode,
+                                                       String callbackPath) {
+        return new ChannelPluginDescriptor(code, displayName, supportedScenes, supportsRealMode, callbackPath);
     }
 }

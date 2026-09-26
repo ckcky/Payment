@@ -237,7 +237,9 @@ public class WechatChannelPlugin extends AbstractChannelPlugin {
      * {@link BizException}，此处的代码<b>不会</b>被执行，因此不会产生任何状态推进（INV-10）。</p>
      */
     @Override
-    public ParsedCallback parseCallback(ChannelCallbackEnvelope envelope) {
+    // 协变返回类型（spec 041 / T12）：真实渠道只产生支付回调解析产物，
+    // 声明更具体的类型让调用方（含既有解析测试）无需向下转型。
+    public ParsedCallback.ParsedPayCallback parseCallback(ChannelCallbackEnvelope envelope) {
         Map<String, String> headers = envelope.headers();
         String signature = headers.get(HEADER_SIGNATURE);
         String timestamp = headers.get(HEADER_TIMESTAMP);
@@ -264,7 +266,7 @@ public class WechatChannelPlugin extends AbstractChannelPlugin {
                         ? ParsedCallback.NotifiedAmount.UNKNOWN
                         : ParsedCallback.NotifiedAmount.of(notification.amountTotalMinor(),
                                 notification.currency().toUpperCase(Locale.ROOT));
-        return new ParsedCallback(paymentNo, result, amount);
+        return ParsedCallback.pay(paymentNo, result, amount);
     }
 
     /** 微信应答体：`{"code":"SUCCESS","message":"成功"}` 才算「平台已收到」。 */

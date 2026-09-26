@@ -151,23 +151,24 @@ class AccessLogFilterTest {
     @Test
     void uriNormalizedToBestMatchingPatternWhenRouted() throws ServletException, IOException {
         // spec 035 §6.2 纪律 2：命中 Spring MVC 路由后 uri 记 {ref} 模式，不落具体单号
+        // 样例取 spec 041 / T12 后的唯一回调入口（原 /internal/payments/{ref}/channel-callback 已删除）
         MockHttpServletRequest request = new MockHttpServletRequest(
-                "POST", "/internal/payments/PM20260922001/channel-callback");
+                "POST", "/callbacks/channels/MOCK");
         request.setContentType("application/json");
         request.setContent("{\"status\":\"SUCCESS\"}".getBytes(StandardCharsets.UTF_8));
         FilterChain chain = (req, resp) -> {
             // DispatcherServlet 命中 handler 后写入的属性——测试在链路内模拟
             req.setAttribute(org.springframework.web.servlet.HandlerMapping
                     .BEST_MATCHING_PATTERN_ATTRIBUTE,
-                    "/internal/payments/{ref}/channel-callback");
+                    "/callbacks/channels/{channelCode}");
         };
 
         filter.doFilter(request, new MockHttpServletResponse(), chain);
 
         assertThat(appender.list).hasSize(1);
         String msg = appender.list.get(0).getFormattedMessage();
-        assertThat(msg).contains("uri=/internal/payments/{ref}/channel-callback")
-                .doesNotContain("PM20260922001");
+        assertThat(msg).contains("uri=/callbacks/channels/{channelCode}")
+                .doesNotContain("/callbacks/channels/MOCK");
     }
 
     @Test

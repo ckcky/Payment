@@ -30,7 +30,7 @@ import com.payment.payment.web.CachedBodyHttpServletRequest;
  * {@code docs/adr/0024-risk-security-decisions.md} ADR-0025。</p>
  *
  * <p><b>注册方式</b>：由 {@link WebConfig} 以 {@code FilterRegistrationBean} 显式注册
- * （url pattern 用 Servlet 前缀匹配 {@code /internal/payments/*}，具体路径在本过滤器内用
+ * （url pattern 用 Servlet 前缀匹配 {@code /callbacks/*}，具体路径在本过滤器内用
  * Ant 匹配判定）。不用 {@code @Component} 自动注册，是因为 Spring Boot 的 MockMvc 只收集
  * {@code FilterRegistrationBean}；若只注册为普通 {@code Filter} bean，集成测试会绕过过滤器，
  * 出现「测试全绿、生产行为不一致」的假绿。</p>
@@ -39,14 +39,15 @@ public class ChannelCallbackSignatureFilter extends OncePerRequestFilter {
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
-    /** 支付回调路径模式：{@code /internal/payments/{paymentNo}/channel-callback}。 */
-    public static final String CALLBACK_PATH_PATTERN = "/internal/payments/*/channel-callback";
-
-    /** 退款回调路径模式（spec 019 / D7）：{@code /internal/payments/refunds/{refundNo}/channel-callback}。 */
-    public static final String REFUND_CALLBACK_PATH_PATTERN = "/internal/payments/refunds/*/channel-callback";
-
-    private static final String[] CALLBACK_PATH_PATTERNS =
-            {CALLBACK_PATH_PATTERN, REFUND_CALLBACK_PATH_PATTERN};
+    /**
+     * 唯一回调入口路径模式（spec 041 / T12）：
+     * {@code /callbacks/channels/{channelCode}}。
+     *
+     * <p>T12 之前这里是两条模式（支付 / 退款各一条 {@code /internal/payments/**} 路径）；
+     * 两条路径随 B4/B5 删除后，只剩唯一入口这一条。过滤器骨架保留的意义不变：
+     * 验签必须在<b>过滤器层</b>完成（未过则不触达 Controller）。</p>
+     */
+    public static final String CALLBACK_PATH_PATTERN = "/callbacks/channels/*";
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -54,12 +55,7 @@ public class ChannelCallbackSignatureFilter extends OncePerRequestFilter {
         if (path == null) {
             return true;
         }
-        for (String pattern : CALLBACK_PATH_PATTERNS) {
-            if (PATH_MATCHER.match(pattern, path)) {
-                return false;
-            }
-        }
-        return true;
+        return !PATH_MATCHER.match(CALLBACK_PATH_PATTERN, path);
     }
 
     @Override

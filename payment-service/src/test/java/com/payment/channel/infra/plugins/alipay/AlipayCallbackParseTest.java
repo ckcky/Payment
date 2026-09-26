@@ -93,7 +93,7 @@ class AlipayCallbackParseTest {
     @Test
     @DisplayName("TRADE_SUCCESS ⇒ success，并带渠道流水号 [FR-204]")
     void tradeSuccessMapsToSuccess() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", "10.00"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", "10.00"));
 
         assertThat(parsed.paymentNo()).isEqualTo(PAYMENT_NO);
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.SUCCESS);
@@ -103,14 +103,14 @@ class AlipayCallbackParseTest {
     @Test
     @DisplayName("TRADE_FINISHED 与 TRADE_SUCCESS 同口径（已完结也是成功）[FR-204]")
     void tradeFinishedMapsToSuccess() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("TRADE_FINISHED", "ch-1", "10.00"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("TRADE_FINISHED", "ch-1", "10.00"));
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.SUCCESS);
     }
 
     @Test
     @DisplayName("TRADE_CLOSED ⇒ 业务失败（渠道明确关闭，不重试）[FR-204]")
     void tradeClosedMapsToBusinessFailure() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("TRADE_CLOSED", "ch-1", "10.00"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("TRADE_CLOSED", "ch-1", "10.00"));
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.FAILURE);
         assertThat(parsed.result().retryable()).isFalse();
     }
@@ -118,14 +118,14 @@ class AlipayCallbackParseTest {
     @Test
     @DisplayName("WAIT_BUYER_PAY ⇒ 无结论不推进（买家还没付 ≠ 这笔不会付）[FR-204]")
     void waitBuyerPayMapsToBusinessUnknown() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("WAIT_BUYER_PAY", "ch-1", "10.00"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("WAIT_BUYER_PAY", "ch-1", "10.00"));
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.UNKNOWN);
     }
 
     @Test
     @DisplayName("未知状态同样无结论：绝不把不认识的状态当成功 [FR-204]")
     void unknownStatusMapsToBusinessUnknown() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("SOMETHING_NEW", "ch-1", "10.00"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("SOMETHING_NEW", "ch-1", "10.00"));
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.UNKNOWN);
     }
 
@@ -134,7 +134,7 @@ class AlipayCallbackParseTest {
     @Test
     @DisplayName("金额被翻译成「分」，币种按支付宝境内语义取 CNY [FR-210]")
     void amountIsTranslatedToMinorUnits() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", "10.00"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", "10.00"));
 
         assertThat(parsed.notifiedAmount().isKnown()).isTrue();
         assertThat(parsed.notifiedAmount().amountMinor()).isEqualTo(1000L);
@@ -144,7 +144,7 @@ class AlipayCallbackParseTest {
     @Test
     @DisplayName("报文无金额 ⇒ UNKNOWN（内核据此跳过校验，绝不把「没读到」当成 0 元）[FR-210]")
     void missingAmountIsUnknownNotZero() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", null));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", null));
 
         assertThat(parsed.notifiedAmount()).isEqualTo(ParsedCallback.NotifiedAmount.UNKNOWN);
         assertThat(parsed.notifiedAmount().isKnown()).isFalse();
@@ -153,7 +153,7 @@ class AlipayCallbackParseTest {
     @Test
     @DisplayName("金额不是合法数值 ⇒ 同样 UNKNOWN，不臆断出一个假金额")
     void malformedAmountIsUnknown() {
-        ParsedCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", "not-a-number"));
+        ParsedCallback.ParsedPayCallback parsed = adapter.parseCallback(envelope("TRADE_SUCCESS", "ch-1", "not-a-number"));
         assertThat(parsed.notifiedAmount().isKnown()).isFalse();
     }
 
@@ -211,7 +211,7 @@ class AlipayCallbackParseTest {
         params.put("app_id", "sandbox-app-1");
         params.put("sign", "fake");
 
-        ParsedCallback parsed = configured.parseCallback(ChannelCallbackEnvelope.form(Map.of(), params));
+        ParsedCallback.ParsedPayCallback parsed = configured.parseCallback(ChannelCallbackEnvelope.form(Map.of(), params));
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.SUCCESS);
     }
 

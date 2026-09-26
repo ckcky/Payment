@@ -162,7 +162,7 @@ class WechatStubServerTest {
         assertThat(refunded.channelReference()).isEqualTo("5000000000000000000000001");
 
         // ---- ④ 回调 ----
-        ParsedCallback parsed = plugin.parseCallback(signedNotification());
+        ParsedCallback.ParsedPayCallback parsed = plugin.parseCallback(signedNotification());
         assertThat(parsed.paymentNo()).isEqualTo("PM001");
         assertThat(parsed.result().status()).isEqualTo(ChannelResult.Status.SUCCESS);
         assertThat(parsed.notifiedAmount().amountMinor()).isEqualTo(100L);
