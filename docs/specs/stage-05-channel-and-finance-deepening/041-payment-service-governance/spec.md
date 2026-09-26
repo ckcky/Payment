@@ -1,10 +1,33 @@
 # 041-payment-service-governance — Spec
 
-> **Status**: Draft
+> **Status**: Approved（2026-09-26 负责人裁决批准立项，H-041-1~3 已裁决）
 > **Date**: 2026-09-26
 > **Stage / Path**: `docs/specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/`
-> **Related ADR**: 新增 ADR（Payment/Channel 双域重构与 API 一次性替换，实施前须 Accepted）
+> **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟡 **Proposed**，2026-09-26 起草，待负责人 Accept；**Supersedes ADR-0072 §6**）
 > **Standard**: [spec-standard.md](../../../standards/spec-standard.md)
+>
+> ⚠️ **实施门禁（不得跳过）**：`acceptance.md` §1 前置条件 1 要求「**新 ADR 已 Accepted**；
+> Feature 已进入 `In Development` 或更高状态」。当前 ADR-0084 为 **Proposed**，
+> 且 H-041-4~6（Supersedes ADR-0072 §6 / ADR-0083 排除路径补 `/callbacks/**` / spec 040 置 Superseded）待裁决
+> ⇒ **Accept 前禁止动任何代码**；本轮只完成 T01（ADR 草案）、T02（四件套与索引）、T03（迁移映射）。
+
+### 0.5 现状与目标结构的差异（2026-09-26 实测核对，实施前必读）
+
+spec 正文按**目标结构**书写，实施者**MUST NOT**照字面把目标当现状。以下为实测差异：
+
+| 项 | spec 目标 | 现状（master `5ce4853`） | 实施含义 |
+|---|---|---|---|
+| 渠道域包名 | `com.payment.channel` | `com.payment.channelgateway`（63 生产 / 26 测试文件） | **改名**，不是新建 |
+| 挂账域 | 无独立包 | `com.payment.posting.{api,application,domain,infra}`（13 生产 / 1 测试） | **并入** `payment` |
+| 旁路包 | 只有四层 | `payment/{limit,mq,web}` + `channelgateway/web` | **收进四层** |
+| 插件目录 | `plugins/<vendor>/` 自包含 | 完整：`infra/wechat/`、`infra/stripe/`；半成品：`infra/alipay/`（缺 `AlipayChannelAdapter` 与 `config/AlipaySandboxProperties`，二者在目录外）；未成型：`DouyinChannelAdapter`、`MockChannelAdapter` 为扁平文件 | 逐渠道补齐（T11） |
+| 渠道单类名 | `ChannelOrder` | 已是 `ChannelOrder`（旧 041 `57e12c3` 由 `PaymentAttempt` 正名而来），表 `channel_orders` | **保留**，只迁包路径 |
+| 事务边界 | 两域不共享事务 | 已拆（旧 041 `57e12c3` D2） | 与 **ADR-0072 §6** 冲突 ⇒ 由 ADR-0084 决策 6 收口 |
+| 回调端点 | `/callbacks/channels/{channelCode}` | `/internal/channels/{channelCode}/callback` | 改名后**脱离 ADR-0083 的 `/internal/channels/**` 排除路径** ⇒ 必须同步补 `/callbacks/**`（ADR-0084 X-2） |
+| spec 040 | 「可由本 Feature 吸收」 | 040 为 Draft，38 个任务全未勾选 | 须显式置 `Superseded by 041` |
+
+**实测规模**：payment-service 187 个生产 java / 18,493 行；78 个测试 java / 12,351 行。
+旧端点路径引用面 130+ 文件（含 docs），非文档约 40 个。
 
 ## 1. 背景（Problem）
 

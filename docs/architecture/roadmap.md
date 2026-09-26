@@ -93,7 +93,10 @@
   - 裁决总表见 `docs/adr/README.md` 与各 ADR 文档头部；裁剪落地形态见 `docs/architecture/technical-solution.md` §2.4。
 - **当前阻塞**：无 ADR 阻塞。已知遗留风险：① N1（对账事实无商户维度，可能跨商户串账）已在 ADR-0023 记录，待单独立项；② 鉴权/验签空实现带来的部署风险（payment-service 不得暴露公网、`/internal/**` 依赖网络层隔离），见 §2.4 与 `009-risk-security/spec.md` §6；③ **014 Redis 引入未经 roadmap §7 论证闸门**（ADR-0044 偏离，013/014 代码与 spec 已收口，见 ADR-0053）：k6 压测基线 + 引入论证证据待补；全栈压测（`performance/catalog-seckill-k6.js`）本环境未实跑（Docker/MySQL 不可用）。
 - **安全能力最终形态（2026-08-31）**：鉴权与验签**只保留接入点、校验为空实现**（`InternalServiceAuthInterceptor#verifyServiceToken` / `ChannelCallbackSignatureFilter#verifySignature` 恒放行）；脱敏、风控、出站令牌**代码已删除**。`009-risk-security` T013（出站令牌闭环）**整条已回退**，不再存在「开启顺序」，`docs/operations/runbook.md` §4 同步修订。
-- **`041-payment-service-governance` 为 Draft（2026-09-26，待负责人审阅）**：拟对整个 payment-service 实施 Payment/Channel 双域四层重构，统一以 `ChannelGateway`（Payment → Channel）与 `PaymentResultPort`（Channel → Payment）隔离交互；API 允许仓内一次性替换，开发/测试环境允许清库重建 Schema。不得在新增 ADR 获批前进入实现；详见 `docs/specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/`。
+- **`041-payment-service-governance` 为 Approved（2026-09-26 负责人裁决批准立项，H-041-1~3 已裁决；**ADR-0084 为 Proposed，待 Accept，Accept 前不得动代码**）**：对整个 payment-service 实施 Payment/Channel 双域四层重构（`channelgateway`→`channel` 正名、`posting` 并入 `payment`、四个旁路包收进四层），统一以 `ChannelGateway`（Payment → Channel）与 `PaymentResultPort`（Channel → Payment）隔离交互；API 允许仓内一次性替换（禁止新旧混跑、不保留兼容层），开发/测试环境允许清库重建 Schema（`APP_ENV` fail-closed）。
+  - **已完成**：T01（ADR-0084 草案 + ADR 索引/traceability/ADR-0072 双向 Supersede 登记）、T02（四件套 + specs 索引 + 实测回归基线 **1086 tests / 0F / 0E**）、T03（迁移映射清单，含 12 个 Controller、4 组路径变更、9 个 spec 未给出目标的端点缺口）。
+  - **Supersedes ADR-0072 §6「分层 ≠ 拆事务」**（旧 041 `57e12c3` 已按两域不共享事务落地，属 Code ≠ ADR 的收口）；**须同步 ADR-0083 排除路径补 `/callbacks/**`**（新回调端点 `/callbacks/channels/{channelCode}` 脱离原 `/internal/channels/**` 排除范围，不补即重开渠道报文进日志的漏洞）。
+  - 详见 `docs/specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/`。
 
 ## Next Feature
 

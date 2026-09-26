@@ -3,6 +3,11 @@
 # ADR-0072: payment-service 两层结构——payment 支付层与 channelAttempt 渠道层的职责切分
 
 - 状态：✅ **Accepted**（2026-09-16 提出，2026-09-16 负责人裁决接受并随 spec 028 落地）
+  > ⚠️ **Partially Superseded by [ADR-0084](0084-payment-channel-governance.md)（2026-09-26 起草，🟡 Proposed，待负责人 Accept）——仅取代本文 §6「事务边界：分层 ≠ 拆事务」**；
+  > 其余条款（职责与写入口分离、退款 attempt 渠道取自原始支付记录、渠道身份 `channelCode()`）继续有效。
+  > 取代原因：旧 spec-041（`57e12c3`，2026-09-26 已合入 master）已按「两域不共享事务、用最终一致换模块自治」落地，
+  > spec 041 进一步要求「Payment 本地事务只保护 Payment 事实；Channel 本地事务只保护 ChannelOrder」，与 §6 直接冲突。
+  > 依 [adr-standard §5.3](../standards/adr-standard.md) 双向登记；**ADR-0084 Accept 前 §6 仍为现行约束**。
 - 关联：ADR-0054（支付编排职责归位——本 ADR 细化其「payment 层编排支付指令」的内部结构）、ADR-0064（一交易多支付单 / 三渠道 mock）、ADR-0012（双响应码错误分类）、ADR-0063（跨系统一律业务单号）、ADR-0049（配错不许静默走默认）、ADR-0073（渠道路由——本 ADR 的直接下游）、[technical-solution §3.1](../architecture/technical-solution.md)、[payment-service.md](../architecture/systems/payment-service.md)
 - 需求源头：负责人 2026-09-16 对 payment-service 结构的裁决——
   > 「之前设计的时候明明说了在 payment-service 里是有两层：一个 payment 支付层，一个 channelAttempt 渠道层。在 payment 层编排支付指令（比如说账务这些），然后调用 channelAttempt 渠道层进行外部渠道的调用。那么 payment 表就应该是在 payment 层的时候记录，在 channelAttempt 返回的时候更新。channelAttempt 渠道层负责具体渠道的实现和抽象，payment 层压根不关心外部渠道是如何实现的，只管调用就行了。但是在代码里我看 channelAttempt 和 payment 表是一起记录更新的，更离谱的是在渠道层完全一点没有看到外部渠道的影子，连桩实现都没有。」
@@ -92,7 +97,12 @@ AbstractMockChannelAdapter（抽象，非 Bean，承载 4 件横切行为）
 
 > 这条同时是 ADR-0073 的「反向按记录解析」不变量——退款换渠道 = 钱退错地方。S5 的硬编码 `"mock"` 必须随本 ADR 一并消除。
 
-### 6. 事务边界：分层 ≠ 拆事务
+### 6. 事务边界：分层 ≠ 拆事务 　⚠️ **本节已被 [ADR-0084](0084-payment-channel-governance.md) 取代（Superseded）**
+
+> **⚠️ 本节自 ADR-0084 Accept 起失效**。取代条款见 [ADR-0084 决策 6](0084-payment-channel-governance.md)：
+> **Payment 本地事务只保护 Payment 事实与本域失败台账；Channel 本地事务只保护 ChannelOrder；两域不共享事务。**
+> 补偿：渠道收敛后经 `PaymentResultPort` 通知 + Payment 侧终态吸收 + UNKNOWN 保留可收敛事实 + 对账与人工显式命令兜底。
+> 本节原文保留作历史（ADR 不可变，只以 Supersede 演进）：
 
 两层**可以且应当共享同一个本地事务**——`payments` 与 `payment_attempts` 的状态必须同时迁移，否则出现 `payment=SUCCEEDED / attempt=PENDING` 之类的永久不一致。
 

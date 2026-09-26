@@ -1,13 +1,22 @@
 # 041-payment-service-governance — Tasks
 
-> **Status**: Draft
-> **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Acceptance**: [acceptance.md](acceptance.md)
+> **Status**: Approved（2026-09-26 负责人裁决批准立项；**ADR-0084 Accept 前不进入 In Development，T04 起不得开工**）
+> **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Acceptance**: [acceptance.md](acceptance.md) ｜ **Migration Map**: [migration-map.md](migration-map.md)
+> **Related ADR**: [ADR-0084](../../../adr/0084-payment-channel-governance.md)（🟡 Proposed，2026-09-26 起草，待负责人 Accept）
 
 ## 0. 决策与迁移基线
 
-- [ ] T01 `docs/adr/0084-payment-channel-governance.md`：记录双域边界、一次性 API 替换、开发/测试清库；更新 ADR 索引与追溯。依赖：无。追溯：FR-001/011/012。验收：ADR Accepted。
-- [ ] T02 `docs/specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/`：完善四件套和需求 checklist；更新 Specs 索引与 Roadmap 为 Draft。依赖：T01。追溯：FR-015。验收：docs lint。
-- [ ] T03 `payment-service/`、上下游服务与 `deployment/`：建立“旧包/类/API/DTO/配置/Schema/调用方→新目标”逐项映射。依赖：T02。追溯：FR-013/015。验收：映射覆盖生产、测试、脚本与文档。
+- [x] T01 `docs/adr/0084-payment-channel-governance.md`：记录双域边界、一次性 API 替换、开发/测试清库；更新 ADR 索引与追溯。依赖：无。追溯：FR-001/011/012。验收：ADR Accepted。
+  - **执行记录（2026-09-26）**：ADR-0084 已起草（Status 🟡 **Proposed**，待负责人 Accept）。七条决策：① 双域对称四层（`channelgateway`→`channel` 正名、`posting` 并入 `payment`、四个旁路包收进四层）；② `ChannelGateway`/`PaymentResultPort` 双向端口 + 跨域 DTO 入 `common-dto`；③ 一次性替换 9 组 HTTP API，禁止兼容层；④ 仅 dev/test 清库重建（`APP_ENV` fail-closed）；⑤ 插件目录自包含；⑥ **Supersedes ADR-0072 §6**（两域不共享事务）；⑦ ArchUnit 双域/四层/Controller/持久化门禁 + 阳性对照。
+  - **预检新发现并已登记 ADR-0084「交叉影响」**：X-1 ADR-0072 §6 被旧 041 `57e12c3` 的代码事实推翻（Code ≠ ADR）；X-2 新回调路径 `/callbacks/channels/**` **脱离** ADR-0083 的 `/internal/channels/**` 排除路径 ⇒ 不补即重开「渠道报文含 `sign` 进 ACCESS_LOG」的漏洞；X-4 spec 040 须置 `Superseded by 041`。
+  - **双向登记已完成**：`docs/adr/README.md`（索引表 / 完整文件清单 43 文件 / 速查 / 下一可用编号 → 0085）与 `docs/adr/traceability.md` 已同步；`docs/adr/0072-two-layer-channel-architecture.md` 头部与 §6 已补 `Partially Superseded by ADR-0084（仅 §6）`。
+  - **遗留**：待负责人 **Accept**（H-041-4~6）。
+- [x] T02 `docs/specs/stage-05-channel-and-finance-deepening/041-payment-service-governance/`：完善四件套和需求 checklist；更新 Specs 索引与 Roadmap。依赖：T01。追溯：FR-015。验收：docs lint。
+  - **执行记录（2026-09-26）**：四件套状态 `Draft` → `Approved`（H-041-1~3 已裁决；并注明 ADR Accept 前不进 In Development）；spec.md 新增 **§0.5「现状与目标结构的差异」**（8 项实测漂移，防止照字面把目标当现状）；acceptance.md 补实测回归基线与「交付记录」。
+  - **遗留**：docs lint 待跑；Roadmap 与 Specs 索引待同步（本轮一并完成）。
+- [x] T03 `payment-service/`、上下游服务与 `deployment/`：建立"旧包/类/API/DTO/配置/Schema/调用方→新目标"逐项映射。依赖：T02。追溯：FR-013/015。验收：映射覆盖生产、测试、脚本与文档。
+  - **执行记录（2026-09-26）**：产出 [migration-map.md](migration-map.md)，覆盖 5 大类：包/类 → 目标、API 端点 → 新端点（含调用方清单）、配置、Schema、调用方（上下游服务 + deployment）。
+  - **统计**：12 个 Controller、4 组端点路径变更、130+ 引用文件（含 docs，非文档约 40）、4 个下游服务、6 处 deployment。
 
 ## 1. 契约与目标骨架
 

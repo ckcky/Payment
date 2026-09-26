@@ -1,14 +1,18 @@
 # 041-payment-service-governance — Acceptance
 
-> **Status**: Draft
-> **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Tasks**: [tasks.md](tasks.md)
+> **Status**: Approved（2026-09-26 负责人裁决批准立项；**ADR-0084 Accept 前不进入 In Development**）
+> **Spec**: [spec.md](spec.md) ｜ **Plan**: [plan.md](plan.md) ｜ **Tasks**: [tasks.md](tasks.md) ｜ **Migration Map**: [migration-map.md](migration-map.md)
 
 ## 1. 验收前置条件
 
 1. 新 ADR 已 Accepted；Feature 已进入 `In Development` 或更高状态。
+   - **当前状态（2026-09-26）**：❌ **未满足**。ADR-0084 已起草但为 **Proposed**；Feature 状态 **Approved**（立项已批准）而非 In Development；H-041-4~6 待裁决。
 2. 数据库明确是 development/test，且安全清库；生产、共享验收和未识别环境必须拒绝。
+   - **当前状态**：⚠️ 本机 `deployment/logs/*.log` 在实时写入 ⇒ **有 live 栈在跑**，清库前必须先停栈。
 3. 旧包/API/DTO/配置/Schema/调用方迁移清单完成；仓内调用方均使用新 API。
+   - **当前状态**：✅ 清单已完成（[migration-map.md](migration-map.md)，T03）；❌ 调用方**尚未迁移**（T21~T23 未开工）。
 4. MySQL、Redis、测试容器和依赖服务可用；CI 的真实库测试不得静默跳过。
+   - **当前状态**：✅ 全量 `mvnw clean test` 1086 / 0F / 0E 通过（见 §5），依赖服务可用。
 
 ## 2. INV 门禁
 
@@ -56,19 +60,51 @@
 7. 展示一个插件目录的完整渠道资产，并展示 Payment 无渠道私有导入。
 8. 验证所有新 API；旧路径均不存在，demo/E2E 均使用新路径。
 
-## 5. 交付记录
+## 5. 回归基线（2026-09-26 实测，禁止抄 spec 里的数字）
+
+**命令**（本机默认 `java` 是 JDK 11，必须显式覆盖）：
+
+```bash
+export JAVA_HOME=/usr/local/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+./mvnw -B clean test     # 必须 clean：target/surefire-reports/ 会残留已删除类的旧 XML，直接加总得到虚高数字
+```
+
+**实测结果**（master `5ce4853`，18 reactor 模块）：**1086 tests / 0 Failures / 0 Errors / BUILD SUCCESS**（6 分 37 秒）
+
+| 模块 | 测试数 | 模块 | 测试数 |
+|---|---|---|---|
+| common-core | 70 | entitlement-service | 28 |
+| common-dto | 15 | reconciliation-service | 157 |
+| common-redis-mq | 22 | settlement-service | 55 |
+| merchant-service | 10 | ledger-service | 73 |
+| catalog-service | 49 | deployment/mock-channel-web | 11 |
+| order-service | 73 | deployment/test-infra | 19 |
+| **payment-service** | **456** | deployment/architecture-tests | 23 |
+| fulfillment-service | 25 | **合计** | **1086** |
+
+- `common-mybatis`、`deployment/e2e-tests` 无 surefire 报告（前者无测试；后者 live 栈默认跳过），计 0。
+- **自洽校验**：`payment-service` 源码级 `@Test|@ParameterizedTest|@RepeatedTest` 注解数 = **496**，
+  执行数 = **456**，差 40（参数化用例展开、条件装配与依赖 Testcontainers 的用例计入源码但不计入本 profile）。
+  本 Feature 结束时**必须重跑同一口径**并给出「增量 = 新增用例数」的对照。
+- ⚠️ 本基线比 037 收口时记录的 482 / 1112 **低 26**，原因是旧 041（`payment-flow-layering`，
+  `5c00ad4` / `57e12c3`）已合入并改动了测试装配。**基线必须在每次开工前重测，不得沿用历史数字。**
+
+## 6. 交付记录
 
 | 项目 | 结果 | 证据/命令 | 备注 |
 | --- | --- | --- | --- |
-| Schema lint 与双路径重放 | 待执行 |  |  |
-| Payment/Channel 单元与真库测试 | 待执行 |  |  |
-| ArchUnit 与阳性对照 | 待执行 |  |  |
-| HTTP 契约与仓内调用方 | 待执行 |  |  |
-| 全 reactor verify | 待执行 |  |  |
-| 容器关键 Demo | 待执行 |  |  |
-| 文档 lint/链接检查 | 待执行 |  |  |
+| 全量单测基线（开工前） | ✅ **1086 / 0F / 0E** | `./mvnw -B clean test` | 见 §5；本轮唯一已执行的验证 |
+| Schema lint 与双路径重放 | 待执行 | `schema-lint.sh` / `schema-replay.sh` | 阻塞于 T20 |
+| Payment/Channel 单元与真库测试 | 待执行 | payment-service 单测 | 阻塞于 T07~T18 |
+| ArchUnit 与阳性对照 | 待执行 | `deployment/architecture-tests` | 阻塞于 T25；现状 23/23 绿 |
+| HTTP 契约与仓内调用方 | 待执行 | 契约测试 + 负向 `rg` | 阻塞于 T21~T23 |
+| 全 reactor verify | 待执行 | `./mvnw -B clean verify` | 阻塞于 T28（本轮只跑到 `test`） |
+| 容器关键 Demo | 待执行 | `deployment/demo/*.sh` | 阻塞于 T23 / T28 |
+| 文档 lint/链接检查 | 待执行 | `python deployment/docs-lint.py` | 阻塞于 T27（ADR 部分已可跑） |
+| **ADR-0084 Accept** | ⏳ **待负责人** | `docs/adr/0084-payment-channel-governance.md` | **本项未完成 ⇒ T04 起全部不得开工** |
 
-## 6. 已知限制
+## 7. 已知限制
 
 - 仅开发/测试环境允许清库；真实数据迁移、灰度、旧 API 兼容不在范围内。
 - 不新增真实渠道能力；现有渠道能力以迁移前已验收行为为基线。
